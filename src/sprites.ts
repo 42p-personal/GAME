@@ -1,0 +1,91 @@
+// 16x16 pixel-art sprites, one silhouette per body type (§8, pixel-art plan).
+// Each species is the same silhouette tinted by its own palette, so species read
+// as distinct creatures while keeping the art scope small.
+// Legend: '.' transparent · X outline · B body · L belly/light · A accent · E eye · P pupil
+import { BodyType } from './core'
+
+export const SPRITES: Record<BodyType, string[]> = {
+  Mammal: [
+    '................',
+    '...XX......XX...',
+    '..XBBX....XBBX..',
+    '..XBBXXXXXXBBX..',
+    '.XBBBBBBBBBBBBX.',
+    '.XBEPBBBBBBBBBX.',
+    '.XBBBBBBBBBBBBX.',
+    '.XBBBBBBBBBBBBX.',
+    '.XBLLLLLLLLLLBX.',
+    '.XBBBBBBBBBBBBX.',
+    '.XBBBBBBBBBBBBX.',
+    '..XX.XX..XX.XX..',
+    '..XX.XX..XX.XX..',
+    '..XX.XX..XX.XX..',
+    '................',
+    '................',
+  ],
+  Avian: [
+    '................',
+    '.....XXXX.......',
+    '....XBBBBXX.....',
+    '...XBBBBBBBX....',
+    '..XBBBEPBBBBXA..',
+    '..XBBBBBBBBBXAA.',
+    '..XBLLBBBBBBXA..',
+    '..XBLLLBBBBBX...',
+    '...XBBBBBBBBX...',
+    '....XBBBBBBX....',
+    '.....XXXXXX.....',
+    '.....X..X.......',
+    '.....X..X.......',
+    '....XX..XX......',
+    '................',
+    '................',
+  ],
+  Marsupial: [
+    '................',
+    '....X....X......',
+    '...XX....XX.....',
+    '...XBXXXXXBX....',
+    '..XBBBBBBBBBX...',
+    '..XBBEPBBBBBX...',
+    '..XBBBBBBBBBX...',
+    '...XBBBBBBBX...A',
+    '...XBBBBBBBX..AA',
+    '..XBLLLLLLBX..AA',
+    '..XBLLLLLLBX.AA.',
+    '..XBBBBBBBBX.A..',
+    '..XBBXXXXBBX....',
+    '.XXXX..XXXX.....',
+    '.XXX....XXX.....',
+    '................',
+  ],
+  Aquatic: [
+    '................',
+    '.......XX.......',
+    '......XXXX......',
+    'A....XBBBBX.....',
+    'AA..XBBBBBBX....',
+    'AAAXBBBEPBBBX...',
+    'AAXBBBBBBBBBBX..',
+    'AAXBBLLLLLLBBX..',
+    'AAXBBBBBBBBBBX..',
+    'AAAXBBBBBBBBX...',
+    'AA..XBBBBBBX....',
+    'A....XBBBBX.....',
+    '......XXXX......',
+    '.......XX.......',
+    '................',
+    '................',
+  ],
+}
+
+export function palette(hue: number): Record<string, string> {
+  return {
+    X: `hsl(${hue} 45% 22%)`,
+    B: `hsl(${hue} 55% 50%)`,
+    L: `hsl(${hue} 48% 72%)`,
+    A: `hsl(${(hue + 35) % 360} 65% 55%)`,
+    E: '#f4f4f8',
+    P: '#14161f',
+  }
+}
