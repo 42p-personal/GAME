@@ -1,47 +1,33 @@
-# Deploying to Cloudflare Pages (game.p42.uk)
+# Deploying to Cloudflare Pages
 
-The app is a **static Vite SPA** — no server code. Cloudflare Pages serves the built
-`dist/` folder directly. No code rewrite is needed; `public/_redirects` provides SPA
-fallback and `wrangler.jsonc` sets the Pages project name and output dir.
+The app is a **static Vite SPA** — no server code, and no hardcoded hostname (Vite builds with a
+root `/` base and relative asset URLs). Cloudflare Pages serves the built `dist/` folder.
+`public/_redirects` provides SPA fallback and `wrangler.jsonc` sets the project name + output dir.
 
-## One-time: credentials
+## Live setup
 
-Deployment needs a **Cloudflare API token** with these permissions on the `p42.uk` account:
+- **Pages project:** `game` (account: Mpackman0). Default URL: `https://game-eoz.pages.dev`.
+- **Git integration:** connected to `42p-personal/GAME`, production branch `main`.
+  Build command `npm run build`, output dir `dist`. **Every push to `main` auto-builds & deploys.**
+- **Custom domain:** `tamergame.42p.uk` (managed in the Pages project → Custom domains tab).
 
-- **Account → Cloudflare Pages → Edit** (create project + deploy)
-- **Zone → DNS → Edit** for the `p42.uk` zone (add the `game` custom-domain record)
+So the normal workflow is just: commit and push to `main`. No manual deploy step.
 
-Create it at *Cloudflare dashboard → My Profile → API Tokens → Create Token*, then export it:
+## Manual deploy (optional, via CLI)
+
+Requires a Cloudflare API token with **Account → Cloudflare Pages → Edit** (and **Zone → DNS → Edit**
+if adding/changing a custom domain). Then:
 
 ```bash
 export CLOUDFLARE_API_TOKEN="<token>"      # bash
 $env:CLOUDFLARE_API_TOKEN = "<token>"      # PowerShell
+
+npm run deploy      # = npm run build && wrangler pages deploy  (uploads dist to project "game")
 ```
 
-Verify: `npx wrangler whoami`
+## Changing the custom domain
 
-## First deploy
-
-```bash
-# 1. Create the Pages project (once)
-npx wrangler pages project create monster-tamer --production-branch main
-
-# 2. Build + deploy
-npm run deploy            # = npm run build && wrangler pages deploy
-```
-
-This publishes to `https://monster-tamer.pages.dev`.
-
-## Custom domain (game.p42.uk)
-
-```bash
-npx wrangler pages domain add monster-tamer game.p42.uk
-```
-
-This adds the domain to the project and creates the `CNAME game → monster-tamer.pages.dev`
-DNS record on the `p42.uk` zone (proxied). SSL provisions automatically in a few minutes.
-
-## Continuous deploys (optional)
-
-Alternatively, connect the GitHub repo (`42p-personal/GAME`) in the Pages dashboard with
-build command `npm run build` and output dir `dist` — every push to `main` then auto-deploys.
+In the dashboard: **Workers & Pages → game → Custom domains** — remove the old domain and
+**Set up a custom domain** for the new one. Cloudflare adds the `CNAME → game-eoz.pages.dev`
+record on the zone automatically; SSL provisions in a few minutes. No code change is needed —
+the app is domain-agnostic.
