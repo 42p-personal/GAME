@@ -1,20 +1,22 @@
 import { Dispatch, SetStateAction, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  BODY_ELEMENT, BodyType, Element, FOODS, Monster, STATS, Stat, Species, bodySignature, feedDelta,
+  BODY_ELEMENT, BodyType, Element, FOODS, LEAGUES, Monster, STATS, Stat, Species, feedDelta,
   happinessMultiplier, hashString, mulberry32,
 } from './core'
 import { generateMonster, maxHp, maxMana } from './monster'
 import { BattleResult, simulateBattle } from './battle'
 import { SPRITES, palette } from './sprites'
-import { SPECIES } from './species'
+import { SPECIES, bodySignature } from './species'
 import { BIOS } from './bestiary'
+import { BASIC_DRILLS, Drill, INTENSIVE_DRILLS } from './drills'
 import {
-  MAX_STAMINA, WeeklyAction, applyWeek, careerMonster, dateLabel, foodName, stageInfo,
+  MAX_STAMINA, canRankUp, careerMonster, dateLabel, foodName, rankUpFee, stageInfo, trainingProfileFor,
 } from './game'
 import {
-  FUSION_COST, GameState, RENTAL_PER_FROZEN, barnCost, buyBulkFood, buyMonster, buySpecialLicense, buyEliteLicense,
-  feed, freeze, fuse, fusionRoom, goto, newGame, offerMonster,
-  thaw, upgradeBarn, BULK_FOOD_COST, SPECIAL_LICENSE_COST, ELITE_LICENSE_COST, TOURNAMENT_CALENDAR,
+  BULK_FOOD_COST, ELITE_LICENSE_COST, FUSION_COST, GameState, RENTAL_PER_FROZEN, SPECIAL_LICENSE_COST,
+  TOURNAMENT_CALENDAR, WeekPlanEntry, advanceWeek, barnCost, buyBulkFood, buyEliteLicense, buyMonster,
+  buySpecialLicense, freeze, fuse, fusionRoom, goto, monthOfWeek, newGame, offerMonster, promoteMonster,
+  thaw, upgradeBarn,
 } from './town'
 
 const STAT_COLOR: Record<Stat, string> = {
@@ -155,31 +157,42 @@ function Stable({ label, seed, setSeed, train, setTrain, happiness, setHappiness
   )
 }
 
-// Expandable codex of all 20 species, grouped by body type.
-function Bestiary() {
-  const types: BodyType[] = ['Mammal', 'Avian', 'Marsupial', 'Aquatic']
+// Expandable codex of all species, grouped by body type. Exclusive body types
+// stay locked (name only) until the matching breeding license is owned.
+function Bestiary({ specialLicense, eliteLicense }: { specialLicense: boolean; eliteLicense: boolean }) {
+  const groups: { bt: BodyType; locked: boolean; licenseName: string }[] = [
+    { bt: 'Mammal', locked: false, licenseName: '' },
+    { bt: 'Avian', locked: false, licenseName: '' },
+    { bt: 'Marsupial', locked: false, licenseName: '' },
+    { bt: 'Aquatic', locked: false, licenseName: '' },
+    { bt: 'Draconic', locked: !specialLicense, licenseName: 'Special Breeding License' },
+    { bt: 'Abyssal', locked: !specialLicense, licenseName: 'Special Breeding License' },
+    { bt: 'Mythical', locked: !eliteLicense, licenseName: 'Elite Breeding License' },
+  ]
   return (
     <details className="bestiary">
       <summary>📖 Bestiary — {SPECIES.length} monsters</summary>
       <div className="bestbody">
-        {types.map((bt) => (
+        {groups.map(({ bt, locked, licenseName }) => (
           <div className="bestgroup" key={bt}>
             <div className="bestgroup-h">
               {bt} · resist {ELEMENT_ICON[BODY_ELEMENT[bt].resist]} · weak {ELEMENT_ICON[BODY_ELEMENT[bt].weak]}
             </div>
-            {SPECIES.filter((s) => s.body === bt).map((s) => (
-              <details className="bestrow" key={s.id}>
-                <summary>
-                  <Sprite species={s} size={36} />
-                  <span className="bn">{s.name}</span>
-                  <span className="dim">· {s.naturalClass} · ★ {s.ultimate.name}</span>
-                </summary>
-                <p className="bio">{BIOS[s.id]}</p>
-                <p className="dim bsmall">
-                  Innate: {s.innate.map((a) => a.name).join(' · ')} · Lifespan {s.lifespan}y
-                </p>
-              </details>
-            ))}
+            {locked
+              ? <div className="dim bsmall">🔒 {SPECIES.filter((s) => s.body === bt).length} species — unlock with the {licenseName}.</div>
+              : SPECIES.filter((s) => s.body === bt).map((s) => (
+                <details className="bestrow" key={s.id}>
+                  <summary>
+                    <Sprite species={s} size={36} />
+                    <span className="bn">{s.name}</span>
+                    <span className="dim">· {s.naturalClass} · ★ {s.ultimate.name}</span>
+                  </summary>
+                  <p className="bio">{BIOS[s.id] ?? s.flavour}</p>
+                  <p className="dim bsmall">
+                    Innate: {s.innate.map((a) => a.name).join(' · ')} · Lifespan {s.lifespan}y
+                  </p>
+                </details>
+              ))}
           </div>
         ))}
       </div>
@@ -399,13 +412,14 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
 }
 
 // ============================ Ranch (raising loop) ============================
-interface WeekPlanEntry { trainingType: 'weak' | 'strong' | 'rest'; food: (typeof FOODS)[number]['id'] | '' }
+const drillLabel = (d: Drill) =>
+  Object.entries(d.gains).map(([st, v]) => `${(v as number) > 0 ? '+' : ''}${v} ${st}`).join(' ')
 
 function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetStateAction<GameState>> }) {
-  const [phase, setPhase] = useState<'decisions' | 'review' | 'summary'>('decisions')
+  const [phase, setPhase] = useState<'decisions' | 'review'>('decisions')
   const [decisionIdx, setDecisionIdx] = useState(0)
   const [weekPlan, setWeekPlan] = useState<Record<string, WeekPlanEntry>>({})
-  const [calendarMonth, setCalendarMonth] = useState(1)
+  const [calendarMonth, setCalendarMonth] = useState(() => monthOfWeek(game.week))
 
   if (game.stable.length === 0) {
     return (
@@ -422,15 +436,17 @@ function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSt
   const m = careerMonster(currentCareer)
   const st = stageInfo(currentCareer.ageWeeks, currentCareer.species.lifespan)
   const discount = game.bulkFood ? 0.8 : 1
-  const currentPlan = weekPlan[currentCareer.id] || { trainingType: 'rest', food: '' }
+  const currentPlan: WeekPlanEntry = weekPlan[currentCareer.id] || { activity: 'rest', food: '' }
+  const prof = trainingProfileFor(currentCareer.species)
 
-  const handleSetDecision = (trainingType: 'weak' | 'strong' | 'rest', food: (typeof FOODS)[number]['id'] | '') => {
-    setWeekPlan((wp) => ({ ...wp, [currentCareer.id]: { trainingType, food } }))
-    if (decisionIdx < game.stable.length - 1) {
-      setDecisionIdx((i) => i + 1)
-    } else {
-      setPhase('review')
-    }
+  // Selecting an activity or food only records the plan — advancing to the next
+  // monster is always an explicit button press, so both can be chosen in any order.
+  const setActivity = (activity: string) =>
+    setWeekPlan((wp) => ({ ...wp, [currentCareer.id]: { ...currentPlan, activity } }))
+  const advanceDecision = () => {
+    setWeekPlan((wp) => ({ ...wp, [currentCareer.id]: currentPlan }))
+    if (decisionIdx < game.stable.length - 1) setDecisionIdx((i) => i + 1)
+    else setPhase('review')
   }
 
   if (phase === 'decisions') {
@@ -438,15 +454,17 @@ function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSt
       <>
         <div className="ranchtop">
           <button className="ghost" onClick={() => setGame((g) => goto(g, 'town'))}>🏛 Town</button>
+          <span>📅 {dateLabel(game.week)}</span>
           <span>🪙 {game.gold}g</span>
           <span>Monster {decisionIdx + 1}/{game.stable.length}</span>
+          {decisionIdx > 0 && <button className="ghost" onClick={() => setDecisionIdx((i) => i - 1)}>← Previous</button>}
         </div>
-        <p className="sub">Week {dateLabel(currentCareer.week)} — Choose training &amp; food for {currentCareer.name}.</p>
+        <p className="sub">Choose an activity &amp; food for {currentCareer.name}.</p>
 
         <div className="career">
           <div className="card">
             <div className="careerbar">
-              <span>📅 {dateLabel(currentCareer.week)}</span>
+              <span>📅 {dateLabel(game.week)}</span>
               <span>{st.stage} · age {st.ageYears}y / {currentCareer.species.lifespan}y</span>
             </div>
             <div className="meters">
@@ -458,20 +476,59 @@ function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSt
 
           <div className="card actions">
             {currentCareer.retired ? (
-              <div className="retired">🏁 {currentCareer.name} has retired and can no longer compete.</div>
+              <>
+                <div className="retired">🏁 {currentCareer.name} has retired and can no longer compete.</div>
+                <div className="carerow" style={{ marginTop: '1rem' }}>
+                  <button className="enter" onClick={advanceDecision}>
+                    {decisionIdx < game.stable.length - 1 ? 'Next Monster →' : 'Continue to Review →'}
+                  </button>
+                </div>
+              </>
             ) : (
               <>
-                <div className="section-title">Training — choose weak or strong training, or rest</div>
+                {canRankUp(currentCareer) && (
+                  <div className="carerow">
+                    <button className="rankup" disabled={game.gold < rankUpFee(currentCareer)}
+                      onClick={() => setGame((g) => promoteMonster(g, currentCareer.id))}>
+                      ⭐ Rank-up trial · {rankUpFee(currentCareer)}g → {LEAGUES[currentCareer.licenseIndex + 1].name} league
+                    </button>
+                  </div>
+                )}
+
+                <div className="section-title">Activity — rest, go exploring, or train a drill</div>
+                <div className="hint">
+                  Aptitude: trains {prof.primary} fastest (+20%), {prof.secondary} well (+10%), {prof.weakness} poorly (−20%).
+                  Low stamina weakens gains.
+                </div>
                 <div className="carerow">
-                  <button className={currentPlan.trainingType === 'weak' ? 'selected' : ''} onClick={() => handleSetDecision('weak', currentPlan.food)}>💪 Weak Training (−10% stamina)</button>
-                  <button className={currentPlan.trainingType === 'strong' ? 'selected' : ''} onClick={() => handleSetDecision('strong', currentPlan.food)}>🔥 Strong Training (−25% stamina)</button>
-                  <button className={currentPlan.trainingType === 'rest' ? 'selected' : ''} onClick={() => handleSetDecision('rest', currentPlan.food)}>😴 Rest (+stamina)</button>
+                  <button className={currentPlan.activity === 'rest' ? 'selected' : ''} onClick={() => setActivity('rest')}>😴 Rest (+stamina)</button>
+                  <button className={currentPlan.activity === 'excursion' ? 'selected' : ''} onClick={() => setActivity('excursion')}>🧭 Excursion (−25 stamina, finds gold)</button>
+                </div>
+
+                <div className="section-title">Basic drills — one stat, −10 stamina</div>
+                <div className="foods">
+                  {BASIC_DRILLS.map((d) => (
+                    <button key={d.id} className={`food ${currentPlan.activity === d.id ? 'selected' : ''}`}
+                      onClick={() => setActivity(d.id)} title={d.desc}>
+                      {d.name}{currentPlan.activity === d.id ? ' ✓' : ''} · {drillLabel(d)}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="section-title">Intensive drills — bigger gains, a cost, −25 stamina</div>
+                <div className="foods">
+                  {INTENSIVE_DRILLS.map((d) => (
+                    <button key={d.id} className={`food ${currentPlan.activity === d.id ? 'selected' : ''}`}
+                      onClick={() => setActivity(d.id)} title={d.desc}>
+                      {d.name}{currentPlan.activity === d.id ? ' ✓' : ''} · {drillLabel(d)}
+                    </button>
+                  ))}
                 </div>
 
                 <div className="section-title">Food — buy 1 food this week{game.bulkFood ? ' · 🛒 −20%' : ''}</div>
                 <div className="foods">
                   {FOODS.map((f) => {
-                    const price = Math.max(1, Math.round(currentCareer.market[f.id] * discount))
+                    const price = Math.max(1, Math.round(game.foodMarket[f.id] * discount))
                     const d = feedDelta(f.id, currentCareer.favouriteFood, currentCareer.hatedFood)
                     const afford = game.gold >= price
                     const selected = currentPlan.food === f.id
@@ -479,18 +536,16 @@ function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSt
                       <button key={f.id} className={`food ${selected ? 'selected' : ''}`} disabled={!afford}
                         onClick={() => setWeekPlan((wp) => ({ ...wp, [currentCareer.id]: { ...currentPlan, food: selected ? '' : f.id } }))}
                         title={d > 0 ? 'favourite (+1 happiness)' : d < 0 ? 'hated (−1 happiness)' : 'neutral'}>
-                        {foodName(f.id)}{currentPlan.food === f.id ? ' ✓' : ''} · {price}g{d > 0 ? ' ♥' : d < 0 ? ' ✖' : ''}
+                        {foodName(f.id)}{selected ? ' ✓' : ''} · {price}g{d > 0 ? ' ♥' : d < 0 ? ' ✖' : ''}
                       </button>
                     )
                   })}
                 </div>
 
                 <div className="carerow" style={{ marginTop: '1rem' }}>
-                  {decisionIdx < game.stable.length - 1 ? (
-                    <button className="enter" onClick={() => handleSetDecision(currentPlan.trainingType, currentPlan.food)}>Next Monster →</button>
-                  ) : (
-                    <button className="enter" onClick={() => handleSetDecision(currentPlan.trainingType, currentPlan.food)}>Continue to Review →</button>
-                  )}
+                  <button className="enter" onClick={advanceDecision}>
+                    {decisionIdx < game.stable.length - 1 ? 'Next Monster →' : 'Continue to Review →'}
+                  </button>
                 </div>
               </>
             )}
@@ -501,22 +556,44 @@ function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSt
   }
 
   // Review phase
+  const currentMonth = monthOfWeek(game.week)
   const tournamentsThisMonth = TOURNAMENT_CALENDAR.filter((t) => t.month === calendarMonth)
+  const activityName = (p?: WeekPlanEntry) => {
+    if (!p) return '—'
+    if (p.activity === 'rest') return '😴 Rest'
+    if (p.activity === 'excursion') return '🧭 Excursion'
+    const d = [...BASIC_DRILLS, ...INTENSIVE_DRILLS].find((x) => x.id === p.activity)
+    return d ? `💪 ${d.name}` : p.activity
+  }
 
   return (
     <>
       <div className="ranchtop">
         <button className="ghost" onClick={() => setGame((g) => goto(g, 'town'))}>🏛 Town</button>
+        <span>📅 {dateLabel(game.week)}</span>
         <span>🪙 {game.gold}g</span>
-        <button className="ghost" onClick={() => setPhase('decisions')}>← Back</button>
+        <button className="ghost" onClick={() => { setDecisionIdx(0); setPhase('decisions') }}>← Back</button>
       </div>
-      <p className="sub">Review decisions before advancing. Inspect abilities, check tournaments, or return to town.</p>
+      <p className="sub">Review decisions before advancing. Check the tournament calendar, or return to town.</p>
 
       <div className="townmap" style={{ gap: '1rem' }}>
-        {/* Abilities inspect */}
+        {/* This week's plan */}
         <div className="card loc">
-          <div className="loc-h"><span>⚔️ Abilities</span></div>
-          <div className="hint">Manage active abilities (coming soon)</div>
+          <div className="loc-h"><span>📋 This week's plan</span></div>
+          <div className="labrows">
+            {game.stable.map((c) => {
+              const p = weekPlan[c.id]
+              return (
+                <div className="labrow" key={c.id}>
+                  <Sprite species={c.species} size={28} />
+                  <span className="bn">{c.name}</span>
+                  <span className="dim">
+                    {c.retired ? '🏁 Retired' : activityName(p)}{p?.food ? ` · 🍽 ${foodName(p.food)}` : ''}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
         </div>
 
         {/* Calendar */}
@@ -524,58 +601,32 @@ function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSt
           <div className="loc-h">
             <span>📅 Tournament Calendar</span>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button className="ghost" onClick={() => setCalendarMonth((m) => m === 1 ? 12 : m - 1)}>◀</button>
-              <span>Month {calendarMonth}</span>
-              <button className="ghost" onClick={() => setCalendarMonth((m) => m === 12 ? 1 : m + 1)}>▶</button>
+              <button className="ghost" onClick={() => setCalendarMonth((mo) => mo === 1 ? 12 : mo - 1)}>◀</button>
+              <span>Month {calendarMonth}{calendarMonth === currentMonth ? ' · now' : ''}</span>
+              <button className="ghost" onClick={() => setCalendarMonth((mo) => mo === 12 ? 1 : mo + 1)}>▶</button>
             </div>
           </div>
           <div className="hint">Tournaments this month: {tournamentsThisMonth.length}</div>
-          {tournamentsThisMonth.map((t) => (
-            <div key={t.id} className="offer" style={{ padding: '0.5rem', borderBottom: '1px solid var(--line)' }}>
-              <div><b>{t.name}</b> — {t.league} league</div>
-              <div className="dim">Rewards: {t.rewards.gold}g, {t.rewards.exp} exp</div>
-              <button className="enter">Sign Up →</button>
-            </div>
-          ))}
+          {tournamentsThisMonth.map((t) => {
+            const eligible = game.stable.some((c) => !c.retired && LEAGUES[c.licenseIndex].name === t.league)
+            return (
+              <div key={t.id} className="offer" style={{ padding: '0.5rem', borderBottom: '1px solid var(--line)' }}>
+                <div><b>{t.name}</b> — {t.league} league</div>
+                <div className="dim">Rewards: {t.rewards.gold}g, {t.rewards.exp} exp</div>
+                {!eligible && <div className="dim">Requires a {t.league}-league monster.</div>}
+                <button className="enter" disabled title="Tournament battles arrive in the next update">Sign Up →</button>
+              </div>
+            )
+          })}
         </div>
 
         {/* Proceed */}
         <div className="card loc">
           <div className="loc-h"><span>⏭️ Advance Week</span></div>
-          <div className="hint">Decisions locked in. Ready to advance?</div>
+          <div className="hint">Feeding resolves first at this week's prices, then each monster's activity. The market restocks monthly.</div>
           <button className="enter" onClick={() => {
-            // Apply all week actions to each monster, then feed them (if selected).
-            // Important: we apply actions directly to each monster without calling weekAction,
-            // which would age all monsters multiple times.
-            let newGame = { ...game, stable: [...game.stable] }
-            const rental = game.frozen.length * RENTAL_PER_FROZEN
-            let totalGold = game.gold
-
-            for (let i = 0; i < newGame.stable.length; i++) {
-              const c = newGame.stable[i]
-              const plan = weekPlan[c.id]
-              if (!c.retired && plan) {
-                const action: WeeklyAction = plan.trainingType === 'rest'
-                  ? { kind: 'rest' }
-                  : { kind: 'train', trainType: plan.trainingType as 'weak' | 'strong' }
-                const { c: updated, gold } = applyWeek(c, action, totalGold, rental)
-                totalGold = gold
-                newGame.stable[i] = updated
-              }
-            }
-
-            // Feed selected monsters
-            for (let i = 0; i < newGame.stable.length; i++) {
-              const c = newGame.stable[i]
-              const plan = weekPlan[c.id]
-              if (plan && plan.food) {
-                const feedGame = feed({ ...newGame, stable: newGame.stable, gold: totalGold }, plan.food)
-                newGame = feedGame
-                totalGold = feedGame.gold
-              }
-            }
-
-            setGame({ ...newGame, gold: totalGold })
+            setGame((g) => advanceWeek(g, weekPlan))
+            setCalendarMonth(monthOfWeek(game.week + 1))
             setWeekPlan({})
             setDecisionIdx(0)
             setPhase('decisions')
@@ -586,22 +637,47 @@ function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSt
   )
 }
 
+// --- Persistence: the whole GameState is plain JSON, saved on every change ---
+const SAVE_KEY = 'monster-tamer-save-v1'
+const randomSeed = () => Math.random().toString(36).slice(2, 8)
+
+function loadSavedGame(): GameState | null {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY)
+    if (!raw) return null
+    const g = JSON.parse(raw)
+    // sanity-check the save shape (older/foreign saves start fresh)
+    if (typeof g?.week !== 'number' || !Array.isArray(g?.stable) || typeof g?.foodMarket !== 'object') return null
+    return g as GameState
+  } catch {
+    return null
+  }
+}
+
 export function App() {
   const [view, setView] = useState<'game' | 'sandbox'>('game')
-  const [game, setGame] = useState<GameState>(() => newGame('Aki'))
+  const [game, setGame] = useState<GameState>(() => loadSavedGame() ?? newGame(randomSeed()))
+
+  useEffect(() => {
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(game)) } catch { /* storage full/unavailable — play on */ }
+  }, [game])
+
   return (
     <div className="app">
       <h1>Monster Tamer <span className="tag">/ prototype</span></h1>
       <div className="tabs">
         <button className={'tab' + (view === 'game' ? ' on' : '')} onClick={() => setView('game')}>🎮 Game</button>
         <button className={'tab' + (view === 'sandbox' ? ' on' : '')} onClick={() => setView('sandbox')}>⚔️ Sandbox</button>
+        <button className="tab" onClick={() => {
+          if (window.confirm('Start a new game? Current progress will be lost.')) setGame(newGame(randomSeed()))
+        }}>✨ New Game</button>
       </div>
       {view === 'game'
         ? (game.area === 'town'
           ? <TownView game={game} setGame={setGame} />
           : <RanchView game={game} setGame={setGame} />)
         : <SandboxView />}
-      <Bestiary />
+      <Bestiary specialLicense={game.specialLicense} eliteLicense={game.eliteLicense} />
     </div>
   )
 }

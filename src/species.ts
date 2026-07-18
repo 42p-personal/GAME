@@ -1,5 +1,5 @@
-// The 20 base species (§8.2 / §8.3): stats, lifespans, innate abilities, ultimates.
-import { Species } from './core'
+// The 35 species (§8.2 / §8.3): stats, lifespans, innate abilities, ultimates.
+import { BodyType, STATS, Stat, Stats, Species } from './core'
 
 const s = (STR: number, DEX: number, CON: number, WIS: number, INT: number, CHA: number) => ({ STR, DEX, CON, WIS, INT, CHA })
 
@@ -88,5 +88,30 @@ export const SPECIES: Species[] = [
   { id: 'harmonybringer', name: 'Harmonybringer', body: 'Mythical', naturalClass: 'Bard', base: s(8, 36, 26, 14, 10, 52), lifespan: 6, flavour: 'Mythical unifier, peace in chaos.',
     innate: [{ name: 'Unison', desc: 'Team stat sync + buff sharing.' }, { name: 'Aegis Bond', desc: 'Redirect damage to self, heal difference.' }], ultimate: { name: 'Perfect Harmony', desc: 'All allies gain all buffs; team cannot be divided.' } },
 ]
+
+// --- Body-type average stat profiles (§8.4) ---
+// Computed from the species data above so they can never drift from it. Every
+// species deviates from its body average — that deviation is its "signature".
+export const BODY_AVERAGES: Record<BodyType, Stats> = (() => {
+  const out = {} as Record<BodyType, Stats>
+  const bodies = [...new Set(SPECIES.map((sp) => sp.body))]
+  for (const body of bodies) {
+    const members = SPECIES.filter((sp) => sp.body === body)
+    const avg = {} as Stats
+    for (const k of STATS) avg[k] = Math.round(members.reduce((sum, sp) => sum + sp.base[k], 0) / members.length)
+    out[body] = avg
+  }
+  return out
+})()
+
+// A species' stat signature: which stats sit notably above / below its body-type
+// average. Returns up to two of each (deviation ≥ 4 counts as notable).
+export function bodySignature(base: Stats, body: BodyType): { above: Stat[]; below: Stat[] } {
+  const avg = BODY_AVERAGES[body]
+  const deltas = STATS.map((st) => ({ st, d: base[st] - avg[st] }))
+  const above = deltas.filter((x) => x.d >= 4).sort((a, b) => b.d - a.d).slice(0, 2).map((x) => x.st)
+  const below = deltas.filter((x) => x.d <= -4).sort((a, b) => a.d - b.d).slice(0, 2).map((x) => x.st)
+  return { above, below }
+}
 
 export const SPECIES_BY_ID: Record<string, Species> = Object.fromEntries(SPECIES.map((sp) => [sp.id, sp]))

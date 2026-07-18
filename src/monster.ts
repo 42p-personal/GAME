@@ -55,9 +55,13 @@ export function generateMonster(seed: string, opts: GenOptions = {}): Monster {
   const species = SPECIES[hashString(seed || 'egg') % SPECIES.length]
   const sex = rng() < 0.5 ? 'M' : 'F'
 
-  // base stats + minimal individual variance (±2 only, to preserve body type structure)
+  // Individual variance (±5), order-preserving: jittered values are re-assigned
+  // largest-to-largest along the species' base ranking, so siblings differ in
+  // magnitude but a species' stat hierarchy (and thus its class) never flips.
   const base: Stats = { ...species.base }
-  for (const k of STATS) base[k] = Math.max(1, base[k] + randInt(rng, -2, 2))
+  const jittered = STATS.map((k) => Math.max(1, species.base[k] + randInt(rng, -5, 5))).sort((a, b) => b - a)
+  const ranked = [...STATS].sort((a, b) => species.base[b] - species.base[a])
+  ranked.forEach((k, i) => { base[k] = jittered[i] })
 
   const stats = applyTraining(base, opts.train ?? 0, rng)
   const learned = learnedMoves(stats)
@@ -98,4 +102,13 @@ export function attackStat(s: Stats, channel: Move['channel']): number {
     case 'voice': return s.CHA
     case 'support': return s.WIS
   }
+}
+
+// Mana cost per move (§11): magic and voice channels draw on the mana pool, so a
+// deep WIS pool sustains casters; physical channels are free.
+export function manaCost(m: Move): number {
+  if (m.channel === 'magic') return Math.max(4, Math.round(m.power * 0.5))
+  if (m.channel === 'voice') return Math.max(3, Math.round(m.power * 0.35))
+  if (m.channel === 'support') return m.power > 0 ? 6 : 4
+  return 0
 }

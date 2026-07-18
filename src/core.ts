@@ -16,17 +16,10 @@ export type Stats = Record<Stat, number>
 export type BodyType = 'Mammal' | 'Avian' | 'Marsupial' | 'Aquatic' | 'Draconic' | 'Abyssal' | 'Mythical'
 export type Sex = 'M' | 'F'
 
-// Body type stat bonuses: primary +20%, secondary +10%, weakness -20%
-export interface BodyTypeStats { primary: Stat; secondary: Stat; weakness: Stat }
-export const BODY_TYPE_STATS: Record<BodyType, BodyTypeStats> = {
-  Mammal: { primary: 'STR', secondary: 'CON', weakness: 'CHA' },
-  Avian: { primary: 'DEX', secondary: 'CHA', weakness: 'CON' },
-  Marsupial: { primary: 'CHA', secondary: 'DEX', weakness: 'INT' },
-  Aquatic: { primary: 'WIS', secondary: 'INT', weakness: 'STR' },
-  Draconic: { primary: 'STR', secondary: 'WIS', weakness: 'DEX' },
-  Abyssal: { primary: 'INT', secondary: 'DEX', weakness: 'CON' },
-  Mythical: { primary: 'STR', secondary: 'CON', weakness: 'CHA' }, // varies per species, will override
-}
+// Training aptitude: primary +20% exp, secondary +10%, weakness -20%.
+// Derived per species from its base stat spread (top / 2nd / lowest) unless a
+// species sets an explicit `trainingProfile` override — see game.ts:trainingProfileFor.
+export interface TrainingProfile { primary: Stat; secondary: Stat; weakness: Stat }
 
 export type Channel = 'melee' | 'ranged' | 'magic' | 'voice' | 'support'
 export type MoveType = 'damage' | 'buff' | 'debuff' | 'status' | 'control'
@@ -68,6 +61,7 @@ export interface Species {
   innate: Ability[]
   ultimate: Ability
   flavour: string
+  trainingProfile?: TrainingProfile // optional override; defaults to top/2nd/lowest base stat
 }
 
 export interface Monster {
@@ -117,7 +111,7 @@ export const CLASSES: ClassDef[] = [
   { name: 'Spellsword', primary: 'INT', secondary: 'CON' },
   { name: 'Spellshield', primary: 'CON', secondary: 'WIS' },
   { name: 'Captain', primary: 'STR', secondary: 'CHA' },
-  { name: 'Orator', primary: 'CHA', secondary: 'DEX' },
+  { name: 'Orator', primary: 'CHA', secondary: 'WIS' },
   { name: 'Bard', primary: 'CHA', secondary: 'DEX' },
 ]
 
@@ -129,28 +123,8 @@ export function classForStats(stats: Stats): string {
   return hit ? hit.name : 'Generalist'
 }
 
-// --- Body-type average stat profiles (§8.4) ---
-// Reference baseline for each body type; every species deviates from it (its
-// "signature"), giving individuality on top of shared body-type identity.
-export const BODY_AVERAGES: Record<BodyType, Stats> = {
-  Mammal: { STR: 37, DEX: 22, CON: 33, WIS: 13, INT: 10, CHA: 17 },
-  Avian: { STR: 16, DEX: 34, CON: 16, WIS: 28, INT: 26, CHA: 20 },
-  Marsupial: { STR: 22, DEX: 33, CON: 19, WIS: 20, INT: 10, CHA: 37 },
-  Aquatic: { STR: 14, DEX: 21, CON: 28, WIS: 31, INT: 33, CHA: 13 },
-  Draconic: { STR: 40, DEX: 6, CON: 24, WIS: 26, INT: 20, CHA: 22 }, // STR+WIS focus, weak DEX
-  Abyssal: { STR: 15, DEX: 33, CON: 12, WIS: 27, INT: 33, CHA: 11 }, // INT+DEX focus, weak CON
-  Mythical: { STR: 36, DEX: 27, CON: 31, WIS: 24, INT: 26, CHA: 23 }, // varies by species, default warrior-like
-}
-
-// A species' stat signature: which stats sit notably above / below its body-type
-// average. Returns up to two of each (deviation ≥ 4 counts as notable).
-export function bodySignature(base: Stats, body: BodyType): { above: Stat[]; below: Stat[] } {
-  const avg = BODY_AVERAGES[body]
-  const deltas = STATS.map((s) => ({ s, d: base[s] - avg[s] }))
-  const above = deltas.filter((x) => x.d >= 4).sort((a, b) => b.d - a.d).slice(0, 2).map((x) => x.s)
-  const below = deltas.filter((x) => x.d <= -4).sort((a, b) => a.d - b.d).slice(0, 2).map((x) => x.s)
-  return { above, below }
-}
+// Body-type averages + species signatures moved to species.ts — they're computed
+// from the actual SPECIES data so they can never drift out of sync again.
 
 // --- Elemental affinities (§8.5) ---
 // Each body type resists one element (takes less) and is weak to one (takes more).

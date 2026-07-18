@@ -5,7 +5,8 @@ import {
 } from './core'
 import { generateMonster } from './monster'
 import {
-  Career, START_GOLD, WeeklyAction, applyWeek, buyFood, newCareer, rankUp, stageInfo,
+  Career, START_GOLD, WEEKS_PER_MONTH, WEEKS_PER_YEAR, WeeklyAction, ageOneWeek, applyWeek, buyFood,
+  newCareer, rankUp, rollMarket,
 } from './game'
 
 export type Area = 'town' | 'ranch'
@@ -59,6 +60,7 @@ export interface MarketOffer {
 export interface GameState {
   seed: string
   gold: number
+  week: number // the global calendar — one clock for market, tournaments, and stable
   stable: Career[]
   activeId: string
   frozen: Frozen[]
@@ -67,9 +69,13 @@ export interface GameState {
   specialLicense: boolean // Silver rank: unlock Draconic + Abyssal
   eliteLicense: boolean // Masters rank: unlock Mythical
   area: Area
-  market: MarketOffer[]
-  marketRoll: number
+  market: MarketOffer[] // monster market; restocks at the start of each month
+  foodMarket: Record<Food, number> // this week's town food prices (shared by all monsters)
+  nextId: number // monotonic id counter, survives save/load
 }
+
+// Calendar helpers off the global week clock.
+export const monthOfWeek = (week: number) => Math.floor((week % WEEKS_PER_YEAR) / WEEKS_PER_MONTH) + 1
 
 // --- Economy constants (§13.3) ---
 export const RENTAL_PER_FROZEN = 8 // weekly upkeep per frozen genome
@@ -83,6 +89,7 @@ export function newGame(seed = 'start'): GameState {
   return {
     seed,
     gold: START_GOLD,
+    week: 0,
     stable: [],
     activeId: '',
     frozen: [],
@@ -92,7 +99,8 @@ export function newGame(seed = 'start'): GameState {
     eliteLicense: false,
     area: 'town',
     market: rollMarketOffers(seed, 0, false, false),
-    marketRoll: 0,
+    foodMarket: rollMarket(seed, 0),
+    nextId: 0,
   }
 }
 
@@ -131,7 +139,6 @@ export function rollMarketOffers(seed: string, roll: number, hasSpecialLicense =
 
 export const offerMonster = (o: MarketOffer) => generateMonster(o.seed, { train: 0 })
 
-let boughtCounter = 0
 export function buyMonster(g: GameState, index: number): GameState {
   const o = g.market[index]
   if (!o || g.gold < o.price || g.stable.length >= g.barnCapacity) return g
@@ -146,71 +153,64 @@ export function buyMonster(g: GameState, index: number): GameState {
   if (isExclusive && !g.specialLicense) return g
   if (isMythical && !g.eliteLicense) return g
 
-  const c = newCareer(o.seed, { id: 'own-' + boughtCounter++ + '-' + o.seed })
+  const c = newCareer(o.seed, { id: 'own-' + g.nextId + '-' + o.seed })
   const market = g.market.filter((_, i) => i !== index)
-  return { ...g, gold: g.gold - o.price, stable: [...g.stable, c], market, activeId: g.activeId || c.id }
-}
-
-export function refreshMarket(g: GameState): GameState {
-  const roll = g.marketRoll + 1
-  return { ...g, marketRoll: roll, market: rollMarketOffers(g.seed, roll, g.specialLicense, g.eliteLicense) }
-}
-
-// --- Active-monster helpers + Ranch loop wrappers (fold gold + rental into state) ---
-export const activeCareer = (g: GameState): Career | undefined =>
-  g.stable.find((c) => c.id === g.activeId) ?? g.stable[0]
-
-const replaceActive = (g: GameState, c: Career): GameState => ({
-  ...g,
-  stable: g.stable.map((x) => (x.id === g.activeId ? c : x)),
-})
-
-export function setActive(g: GameState, id: string): GameState {
-  return g.stable.some((c) => c.id === id) ? { ...g, activeId: id } : g
+  return { ...g, gold: g.gold - o.price, stable: [...g.stable, c], market, activeId: g.activeId || c.id, nextId: g.nextId + 1 }
 }
 
 export function goto(g: GameState, area: Area): GameState {
   return { ...g, area }
 }
 
-// Age all stable monsters by one week (they all age regardless of activity).
-function ageStableMonster(c: Career): Career {
-  const { stage: nowStage } = stageInfo(c.ageWeeks + 1, c.species.lifespan)
-  const { stage: oldStage } = stageInfo(c.ageWeeks, c.species.lifespan)
-  const n: Career = { ...c, week: c.week + 1, ageWeeks: c.ageWeeks + 1, log: [...c.log] }
-  if (nowStage !== oldStage) {
-    if (nowStage === 'Retiree') {
-      n.retired = true
-      n.log.push(`🏁 ${n.name} has reached retirement age and can no longer compete.`)
-    } else {
-      n.log.push(`  ↳ ${n.name} is now ${nowStage}${nowStage === 'Elder' ? ' (−20% training)' : nowStage === 'Fully Grown' ? ' (−5% training)' : ''}.`)
+// --- The weekly tick (§2): one canonical path that advances the whole game ---
+// Per monster: feed first (start-of-week choice, at this week's prices), then the
+// chosen activity. Monsters with no plan (or retired) still age. Lab rental is
+// charged once. The global clock advances; food prices reroll weekly and the
+// monster market restocks at the start of each month.
+export interface WeekPlanEntry { activity: string; food: Food | '' } // activity: drill id | 'rest' | 'excursion'
+
+export function advanceWeek(g: GameState, plans: Record<string, WeekPlanEntry>): GameState {
+  let gold = g.gold
+  let rentalDue = g.frozen.length * RENTAL_PER_FROZEN
+  const stable = g.stable.map((c) => {
+    const plan = plans[c.id]
+    let cur = c
+    if (plan?.food && !c.retired) {
+      const fed = buyFood(cur, gold, plan.food, g.foodMarket, g.bulkFood ? 0.8 : 1)
+      cur = fed.c
+      gold = fed.gold
     }
+    if (c.retired || !plan) return ageOneWeek(cur)
+    const action: WeeklyAction =
+      plan.activity === 'rest' ? { kind: 'rest' }
+        : plan.activity === 'excursion' ? { kind: 'excursion' }
+          : { kind: 'train', drillId: plan.activity }
+    const r = applyWeek(cur, action, gold, rentalDue)
+    rentalDue = 0 // charged once per week, not per monster
+    gold = r.gold
+    return r.c
+  })
+  if (rentalDue > 0) gold -= rentalDue // no monster processed the charge (all retired/unplanned)
+
+  const week = g.week + 1
+  const monthTurned = week % WEEKS_PER_MONTH === 0
+  return {
+    ...g,
+    stable,
+    gold,
+    week,
+    foodMarket: rollMarket(g.seed, week),
+    market: monthTurned
+      ? rollMarketOffers(g.seed, week / WEEKS_PER_MONTH, g.specialLicense, g.eliteLicense)
+      : g.market,
   }
-  return n
 }
 
-export function weekAction(g: GameState, action: WeeklyAction): GameState {
-  const c = activeCareer(g)
-  if (!c) return g
-  const rental = g.frozen.length * RENTAL_PER_FROZEN
-  const { c: nc, gold } = applyWeek(c, action, g.gold, rental)
-  // Age all stable monsters (not just the active one)
-  const aged = g.stable.map((m) => m.id === c.id ? nc : ageStableMonster(m))
-  return { ...g, stable: aged, gold, activeId: c.id }
-}
-
-export function feed(g: GameState, food: Food): GameState {
-  const c = activeCareer(g)
-  if (!c) return g
-  const { c: nc, gold } = buyFood(c, g.gold, food, g.bulkFood ? 0.8 : 1)
-  return { ...replaceActive({ ...g, activeId: c.id }, nc), gold }
-}
-
-export function promote(g: GameState): GameState {
-  const c = activeCareer(g)
+export function promoteMonster(g: GameState, id: string): GameState {
+  const c = g.stable.find((x) => x.id === id)
   if (!c) return g
   const { c: nc, gold } = rankUp(c, g.gold)
-  return { ...replaceActive({ ...g, activeId: c.id }, nc), gold }
+  return { ...g, gold, stable: g.stable.map((x) => (x.id === id ? nc : x)) }
 }
 
 // --- Lab (§13.1): freeze / thaw / fuse ---
@@ -252,7 +252,7 @@ export function fuse(g: GameState, aId: string, bId: string): GameState {
   const stats = {} as Stats
   for (const s of STATS) stats[s as Stat] = Math.max(1, Math.round(((a.stats[s] + b.stats[s]) / 2) * FUSION_PENALTY))
   const babySeed = 'fuse-' + a.id + '+' + b.id
-  const baby = newCareer(babySeed, { id: 'own-fuse-' + boughtCounter++ + '-' + babySeed, ageWeeks: 0, stats, licenseIndex: 0 })
+  const baby = newCareer(babySeed, { id: 'own-fuse-' + g.nextId + '-' + babySeed, ageWeeks: 0, stats, licenseIndex: 0 })
   baby.species = a.species // base parent supplies the frame (§10.1)
   baby.log = [`A fusion of ${a.name} and ${b.name} hatches — a baby with inherited promise (unlicensed).`]
   return {
@@ -260,6 +260,7 @@ export function fuse(g: GameState, aId: string, bId: string): GameState {
     gold: g.gold - FUSION_COST,
     stable: [...g.stable, baby],
     frozen: g.frozen.filter((x) => x.id !== aId && x.id !== bId),
+    nextId: g.nextId + 1,
   }
 }
 

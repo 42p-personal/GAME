@@ -1,9 +1,10 @@
 // Weekly calendar / career loop (M2, §2). A single monster you raise week by week:
 // weekly actions (train drill / rest / feed / excursion), stamina, gold, aging.
 import {
-  FOODS, Food, LEAGUES, MAX_HAPPINESS, Monster, STATS, Sex, Species, Stats, Stat, BODY_TYPE_STATS,
+  FOODS, Food, LEAGUES, MAX_HAPPINESS, Monster, STATS, Sex, Species, Stats, Stat, TrainingProfile,
   ULTIMATE_LEVEL, classForStats, feedDelta, hashString, mulberry32, randInt,
 } from './core'
+import { ALL_DRILLS } from './drills'
 import { chooseLoadout, generateMonster, learnedMoves } from './monster'
 
 export const WEEKS_PER_MONTH = 4
@@ -12,8 +13,8 @@ export const WEEKS_PER_YEAR = WEEKS_PER_MONTH * MONTHS_PER_YEAR // 48
 const START_AGE_WEEKS = WEEKS_PER_YEAR // start as a Teen (age 1)
 export const START_GOLD = 500
 export const MAX_STAMINA = 100
-const WEAK_TRAIN_COST = 10 // % of stamina
-const STRONG_TRAIN_COST = 25 // % of stamina
+export const BASIC_DRILL_STAMINA = 10
+export const INTENSIVE_DRILL_STAMINA = 25
 const EXCURSION_COST = 25
 
 export type Stage = 'Baby' | 'Teen' | 'Fully Grown' | 'Elder' | 'Retiree'
@@ -49,9 +50,8 @@ export interface Career {
   stamina: number
   happiness: number
   licenseIndex: number
-  week: number
+  week: number // weeks since this monster joined the stable (age/log bookkeeping)
   retired: boolean
-  market: Record<Food, number> // this week's fluctuating food prices
   fedThisWeek: boolean // only one food may be bought per week per monster
   log: string[]
 }
@@ -67,7 +67,7 @@ export function rollMarket(id: string, week: number): Record<Food, number> {
 export const foodName = (id: Food) => FOODS.find((f) => f.id === id)!.name
 
 export type WeeklyAction =
-  | { kind: 'train'; trainType: 'weak' | 'strong' }
+  | { kind: 'train'; drillId: string }
   | { kind: 'rest' }
   | { kind: 'excursion' }
 
@@ -79,12 +79,21 @@ function staminaMalus(stamina: number): number {
   return 0.5 // -50%
 }
 
-// Body type stat training bonus: primary +20%, secondary +10%, weakness -20%
-function statTrainingBonus(species: Species, stat: Stat): number {
-  const bodyStats = BODY_TYPE_STATS[species.body]
-  if (stat === bodyStats.primary) return 1.2
-  if (stat === bodyStats.secondary) return 1.1
-  if (stat === bodyStats.weakness) return 0.8
+// Training aptitude for a species: explicit override if set, else derived from its
+// base spread (best stat trains fastest, worst slowest) — so aptitude always
+// matches the species' natural identity.
+export function trainingProfileFor(species: Species): TrainingProfile {
+  if (species.trainingProfile) return species.trainingProfile
+  const ordered = [...STATS].sort((a, b) => species.base[b] - species.base[a])
+  return { primary: ordered[0], secondary: ordered[1], weakness: ordered[STATS.length - 1] }
+}
+
+// Stat training bonus: primary +20%, secondary +10%, weakness -20%
+export function statTrainingBonus(species: Species, stat: Stat): number {
+  const prof = trainingProfileFor(species)
+  if (stat === prof.primary) return 1.2
+  if (stat === prof.secondary) return 1.1
+  if (stat === prof.weakness) return 0.8
   return 1
 }
 
@@ -116,18 +125,17 @@ export function newCareer(seed: string, opts: NewCareerOpts = {}): Career {
     licenseIndex: opts.licenseIndex ?? 0,
     week: 0,
     retired: false,
-    market: rollMarket(id, 0),
     fedThisWeek: false,
     log: [`${m.name} the ${m.species.name} (${m.sex === 'M' ? '♂' : '♀'}) joins your stable — a Wood-league hopeful.`],
   }
 }
 
-// Buy one food from this week's market. Does NOT advance the week — feeding is a
-// start-of-week choice, separate from the weekly activity. Gold is game-owned, so
-// it's passed in and returned; `discount` applies the Ranch Shop bulk-food perk.
-export function buyFood(c: Career, gold: number, food: Food, discount = 1): { c: Career; gold: number } {
+// Buy one food from this week's town food market. Does NOT advance the week —
+// feeding is a start-of-week choice, resolved BEFORE the weekly activity. Gold is
+// game-owned, so it's passed in and returned; `discount` is the bulk-food perk.
+export function buyFood(c: Career, gold: number, food: Food, market: Record<Food, number>, discount = 1): { c: Career; gold: number } {
   if (c.retired || c.fedThisWeek) return { c, gold }
-  const price = Math.max(1, Math.round(c.market[food] * discount))
+  const price = Math.max(1, Math.round(market[food] * discount))
   if (gold < price) return { c: push(c, `Wk ${c.week + 1}: can't afford ${foodName(food)} (${price}g).`), gold }
   const d = feedDelta(food, c.favouriteFood, c.hatedFood)
   const happiness = Math.max(0, Math.min(MAX_HAPPINESS, c.happiness + d))
@@ -182,6 +190,28 @@ function push(c: Career, line: string): Career {
   return { ...c, log: [...c.log, line].slice(-40) }
 }
 
+// Log a life-stage transition (shared by applyWeek and ageOneWeek). Mutates `n`.
+function applyStageTransition(n: Career, beforeStage: Stage): void {
+  const nowStage = stageInfo(n.ageWeeks, n.species.lifespan).stage
+  if (nowStage === beforeStage) return
+  if (nowStage === 'Retiree') {
+    n.retired = true
+    n.log.push(`🏁 ${n.name} has reached retirement age and can no longer compete.`)
+  } else {
+    n.log.push(`  ↳ ${n.name} is now ${nowStage}${nowStage === 'Elder' ? ' (−20% training)' : nowStage === 'Fully Grown' ? ' (−5% training)' : ''}.`)
+  }
+}
+
+// Advance the calendar for a monster that took no weekly action (retired, or no
+// plan submitted) — it still ages.
+export function ageOneWeek(c: Career): Career {
+  const before = stageInfo(c.ageWeeks, c.species.lifespan).stage
+  const n: Career = { ...c, week: c.week + 1, ageWeeks: c.ageWeeks + 1, fedThisWeek: false, log: [...c.log] }
+  applyStageTransition(n, before)
+  n.log = n.log.slice(-40)
+  return n
+}
+
 export function applyWeek(c: Career, action: WeeklyAction, gold: number, rental = 0): { c: Career; gold: number } {
   if (c.retired) return { c, gold }
   let g = gold
@@ -193,23 +223,21 @@ export function applyWeek(c: Career, action: WeeklyAction, gold: number, rental 
   const wk = c.week + 1
 
   if (action.kind === 'train') {
-    const baseGains = action.trainType === 'weak' ? 3 : 6
-    const stamCost = Math.max(1, Math.round((action.trainType === 'weak' ? WEAK_TRAIN_COST : STRONG_TRAIN_COST) * MAX_STAMINA / 100))
+    const drill = ALL_DRILLS.find((d) => d.id === action.drillId) ?? ALL_DRILLS[0]
+    const stamCost = drill.kind === 'basic' ? BASIC_DRILL_STAMINA : INTENSIVE_DRILL_STAMINA
     const malus = staminaMalus(n.stamina)
     const eff = trainMult * malus
     const changes: string[] = []
-    for (const stat of STATS) {
-      const delta = baseGains
-      const bodyBonus = statTrainingBonus(c.species, stat)
-      const applied = Math.round(delta * eff * bodyBonus)
+    for (const [stat, delta] of Object.entries(drill.gains) as [Stat, number][]) {
+      // gains scale with life stage, stamina, and species aptitude; drill maluses apply flat
+      const applied = delta > 0 ? Math.round(delta * eff * statTrainingBonus(c.species, stat)) : delta
       const nv = Math.max(1, Math.min(cap, n.stats[stat] + applied))
       const real = nv - n.stats[stat]
       n.stats[stat] = nv
-      if (real !== 0) changes.push(`${stat} +${real}`)
+      if (real !== 0) changes.push(`${stat} ${real > 0 ? '+' : ''}${real}`)
     }
     n.stamina = Math.max(0, n.stamina - stamCost)
-    const trainingName = action.trainType === 'weak' ? 'Weak Training' : 'Strong Training'
-    n.log.push(`Wk ${wk}: ${trainingName} — ${changes.length > 0 ? changes.join(', ') : 'no gain (capped)'}.`)
+    n.log.push(`Wk ${wk}: ${drill.name} — ${changes.length > 0 ? changes.join(', ') : 'no gain (capped)'}.`)
   } else if (action.kind === 'rest') {
     const restMin = Math.round(0.3 * MAX_STAMINA)
     const restMax = Math.round(1 * MAX_STAMINA)
@@ -229,7 +257,7 @@ export function applyWeek(c: Career, action: WeeklyAction, gold: number, rental 
     n.log.push(`  ↳ ${n.name} went unfed — happiness ${n.happiness}/10.`)
   }
 
-  // lab upkeep, advance the calendar, age the monster, reroll the market
+  // lab upkeep, advance the calendar, age the monster
   if (rental > 0) {
     g -= rental
     n.log.push(`  ↳ lab upkeep −${rental}g (frozen genomes).`)
@@ -237,20 +265,11 @@ export function applyWeek(c: Career, action: WeeklyAction, gold: number, rental 
   n.week += 1
   n.ageWeeks += 1
   n.fedThisWeek = false
-  n.market = rollMarket(n.id, n.week)
 
   const afterMoves = learnedMoves(n.stats).length
   if (afterMoves > beforeMoves) n.log.push(`  ↳ learned ${afterMoves - beforeMoves} new move(s)!`)
 
-  const nowStage = stageInfo(n.ageWeeks, n.species.lifespan).stage
-  if (nowStage !== stage) {
-    if (nowStage === 'Retiree') {
-      n.retired = true
-      n.log.push(`🏁 ${n.name} has reached retirement age and can no longer compete.`)
-    } else {
-      n.log.push(`  ↳ ${n.name} is now ${nowStage}${nowStage === 'Elder' ? ' (−20% training)' : nowStage === 'Fully Grown' ? ' (−5% training)' : ''}.`)
-    }
-  }
+  applyStageTransition(n, stage)
 
   n.log = n.log.slice(-40)
   return { c: n, gold: g }
