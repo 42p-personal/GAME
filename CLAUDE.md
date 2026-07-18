@@ -19,7 +19,19 @@ npm run dev
 
 ## Next Steps (In Priority Order)
 
-### 1. Ability Selection UI
+### 1. Skills & Battle-Choice System (DESIGN LOCKED — user spec 2026-07-18)
+Every turn, the battle AI chooses one of:
+- **A skill** — one of the monster's 3 equipped active abilities (learned at
+  milestones via LEARN_LADDER). EVERY skill has an MP cost; if the monster can't
+  afford any equipped skill it CANNOT use one — it must Attack or Block.
+- **Attack** — universal basic attack, no MP cost (replaces "Struggle" as the
+  standard action, not a last resort).
+- **Block** — universal defensive stance, no MP cost; raises the chance to NOT
+  take a hit (avoidance, not just flat mitigation).
+The interesting work is the choice logic: when to spend MP on a skill vs
+conserve, when to block (low HP / out of MP / expecting a big hit) vs attack.
+
+### 1b. Ability Selection UI
 - Moves are already learned from stat thresholds (LEARN_LADDER) and shown in inspect view
 - Add "Change Abilities" in review phase: 3 active slots, swap from learned pool
 - Persist loadout choice on Career (currently auto-chosen by chooseLoadout)
