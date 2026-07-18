@@ -1,10 +1,10 @@
-import { Dispatch, SetStateAction, useMemo, useState } from 'react'
+import { Dispatch, SetStateAction, useEffect, useMemo, useRef, useState } from 'react'
 import {
   BODY_ELEMENT, BodyType, Element, FOODS, Monster, STATS, Stat, Species, bodySignature, feedDelta,
   happinessMultiplier, hashString, mulberry32,
 } from './core'
 import { generateMonster, maxHp, maxMana } from './monster'
-import { simulateBattle } from './battle'
+import { BattleResult, simulateBattle } from './battle'
 import { SPRITES, palette } from './sprites'
 import { SPECIES } from './species'
 import { BIOS } from './bestiary'
@@ -184,6 +184,42 @@ function Bestiary() {
   )
 }
 
+// Reveals the battle log turn-by-turn (~1.5s per action) so the fight plays out
+// like a match you're watching, even though the sim is resolved instantly.
+function BattleReplay({ result, onClear }: { result: BattleResult; onClear: () => void }) {
+  const [revealed, setRevealed] = useState(0)
+  const logRef = useRef<HTMLDivElement>(null)
+  const done = revealed >= result.log.length
+
+  useEffect(() => {
+    if (done) return
+    const line = result.log[revealed]
+    const isTurn = / uses |^🏆|^🏳️/.test(line) // an action (or the finale) = a beat
+    const t = setTimeout(() => setRevealed((r) => r + 1), isTurn ? 1500 : 300)
+    return () => clearTimeout(t)
+  }, [result, revealed, done])
+
+  useEffect(() => {
+    const el = logRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [revealed])
+
+  return (
+    <>
+      <div className="battlebar">
+        {!done && <button className="ghost" onClick={() => setRevealed(result.log.length)}>skip ⏭</button>}
+        <button className="ghost" onClick={onClear}>clear</button>
+      </div>
+      {done && <div className="result">{result.winner === 'draw' ? 'Draw!' : `🏆 ${result.winnerName} wins`}</div>}
+      <div className="log" ref={logRef}>
+        {result.log.slice(0, revealed).map((line, i) => (
+          <div key={i} className={line.startsWith('🏆') || line.startsWith('🏳️') ? 'win' : ''}>{line}</div>
+        ))}
+      </div>
+    </>
+  )
+}
+
 function SandboxView() {
   const [seedA, setSeedA] = useState('Bouldram')
   const [seedB, setSeedB] = useState('Maelurk')
@@ -195,8 +231,12 @@ function SandboxView() {
   const monA = useMemo(() => generateMonster(seedA, { train: trainA }), [seedA, trainA])
   const monB = useMemo(() => generateMonster(seedB, { train: trainB }), [seedB, trainB])
 
-  const [result, setResult] = useState<ReturnType<typeof simulateBattle> | null>(null)
-  const runBattle = () => setResult(simulateBattle(monA, monB, happyA, happyB))
+  const [result, setResult] = useState<BattleResult | null>(null)
+  const [battleKey, setBattleKey] = useState(0)
+  const runBattle = () => {
+    setResult(simulateBattle(monA, monB, happyA, happyB))
+    setBattleKey((k) => k + 1)
+  }
 
   return (
     <>
@@ -210,19 +250,9 @@ function SandboxView() {
 
       <div className="battlebar">
         <button onClick={runBattle}>⚔️ Auto-Battle</button>
-        {result && <button className="ghost" onClick={() => setResult(null)}>clear</button>}
       </div>
 
-      {result && (
-        <>
-          <div className="result">{result.winner === 'draw' ? 'Draw!' : `🏆 ${result.winnerName} wins`}</div>
-          <div className="log">
-            {result.log.map((line, i) => (
-              <div key={i} className={line.startsWith('🏆') || line.startsWith('🏳️') ? 'win' : ''}>{line}</div>
-            ))}
-          </div>
-        </>
-      )}
+      {result && <BattleReplay key={battleKey} result={result} onClear={() => setResult(null)} />}
     </>
   )
 }

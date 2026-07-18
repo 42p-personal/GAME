@@ -687,6 +687,9 @@ specific pairings, giving breeders combos to chase.
   ×0.7 resisted / ×1.3 weak), and all damage a monster deals scales by its **happiness** (§2.5, ×1.00–1.10).
 - The sim consumes: monster stats, class, **innate abilities + 3 equipped learned moves + ultimate**
   (§7), team format (1v1…4v4, FFA), chosen tactics/formation, and the active **league ruleset** modifiers.
+- **Presentation:** the fight resolves instantly, but the log **plays back turn-by-turn** (~1.5s per
+  action) so it reads like a match you're watching — the winner is hidden until the replay finishes, with
+  a **skip** to reveal the rest at once (`BattleReplay` in `src/App.tsx`).
 
 ---
 
