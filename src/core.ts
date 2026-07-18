@@ -23,7 +23,7 @@ export const BODY_TYPE_STATS: Record<BodyType, BodyTypeStats> = {
   Avian: { primary: 'DEX', secondary: 'CHA', weakness: 'CON' },
   Marsupial: { primary: 'CHA', secondary: 'DEX', weakness: 'INT' },
   Aquatic: { primary: 'WIS', secondary: 'INT', weakness: 'STR' },
-  Draconic: { primary: 'STR', secondary: 'WIS', weakness: 'CHA' },
+  Draconic: { primary: 'STR', secondary: 'WIS', weakness: 'DEX' },
   Abyssal: { primary: 'INT', secondary: 'DEX', weakness: 'CON' },
   Mythical: { primary: 'STR', secondary: 'CON', weakness: 'CHA' }, // varies per species, will override
 }
@@ -137,7 +137,7 @@ export const BODY_AVERAGES: Record<BodyType, Stats> = {
   Avian: { STR: 16, DEX: 34, CON: 16, WIS: 28, INT: 26, CHA: 20 },
   Marsupial: { STR: 22, DEX: 33, CON: 19, WIS: 20, INT: 10, CHA: 37 },
   Aquatic: { STR: 14, DEX: 21, CON: 28, WIS: 31, INT: 33, CHA: 13 },
-  Draconic: { STR: 40, DEX: 22, CON: 24, WIS: 26, INT: 20, CHA: 6 }, // STR+WIS focus, weak CHA
+  Draconic: { STR: 40, DEX: 6, CON: 24, WIS: 26, INT: 20, CHA: 22 }, // STR+WIS focus, weak DEX
   Abyssal: { STR: 15, DEX: 33, CON: 12, WIS: 27, INT: 33, CHA: 11 }, // INT+DEX focus, weak CON
   Mythical: { STR: 36, DEX: 27, CON: 31, WIS: 24, INT: 26, CHA: 23 }, // varies by species, default warrior-like
 }
