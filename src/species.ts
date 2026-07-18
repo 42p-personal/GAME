@@ -1,4 +1,5 @@
-// The 35 species (§8.2 / §8.3): stats, lifespans, innate abilities, ultimates.
+// The 45 species (§8.2 / §8.3): stats, lifespans, innate abilities, ultimates.
+// 30 base (6 body types × 5) + 15 exclusive (Draconic/Abyssal/Mythical).
 import { BodyType, STATS, Stat, Stats, Species } from './core'
 
 const s = (STR: number, DEX: number, CON: number, WIS: number, INT: number, CHA: number) => ({ STR, DEX, CON, WIS, INT, CHA })
@@ -51,6 +52,30 @@ export const SPECIES: Species[] = [
     innate: [{ name: 'Live Wire', desc: 'Ranged hit with a stun chance.' }, { name: 'Static Field', desc: 'Chips enemy mana.' }], ultimate: { name: 'Thunderstorm', desc: 'Chain-lightning stun across enemies.' } },
   { id: 'corallux', name: 'Corallux', body: 'Aquatic', naturalClass: 'Spellsword', base: s(20, 14, 36, 24, 40, 12), lifespan: 5, flavour: 'Coral crustacean, mage-bruiser.',
     innate: [{ name: 'Spellblade', desc: 'Melee hits add elemental damage.' }, { name: 'Coral Guard', desc: 'Defence while casting.' }], ultimate: { name: 'Reef Blade', desc: 'Empowers melee with elemental burst + self-fortify.' } },
+
+  // --- Insectoid (⛰️ resist / 💧 weak) — chitinous, tireless; covers WIS/DEX training weaknesses ---
+  { id: 'scarabrute', name: 'Scarabrute', body: 'Insectoid', naturalClass: 'Tank', base: s(36, 16, 44, 8, 14, 12), lifespan: 5, flavour: 'Colossal beetle, living rampart.',
+    innate: [{ name: 'Chitin Plate', desc: 'Flat damage reduction.' }, { name: 'Burrow', desc: 'Slips underground to avoid hits.' }], ultimate: { name: 'Fortress Carapace', desc: 'Near-impervious shell; taunts all enemies.' } },
+  { id: 'mantevoke', name: 'Mantevoke', body: 'Insectoid', naturalClass: 'Rogue', base: s(34, 42, 18, 8, 20, 12), lifespan: 4, flavour: 'Mantis duellist, patient killer.',
+    innate: [{ name: 'Ambush', desc: 'Devastating opening strike.' }, { name: 'Serrated Claws', desc: 'Attacks shred and linger.' }], ultimate: { name: 'Scything Execution', desc: 'A single perfect cut; massive crit.' } },
+  { id: 'arachnyx', name: 'Arachnyx', body: 'Insectoid', naturalClass: 'Wizard', base: s(14, 8, 16, 32, 40, 20), lifespan: 4, flavour: 'Web-weaver mage, never leaves its lair.',
+    innate: [{ name: 'Web Trap', desc: 'Hard to reach; foes arrive slowed.' }, { name: 'Venom Fang', desc: 'Magic laced with toxin.' }], ultimate: { name: 'Silken Cataclysm', desc: 'Binds all enemies in webs; heavy poison burst.' } },
+  { id: 'vespera', name: 'Vespera', body: 'Insectoid', naturalClass: 'Orator', base: s(12, 8, 26, 34, 18, 44), lifespan: 5, flavour: 'Wasp queen, voice of the hive.',
+    innate: [{ name: 'Hive Command', desc: 'The swarm amplifies her strikes.' }, { name: 'Royal Jelly', desc: 'Restorative aura.' }], ultimate: { name: 'Swarm Decree', desc: 'Summons the hive; overwhelming AoE.' } },
+  { id: 'odonatra', name: 'Odonatra', body: 'Insectoid', naturalClass: 'Ranger', base: s(14, 44, 16, 22, 30, 8), lifespan: 4, flavour: 'Dragonfly skirmisher, four-winged blur.',
+    innate: [{ name: 'Skim Dart', desc: 'Opening dive at full speed.' }, { name: 'Compound Eyes', desc: 'Sees every gap in a guard.' }], ultimate: { name: 'Thousand-Lens Volley', desc: 'Unerring ranged barrage; cannot miss.' } },
+
+  // --- Reptilian (🔥 resist / 💨 weak) — slow, patient, cold-blooded; covers DEX/WIS training weaknesses ---
+  { id: 'crocmaw', name: 'Crocmaw', body: 'Reptilian', naturalClass: 'Warrior', base: s(44, 10, 38, 20, 12, 14), lifespan: 6, flavour: 'River crocodile, ambush juggernaut.',
+    innate: [{ name: 'Death Roll', desc: 'Grapples crush and tear.' }, { name: 'Armored Scales', desc: 'Flat damage reduction.' }], ultimate: { name: 'Jawbreaker Vice', desc: 'Clamps one enemy; colossal damage + stun.' } },
+  { id: 'iguanor', name: 'Iguanor', body: 'Reptilian', naturalClass: 'Captain', base: s(42, 10, 26, 14, 12, 34), lifespan: 4, flavour: 'Crested iguana warlord.',
+    innate: [{ name: 'Sun Basking', desc: 'Recovers strength between blows.' }, { name: 'Crest Display', desc: 'Intimidating presence empowers attacks.' }], ultimate: { name: 'Banner of Scales', desc: 'Rallying display; team-wide attack surge.' } },
+  { id: 'serpwyn', name: 'Serpwyn', body: 'Reptilian', naturalClass: 'Sage', base: s(16, 22, 14, 42, 30, 8), lifespan: 5, flavour: 'Hooded cobra oracle, unblinking.',
+    innate: [{ name: 'Cold Blood', desc: 'Unshaken; reduces incoming damage.' }, { name: 'Hypnotic Gaze', desc: 'Strikes land where the eyes lead.' }], ultimate: { name: "Serpent's Prophecy", desc: 'Foresees the fight; team dodges + mana surge.' } },
+  { id: 'geckari', name: 'Geckari', body: 'Reptilian', naturalClass: 'Rogue', base: s(30, 40, 18, 8, 16, 20), lifespan: 4, flavour: 'Gecko wall-runner, impossible angles.',
+    innate: [{ name: 'Wall Runner', desc: 'Attacks from surfaces others cannot reach.' }, { name: 'Tail Drop', desc: 'Sheds its tail to escape a killing blow.' }], ultimate: { name: 'Ceiling Ambush', desc: 'Untouchable repositioning; guaranteed backstab.' } },
+  { id: 'tortavos', name: 'Tortavos', body: 'Reptilian', naturalClass: 'Spellshield', base: s(8, 12, 44, 36, 22, 14), lifespan: 6, flavour: 'Ancient tortoise mystic, unhurried.',
+    innate: [{ name: 'Shell Ward', desc: 'Flat damage reduction.' }, { name: 'Inner Calm', desc: 'Deep reserves of mana.' }], ultimate: { name: 'Aeon Shell', desc: 'Time slows around the shell; massive team barrier.' } },
 
   // --- Draconic (STR / WIS, weakness CHA) — Silver rank exclusive ---
   { id: 'pyraxon', name: 'Pyraxon', body: 'Draconic', naturalClass: 'Warrior', base: s(28, 18, 24, 20, 16, 8), lifespan: 5, flavour: 'Fire-breathing drake, ancient fury.',

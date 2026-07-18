@@ -13,7 +13,7 @@ export const STAT_NAMES: Record<Stat, string> = {
 }
 export type Stats = Record<Stat, number>
 
-export type BodyType = 'Mammal' | 'Avian' | 'Marsupial' | 'Aquatic' | 'Draconic' | 'Abyssal' | 'Mythical'
+export type BodyType = 'Mammal' | 'Avian' | 'Marsupial' | 'Aquatic' | 'Insectoid' | 'Reptilian' | 'Draconic' | 'Abyssal' | 'Mythical'
 export type Sex = 'M' | 'F'
 
 // Training aptitude: primary +20% exp, secondary +10%, weakness -20%.
@@ -128,15 +128,18 @@ export function classForStats(stats: Stats): string {
 
 // --- Elemental affinities (§8.5) ---
 // Each body type resists one element (takes less) and is weak to one (takes more).
-// Two mirrored pairs: Aquatic/Avian on fire/earth, Mammal/Marsupial on water/air.
+// Every body type has a UNIQUE (resist, weak) pair — no two share the same combo,
+// so elemental matchups always distinguish body types (validated in validate.ts).
 export const BODY_ELEMENT: Record<BodyType, { resist: Element; weak: Element }> = {
-  Aquatic: { resist: 'fire', weak: 'earth' },
-  Avian: { resist: 'earth', weak: 'fire' },
   Mammal: { resist: 'water', weak: 'air' },
+  Avian: { resist: 'earth', weak: 'fire' },
   Marsupial: { resist: 'air', weak: 'water' },
+  Aquatic: { resist: 'fire', weak: 'earth' },
+  Insectoid: { resist: 'earth', weak: 'water' }, // chitin shrugs off stone; rain drowns the swarm
+  Reptilian: { resist: 'fire', weak: 'air' }, // desert-baskers; cold winds still cold blood
   Draconic: { resist: 'fire', weak: 'water' },
-  Abyssal: { resist: 'water', weak: 'air' },
-  Mythical: { resist: 'fire', weak: 'earth' },
+  Abyssal: { resist: 'water', weak: 'fire' }, // crushing depths; surface heat is lethal
+  Mythical: { resist: 'air', weak: 'earth' }, // celestial beings; the ground rejects them
 }
 export const RESIST_MULT = 0.7
 export const WEAK_MULT = 1.3

@@ -1,7 +1,7 @@
 // Dev-only design validation. Catches data drift that produced real bugs before:
 // species whose stats derive a different class than their naturalClass, duplicate
 // class stat-pairs (which shadow each other), and degenerate stat spreads.
-import { CLASSES, STATS, classForStats } from './core'
+import { BODY_ELEMENT, BodyType, CLASSES, STATS, classForStats } from './core'
 import { SPECIES } from './species'
 import { trainingProfileFor } from './game'
 
@@ -15,6 +15,16 @@ export function validateDesign(): void {
     const prev = seenPairs.get(key)
     if (prev) problems.push(`CLASSES: ${c.name} duplicates ${prev}'s stat pair ${key} — ${c.name} is unreachable.`)
     seenPairs.set(key, c.name)
+  }
+
+  // Element affinities: every body type must have a unique (resist, weak) pair.
+  const seenElements = new Map<string, string>()
+  for (const [body, aff] of Object.entries(BODY_ELEMENT) as [BodyType, { resist: string; weak: string }][]) {
+    if (aff.resist === aff.weak) problems.push(`BODY_ELEMENT: ${body} resists and is weak to ${aff.resist}.`)
+    const key = aff.resist + '>' + aff.weak
+    const prev = seenElements.get(key)
+    if (prev) problems.push(`BODY_ELEMENT: ${body} duplicates ${prev}'s affinity (resist ${aff.resist} / weak ${aff.weak}).`)
+    seenElements.set(key, body)
   }
 
   for (const sp of SPECIES) {

@@ -165,6 +165,8 @@ function Bestiary({ specialLicense, eliteLicense }: { specialLicense: boolean; e
     { bt: 'Avian', locked: false, licenseName: '' },
     { bt: 'Marsupial', locked: false, licenseName: '' },
     { bt: 'Aquatic', locked: false, licenseName: '' },
+    { bt: 'Insectoid', locked: false, licenseName: '' },
+    { bt: 'Reptilian', locked: false, licenseName: '' },
     { bt: 'Draconic', locked: !specialLicense, licenseName: 'Special Breeding License' },
     { bt: 'Abyssal', locked: !specialLicense, licenseName: 'Special Breeding License' },
     { bt: 'Mythical', locked: !eliteLicense, licenseName: 'Elite Breeding License' },

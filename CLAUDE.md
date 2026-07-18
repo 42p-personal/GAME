@@ -80,10 +80,13 @@ so a monster's class never flips from its species.
   regen, damage mults, first-hit bonuses, lifesteal)
 - Ultimate (stat 600+) fires once per battle below 40% HP
 
-### Exclusive Body Types
-- **Special License (800g)**: Draconic + Abyssal unlock (market + bestiary)
-- **Elite License (2000g)**: Mythical unlock
-- Market filtering AND buyMonster guard both enforce licenses (`src/town.ts`)
+### Body Types (9)
+Base: Mammal, Avian, Marsupial, Aquatic, Insectoid, Reptilian.
+Exclusive: Draconic + Abyssal (Special License 800g), Mythical (Elite License 2000g).
+Market filtering AND buyMonster guard both enforce licenses (`src/town.ts`).
+Every body type has a UNIQUE element (resist, weak) pair — enforced by validate.ts.
+Insectoid/Reptilian species carry the DEX- and WIS-weak training profiles no other
+monsters have, so all six stats appear as both strengths and weaknesses somewhere.
 
 ## Files to Know
 
@@ -94,7 +97,7 @@ so a monster's class never flips from its species.
 | `src/drills.ts` | The 18 training drills (basic + intensive) |
 | `src/App.tsx` | UI: TownView, RanchView, saves, sequential decisions |
 | `src/core.ts` | Types, classes, elements, learn ladder, RNG |
-| `src/species.ts` | 35 species (20 base + 15 exclusive) + computed BODY_AVERAGES |
+| `src/species.ts` | 45 species (30 base across 6 body types + 15 exclusive) + computed BODY_AVERAGES |
 | `src/battle.ts` | Auto-battle sim: mana, innates, ultimates |
 | `src/validate.ts` | Dev-only design consistency checks |
 | `src/sprites.ts` | 16x16 pixel art per body type |
@@ -110,5 +113,5 @@ All changes pushed to **main**. No wrangler deploy yet (Worker hasn't changed).
 - [ ] Proceed → gold drops by food, stamina by drill, chosen stat gains
 - [ ] Advance 4 weeks → market restocks with 3 new monsters at Month 2
 - [ ] Reload page → game state persists; New Game resets after confirm
-- [ ] Bestiary lists all 7 body types; exclusives locked until licensed
+- [ ] Bestiary lists all 9 body types; exclusives locked until licensed
 - [ ] Sandbox battle log shows innates, mana exhaustion, drains
