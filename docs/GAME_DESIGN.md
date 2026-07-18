@@ -78,6 +78,26 @@ Each stat has **two** intensive drills (each sacrificing a different stat), so a
 build hard while choosing *which* weakness to accept. Data lives in `src/drills.ts`.
 *(Exact per-week values and stamina/injury interactions are tuning, §13.)*
 
+### 2.5 Feeding & happiness
+Each monster is assigned a **random favourite** and **hated** food at birth. The **Feeding** weekly
+action buys a food and feeds it:
+- **Favourite → +1 happiness**, **hated → −1 happiness**, any other food is neutral.
+- **Happiness** runs **0–10**. It scales battle damage at **+1% per point** — a monster at max happiness
+  deals **×1.10** damage (`happinessMultiplier` in `src/core.ts`).
+
+**Foods** (cheapest → most expensive; feeding costs money, §12):
+
+| Food         | Rel. cost |
+|--------------|:---------:|
+| Vegetables   | cheapest  |
+| Fruit        | ↑         |
+| Meat         | ↑         |
+| Sweet Treats | dearest   |
+
+The tension: a monster whose favourite is **Sweet Treats** is expensive to keep happy, while a
+veggie-lover is cheap — and feeding the **hated** food (maybe the only cheap option that week) costs you
+happiness. Favourite/hated are stored on the monster; happiness is live state.
+
 ---
 
 ## 3. Leagues & Ranking (Licenses)
@@ -530,6 +550,24 @@ three ways so no two feel the same even inside the same type:
 > individual variance (§10.2) — so even two same-species monsters differ slightly, and every species
 > differs meaningfully from its body-type norm.
 
+### 8.5 Elemental affinities
+Elemental magic (§5, INT channel) comes in four elements — **fire, water, earth, air**. Each **body type
+resists one** element (takes less) and is **weak to one** (takes more). Two mirrored pairs, so every
+element is resisted by exactly one body type and exploited against exactly one:
+
+| Body type  | Resists (×0.7) | Weak to (×1.3) |
+|------------|:--------------:|:--------------:|
+| Aquatic    | 🔥 Fire        | ⛰️ Earth       |
+| Avian      | ⛰️ Earth       | 🔥 Fire        |
+| Mammal     | 💧 Water       | 💨 Air         |
+| Marsupial  | 💨 Air         | 💧 Water       |
+
+*Theme:* water douses fire (Aquatic resists fire) but silt/ground unsettles it; fliers soar over ground
+attacks (Avian resists earth) but fire singes wings; grounded beasts shrug off water (Mammal) but are
+tossed by gusts; nimble marsupials ride the wind but swim poorly. Multipliers (`RESIST_MULT` /
+`WEAK_MULT` in `src/core.ts`) are tunable. Only moves with an `element` (the INT pool, §7.5) trigger
+affinity; melee/ranged/voice are non-elemental.
+
 ---
 
 ## 9. Lifespan, Life Cycle & Retirement
@@ -633,6 +671,8 @@ specific pairings, giving breeders combos to chase.
   mitigation via **defence**, **dodge**, **HP**, and **mana** economy.
 - Each move resolves against its **accuracy** and **cooldown** (§7.2); moves may deal damage, buff, or
   apply a **status effect** (§7.6). The sim ticks statuses (Burn→HP, Poison→mana) each round.
+- **Damage multipliers:** elemental moves scale by the target's **body-type affinity** (§8.5,
+  ×0.7 resisted / ×1.3 weak), and all damage a monster deals scales by its **happiness** (§2.5, ×1.00–1.10).
 - The sim consumes: monster stats, class, **innate abilities + 3 equipped learned moves + ultimate**
   (§7), team format (1v1…4v4, FFA), chosen tactics/formation, and the active **league ruleset** modifiers.
 
@@ -650,7 +690,8 @@ Money is the throttle on every mechanic — you earn it in the arena and spend i
 ### 12.2 Costs (everything has a price)
 | Mechanic            | Cost      | Notes                                                             |
 |---------------------|-----------|------------------------------------------------------------------|
-| Weekly care         | Low       | Training / rest / feeding / excursions — routine upkeep.         |
+| Weekly care         | Low       | Training / rest / excursions — routine upkeep.                   |
+| **Feeding**         | Veg → Sweets (cheap→dear) | Buys a food; favourite raises **happiness** → battle damage (§2.5). |
 | **Breeding**        | **Cheap** | Needs a **compatible male + female** (same body type, opposite sex). The everyday generational tool. |
 | **Fusion**          | **Very expensive** | Directed, consumes a frozen donor — a premium, deliberate play. |
 | Freezing / storage  | TBD       | Possible upkeep per frozen genome or stable slot.                |

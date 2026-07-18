@@ -1,5 +1,8 @@
 import { useMemo, useState } from 'react'
-import { Monster, STATS, Stat, bodySignature, hashString, mulberry32 } from './core'
+import {
+  BODY_ELEMENT, Element, FOODS, Monster, STATS, Stat, bodySignature, feedDelta,
+  happinessMultiplier, hashString, mulberry32,
+} from './core'
 import { generateMonster, maxHp, maxMana } from './monster'
 import { simulateBattle } from './battle'
 import { SPRITES, palette } from './sprites'
@@ -8,6 +11,7 @@ const STAT_COLOR: Record<Stat, string> = {
   STR: 'var(--str)', DEX: 'var(--dex)', CON: 'var(--con)',
   WIS: 'var(--wis)', INT: 'var(--int)', CHA: 'var(--cha)',
 }
+const ELEMENT_ICON: Record<Element, string> = { fire: '🔥', water: '💧', earth: '⛰️', air: '💨' }
 
 // Pixel-art sprite: the species' body-type silhouette, tinted by a per-species hue.
 function Sprite({ m, size = 96 }: { m: Monster; size?: number }) {
@@ -75,6 +79,11 @@ function MonsterCard({ m }: { m: Monster }) {
         <span className={'badge' + (m.ultimateUnlocked ? ' on' : '')}>★ {m.species.ultimate.name} {m.ultimateUnlocked ? '' : '(600)'}</span>
       </div>
 
+      <div className="afftaste">
+        <span>Element: <b className="up">{ELEMENT_ICON[BODY_ELEMENT[m.species.body].resist]} resist</b> · <b className="down">{ELEMENT_ICON[BODY_ELEMENT[m.species.body].weak]} weak</b></span>
+        <span>Taste: <b className="up">♥ {m.favouriteFood}</b> · <b className="down">✖ {m.hatedFood}</b></span>
+      </div>
+
       {STATS.map((k) => <StatBar key={k} stat={k} value={m.stats[k]} max={barMax} />)}
 
       <div className="section-title">Innate</div>
@@ -97,10 +106,13 @@ function MonsterCard({ m }: { m: Monster }) {
   )
 }
 
-function Stable({ label, seed, setSeed, train, setTrain, m }: {
+function Stable({ label, seed, setSeed, train, setTrain, happiness, setHappiness, m }: {
   label: string; seed: string; setSeed: (s: string) => void
-  train: number; setTrain: (n: number) => void; m: Monster
+  train: number; setTrain: (n: number) => void
+  happiness: number; setHappiness: (n: number) => void; m: Monster
 }) {
+  const feed = (food: (typeof FOODS)[number]['id']) =>
+    setHappiness(Math.max(0, Math.min(10, happiness + feedDelta(food, m.favouriteFood, m.hatedFood))))
   return (
     <div className="card">
       <div className="controls">
@@ -112,6 +124,23 @@ function Stable({ label, seed, setSeed, train, setTrain, m }: {
         <input type="range" min={0} max={2400} step={20} value={train} onChange={(e) => setTrain(Number(e.target.value))} />
       </div>
       <MonsterCard m={m} />
+      <div className="feed">
+        <div className="happyrow">
+          <span>Happiness {happiness}/10</span>
+          <span className="dim">battle dmg ×{happinessMultiplier(happiness).toFixed(2)}</span>
+        </div>
+        <div className="happybar"><i style={{ width: `${happiness * 10}%` }} /></div>
+        <div className="foods">
+          {FOODS.map((f) => {
+            const d = feedDelta(f.id, m.favouriteFood, m.hatedFood)
+            return (
+              <button key={f.id} className="food" onClick={() => feed(f.id)} title={`${f.price}g · ${d > 0 ? 'favourite (+1)' : d < 0 ? 'hated (−1)' : 'neutral'}`}>
+                {f.name}{d > 0 ? ' ♥' : d < 0 ? ' ✖' : ''}
+              </button>
+            )
+          })}
+        </div>
+      </div>
     </div>
   )
 }
@@ -121,12 +150,14 @@ export function App() {
   const [seedB, setSeedB] = useState('Maelurk')
   const [trainA, setTrainA] = useState(300)
   const [trainB, setTrainB] = useState(300)
+  const [happyA, setHappyA] = useState(5)
+  const [happyB, setHappyB] = useState(5)
 
   const monA = useMemo(() => generateMonster(seedA, { train: trainA }), [seedA, trainA])
   const monB = useMemo(() => generateMonster(seedB, { train: trainB }), [seedB, trainB])
 
   const [result, setResult] = useState<ReturnType<typeof simulateBattle> | null>(null)
-  const runBattle = () => setResult(simulateBattle(monA, monB))
+  const runBattle = () => setResult(simulateBattle(monA, monB, happyA, happyB))
 
   return (
     <div className="app">
@@ -134,9 +165,9 @@ export function App() {
       <p className="sub">Type a seed to generate a monster, invest training to unlock moves &amp; its ultimate (at 600), then auto-battle. Same seeds → same monsters &amp; same fight.</p>
 
       <div className="arena">
-        <Stable label="A" seed={seedA} setSeed={setSeedA} train={trainA} setTrain={setTrainA} m={monA} />
+        <Stable label="A" seed={seedA} setSeed={setSeedA} train={trainA} setTrain={setTrainA} happiness={happyA} setHappiness={setHappyA} m={monA} />
         <div className="vs">VS</div>
-        <Stable label="B" seed={seedB} setSeed={setSeedB} train={trainB} setTrain={setTrainB} m={monB} />
+        <Stable label="B" seed={seedB} setSeed={setSeedB} train={trainB} setTrain={setTrainB} happiness={happyB} setHappiness={setHappyB} m={monB} />
       </div>
 
       <div className="battlebar">

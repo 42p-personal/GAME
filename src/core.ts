@@ -21,6 +21,11 @@ export type MoveType = 'damage' | 'buff' | 'debuff' | 'status' | 'control'
 export type Target = 'enemy' | 'allEnemies' | 'self' | 'ally' | 'team'
 export type StatusKind = 'blind' | 'poison' | 'burn' | 'fear' | 'confusion' | 'stun' | 'knockback'
 
+export type Element = 'fire' | 'water' | 'earth' | 'air'
+export const ELEMENTS: Element[] = ['fire', 'water', 'earth', 'air']
+
+export type Food = 'vegetables' | 'fruit' | 'meat' | 'sweet treats'
+
 export interface MoveStatus { kind: StatusKind; chance: number; duration: number }
 
 export interface Move {
@@ -35,6 +40,7 @@ export interface Move {
   accuracy: number // 0..100
   power: number // damage / heal scale; 0 for pure utility
   status?: MoveStatus
+  element?: Element // magic moves carry an element (§8.5)
   desc: string
 }
 
@@ -63,6 +69,8 @@ export interface Monster {
   learned: Move[]
   loadout: Move[]
   ultimateUnlocked: boolean
+  favouriteFood: Food
+  hatedFood: Food
 }
 
 // --- Leagues (license -> stat cap), §3 ---
@@ -127,6 +135,41 @@ export function bodySignature(base: Stats, body: BodyType): { above: Stat[]; bel
   const above = deltas.filter((x) => x.d >= 4).sort((a, b) => b.d - a.d).slice(0, 2).map((x) => x.s)
   const below = deltas.filter((x) => x.d <= -4).sort((a, b) => a.d - b.d).slice(0, 2).map((x) => x.s)
   return { above, below }
+}
+
+// --- Elemental affinities (§8.5) ---
+// Each body type resists one element (takes less) and is weak to one (takes more).
+// Two mirrored pairs: Aquatic/Avian on fire/earth, Mammal/Marsupial on water/air.
+export const BODY_ELEMENT: Record<BodyType, { resist: Element; weak: Element }> = {
+  Aquatic: { resist: 'fire', weak: 'earth' },
+  Avian: { resist: 'earth', weak: 'fire' },
+  Mammal: { resist: 'water', weak: 'air' },
+  Marsupial: { resist: 'air', weak: 'water' },
+}
+export const RESIST_MULT = 0.7
+export const WEAK_MULT = 1.3
+export function elementMultiplier(body: BodyType, element: Element): number {
+  const aff = BODY_ELEMENT[body]
+  if (aff.resist === element) return RESIST_MULT
+  if (aff.weak === element) return WEAK_MULT
+  return 1
+}
+
+// --- Food & happiness (§2.4 / §12) ---
+export const FOODS: { id: Food; name: string; price: number }[] = [
+  { id: 'vegetables', name: 'Vegetables', price: 5 },
+  { id: 'fruit', name: 'Fruit', price: 10 },
+  { id: 'meat', name: 'Meat', price: 20 },
+  { id: 'sweet treats', name: 'Sweet Treats', price: 40 },
+]
+export const MAX_HAPPINESS = 10
+// Happiness 0..10 → +1% damage per point (1.10× at 10).
+export const happinessMultiplier = (happiness: number) => 1 + 0.01 * happiness
+// Feeding: favourite +1 happiness, hated −1, anything else neutral.
+export function feedDelta(food: Food, fav: Food, hated: Food): number {
+  if (food === fav) return 1
+  if (food === hated) return -1
+  return 0
 }
 
 // --- Status descriptions (§7.6) ---

@@ -1,6 +1,6 @@
 // 1v1 auto-battle simulator (§11). Deterministic given a seed. Teamfight-Manager
 // style: no player input mid-fight — the monster's build decides the outcome.
-import { Monster, Move, RNG, StatusKind, chance, hashString, mulberry32 } from './core'
+import { Monster, Move, RNG, StatusKind, chance, elementMultiplier, happinessMultiplier, hashString, mulberry32 } from './core'
 import { attackStat, dodgeChance, manaRegen, maxHp, maxMana } from './monster'
 
 interface ActiveStatus { kind: StatusKind; turns: number }
@@ -14,6 +14,7 @@ interface Combatant {
   cooldowns: Record<string, number> // moveId -> turns remaining
   statuses: ActiveStatus[]
   guard: number // temporary flat damage reduction (from buff moves)
+  happiness: number // 0..10, scales damage dealt (§2.4)
 }
 
 export interface BattleResult {
@@ -22,7 +23,7 @@ export interface BattleResult {
   winnerName: string
 }
 
-function makeCombatant(m: Monster): Combatant {
+function makeCombatant(m: Monster, happiness: number): Combatant {
   return {
     m,
     hp: maxHp(m.stats),
@@ -32,6 +33,7 @@ function makeCombatant(m: Monster): Combatant {
     cooldowns: {},
     statuses: [],
     guard: 0,
+    happiness,
   }
 }
 
@@ -103,6 +105,15 @@ function resolveMove(attacker: Combatant, defender: Combatant, move: Move, rng: 
   const atk = attackStat(attacker.m.stats, move.channel)
   const variance = 0.85 + rng() * 0.3
   let dmg = move.power * (atk / 40) * variance
+  dmg *= happinessMultiplier(attacker.happiness) // happy monsters hit harder (§2.4)
+  // elemental affinity: resisted or super-effective vs the target's body type (§8.5)
+  let effNote = ''
+  if (move.element) {
+    const em = elementMultiplier(realTarget.m.species.body, move.element)
+    dmg *= em
+    if (em > 1) effNote = ' — super effective!'
+    else if (em < 1) effNote = ' — resisted'
+  }
   // physical channels mitigated by target STR-based guard; magic/voice partly by CON
   const mitigation = (move.channel === 'melee' || move.channel === 'ranged')
     ? realTarget.m.stats.STR * 0.06 + realTarget.guard
@@ -110,7 +121,7 @@ function resolveMove(attacker: Combatant, defender: Combatant, move: Move, rng: 
   dmg = Math.max(1, Math.round(dmg - mitigation))
   realTarget.hp -= dmg
   realTarget.guard = 0
-  log.push(`  ${attacker.m.name} uses ${move.name} → ${dmg} damage to ${realTarget.m.name}.`)
+  log.push(`  ${attacker.m.name} uses ${move.name} → ${dmg} damage to ${realTarget.m.name}${effNote}.`)
 
   // Apply status
   if (move.status && chance(rng, move.status.chance)) {
@@ -130,10 +141,10 @@ function takeTurn(attacker: Combatant, defender: Combatant, rng: RNG, log: strin
   resolveMove(attacker, defender, move, rng, log)
 }
 
-export function simulateBattle(a: Monster, b: Monster): BattleResult {
+export function simulateBattle(a: Monster, b: Monster, happA = 0, happB = 0): BattleResult {
   const rng = mulberry32(hashString(a.seed + '|' + b.seed + '|vs'))
-  const A = makeCombatant(a)
-  const B = makeCombatant(b)
+  const A = makeCombatant(a, happA)
+  const B = makeCombatant(b, happB)
   const log: string[] = []
   log.push(`⚔️  ${a.name} the ${a.species.name} (${a.className}) vs ${b.name} the ${b.species.name} (${b.className})`)
   log.push(`   ${a.name}: ${A.maxHp} HP · ${b.name}: ${B.maxHp} HP`)

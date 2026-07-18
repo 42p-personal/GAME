@@ -54,6 +54,19 @@ button:hover { filter: brightness(1.08); }
 .sig .down { color: var(--str); font-weight: 700; }
 .sig .dim { color: var(--muted); font-size: 11px; }
 
+.afftaste { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; margin: 6px 0 10px; color: var(--muted); }
+.afftaste .up { color: var(--dex); }
+.afftaste .down { color: var(--str); }
+.afftaste b { text-transform: capitalize; }
+
+.feed { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+.happyrow { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 5px; }
+.happyrow .dim { color: var(--muted); font-size: 12px; }
+.happybar { height: 8px; background: var(--panel2); border-radius: 6px; overflow: hidden; margin-bottom: 8px; }
+.happybar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--con), var(--dex)); border-radius: 6px; transition: width .2s; }
+.foods { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.food { background: var(--panel2); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 12.5px; font-weight: 600; }
+
 .slider { margin: 10px 0 4px; }
 .slider label { font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; }
 input[type=range] { width: 100%; }
