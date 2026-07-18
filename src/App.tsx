@@ -12,9 +12,9 @@ import {
   MAX_STAMINA, WeeklyAction, applyWeek, careerMonster, dateLabel, foodName, stageInfo,
 } from './game'
 import {
-  FUSION_COST, GameState, RENTAL_PER_FROZEN, barnCost, buyBulkFood, buyMonster,
+  FUSION_COST, GameState, RENTAL_PER_FROZEN, barnCost, buyBulkFood, buyMonster, buySpecialLicense, buyEliteLicense,
   feed, freeze, fuse, fusionRoom, goto, newGame, offerMonster, refreshMarket,
-  thaw, upgradeBarn, BULK_FOOD_COST, TOURNAMENT_CALENDAR,
+  thaw, upgradeBarn, BULK_FOOD_COST, SPECIAL_LICENSE_COST, ELITE_LICENSE_COST, TOURNAMENT_CALENDAR,
 } from './town'
 
 const STAT_COLOR: Record<Stat, string> = {
@@ -372,6 +372,24 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
             </div>
             <button disabled={game.bulkFood || game.gold < BULK_FOOD_COST} onClick={() => setGame((g) => buyBulkFood(g))}>
               {game.bulkFood ? '✓ Owned' : `Buy · ${BULK_FOOD_COST}g`}
+            </button>
+          </div>
+          <div className="shoprow">
+            <div>
+              <b>Special Breeding License</b>
+              <div className="dim">{game.specialLicense ? '✓ Unlocked Draconic & Abyssal' : 'Requires Silver league'}</div>
+            </div>
+            <button disabled={game.specialLicense || game.gold < SPECIAL_LICENSE_COST} onClick={() => setGame((g) => buySpecialLicense(g))}>
+              {game.specialLicense ? '✓ Owned' : `Buy · ${SPECIAL_LICENSE_COST}g`}
+            </button>
+          </div>
+          <div className="shoprow">
+            <div>
+              <b>Elite Breeding License</b>
+              <div className="dim">{game.eliteLicense ? '✓ Unlocked Mythical' : 'Requires Masters league'}</div>
+            </div>
+            <button disabled={game.eliteLicense || game.gold < ELITE_LICENSE_COST} onClick={() => setGame((g) => buyEliteLicense(g))}>
+              {game.eliteLicense ? '✓ Owned' : `Buy · ${ELITE_LICENSE_COST}g`}
             </button>
           </div>
         </div>

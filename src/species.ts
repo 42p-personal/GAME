@@ -51,6 +51,42 @@ export const SPECIES: Species[] = [
     innate: [{ name: 'Live Wire', desc: 'Ranged hit with a stun chance.' }, { name: 'Static Field', desc: 'Chips enemy mana.' }], ultimate: { name: 'Thunderstorm', desc: 'Chain-lightning stun across enemies.' } },
   { id: 'corallux', name: 'Corallux', body: 'Aquatic', naturalClass: 'Spellsword', base: s(20, 14, 36, 24, 40, 12), lifespan: 5, flavour: 'Coral crustacean, mage-bruiser.',
     innate: [{ name: 'Spellblade', desc: 'Melee hits add elemental damage.' }, { name: 'Coral Guard', desc: 'Defence while casting.' }], ultimate: { name: 'Reef Blade', desc: 'Empowers melee with elemental burst + self-fortify.' } },
+
+  // --- Draconic (STR / WIS, weakness CHA) — Silver rank exclusive ---
+  { id: 'pyraxon', name: 'Pyraxon', body: 'Draconic', naturalClass: 'Warrior', base: s(28, 18, 20, 24, 16, 8), lifespan: 5, flavour: 'Fire-breathing drake, ancient fury.',
+    innate: [{ name: 'Flame Aura', desc: 'Nearby foes burn (DoT).' }, { name: 'Draconic Pride', desc: 'Stronger when alone.' }], ultimate: { name: 'Inferno Cataclysm', desc: 'Massive fire AoE that ignores shields.' } },
+  { id: 'frostwyren', name: 'Frostwyren', body: 'Draconic', naturalClass: 'Wizard', base: s(24, 22, 18, 32, 24, 6), lifespan: 5, flavour: 'Icy wyvern, patient mage.',
+    innate: [{ name: 'Blizzard', desc: 'Spells leave frozen ground.' }, { name: 'Glacial Wisdom', desc: 'Mana efficiency boost.' }], ultimate: { name: 'Absolute Zero', desc: 'Freezes all enemies; stun if already frozen.' } },
+  { id: 'stormlerath', name: 'Stormlerath', body: 'Draconic', naturalClass: 'Ranger', base: s(26, 30, 20, 26, 18, 6), lifespan: 4, flavour: 'Lightning-winged serpent, swift strike.',
+    innate: [{ name: 'Overload', desc: 'High-damage ranged crits.' }, { name: 'Dodge Storm', desc: 'Evasion under pressure.' }], ultimate: { name: 'Maelstrom Lance', desc: 'Ranged barrage that chains on hits.' } },
+  { id: 'verdantdrake', name: 'Verdantdrake', body: 'Draconic', naturalClass: 'Sage', base: s(22, 20, 24, 36, 20, 8), lifespan: 6, flavour: 'Emerald dragon, nature\'s guardian.',
+    innate: [{ name: 'Life Bloom', desc: 'Passive team heal over time.' }, { name: 'Root Grasp', desc: 'Immobilize enemies briefly.' }], ultimate: { name: 'Vitality Surge', desc: 'Massive team heal + grow in power.' } },
+  { id: 'voidmaw', name: 'Voidmaw', body: 'Draconic', naturalClass: 'Wizard', base: s(20, 24, 18, 28, 32, 6), lifespan: 4, flavour: 'Void-touched dragon, cosmic terror.',
+    innate: [{ name: 'Void Pulse', desc: 'Ranged magic ignores defense.' }, { name: 'Entropy', desc: 'Debuffs enemy stats.' }], ultimate: { name: 'Annihilation', desc: 'Pure void damage; scales with enemy weaknesses.' } },
+
+  // --- Abyssal (INT / DEX, weakness CON) — Silver rank exclusive ---
+  { id: 'tenebrae', name: 'Tenebrae', body: 'Abyssal', naturalClass: 'Rogue', base: s(16, 34, 12, 26, 28, 10), lifespan: 4, flavour: 'Shadow squid, sneaky assassin.',
+    innate: [{ name: 'Cloak of Shadow', desc: 'Evasion burst + damage while hidden.' }, { name: 'Silent Strike', desc: 'Guaranteed crit from stealth.' }], ultimate: { name: 'Venom Fangs', desc: 'Stealth + poison burst combo.' } },
+  { id: 'abyssomancer', name: 'Abyssomancer', body: 'Abyssal', naturalClass: 'Wizard', base: s(14, 28, 10, 32, 40, 12), lifespan: 5, flavour: 'Deep-sea sorceress, eldritch power.',
+    innate: [{ name: 'Rift Magic', desc: 'Spells tear holes in space.' }, { name: 'Mana Theft', desc: 'Drain enemy mana on cast.' }], ultimate: { name: 'Abyssal Convergence', desc: 'Summons void rifts; massive damage + mana drain.' } },
+  { id: 'lurkerss', name: 'Lurkerss', body: 'Abyssal', naturalClass: 'Sage', base: s(12, 30, 14, 36, 32, 14), lifespan: 5, flavour: 'Luminescent serpent, deep thinker.',
+    innate: [{ name: 'Psychic Aura', desc: 'Team dodge + crit buff.' }, { name: 'Ancient Knowing', desc: 'Predict enemy actions.' }], ultimate: { name: 'Mind Flay', desc: 'Paralyze multiple enemies; drain their knowledge.' } },
+  { id: 'chrono-leviathan', name: 'Chrono-Leviathan', body: 'Abyssal', naturalClass: 'Sage', base: s(18, 32, 12, 30, 36, 8), lifespan: 6, flavour: 'Time-warped colossus, ageless predator.',
+    innate: [{ name: 'Temporal Distortion', desc: 'Slow enemies, haste allies.' }, { name: 'Age Reversal', desc: 'Heal by aging enemies.' }], ultimate: { name: 'Time\'s Grasp', desc: 'Stop all enemies for several ticks.' } },
+  { id: 'cephalumbra', name: 'Cephalumbra', body: 'Abyssal', naturalClass: 'Rogue', base: s(14, 40, 10, 24, 30, 10), lifespan: 4, flavour: 'Phantom tentacles, ghost-swift.',
+    innate: [{ name: 'Phase Shift', desc: 'Become untargetable briefly.' }, { name: 'Whip Strike', desc: 'Ranged multi-hit.' }], ultimate: { name: 'Phantom Assault', desc: 'Untargetable flurry; each hit paralyzes.' } },
+
+  // --- Mythical (5 unique archetypes) — Masters rank exclusive ---
+  { id: 'titanrex', name: 'Titanrex', body: 'Mythical', naturalClass: 'Warrior', base: s(48, 14, 38, 10, 10, 6), lifespan: 7, flavour: 'Primal tyrant lizard, raw power.',
+    innate: [{ name: 'Prehistoric Roar', desc: 'Debilitate all foes.' }, { name: 'Unstoppable', desc: 'Cannot be displaced.' }], ultimate: { name: 'Meteor Stomp', desc: 'AoE devastation; world-shaking force.' } },
+  { id: 'stellarion', name: 'Stellarion', body: 'Mythical', naturalClass: 'Ranger', base: s(12, 46, 8, 36, 26, 12), lifespan: 5, flavour: 'Star-born hunter, celestial archer.',
+    innate: [{ name: 'Stellar Shot', desc: 'Ranged hits pierce armor.' }, { name: 'Cosmic Precision', desc: 'Always hits.' }], ultimate: { name: 'Supernova Barrage', desc: 'Ranged salvo; each shot ignores defense.' } },
+  { id: 'wisdomkeeper', name: 'Wisdomkeeper', body: 'Mythical', naturalClass: 'Sage', base: s(10, 16, 18, 50, 42, 10), lifespan: 7, flavour: 'Ancient oracle, all-seeing guide.',
+    innate: [{ name: 'Foresight', desc: 'Team dodge + magic resist.' }, { name: 'Truth\'s Word', desc: 'Dispel all buffs/debuffs at will.' }], ultimate: { name: 'Revelation', desc: 'See all enemy stats; team gains massive wisdom buff.' } },
+  { id: 'archmage-aleph', name: 'Archmage-Aleph', body: 'Mythical', naturalClass: 'Wizard', base: s(8, 20, 14, 24, 52, 28), lifespan: 5, flavour: 'First of mages, spell incarnate.',
+    innate: [{ name: 'Spell Echo', desc: 'Magic casts twice with half cost.' }, { name: 'Arcane Mastery', desc: 'Spellcasting is near-costless.' }], ultimate: { name: 'Spell Tsunami', desc: 'Cast all learned spells simultaneously.' } },
+  { id: 'harmonybringer', name: 'Harmonybringer', body: 'Mythical', naturalClass: 'Bard', base: s(10, 18, 32, 18, 14, 52), lifespan: 6, flavour: 'Mythical unifier, peace in chaos.',
+    innate: [{ name: 'Unison', desc: 'Team stat sync + buff sharing.' }, { name: 'Aegis Bond', desc: 'Redirect damage to self, heal difference.' }], ultimate: { name: 'Perfect Harmony', desc: 'All allies gain all buffs; team cannot be divided.' } },
 ]
 
 export const SPECIES_BY_ID: Record<string, Species> = Object.fromEntries(SPECIES.map((sp) => [sp.id, sp]))

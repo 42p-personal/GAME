@@ -1,7 +1,7 @@
 // Weekly calendar / career loop (M2, §2). A single monster you raise week by week:
 // weekly actions (train drill / rest / feed / excursion), stamina, gold, aging.
 import {
-  FOODS, Food, LEAGUES, MAX_HAPPINESS, Monster, STATS, Sex, Species, Stats,
+  FOODS, Food, LEAGUES, MAX_HAPPINESS, Monster, STATS, Sex, Species, Stats, Stat, BODY_TYPE_STATS,
   ULTIMATE_LEVEL, classForStats, feedDelta, hashString, mulberry32, randInt,
 } from './core'
 import { chooseLoadout, generateMonster, learnedMoves } from './monster'
@@ -77,6 +77,15 @@ function staminaMalus(stamina: number): number {
   if (stamina > 50) return 0.95 // -5%
   if (stamina > 30) return 0.9 // -10%
   return 0.5 // -50%
+}
+
+// Body type stat training bonus: primary +20%, secondary +10%, weakness -20%
+function statTrainingBonus(species: Species, stat: Stat): number {
+  const bodyStats = BODY_TYPE_STATS[species.body]
+  if (stat === bodyStats.primary) return 1.2
+  if (stat === bodyStats.secondary) return 1.1
+  if (stat === bodyStats.weakness) return 0.8
+  return 1
 }
 
 export interface NewCareerOpts {
@@ -191,7 +200,8 @@ export function applyWeek(c: Career, action: WeeklyAction, gold: number, rental 
     const changes: string[] = []
     for (const stat of STATS) {
       const delta = baseGains
-      const applied = Math.round(delta * eff)
+      const bodyBonus = statTrainingBonus(c.species, stat)
+      const applied = Math.round(delta * eff * bodyBonus)
       const nv = Math.max(1, Math.min(cap, n.stats[stat] + applied))
       const real = nv - n.stats[stat]
       n.stats[stat] = nv

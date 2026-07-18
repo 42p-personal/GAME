@@ -10,6 +10,10 @@ import {
 
 export type Area = 'town' | 'ranch'
 
+// Licensing costs for exclusive monster types
+export const SPECIAL_LICENSE_COST = 800 // Silver rank: Draconic + Abyssal
+export const ELITE_LICENSE_COST = 2000 // Masters rank: Mythical
+
 export interface Tournament {
   id: string
   name: string
@@ -60,6 +64,8 @@ export interface GameState {
   frozen: Frozen[]
   barnCapacity: number
   bulkFood: boolean // Ranch Shop upgrade: 20% off food
+  specialLicense: boolean // Silver rank: unlock Draconic + Abyssal
+  eliteLicense: boolean // Masters rank: unlock Mythical
   area: Area
   market: MarketOffer[]
   marketRoll: number
@@ -82,6 +88,8 @@ export function newGame(seed = 'start'): GameState {
     frozen: [],
     barnCapacity: START_BARN,
     bulkFood: false,
+    specialLicense: false,
+    eliteLicense: false,
     area: 'town',
     market: rollMarketOffers(seed, 0),
     marketRoll: 0,
@@ -248,4 +256,14 @@ export function upgradeBarn(g: GameState): GameState {
 export function buyBulkFood(g: GameState): GameState {
   if (g.bulkFood || g.gold < BULK_FOOD_COST) return g
   return { ...g, gold: g.gold - BULK_FOOD_COST, bulkFood: true }
+}
+
+export function buySpecialLicense(g: GameState): GameState {
+  if (g.specialLicense || g.gold < SPECIAL_LICENSE_COST) return g
+  return { ...g, gold: g.gold - SPECIAL_LICENSE_COST, specialLicense: true }
+}
+
+export function buyEliteLicense(g: GameState): GameState {
+  if (g.eliteLicense || g.gold < ELITE_LICENSE_COST) return g
+  return { ...g, gold: g.gold - ELITE_LICENSE_COST, eliteLicense: true }
 }
