@@ -720,7 +720,50 @@ tying combat success back into the raising loop.
 
 ---
 
-## 13. Open Questions (to resolve later)
+## 13. Areas & Navigation
+
+The game is played across **areas**, reached from a hub. All areas share one **gold** wallet and one
+**GameState** (stable of owned monsters, frozen genomes, ranch upgrades, current area).
+
+### 13.1 Town (starting hub)
+The starting area. From Town the player enters four locations:
+
+- **Market — buy monsters.** Shows **3 random base monsters** (never fusions). Every base species is
+  weighted **equally**, so the offering is truly random. Each has a **purchase price** that **fluctuates
+  around a shared base value on a *wider* band than the food market** (≈ ±60% vs food's ±40%). Stock
+  refreshes on demand (a Refresh action) / on revisit.
+- **Lab — cryogenics & fusion.** Charges a **weekly rental per frozen monster**. Options:
+  - **Freeze** — put a monster into stasis (banks its genome, frees a ranch slot).
+  - **Thaw** — return a frozen monster to the stable.
+  - **Fuse** — combine two monsters into a new hatchling (§10) for a **huge** one-off cost.
+- **Ranch** — travel to the Ranch area (the raising loop, §2 / §13.2).
+- **Ranch Shop — buy ranch upgrades**, e.g. **bigger barns** (raise stable capacity → keep and raise more
+  monsters), **bulk food buying** (stockpile / discount food), and more.
+
+### 13.2 Ranch (raising area)
+Home of the weekly loop (§2): the stable, training drills (§2.4), the food market & feeding (§2.5),
+excursions, rest, rank-ups, and aging. The **barn capacity** (upgraded at the Ranch Shop) caps how many
+monsters the stable holds — the gate for the multi-monster game.
+
+### 13.3 Price bands & costs
+| Sink | Scale |
+|------|-------|
+| Food (§2.5) | ±40% weekly fluctuation |
+| **Monster market** | **±~60% fluctuation** around a shared base price (equal for all species) |
+| Lab rental | recurring, per frozen monster per week |
+| **Fusion** | **huge** one-off |
+| Ranch upgrades | one-off per upgrade |
+
+### 13.4 Implementation notes
+- One shared **GameState**: `{ gold, stable[], frozen[], barnCapacity, upgrades, area, market }`.
+- Monsters bought from the Market are **base, untrained** (equal-weighted species pick via the seeded
+  generator). Fusion output is a **baby** (§10.2), so it goes through the Ranch like any hatchling.
+- **Open:** market refresh cadence & exact price band; rental amount; fusion price; the full upgrade list
+  and prices; whether idle stable monsters age.
+
+---
+
+## 14. Open Questions (to resolve later)
 - Exact training math (stat gains, diminishing returns, fatigue/injury curves).
 - Elements/types list and matchup chart; how "voice" (non-elemental) interacts with defences.
 - Balance the **60-skill pool** (§7.5): per-skill cooldown / accuracy / power / status; each species' ultimate effect; status magnitudes & durations (§7.6); tune `p_base` for hatch inheritance (§7.4); how fusion combines/drops moves.

@@ -114,3 +114,33 @@ input[type=range] { width: 100%; }
 .log { background: #0c0e15; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; font-family: ui-monospace, 'Cascadia Code', monospace; font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; max-height: 420px; overflow: auto; }
 .log .win { color: var(--accent); font-weight: 700; }
 .result { text-align: center; font-size: 18px; font-weight: 700; margin: 8px 0; }
+
+/* ---- Town hub (§13) ---- */
+.townbar { display: flex; flex-wrap: wrap; gap: 14px; font-size: 14px; font-weight: 700; margin: 0 0 16px; padding: 10px 14px; background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; }
+.townbar .up { color: var(--accent); }
+.townmap { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.loc .loc-h { display: flex; justify-content: space-between; align-items: center; font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+.loc .loc-h .dim { color: var(--muted); font-size: 12px; font-weight: 400; }
+.offers { display: flex; flex-direction: column; gap: 14px; margin-top: 8px; }
+.offer { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+.offer > button { width: 100%; margin-top: 8px; }
+.offer > button:disabled { opacity: .4; cursor: not-allowed; }
+.labrows { display: flex; flex-direction: column; gap: 5px; }
+.labrow { display: flex; align-items: center; gap: 8px; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; font-size: 13px; }
+.labrow .bn { font-weight: 700; }
+.labrow .dim { color: var(--muted); font-size: 12px; }
+.labrow button { margin-left: auto; padding: 5px 10px; font-size: 12px; }
+.labrow button:disabled { opacity: .4; cursor: not-allowed; }
+.fuserow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.fuserow select { flex: 1; min-width: 120px; background: var(--panel2); border: 1px solid var(--line); color: var(--ink); border-radius: 8px; padding: 7px 8px; font-size: 13px; }
+.fuserow .rankup { background: var(--accent2); color: #1a1206; }
+.fuserow .rankup:disabled { opacity: .4; cursor: not-allowed; }
+.loc .enter { width: 100%; margin-top: 8px; padding: 12px; font-size: 15px; }
+.loc .enter:disabled { opacity: .4; cursor: not-allowed; }
+.shoprow { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-top: 8px; font-size: 13px; }
+.shoprow .dim { color: var(--muted); font-size: 12px; }
+.shoprow button:disabled { opacity: .4; cursor: not-allowed; }
+.ranchtop { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; font-size: 14px; font-weight: 700; }
+.ranchtop select { background: var(--panel2); border: 1px solid var(--line); color: var(--ink); border-radius: 8px; padding: 6px 8px; margin-left: auto; }
+.food:disabled { opacity: .4; cursor: not-allowed; }
+@media (max-width: 720px) { .townmap { grid-template-columns: 1fr; } }

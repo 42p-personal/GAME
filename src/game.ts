@@ -11,8 +11,7 @@ export const WEEKS_PER_MONTH = 4
 export const MONTHS_PER_YEAR = 12
 export const WEEKS_PER_YEAR = WEEKS_PER_MONTH * MONTHS_PER_YEAR // 48
 const START_AGE_WEEKS = WEEKS_PER_YEAR // start as a Teen (age 1)
-const START_GOLD = 200
-const WEEKLY_ALLOWANCE = 15
+export const START_GOLD = 500
 export const MAX_STAMINA = 100
 const TRAIN_COST = { basic: 20, intensive: 30 }
 const REST_RECOVER = 55
@@ -51,7 +50,6 @@ export interface Career {
   stamina: number
   happiness: number
   licenseIndex: number
-  gold: number
   week: number
   retired: boolean
   market: Record<Food, number> // this week's fluctuating food prices
@@ -74,39 +72,54 @@ export type WeeklyAction =
   | { kind: 'rest' }
   | { kind: 'excursion' }
 
-export function newCareer(seed: string): Career {
+export interface NewCareerOpts {
+  id?: string // stable-unique id (defaults to the generation seed)
+  ageWeeks?: number // fusion babies start at 0 (Baby)
+  stats?: Stats // override seed stats (fusion averages the parents)
+  licenseIndex?: number
+  happiness?: number
+}
+
+// Create a raising Career. Stats/species/name come from `seed`; `opts.id` lets the
+// Market give a bought monster a stable-unique id while keeping the previewed
+// monster (same seed). Fusion passes ageWeeks:0 + averaged stats for a baby.
+export function newCareer(seed: string, opts: NewCareerOpts = {}): Career {
   const m = generateMonster(seed, { train: 0 })
+  const id = opts.id ?? seed
   return {
-    id: seed,
+    id,
     name: m.name,
     species: m.species,
     sex: m.sex,
     favouriteFood: m.favouriteFood,
     hatedFood: m.hatedFood,
-    stats: { ...m.stats },
-    ageWeeks: START_AGE_WEEKS,
+    stats: opts.stats ? { ...opts.stats } : { ...m.stats },
+    ageWeeks: opts.ageWeeks ?? START_AGE_WEEKS,
     stamina: MAX_STAMINA,
-    happiness: 5,
-    licenseIndex: 0,
-    gold: START_GOLD,
+    happiness: opts.happiness ?? 5,
+    licenseIndex: opts.licenseIndex ?? 0,
     week: 0,
     retired: false,
-    market: rollMarket(seed, 0),
+    market: rollMarket(id, 0),
     fedThisWeek: false,
     log: [`${m.name} the ${m.species.name} (${m.sex === 'M' ? '♂' : '♀'}) joins your stable — a Wood-league hopeful.`],
   }
 }
 
 // Buy one food from this week's market. Does NOT advance the week — feeding is a
-// start-of-week choice, separate from the weekly activity.
-export function buyFood(c: Career, food: Food): Career {
-  if (c.retired || c.fedThisWeek) return c
-  const price = c.market[food]
-  if (c.gold < price) return push(c, `Wk ${c.week + 1}: can't afford ${foodName(food)} (${price}g).`)
+// start-of-week choice, separate from the weekly activity. Gold is game-owned, so
+// it's passed in and returned; `discount` applies the Ranch Shop bulk-food perk.
+export function buyFood(c: Career, gold: number, food: Food, discount = 1): { c: Career; gold: number } {
+  if (c.retired || c.fedThisWeek) return { c, gold }
+  const price = Math.max(1, Math.round(c.market[food] * discount))
+  if (gold < price) return { c: push(c, `Wk ${c.week + 1}: can't afford ${foodName(food)} (${price}g).`), gold }
   const d = feedDelta(food, c.favouriteFood, c.hatedFood)
   const happiness = Math.max(0, Math.min(MAX_HAPPINESS, c.happiness + d))
-  const n: Career = { ...c, gold: c.gold - price, happiness, fedThisWeek: true, log: [...c.log] }
-  return push(n, `Wk ${c.week + 1}: fed ${foodName(food)} (−${price}g). Happiness ${happiness}/10${d > 0 ? ' ♥' : d < 0 ? ' ✖' : ''}.`)
+  const n: Career = { ...c, happiness, fedThisWeek: true, log: [...c.log] }
+  return {
+    c: push(n, `Wk ${c.week + 1}: fed ${foodName(food)} (−${price}g). Happiness ${happiness}/10${d > 0 ? ' ♥' : d < 0 ? ' ✖' : ''}.`),
+    gold: gold - price,
+  }
 }
 
 // Derive a display Monster from the career's current state.
@@ -138,20 +151,24 @@ export function rankUpFee(c: Career): number {
   return (c.licenseIndex + 1) * 40
 }
 
-export function rankUp(c: Career): Career {
-  if (!canRankUp(c)) return c
+export function rankUp(c: Career, gold: number): { c: Career; gold: number } {
+  if (!canRankUp(c)) return { c, gold }
   const fee = rankUpFee(c)
-  if (c.gold < fee) return push(c, `Rank-up trial costs ${fee}g — not enough gold.`)
-  const n: Career = { ...c, licenseIndex: c.licenseIndex + 1, gold: c.gold - fee, log: [...c.log] }
-  return push(n, `⭐ Passed the rank-up trial! Promoted to ${LEAGUES[n.licenseIndex].name} (cap ${LEAGUES[n.licenseIndex].cap}).`)
+  if (gold < fee) return { c: push(c, `Rank-up trial costs ${fee}g — not enough gold.`), gold }
+  const n: Career = { ...c, licenseIndex: c.licenseIndex + 1, log: [...c.log] }
+  return {
+    c: push(n, `⭐ Passed the rank-up trial! Promoted to ${LEAGUES[n.licenseIndex].name} (cap ${LEAGUES[n.licenseIndex].cap}).`),
+    gold: gold - fee,
+  }
 }
 
 function push(c: Career, line: string): Career {
   return { ...c, log: [...c.log, line].slice(-40) }
 }
 
-export function applyWeek(c: Career, action: WeeklyAction): Career {
-  if (c.retired) return c
+export function applyWeek(c: Career, action: WeeklyAction, gold: number, rental = 0): { c: Career; gold: number } {
+  if (c.retired) return { c, gold }
+  let g = gold
   const n: Career = { ...c, stats: { ...c.stats }, log: [...c.log] }
   const rng = mulberry32(hashString(c.id + ':' + c.week))
   const cap = LEAGUES[c.licenseIndex].cap
@@ -179,7 +196,7 @@ export function applyWeek(c: Career, action: WeeklyAction): Career {
   } else {
     n.stamina = Math.max(0, n.stamina - EXCURSION_COST)
     const purse = randInt(rng, 30, 80)
-    n.gold += purse
+    g += purse
     n.log.push(`Wk ${wk}: excursion — returned with ${purse}g.`)
   }
 
@@ -189,8 +206,11 @@ export function applyWeek(c: Career, action: WeeklyAction): Career {
     n.log.push(`  ↳ ${n.name} went unfed — happiness ${n.happiness}/10.`)
   }
 
-  // weekly allowance, advance the calendar, age the monster, reroll the market
-  n.gold += WEEKLY_ALLOWANCE
+  // lab upkeep, advance the calendar, age the monster, reroll the market
+  if (rental > 0) {
+    g -= rental
+    n.log.push(`  ↳ lab upkeep −${rental}g (frozen genomes).`)
+  }
   n.week += 1
   n.ageWeeks += 1
   n.fedThisWeek = false
@@ -210,5 +230,5 @@ export function applyWeek(c: Career, action: WeeklyAction): Career {
   }
 
   n.log = n.log.slice(-40)
-  return n
+  return { c: n, gold: g }
 }

@@ -10,9 +10,13 @@ import { SPECIES } from './species'
 import { BIOS } from './bestiary'
 import { BASIC_DRILLS, INTENSIVE_DRILLS } from './drills'
 import {
-  Career, MAX_STAMINA, WeeklyAction, applyWeek, buyFood, canRankUp, careerMonster, dateLabel,
-  foodName, newCareer, rankUp, rankUpFee, stageInfo,
+  MAX_STAMINA, WeeklyAction, canRankUp, careerMonster, dateLabel, foodName, rankUpFee, stageInfo,
 } from './game'
+import {
+  FUSION_COST, GameState, RENTAL_PER_FROZEN, activeCareer, barnCost, buyBulkFood, buyMonster,
+  feed, freeze, fuse, fusionRoom, goto, newGame, offerMonster, promote, refreshMarket, setActive,
+  thaw, upgradeBarn, weekAction, BULK_FOOD_COST,
+} from './town'
 
 const STAT_COLOR: Record<Stat, string> = {
   STR: 'var(--str)', DEX: 'var(--dex)', CON: 'var(--con)',
@@ -118,7 +122,7 @@ function Stable({ label, seed, setSeed, train, setTrain, happiness, setHappiness
   train: number; setTrain: (n: number) => void
   happiness: number; setHappiness: (n: number) => void; m: Monster
 }) {
-  const feed = (food: (typeof FOODS)[number]['id']) =>
+  const feedLocal = (food: (typeof FOODS)[number]['id']) =>
     setHappiness(Math.max(0, Math.min(10, happiness + feedDelta(food, m.favouriteFood, m.hatedFood))))
   return (
     <div className="card">
@@ -141,7 +145,7 @@ function Stable({ label, seed, setSeed, train, setTrain, happiness, setHappiness
           {FOODS.map((f) => {
             const d = feedDelta(f.id, m.favouriteFood, m.hatedFood)
             return (
-              <button key={f.id} className="food" onClick={() => feed(f.id)} title={`${f.price}g · ${d > 0 ? 'favourite (+1)' : d < 0 ? 'hated (−1)' : 'neutral'}`}>
+              <button key={f.id} className="food" onClick={() => feedLocal(f.id)} title={`${f.price}g · ${d > 0 ? 'favourite (+1)' : d < 0 ? 'hated (−1)' : 'neutral'}`}>
                 {f.name}{d > 0 ? ' ♥' : d < 0 ? ' ✖' : ''}
               </button>
             )
@@ -257,29 +261,162 @@ function SandboxView() {
   )
 }
 
-// Career mode: raise one monster week by week (M2). State is held by App so it
-// survives tab switches.
-function CareerView({ career, setCareer, seed, setSeed }: {
-  career: Career; setCareer: Dispatch<SetStateAction<Career>>
-  seed: string; setSeed: Dispatch<SetStateAction<string>>
-}) {
-  const m = careerMonster(career)
-  const st = stageInfo(career.ageWeeks, career.species.lifespan)
-  const act = (a: WeeklyAction) => setCareer((c) => applyWeek(c, a))
+// ============================ Town hub (§13) ============================
+function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetStateAction<GameState>> }) {
+  const [fuseA, setFuseA] = useState('')
+  const [fuseB, setFuseB] = useState('')
+  const barnFull = game.stable.length >= game.barnCapacity
 
   return (
     <>
-      <p className="sub">Raise a monster week by week — train, rest, feed, or explore. It ages, learns moves, and climbs the leagues; each action advances one week.</p>
-      <div className="controls" style={{ maxWidth: 420 }}>
-        <input type="text" value={seed} placeholder="starter seed…" onChange={(e) => setSeed(e.target.value)} />
-        <button onClick={() => setCareer(newCareer('career-' + seed))}>New career</button>
+      <p className="sub">Town — your hub. Buy monsters at the Market, bank &amp; combine genomes at the Lab, upgrade at the Ranch Shop, then head to the Ranch to raise your active monster.</p>
+
+      <div className="townbar">
+        <span>🪙 {game.gold}g</span>
+        <span>🏠 Stable {game.stable.length}/{game.barnCapacity}</span>
+        <span>❄️ Frozen {game.frozen.length}</span>
+        {game.bulkFood && <span className="up">🛒 Bulk food</span>}
       </div>
+
+      <div className="townmap">
+        {/* Market */}
+        <div className="card loc">
+          <div className="loc-h"><span>🛒 Market</span><button className="ghost" onClick={() => setGame((g) => refreshMarket(g))}>↻ Refresh</button></div>
+          <div className="hint">3 random monsters · prices swing wider than food (±60%).{barnFull ? ' Stable full — upgrade a barn to buy.' : ''}</div>
+          <div className="offers">
+            {game.market.length === 0 && <div className="dim">Sold out — refresh for a new lineup.</div>}
+            {game.market.map((o, i) => {
+              const m = offerMonster(o)
+              const afford = game.gold >= o.price
+              return (
+                <div className="offer" key={o.seed}>
+                  <MonsterCard m={m} />
+                  <button disabled={!afford || barnFull} onClick={() => setGame((g) => buyMonster(g, i))}>
+                    Buy · {o.price}g
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Lab */}
+        <div className="card loc">
+          <div className="loc-h"><span>🧪 Lab</span><span className="dim">upkeep {RENTAL_PER_FROZEN}g/wk each</span></div>
+          <div className="section-title">Freeze (bank a genome)</div>
+          <div className="labrows">
+            {game.stable.length === 0 && <div className="dim">No monsters in the stable.</div>}
+            {game.stable.map((c) => (
+              <div className="labrow" key={c.id}>
+                <Sprite species={c.species} size={28} />
+                <span className="bn">{c.name}</span>
+                <span className="dim">{c.species.name}</span>
+                <button className="ghost" onClick={() => setGame((g) => freeze(g, c.id))}>Freeze ❄️</button>
+              </div>
+            ))}
+          </div>
+          <div className="section-title">Thaw</div>
+          <div className="labrows">
+            {game.frozen.length === 0 && <div className="dim">No frozen genomes.</div>}
+            {game.frozen.map((f) => (
+              <div className="labrow" key={f.id}>
+                <Sprite species={f.species} size={28} />
+                <span className="bn">{f.name}</span>
+                <span className="dim">{f.species.name}</span>
+                <button className="ghost" disabled={barnFull} onClick={() => setGame((g) => thaw(g, f.id))}>Thaw</button>
+              </div>
+            ))}
+          </div>
+          <div className="section-title">Fuse (combine two frozen → baby)</div>
+          <div className="fuserow">
+            <select value={fuseA} onChange={(e) => setFuseA(e.target.value)}>
+              <option value="">— parent A —</option>
+              {game.frozen.map((f) => <option key={f.id} value={f.id}>{f.name} ({f.species.name})</option>)}
+            </select>
+            <select value={fuseB} onChange={(e) => setFuseB(e.target.value)}>
+              <option value="">— parent B —</option>
+              {game.frozen.map((f) => <option key={f.id} value={f.id}>{f.name} ({f.species.name})</option>)}
+            </select>
+            <button
+              className="rankup"
+              disabled={!fuseA || !fuseB || fuseA === fuseB || game.gold < FUSION_COST || !fusionRoom(game)}
+              onClick={() => { setGame((g) => fuse(g, fuseA, fuseB)); setFuseA(''); setFuseB('') }}
+            >
+              Fuse · {FUSION_COST}g
+            </button>
+          </div>
+          <div className="hint">Baby inherits the average of both parents minus a small penalty, and starts unlicensed.</div>
+        </div>
+
+        {/* Ranch */}
+        <div className="card loc">
+          <div className="loc-h"><span>🐄 Ranch</span></div>
+          <div className="hint">Raise your active monster week by week — train, feed, rest, rank up.</div>
+          <button className="enter" disabled={game.stable.length === 0} onClick={() => setGame((g) => goto(g, 'ranch'))}>Enter the Ranch →</button>
+          {game.stable.length === 0 && <div className="dim">Buy a monster first.</div>}
+        </div>
+
+        {/* Ranch Shop */}
+        <div className="card loc">
+          <div className="loc-h"><span>🏗️ Ranch Shop</span></div>
+          <div className="shoprow">
+            <div>
+              <b>Bigger Barn</b>
+              <div className="dim">Capacity {game.barnCapacity} → {game.barnCapacity + 1}</div>
+            </div>
+            <button disabled={game.gold < barnCost(game)} onClick={() => setGame((g) => upgradeBarn(g))}>Buy · {barnCost(game)}g</button>
+          </div>
+          <div className="shoprow">
+            <div>
+              <b>Bulk Food Contract</b>
+              <div className="dim">{game.bulkFood ? 'Owned — 20% off food.' : 'Permanent 20% off all food.'}</div>
+            </div>
+            <button disabled={game.bulkFood || game.gold < BULK_FOOD_COST} onClick={() => setGame((g) => buyBulkFood(g))}>
+              {game.bulkFood ? '✓ Owned' : `Buy · ${BULK_FOOD_COST}g`}
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ============================ Ranch (raising loop) ============================
+function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetStateAction<GameState>> }) {
+  const career = activeCareer(game)
+
+  if (!career) {
+    return (
+      <>
+        <div className="ranchtop">
+          <button className="ghost" onClick={() => setGame((g) => goto(g, 'town'))}>🏛 Town</button>
+        </div>
+        <p className="sub">Your stable is empty. Head to Town → Market to buy a monster.</p>
+      </>
+    )
+  }
+
+  const m = careerMonster(career)
+  const st = stageInfo(career.ageWeeks, career.species.lifespan)
+  const discount = game.bulkFood ? 0.8 : 1
+
+  return (
+    <>
+      <div className="ranchtop">
+        <button className="ghost" onClick={() => setGame((g) => goto(g, 'town'))}>🏛 Town</button>
+        <span>🪙 {game.gold}g</span>
+        {game.stable.length > 1 && (
+          <select value={game.activeId} onChange={(e) => setGame((g) => setActive(g, e.target.value))}>
+            {game.stable.map((c) => <option key={c.id} value={c.id}>{c.name} · {c.species.name}</option>)}
+          </select>
+        )}
+      </div>
+      <p className="sub">Raise {career.name} week by week — train, rest, feed, or explore. It ages, learns moves, and climbs the leagues; each action advances one week.</p>
 
       <div className="career">
         <div className="card">
           <div className="careerbar">
             <span>📅 {dateLabel(career.week)}</span>
-            <span>🪙 {career.gold}g</span>
             <span>{st.stage} · age {st.ageYears}y / {career.species.lifespan}y</span>
           </div>
           <div className="meters">
@@ -291,20 +428,20 @@ function CareerView({ career, setCareer, seed, setSeed }: {
 
         <div className="card actions">
           {career.retired ? (
-            <div className="retired">🏁 {career.name} has retired and can no longer compete. (Retirement options — sell / freeze / expert trainer / breeding — arrive with M5–M6.) Start a new career to keep playing.</div>
+            <div className="retired">🏁 {career.name} has retired and can no longer compete. Freeze it at the Lab to bank its genome, or switch to another monster. (Sell / expert-trainer options arrive with M5–M6.)</div>
           ) : (
             <>
               <div className="section-title">
-                Market — buy 1 food this week{career.fedThisWeek ? ' · ✓ fed' : ''}
+                Market — buy 1 food this week{career.fedThisWeek ? ' · ✓ fed' : ''}{game.bulkFood ? ' · 🛒 −20%' : ''}
               </div>
               <div className="foods">
                 {FOODS.map((f) => {
-                  const price = career.market[f.id]
+                  const price = Math.max(1, Math.round(career.market[f.id] * discount))
                   const d = feedDelta(f.id, career.favouriteFood, career.hatedFood)
-                  const afford = career.gold >= price
+                  const afford = game.gold >= price
                   return (
                     <button key={f.id} className="food" disabled={career.fedThisWeek || !afford}
-                      onClick={() => setCareer(buyFood(career, f.id))}
+                      onClick={() => setGame((g) => feed(g, f.id))}
                       title={d > 0 ? 'favourite (+1 happiness)' : d < 0 ? 'hated (−1 happiness)' : 'neutral'}>
                       {foodName(f.id)} · {price}g{d > 0 ? ' ♥' : d < 0 ? ' ✖' : ''}
                     </button>
@@ -315,20 +452,20 @@ function CareerView({ career, setCareer, seed, setSeed }: {
               <div className="section-title">Train — basic (+minor, no downside)</div>
               <div className="drillgrid">
                 {BASIC_DRILLS.map((d) => (
-                  <button key={d.id} className="drill" onClick={() => act({ kind: 'train', drillId: d.id })} title={d.desc}>{d.name}</button>
+                  <button key={d.id} className="drill" onClick={() => setGame((g) => weekAct(g, { kind: 'train', drillId: d.id }))} title={d.desc}>{d.name}</button>
                 ))}
               </div>
               <div className="section-title">Train — intensive (+major / −minor)</div>
               <div className="drillgrid">
                 {INTENSIVE_DRILLS.map((d) => (
-                  <button key={d.id} className="drill int" onClick={() => act({ kind: 'train', drillId: d.id })} title={d.desc}>{d.name}</button>
+                  <button key={d.id} className="drill int" onClick={() => setGame((g) => weekAct(g, { kind: 'train', drillId: d.id }))} title={d.desc}>{d.name}</button>
                 ))}
               </div>
               <div className="section-title">Care &amp; explore</div>
               <div className="carerow">
-                <button onClick={() => act({ kind: 'rest' })}>😴 Rest</button>
-                <button onClick={() => act({ kind: 'excursion' })}>🧭 Excursion</button>
-                {canRankUp(career) && <button className="rankup" onClick={() => setCareer(rankUp(career))}>⭐ Rank-up ({rankUpFee(career)}g)</button>}
+                <button onClick={() => setGame((g) => weekAct(g, { kind: 'rest' }))}>😴 Rest</button>
+                <button onClick={() => setGame((g) => weekAct(g, { kind: 'excursion' }))}>🧭 Excursion</button>
+                {canRankUp(career) && <button className="rankup" onClick={() => setGame((g) => promote(g))}>⭐ Rank-up ({rankUpFee(career)}g)</button>}
               </div>
             </>
           )}
@@ -342,19 +479,23 @@ function CareerView({ career, setCareer, seed, setSeed }: {
   )
 }
 
+// small alias so the JSX reads cleanly
+const weekAct = (g: GameState, a: WeeklyAction) => weekAction(g, a)
+
 export function App() {
-  const [view, setView] = useState<'career' | 'sandbox'>('career')
-  const [careerSeed, setCareerSeed] = useState('Aki')
-  const [career, setCareer] = useState<Career>(() => newCareer('career-Aki'))
+  const [view, setView] = useState<'game' | 'sandbox'>('game')
+  const [game, setGame] = useState<GameState>(() => newGame('Aki'))
   return (
     <div className="app">
       <h1>Monster Tamer <span className="tag">/ prototype</span></h1>
       <div className="tabs">
-        <button className={'tab' + (view === 'career' ? ' on' : '')} onClick={() => setView('career')}>🎮 Career</button>
+        <button className={'tab' + (view === 'game' ? ' on' : '')} onClick={() => setView('game')}>🎮 Game</button>
         <button className={'tab' + (view === 'sandbox' ? ' on' : '')} onClick={() => setView('sandbox')}>⚔️ Sandbox</button>
       </div>
-      {view === 'career'
-        ? <CareerView career={career} setCareer={setCareer} seed={careerSeed} setSeed={setCareerSeed} />
+      {view === 'game'
+        ? (game.area === 'town'
+          ? <TownView game={game} setGame={setGame} />
+          : <RanchView game={game} setGame={setGame} />)
         : <SandboxView />}
       <Bestiary />
     </div>
