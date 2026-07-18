@@ -55,9 +55,9 @@ export function generateMonster(seed: string, opts: GenOptions = {}): Monster {
   const species = SPECIES[hashString(seed || 'egg') % SPECIES.length]
   const sex = rng() < 0.5 ? 'M' : 'F'
 
-  // base stats + small individual variance
+  // base stats + minimal individual variance (±2 only, to preserve body type structure)
   const base: Stats = { ...species.base }
-  for (const k of STATS) base[k] = Math.max(1, base[k] + randInt(rng, -6, 8))
+  for (const k of STATS) base[k] = Math.max(1, base[k] + randInt(rng, -2, 2))
 
   const stats = applyTraining(base, opts.train ?? 0, rng)
   const learned = learnedMoves(stats)
