@@ -13,7 +13,7 @@ import {
 } from './game'
 import {
   FUSION_COST, GameState, RENTAL_PER_FROZEN, barnCost, buyBulkFood, buyMonster, buySpecialLicense, buyEliteLicense,
-  feed, freeze, fuse, fusionRoom, goto, newGame, offerMonster, refreshMarket,
+  feed, freeze, fuse, fusionRoom, goto, newGame, offerMonster,
   thaw, upgradeBarn, BULK_FOOD_COST, SPECIAL_LICENSE_COST, ELITE_LICENSE_COST, TOURNAMENT_CALENDAR,
 } from './town'
 
@@ -280,10 +280,10 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
       <div className="townmap">
         {/* Market */}
         <div className="card loc">
-          <div className="loc-h"><span>🛒 Market</span><button className="ghost" onClick={() => setGame((g) => refreshMarket(g))}>↻ Refresh</button></div>
+          <div className="loc-h"><span>🛒 Market</span></div>
           <div className="hint">3 random monsters · prices swing wider than food (±60%).{barnFull ? ' Stable full — upgrade a barn to buy.' : ''}</div>
           <div className="offers">
-            {game.market.length === 0 && <div className="dim">Sold out — refresh for a new lineup.</div>}
+            {game.market.length === 0 && <div className="dim">Sold out — market refreshes at the start of each month.</div>}
             {game.market.map((o, i) => {
               const m = offerMonster(o)
               const afford = game.gold >= o.price

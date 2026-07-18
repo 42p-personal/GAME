@@ -91,20 +91,41 @@ export function newGame(seed = 'start'): GameState {
     specialLicense: false,
     eliteLicense: false,
     area: 'town',
-    market: rollMarketOffers(seed, 0),
+    market: rollMarketOffers(seed, 0, false, false),
     marketRoll: 0,
   }
 }
 
 // --- Market (§13.1) — 3 equal-weighted base monsters; price band wider than food. ---
-export function rollMarketOffers(seed: string, roll: number): MarketOffer[] {
+export function rollMarketOffers(seed: string, roll: number, hasSpecialLicense = false, hasEliteLicense = false): MarketOffer[] {
   const offers: MarketOffer[] = []
-  for (let i = 0; i < 3; i++) {
-    const rng = mulberry32(hashString(seed + ':town:' + roll + ':' + i))
-    const s = 'mkt-' + hashString(seed + ':' + roll + ':' + i).toString(36)
+  let attemptIndex = 0
+  const maxAttempts = 100 // prevent infinite loops
+
+  while (offers.length < 3 && attemptIndex < maxAttempts) {
+    const s = 'mkt-' + hashString(seed + ':' + roll + ':' + attemptIndex).toString(36)
+    const monster = generateMonster(s)
+    const bodyType = monster.species.body
+
+    // Filter out exclusive creatures if player doesn't have licenses
+    const isExclusive = ['Draconic', 'Abyssal'].includes(bodyType)
+    const isMythical = bodyType === 'Mythical'
+
+    if (isExclusive && !hasSpecialLicense) {
+      attemptIndex++
+      continue
+    }
+    if (isMythical && !hasEliteLicense) {
+      attemptIndex++
+      continue
+    }
+
+    const rng = mulberry32(hashString(seed + ':town:' + roll + ':' + attemptIndex))
     const price = Math.max(1, Math.round(MARKET_BASE * (0.4 + rng() * 1.2))) // ±60%
     offers.push({ seed: s, price })
+    attemptIndex++
   }
+
   return offers
 }
 
@@ -114,6 +135,17 @@ let boughtCounter = 0
 export function buyMonster(g: GameState, index: number): GameState {
   const o = g.market[index]
   if (!o || g.gold < o.price || g.stable.length >= g.barnCapacity) return g
+
+  const monster = generateMonster(o.seed, { train: 0 })
+  const bodyType = monster.species.body
+
+  // Check licensing requirements for exclusive creatures
+  const isExclusive = ['Draconic', 'Abyssal'].includes(bodyType)
+  const isMythical = bodyType === 'Mythical'
+
+  if (isExclusive && !g.specialLicense) return g
+  if (isMythical && !g.eliteLicense) return g
+
   const c = newCareer(o.seed, { id: 'own-' + boughtCounter++ + '-' + o.seed })
   const market = g.market.filter((_, i) => i !== index)
   return { ...g, gold: g.gold - o.price, stable: [...g.stable, c], market, activeId: g.activeId || c.id }
@@ -121,7 +153,7 @@ export function buyMonster(g: GameState, index: number): GameState {
 
 export function refreshMarket(g: GameState): GameState {
   const roll = g.marketRoll + 1
-  return { ...g, marketRoll: roll, market: rollMarketOffers(g.seed, roll) }
+  return { ...g, marketRoll: roll, market: rollMarketOffers(g.seed, roll, g.specialLicense, g.eliteLicense) }
 }
 
 // --- Active-monster helpers + Ranch loop wrappers (fold gold + rental into state) ---
