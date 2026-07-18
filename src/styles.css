@@ -87,6 +87,27 @@ button:hover { filter: brightness(1.08); }
 .slider label { font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; }
 input[type=range] { width: 100%; }
 
+.tabs { display: flex; gap: 8px; margin: 4px 0 18px; }
+.tab { background: var(--panel2); color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 8px 16px; font-weight: 700; }
+.tab.on { background: var(--accent); color: #0c1a13; border-color: var(--accent); }
+
+.career { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.careerbar { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 13px; font-weight: 700; margin-bottom: 10px; }
+.meters { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.meter label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 3px; }
+.meter .bar { height: 8px; background: var(--panel2); border-radius: 6px; overflow: hidden; }
+.meter .bar > i { display: block; height: 100%; border-radius: 6px; transition: width .2s; }
+.actions .drillgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.drill { background: var(--panel2); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px; font-size: 12.5px; font-weight: 600; text-align: left; }
+.drill.int { border-color: var(--accent2); }
+.drill:hover, .food:hover { border-color: var(--accent); }
+.carerow { display: flex; gap: 6px; flex-wrap: wrap; }
+.carerow button { background: var(--panel2); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font-weight: 700; }
+.carerow .rankup { background: var(--accent2); color: #1a1206; border-color: var(--accent2); }
+.careerlog { max-height: 220px; }
+.retired { background: var(--panel2); border: 1px solid var(--accent2); border-radius: 8px; padding: 12px; font-size: 13px; line-height: 1.5; }
+@media (max-width: 720px) { .career { grid-template-columns: 1fr; } }
+
 .battlebar { display: flex; justify-content: center; gap: 12px; margin: 22px 0 10px; }
 .log { background: #0c0e15; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; font-family: ui-monospace, 'Cascadia Code', monospace; font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; max-height: 420px; overflow: auto; }
 .log .win { color: var(--accent); font-weight: 700; }

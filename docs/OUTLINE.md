@@ -51,11 +51,15 @@ Vite + React + TS project, state store, save/load stub, basic screen routing.
 - Derive **class** from stat priorities; roll **ability milestones** from the genome.
 - Render a placeholder pixel-art monster from its parts.
 
-### M2 — Calendar & weekly actions
-- Week/month/year clock (§2).
-- Weekly actions: **Training** (per-stat gains, fatigue), **Rest**, **Feeding**, **Excursions**.
-- Enforce **license stat caps** (§3/§5).
-- **Ability unlocks** fire when training crosses a stat milestone; class re-labels as stats shift.
+### M2 — Calendar & weekly actions ✅ *(first pass built — `src/game.ts`, Career tab)*
+- Week/month/year clock (§2) — one week per action.
+- Weekly actions: **Training** (basic + intensive drills, per-stat gains), **Rest**, **Feeding**
+  (costs gold, moves happiness), **Excursions** (earn gold).
+- **Stamina** (0–100), **gold** (start 200 + weekly allowance), **aging** through life stages with the
+  training malus, and **retirement** at lifespan.
+- Enforce **license stat caps** (§3/§5); **ability unlocks** logged as stats cross learn levels.
+- *Placeholder:* a simple **Rank-up** button (eligible near cap) stands in for the real knockout
+  rank-up tournaments (M4).
 
 ### M3 — Auto-battle sim (1v1)
 - Damage channels from stats: melee, ranged, elemental, voice; defence/dodge/HP/mana.

@@ -8,6 +8,11 @@ import { simulateBattle } from './battle'
 import { SPRITES, palette } from './sprites'
 import { SPECIES } from './species'
 import { BIOS } from './bestiary'
+import { BASIC_DRILLS, INTENSIVE_DRILLS } from './drills'
+import {
+  Career, MAX_STAMINA, WeeklyAction, applyWeek, canRankUp, careerMonster, dateLabel,
+  newCareer, rankUp, rankUpFee, stageInfo,
+} from './game'
 
 const STAT_COLOR: Record<Stat, string> = {
   STR: 'var(--str)', DEX: 'var(--dex)', CON: 'var(--con)',
@@ -179,7 +184,7 @@ function Bestiary() {
   )
 }
 
-export function App() {
+function SandboxView() {
   const [seedA, setSeedA] = useState('Bouldram')
   const [seedB, setSeedB] = useState('Maelurk')
   const [trainA, setTrainA] = useState(300)
@@ -194,8 +199,7 @@ export function App() {
   const runBattle = () => setResult(simulateBattle(monA, monB, happyA, happyB))
 
   return (
-    <div className="app">
-      <h1>Monster Tamer <span className="tag">/ prototype</span></h1>
+    <>
       <p className="sub">Type a seed to generate a monster, invest training to unlock moves &amp; its ultimate (at 600), then auto-battle. Same seeds → same monsters &amp; same fight.</p>
 
       <div className="arena">
@@ -219,7 +223,92 @@ export function App() {
           </div>
         </>
       )}
+    </>
+  )
+}
 
+// Career mode: raise one monster week by week (M2).
+function CareerView() {
+  const [seed, setSeed] = useState('Aki')
+  const [career, setCareer] = useState<Career>(() => newCareer('career-Aki'))
+  const m = careerMonster(career)
+  const st = stageInfo(career.ageWeeks, career.species.lifespan)
+  const act = (a: WeeklyAction) => setCareer((c) => applyWeek(c, a))
+
+  return (
+    <>
+      <p className="sub">Raise a monster week by week — train, rest, feed, or explore. It ages, learns moves, and climbs the leagues; each action advances one week.</p>
+      <div className="controls" style={{ maxWidth: 420 }}>
+        <input type="text" value={seed} placeholder="starter seed…" onChange={(e) => setSeed(e.target.value)} />
+        <button onClick={() => setCareer(newCareer('career-' + seed))}>New career</button>
+      </div>
+
+      <div className="career">
+        <div className="card">
+          <div className="careerbar">
+            <span>📅 {dateLabel(career.week)}</span>
+            <span>🪙 {career.gold}g</span>
+            <span>{st.stage} · age {st.ageYears}y / {career.species.lifespan}y</span>
+          </div>
+          <div className="meters">
+            <div className="meter"><label>Stamina {career.stamina}/{MAX_STAMINA}</label><div className="bar"><i style={{ width: `${career.stamina}%`, background: 'var(--dex)' }} /></div></div>
+            <div className="meter"><label>Happiness {career.happiness}/10</label><div className="bar"><i style={{ width: `${career.happiness * 10}%`, background: 'var(--cha)' }} /></div></div>
+          </div>
+          <MonsterCard m={m} />
+        </div>
+
+        <div className="card actions">
+          {career.retired ? (
+            <div className="retired">🏁 {career.name} has retired and can no longer compete. (Retirement options — sell / freeze / expert trainer / breeding — arrive with M5–M6.) Start a new career to keep playing.</div>
+          ) : (
+            <>
+              <div className="section-title">Train — basic (+minor, no downside)</div>
+              <div className="drillgrid">
+                {BASIC_DRILLS.map((d) => (
+                  <button key={d.id} className="drill" onClick={() => act({ kind: 'train', drillId: d.id })} title={d.desc}>{d.name}</button>
+                ))}
+              </div>
+              <div className="section-title">Train — intensive (+major / −minor)</div>
+              <div className="drillgrid">
+                {INTENSIVE_DRILLS.map((d) => (
+                  <button key={d.id} className="drill int" onClick={() => act({ kind: 'train', drillId: d.id })} title={d.desc}>{d.name}</button>
+                ))}
+              </div>
+              <div className="section-title">Care &amp; explore</div>
+              <div className="carerow">
+                <button onClick={() => act({ kind: 'rest' })}>😴 Rest</button>
+                <button onClick={() => act({ kind: 'excursion' })}>🧭 Excursion</button>
+                {canRankUp(career) && <button className="rankup" onClick={() => setCareer(rankUp(career))}>⭐ Rank-up ({rankUpFee(career)}g)</button>}
+              </div>
+              <div className="section-title">Feed</div>
+              <div className="foods">
+                {FOODS.map((f) => {
+                  const d = feedDelta(f.id, career.favouriteFood, career.hatedFood)
+                  return <button key={f.id} className="food" onClick={() => act({ kind: 'feed', food: f.id })} title={`${f.price}g`}>{f.name} · {f.price}g{d > 0 ? ' ♥' : d < 0 ? ' ✖' : ''}</button>
+                })}
+              </div>
+            </>
+          )}
+          <div className="section-title">Journal</div>
+          <div className="log careerlog">
+            {career.log.slice().reverse().map((line, i) => <div key={i} className={line.startsWith('⭐') || line.startsWith('🏁') ? 'win' : ''}>{line}</div>)}
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+export function App() {
+  const [view, setView] = useState<'career' | 'sandbox'>('career')
+  return (
+    <div className="app">
+      <h1>Monster Tamer <span className="tag">/ prototype</span></h1>
+      <div className="tabs">
+        <button className={'tab' + (view === 'career' ? ' on' : '')} onClick={() => setView('career')}>🎮 Career</button>
+        <button className={'tab' + (view === 'sandbox' ? ' on' : '')} onClick={() => setView('sandbox')}>⚔️ Sandbox</button>
+      </div>
+      {view === 'career' ? <CareerView /> : <SandboxView />}
       <Bestiary />
     </div>
   )
