@@ -104,11 +104,11 @@ export function attackStat(s: Stats, channel: Move['channel']): number {
   }
 }
 
-// Mana cost per move (§11): magic and voice channels draw on the mana pool, so a
-// deep WIS pool sustains casters; physical channels are free.
+// Mana cost per skill (battle-choice design): EVERY skill costs MP, whatever its
+// channel — if a monster can't afford any equipped skill it must Attack or Block.
+// The universal Attack/Block actions (battle.ts) are the only free options.
 export function manaCost(m: Move): number {
-  if (m.channel === 'magic') return Math.max(4, Math.round(m.power * 0.5))
-  if (m.channel === 'voice') return Math.max(3, Math.round(m.power * 0.35))
-  if (m.channel === 'support') return m.power > 0 ? 6 : 4
-  return 0
+  if (m.type === 'damage') return Math.max(4, Math.round(m.power * 0.45))
+  if (m.power > 0) return Math.max(6, Math.round(m.power * 0.4)) // heals
+  return 6 // buffs / control / utility
 }

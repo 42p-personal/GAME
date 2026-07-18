@@ -20,6 +20,11 @@ npm run dev
 ## Next Steps (In Priority Order)
 
 ### 1. Skills & Battle-Choice System (DESIGN LOCKED — user spec 2026-07-18)
+**STATUS: battle-side implemented on the `preview` branch (2026-07-18)** — all
+skills cost MP (`monster.ts:manaCost`), universal Attack (free, best channel,
+power 12) and Block (free, +30–55% avoid scaling with WIS, lasts until next
+action), choice policy in `battle.ts:chooseAction`. Remaining: tune policy
+numbers, damage scaling at high stats (one-shots), and the Ability Selection UI.
 Every turn, the battle AI chooses one of:
 - **A skill** — one of the monster's 3 equipped active abilities (learned at
   milestones via LEARN_LADDER). EVERY skill has an MP cost; if the monster can't

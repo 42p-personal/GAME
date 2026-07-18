@@ -85,6 +85,7 @@ interface Combatant {
   cooldowns: Record<string, number> // moveId -> turns remaining
   statuses: ActiveStatus[]
   guard: number // temporary flat damage reduction (from buff moves)
+  blockAvoid: number // Block stance: bonus % chance to avoid hits until next action
   happiness: number // 0..10, scales damage dealt (§2.4)
   innate: Required<InnateEffect>
   hasLandedHit: boolean // first-hit bonuses spend after the first damaging hit
@@ -107,6 +108,7 @@ function makeCombatant(m: Monster, happiness: number): Combatant {
     cooldowns: {},
     statuses: [],
     guard: 0,
+    blockAvoid: 0,
     happiness,
     innate: innateEffects(m) as Required<InnateEffect>,
     hasLandedHit: false,
@@ -132,18 +134,68 @@ function tickStatuses(c: Combatant, log: string[]): void {
   c.statuses = c.statuses.filter((s) => s.turns > 0)
 }
 
-// Pick the strongest affordable, off-cooldown move; damage first.
-function chooseMove(c: Combatant): Move | null {
-  const ready = c.m.loadout.filter((mv) => (c.cooldowns[mv.id] ?? 0) <= 0 && manaCost(mv) <= c.mana)
-  if (ready.length === 0) return null
-  const dmg = ready.filter((m) => m.type === 'damage').sort((a, b) => b.power - a.power)
-  if (dmg.length) return dmg[0]
-  return ready[0]
+// --- Universal free actions (battle-choice design) ---
+// Every skill costs MP; when none is affordable the monster must Attack or Block.
+const ATTACK_POWER = 12
+const FREE_MOVE_IDS = new Set(['attack', 'ultimate'])
+const moveCost = (mv: Move) => (FREE_MOVE_IDS.has(mv.id) ? 0 : manaCost(mv))
+
+// Basic attack through the monster's best offensive channel (a wizard's "attack"
+// is a bolt, a bard's a taunt) — free, always available.
+function basicAttack(m: Monster): Move {
+  const channels: Move['channel'][] = ['melee', 'ranged', 'magic', 'voice']
+  const best = channels.reduce((a, b) => (attackStat(m.stats, a) >= attackStat(m.stats, b) ? a : b))
+  return {
+    id: 'attack', name: 'Attack', stat: 'STR', learnLevel: 0, type: 'damage',
+    channel: best, target: 'enemy', cooldown: 0, accuracy: 95, power: ATTACK_POWER, desc: 'A basic attack.',
+  }
 }
 
-const STRUGGLE: Move = {
-  id: 'struggle', name: 'Struggle', stat: 'STR', learnLevel: 0, type: 'damage',
-  channel: 'melee', target: 'enemy', cooldown: 0, accuracy: 100, power: 6, desc: 'A desperate blow.',
+// Block: defensive stance until the blocker's next action — raises the chance to
+// NOT take a hit at all. Scales gently with WIS (composure under pressure).
+const blockValue = (c: Combatant) => Math.min(55, Math.round(30 + c.m.stats.WIS * 0.05))
+
+type Action = { kind: 'skill'; move: Move } | { kind: 'attack' } | { kind: 'block' }
+
+// The per-turn choice: skill vs Attack vs Block. First-pass policy, meant for tuning:
+// heal when hurt, block when hurt and a big hit looms or while charging MP for a
+// skill, spend MP on skills that clearly beat a basic Attack, otherwise Attack.
+function chooseAction(self: Combatant, foe: Combatant, rng: RNG): Action {
+  const ready = self.m.loadout.filter((mv) => (self.cooldowns[mv.id] ?? 0) <= 0 && moveCost(mv) <= self.mana)
+  const heals = ready.filter((mv) => mv.type !== 'damage' && mv.power > 0)
+  const dmgs = ready.filter((mv) => mv.type === 'damage').sort((a, b) => b.power - a.power)
+  const utils = ready.filter((mv) => mv.type !== 'damage' && mv.power === 0)
+  const hpFrac = self.hp / self.maxHp
+
+  // What the foe can plausibly throw next turn (AI may peek — it's a sim).
+  const foeThreats = foe.m.loadout.filter((mv) => (foe.cooldowns[mv.id] ?? 0) <= 1 && moveCost(mv) <= foe.mana + manaRegen(foe.m.stats))
+  const threat = Math.max(ATTACK_POWER, ...foeThreats.filter((mv) => mv.type === 'damage').map((mv) => mv.power))
+
+  // Emergency heal beats everything.
+  if (hpFrac < 0.45 && heals.length) return { kind: 'skill', move: heals[0] }
+
+  // Hurt with a real hit incoming → guard up more often than not.
+  if (hpFrac < 0.45 && threat >= 20 && chance(rng, 55)) return { kind: 'block' }
+
+  // A damage skill is worth its MP if it clearly out-hits a basic Attack, or if
+  // it can land a status effect that a plain Attack never could.
+  const worthIt = dmgs.filter((mv) => mv.power >= ATTACK_POWER + 4 || (mv.status !== undefined && mv.power >= ATTACK_POWER - 4))
+  if (worthIt.length) return { kind: 'skill', move: worthIt[0] }
+
+  // Nothing affordable, but one more turn of regen unlocks a skill → block to charge.
+  if (ready.length === 0) {
+    const upcoming = self.m.loadout.filter((mv) => (self.cooldowns[mv.id] ?? 0) <= 1).map(moveCost)
+    const cheapest = upcoming.length ? Math.min(...upcoming) : Infinity
+    if (self.mana + manaRegen(self.m.stats) + self.innate.regen >= cheapest && chance(rng, 50)) return { kind: 'block' }
+  }
+
+  // No worthwhile skill this turn and the foe threatens something heavy → parry window.
+  if (threat >= 25 && chance(rng, 35)) return { kind: 'block' }
+
+  // Occasionally spend a turn (and MP) on a utility buff.
+  if (utils.length && chance(rng, 25)) return { kind: 'skill', move: utils[0] }
+
+  return { kind: 'attack' }
 }
 
 // The species ultimate (§8.3): once per battle, unleashed when pushed below 40%
@@ -166,7 +218,7 @@ function resolveMove(attacker: Combatant, defender: Combatant, move: Move, rng: 
   }
 
   attacker.cooldowns[move.id] = move.cooldown
-  attacker.mana = Math.max(0, attacker.mana - manaCost(move))
+  attacker.mana = Math.max(0, attacker.mana - moveCost(move))
 
   if (move.type !== 'damage') {
     // Utility: heal or guard. Everything else is flavour + spends the turn.
@@ -183,12 +235,13 @@ function resolveMove(attacker: Combatant, defender: Combatant, move: Move, rng: 
     return
   }
 
-  // Accuracy vs dodge (+blind penalty, innate accuracy/dodge passives)
+  // Accuracy vs dodge (+blind penalty, innate passives, Block stance avoidance)
   let acc = move.accuracy + attacker.innate.acc
   if (hasStatus(attacker, 'blind')) acc -= 25
-  const dodge = dodgeChance(realTarget.m.stats) + realTarget.innate.dodge
+  const dodge = dodgeChance(realTarget.m.stats) + realTarget.innate.dodge + realTarget.blockAvoid
   if (!chance(rng, Math.max(5, acc - dodge))) {
-    log.push(`  ${attacker.m.name}'s ${move.name} misses ${realTarget.m.name}.`)
+    if (realTarget.blockAvoid > 0) log.push(`  🛡 ${realTarget.m.name} blocks ${attacker.m.name}'s ${move.name}!`)
+    else log.push(`  ${attacker.m.name}'s ${move.name} misses ${realTarget.m.name}.`)
     return
   }
 
@@ -233,6 +286,8 @@ function resolveMove(attacker: Combatant, defender: Combatant, move: Move, rng: 
 }
 
 function takeTurn(attacker: Combatant, defender: Combatant, rng: RNG, log: string[]): void {
+  // A Block stance lasts until the blocker's next action — it ends now.
+  attacker.blockAvoid = 0
   // regen mana (innate mana engines add to it)
   attacker.mana = Math.min(attacker.maxMana, attacker.mana + manaRegen(attacker.m.stats) + attacker.innate.regen)
 
@@ -247,8 +302,14 @@ function takeTurn(attacker: Combatant, defender: Combatant, rng: RNG, log: strin
     return
   }
 
-  const move = chooseMove(attacker) ?? STRUGGLE
-  resolveMove(attacker, defender, move, rng, log)
+  // The per-turn choice: skill (costs MP) vs free Attack vs free Block.
+  const action = chooseAction(attacker, defender, rng)
+  if (action.kind === 'block') {
+    attacker.blockAvoid = blockValue(attacker)
+    log.push(`  🛡 ${attacker.m.name} braces to block (+${attacker.blockAvoid}% avoid).`)
+    return
+  }
+  resolveMove(attacker, defender, action.kind === 'attack' ? basicAttack(attacker.m) : action.move, rng, log)
 }
 
 export function simulateBattle(a: Monster, b: Monster, happA = 0, happB = 0): BattleResult {
