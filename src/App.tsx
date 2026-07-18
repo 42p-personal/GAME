@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react'
 import {
-  BODY_ELEMENT, Element, FOODS, Monster, STATS, Stat, bodySignature, feedDelta,
+  BODY_ELEMENT, BodyType, Element, FOODS, Monster, STATS, Stat, Species, bodySignature, feedDelta,
   happinessMultiplier, hashString, mulberry32,
 } from './core'
 import { generateMonster, maxHp, maxMana } from './monster'
 import { simulateBattle } from './battle'
 import { SPRITES, palette } from './sprites'
+import { SPECIES } from './species'
+import { BIOS } from './bestiary'
 
 const STAT_COLOR: Record<Stat, string> = {
   STR: 'var(--str)', DEX: 'var(--dex)', CON: 'var(--con)',
@@ -14,9 +16,9 @@ const STAT_COLOR: Record<Stat, string> = {
 const ELEMENT_ICON: Record<Element, string> = { fire: '🔥', water: '💧', earth: '⛰️', air: '💨' }
 
 // Pixel-art sprite: the species' body-type silhouette, tinted by a per-species hue.
-function Sprite({ m, size = 96 }: { m: Monster; size?: number }) {
-  const pal = useMemo(() => palette(hashString(m.species.id) % 360), [m.species.id])
-  const grid = SPRITES[m.species.body]
+function Sprite({ species, size = 96 }: { species: Species; size?: number }) {
+  const pal = useMemo(() => palette(hashString(species.id) % 360), [species.id])
+  const grid = SPRITES[species.body]
   const u = size / 16
   const cells: JSX.Element[] = []
   grid.forEach((row, y) => {
@@ -61,7 +63,7 @@ function MonsterCard({ m }: { m: Monster }) {
   return (
     <div>
       <div className="mhead">
-        <Sprite m={m} />
+        <Sprite species={m.species} />
         <div>
           <div className="name">{m.name}</div>
           <div className="meta">{m.species.name} · {m.species.body} · {m.sex === 'M' ? '♂' : '♀'}</div>
@@ -145,6 +147,38 @@ function Stable({ label, seed, setSeed, train, setTrain, happiness, setHappiness
   )
 }
 
+// Expandable codex of all 20 species, grouped by body type.
+function Bestiary() {
+  const types: BodyType[] = ['Mammal', 'Avian', 'Marsupial', 'Aquatic']
+  return (
+    <details className="bestiary">
+      <summary>📖 Bestiary — {SPECIES.length} monsters</summary>
+      <div className="bestbody">
+        {types.map((bt) => (
+          <div className="bestgroup" key={bt}>
+            <div className="bestgroup-h">
+              {bt} · resist {ELEMENT_ICON[BODY_ELEMENT[bt].resist]} · weak {ELEMENT_ICON[BODY_ELEMENT[bt].weak]}
+            </div>
+            {SPECIES.filter((s) => s.body === bt).map((s) => (
+              <details className="bestrow" key={s.id}>
+                <summary>
+                  <Sprite species={s} size={36} />
+                  <span className="bn">{s.name}</span>
+                  <span className="dim">· {s.naturalClass} · ★ {s.ultimate.name}</span>
+                </summary>
+                <p className="bio">{BIOS[s.id]}</p>
+                <p className="dim bsmall">
+                  Innate: {s.innate.map((a) => a.name).join(' · ')} · Lifespan {s.lifespan}y
+                </p>
+              </details>
+            ))}
+          </div>
+        ))}
+      </div>
+    </details>
+  )
+}
+
 export function App() {
   const [seedA, setSeedA] = useState('Bouldram')
   const [seedB, setSeedB] = useState('Maelurk')
@@ -185,6 +219,8 @@ export function App() {
           </div>
         </>
       )}
+
+      <Bestiary />
     </div>
   )
 }

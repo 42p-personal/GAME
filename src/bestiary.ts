@@ -1,0 +1,23 @@
+// Backstories for the 20 species (§ docs/BESTIARY.md). App-length bios keyed by species id.
+export const BIOS: Record<string, string> = {
+  bouldram: 'Charged every rival on his home cliffs until they learned to simply dodge. He came down the mountain chasing the one thing the cliffs could no longer give him — an opponent who can take his full Avalanche Charge and still be standing.',
+  aegisox: 'A retired guardian of a mountain caravan road, left obsolete when the caravans traded oxen for engines. She brought her unbreakable stance to the arena, where a wall still has worth, and fights to shield her teammates more than to win.',
+  maneleo: 'Deposed from his pride by a younger challenger and refusing exile, he joined the Circuit to rebuild his name from nothing and gather a new pride — teammates who will stand and roar at his side.',
+  grivvel: 'A scrappy frostwoods loner who arrived on a dare and stayed for the fury. Standing still bores him and losing enrages him — and he is already picking the next fight before the last one has cooled.',
+  ursath: 'Woke from a long hibernation to find his forest felled and paved. He wanders the Circuit half in search of a new home, half for the honest satisfaction of a Titan’s Maul landing true.',
+  skyrend: 'Measures her entire worth in the quality of her dives. She competes to hunt the one quarry she has never caught: a flawless, unanswerable Death from Above.',
+  strixil: 'A scholar-owl who treats every duel as a question and every opponent an answer. Calm and quietly formidable, she would rather out-think a foe and fuel her team’s magic than trade blows.',
+  zephyri: 'She never could sit still. To her the arena is the grandest playground of speed ever built, and the crowd’s gasp as she blurs untouched through a Thousand Cuts is the only prize she wants.',
+  corvaan: 'A born thief who stole a spellbook and found it shinier than any treasure. Now he collects reputation instead, competing to be known as the cleverest, most theatrical caster on the Circuit.',
+  larkessa: 'Her voice once emptied taverns of coin, but taverns were never big enough. She found the roar of a tournament crowd and knew she had found her true audience — she competes for the applause and to lift the teammates who sing along.',
+  bruxaroo: 'Made his name in staged fairground exhibition bouts and grew tired of the choreography. He came to the Circuit hungry for real competition and the honest thud of an unrehearsed Knockout Combo.',
+  koalio: 'A slow-speaking philosopher who delivers every thought like a lullaby. He competes to prove gentleness can win — he would genuinely rather sing an opponent into a peaceful Dreamsong than strike them.',
+  quokkade: 'The Circuit’s most relentlessly cheerful competitor. She fights for the crowds and the friendships, and throws the same Festival whether she has won or lost.',
+  sylvaglide: 'Tiny body, enormous ambition. She entered to prove the smallest competitor can soar clean over the biggest — and has spent her whole career turning being underestimated into an ambush.',
+  tazzik: 'A whirlwind of teeth and temper with more energy than one creature should hold. The arena is the only place that can absorb his full Tasmanian Fury, and he is fiercely, secretly loyal to anyone who can weather it and grin back.',
+  maelurk: 'Surfaced from the deep out of pure curiosity — the surface simply looked interesting. He stayed to test eight-armed spellwork against creatures unlike anything in his trenches, treating each Abyssal Grasp as an experiment he is enjoying immensely.',
+  nautilux: 'A thousand-tide drifter who has weathered every storm. She competes not to conquer but to endure, taking slow, deep pride in being the Pearl Barrier no storm has ever broken.',
+  serapelle: 'The oldest competitor in the Circuit’s records, having watched entire leagues rise and crumble. He returns each season to mentor the young and remind an impatient Circuit that patience outlasts power.',
+  voltaray: 'A restless current-rider who craves the jolt of competition the way others crave calm. He is a showman, hooked on the collective gasp of a crowd the instant his Thunderstorm lands.',
+  corallux: 'Grown from a single surviving fragment of a bleached, dying reef. He fights to carry that lost home’s name back into the light — every Reef Blade swung in its memory.',
+}
