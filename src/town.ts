@@ -10,6 +10,30 @@ import {
 
 export type Area = 'town' | 'ranch'
 
+export interface Tournament {
+  id: string
+  name: string
+  month: number // 1-12
+  league: string // Wood, Copper, Tin, etc.
+  rewards: { gold: number; exp: number }
+}
+
+// Calendar: 12 tournaments, one per month, ranging from Wood to Gold leagues
+export const TOURNAMENT_CALENDAR: Tournament[] = [
+  { id: 'jan-wood', name: 'January Classic', month: 1, league: 'Wood', rewards: { gold: 100, exp: 50 } },
+  { id: 'feb-copper', name: 'February Clash', month: 2, league: 'Copper', rewards: { gold: 150, exp: 75 } },
+  { id: 'mar-tin', name: 'March Melee', month: 3, league: 'Tin', rewards: { gold: 200, exp: 100 } },
+  { id: 'apr-bronze', name: 'April Bout', month: 4, league: 'Bronze', rewards: { gold: 250, exp: 125 } },
+  { id: 'may-iron', name: 'May Invitational', month: 5, league: 'Iron', rewards: { gold: 300, exp: 150 } },
+  { id: 'jun-silver', name: 'June Showdown', month: 6, league: 'Silver', rewards: { gold: 350, exp: 175 } },
+  { id: 'jul-gold', name: 'July Grand Prix', month: 7, league: 'Gold', rewards: { gold: 400, exp: 200 } },
+  { id: 'aug-plat', name: 'August Crown', month: 8, league: 'Platinum', rewards: { gold: 450, exp: 225 } },
+  { id: 'sep-masters', name: 'September Summit', month: 9, league: 'Masters', rewards: { gold: 500, exp: 250 } },
+  { id: 'oct-elite', name: 'October Elite', month: 10, league: 'Tamer Elite', rewards: { gold: 600, exp: 300 } },
+  { id: 'nov-wood2', name: 'November Novice', month: 11, league: 'Wood', rewards: { gold: 100, exp: 50 } },
+  { id: 'dec-charity', name: 'December Dash', month: 12, league: 'Copper', rewards: { gold: 150, exp: 75 } },
+]
+
 // A banked genome: enough of a monster to restore it (thaw) or fuse it later.
 export interface Frozen {
   id: string

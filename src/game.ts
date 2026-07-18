@@ -1,10 +1,9 @@
 // Weekly calendar / career loop (M2, §2). A single monster you raise week by week:
 // weekly actions (train drill / rest / feed / excursion), stamina, gold, aging.
 import {
-  FOODS, Food, LEAGUES, MAX_HAPPINESS, Monster, STATS, Sex, Species, Stat, Stats,
+  FOODS, Food, LEAGUES, MAX_HAPPINESS, Monster, STATS, Sex, Species, Stats,
   ULTIMATE_LEVEL, classForStats, feedDelta, hashString, mulberry32, randInt,
 } from './core'
-import { ALL_DRILLS } from './drills'
 import { chooseLoadout, generateMonster, learnedMoves } from './monster'
 
 export const WEEKS_PER_MONTH = 4
@@ -13,8 +12,8 @@ export const WEEKS_PER_YEAR = WEEKS_PER_MONTH * MONTHS_PER_YEAR // 48
 const START_AGE_WEEKS = WEEKS_PER_YEAR // start as a Teen (age 1)
 export const START_GOLD = 500
 export const MAX_STAMINA = 100
-const TRAIN_COST = { basic: 20, intensive: 30 }
-const REST_RECOVER = 55
+const WEAK_TRAIN_COST = 10 // % of stamina
+const STRONG_TRAIN_COST = 25 // % of stamina
 const EXCURSION_COST = 25
 
 export type Stage = 'Baby' | 'Teen' | 'Fully Grown' | 'Elder' | 'Retiree'
@@ -68,9 +67,17 @@ export function rollMarket(id: string, week: number): Record<Food, number> {
 export const foodName = (id: Food) => FOODS.find((f) => f.id === id)!.name
 
 export type WeeklyAction =
-  | { kind: 'train'; drillId: string }
+  | { kind: 'train'; trainType: 'weak' | 'strong' }
   | { kind: 'rest' }
   | { kind: 'excursion' }
+
+// Stamina malus: exp penalty scales with stamina level
+function staminaMalus(stamina: number): number {
+  if (stamina > 70) return 1 // no penalty
+  if (stamina > 50) return 0.95 // -5%
+  if (stamina > 30) return 0.9 // -10%
+  return 0.5 // -50%
+}
 
 export interface NewCareerOpts {
   id?: string // stable-unique id (defaults to the generation seed)
@@ -177,21 +184,27 @@ export function applyWeek(c: Career, action: WeeklyAction, gold: number, rental 
   const wk = c.week + 1
 
   if (action.kind === 'train') {
-    const drill = ALL_DRILLS.find((d) => d.id === action.drillId)!
-    const eff = trainMult * (n.stamina <= 0 ? 0.5 : 1)
+    const baseGains = action.trainType === 'weak' ? 3 : 6
+    const stamCost = Math.max(1, Math.round((action.trainType === 'weak' ? WEAK_TRAIN_COST : STRONG_TRAIN_COST) * MAX_STAMINA / 100))
+    const malus = staminaMalus(n.stamina)
+    const eff = trainMult * malus
     const changes: string[] = []
-    for (const key of Object.keys(drill.gains) as Stat[]) {
-      const delta = drill.gains[key]!
-      const applied = delta > 0 ? Math.round(delta * eff) : delta // life-stage malus hits gains, not penalties
-      const nv = Math.max(1, Math.min(delta > 0 ? cap : 999, n.stats[key] + applied))
-      const real = nv - n.stats[key]
-      n.stats[key] = nv
-      if (real !== 0) changes.push(`${key} ${real > 0 ? '+' : ''}${real}`)
+    for (const stat of STATS) {
+      const delta = baseGains
+      const applied = Math.round(delta * eff)
+      const nv = Math.max(1, Math.min(cap, n.stats[stat] + applied))
+      const real = nv - n.stats[stat]
+      n.stats[stat] = nv
+      if (real !== 0) changes.push(`${stat} +${real}`)
     }
-    n.stamina = Math.max(0, n.stamina - TRAIN_COST[drill.kind])
-    n.log.push(`Wk ${wk}: ${drill.name} — ${changes.join(', ') || 'no gain (capped)'}.`)
+    n.stamina = Math.max(0, n.stamina - stamCost)
+    const trainingName = action.trainType === 'weak' ? 'Weak Training' : 'Strong Training'
+    n.log.push(`Wk ${wk}: ${trainingName} — ${changes.length > 0 ? changes.join(', ') : 'no gain (capped)'}.`)
   } else if (action.kind === 'rest') {
-    n.stamina = Math.min(MAX_STAMINA, n.stamina + REST_RECOVER)
+    const restMin = Math.round(0.3 * MAX_STAMINA)
+    const restMax = Math.round(1 * MAX_STAMINA)
+    const restAmount = restMin + Math.floor(rng() * ((restMax - restMin) / 5 + 1)) * 5
+    n.stamina = Math.min(MAX_STAMINA, n.stamina + restAmount)
     n.log.push(`Wk ${wk}: rested. Stamina ${n.stamina}/${MAX_STAMINA}.`)
   } else {
     n.stamina = Math.max(0, n.stamina - EXCURSION_COST)

@@ -8,14 +8,13 @@ import { BattleResult, simulateBattle } from './battle'
 import { SPRITES, palette } from './sprites'
 import { SPECIES } from './species'
 import { BIOS } from './bestiary'
-import { BASIC_DRILLS, INTENSIVE_DRILLS } from './drills'
 import {
-  MAX_STAMINA, WeeklyAction, canRankUp, careerMonster, dateLabel, foodName, rankUpFee, stageInfo,
+  MAX_STAMINA, WeeklyAction, applyWeek, careerMonster, dateLabel, foodName, stageInfo,
 } from './game'
 import {
-  FUSION_COST, GameState, RENTAL_PER_FROZEN, activeCareer, barnCost, buyBulkFood, buyMonster,
-  feed, freeze, fuse, fusionRoom, goto, newGame, offerMonster, promote, refreshMarket, setActive,
-  thaw, upgradeBarn, weekAction, BULK_FOOD_COST,
+  FUSION_COST, GameState, RENTAL_PER_FROZEN, barnCost, buyBulkFood, buyMonster,
+  feed, freeze, fuse, fusionRoom, goto, newGame, offerMonster, refreshMarket,
+  thaw, upgradeBarn, BULK_FOOD_COST, TOURNAMENT_CALENDAR,
 } from './town'
 
 const STAT_COLOR: Record<Stat, string> = {
@@ -382,10 +381,15 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
 }
 
 // ============================ Ranch (raising loop) ============================
-function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetStateAction<GameState>> }) {
-  const career = activeCareer(game)
+interface WeekPlanEntry { trainingType: 'weak' | 'strong' | 'rest'; food: (typeof FOODS)[number]['id'] | '' }
 
-  if (!career) {
+function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetStateAction<GameState>> }) {
+  const [phase, setPhase] = useState<'decisions' | 'review' | 'summary'>('decisions')
+  const [decisionIdx, setDecisionIdx] = useState(0)
+  const [weekPlan, setWeekPlan] = useState<Record<string, WeekPlanEntry>>({})
+  const [calendarMonth, setCalendarMonth] = useState(1)
+
+  if (game.stable.length === 0) {
     return (
       <>
         <div className="ranchtop">
@@ -396,91 +400,173 @@ function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSt
     )
   }
 
-  const m = careerMonster(career)
-  const st = stageInfo(career.ageWeeks, career.species.lifespan)
+  const currentCareer = game.stable[decisionIdx]
+  const m = careerMonster(currentCareer)
+  const st = stageInfo(currentCareer.ageWeeks, currentCareer.species.lifespan)
   const discount = game.bulkFood ? 0.8 : 1
+  const currentPlan = weekPlan[currentCareer.id] || { trainingType: 'rest', food: '' }
+
+  const handleSetDecision = (trainingType: 'weak' | 'strong' | 'rest', food: (typeof FOODS)[number]['id'] | '') => {
+    setWeekPlan((wp) => ({ ...wp, [currentCareer.id]: { trainingType, food } }))
+    if (decisionIdx < game.stable.length - 1) {
+      setDecisionIdx((i) => i + 1)
+    } else {
+      setPhase('review')
+    }
+  }
+
+  if (phase === 'decisions') {
+    return (
+      <>
+        <div className="ranchtop">
+          <button className="ghost" onClick={() => setGame((g) => goto(g, 'town'))}>🏛 Town</button>
+          <span>🪙 {game.gold}g</span>
+          <span>Monster {decisionIdx + 1}/{game.stable.length}</span>
+        </div>
+        <p className="sub">Week {dateLabel(currentCareer.week)} — Choose training &amp; food for {currentCareer.name}.</p>
+
+        <div className="career">
+          <div className="card">
+            <div className="careerbar">
+              <span>📅 {dateLabel(currentCareer.week)}</span>
+              <span>{st.stage} · age {st.ageYears}y / {currentCareer.species.lifespan}y</span>
+            </div>
+            <div className="meters">
+              <div className="meter"><label>Stamina {currentCareer.stamina}/{MAX_STAMINA}</label><div className="bar"><i style={{ width: `${currentCareer.stamina}%`, background: 'var(--dex)' }} /></div></div>
+              <div className="meter"><label>Happiness {currentCareer.happiness}/10</label><div className="bar"><i style={{ width: `${currentCareer.happiness * 10}%`, background: 'var(--cha)' }} /></div></div>
+            </div>
+            <MonsterCard m={m} />
+          </div>
+
+          <div className="card actions">
+            {currentCareer.retired ? (
+              <div className="retired">🏁 {currentCareer.name} has retired and can no longer compete.</div>
+            ) : (
+              <>
+                <div className="section-title">Training — choose weak or strong training, or rest</div>
+                <div className="carerow">
+                  <button className={currentPlan.trainingType === 'weak' ? 'selected' : ''} onClick={() => handleSetDecision('weak', currentPlan.food)}>💪 Weak Training (−10% stamina)</button>
+                  <button className={currentPlan.trainingType === 'strong' ? 'selected' : ''} onClick={() => handleSetDecision('strong', currentPlan.food)}>🔥 Strong Training (−25% stamina)</button>
+                  <button className={currentPlan.trainingType === 'rest' ? 'selected' : ''} onClick={() => handleSetDecision('rest', currentPlan.food)}>😴 Rest (+stamina)</button>
+                </div>
+
+                <div className="section-title">Food — buy 1 food this week{game.bulkFood ? ' · 🛒 −20%' : ''}</div>
+                <div className="foods">
+                  {FOODS.map((f) => {
+                    const price = Math.max(1, Math.round(currentCareer.market[f.id] * discount))
+                    const d = feedDelta(f.id, currentCareer.favouriteFood, currentCareer.hatedFood)
+                    const afford = game.gold >= price
+                    const selected = currentPlan.food === f.id
+                    return (
+                      <button key={f.id} className={`food ${selected ? 'selected' : ''}`} disabled={!afford}
+                        onClick={() => setWeekPlan((wp) => ({ ...wp, [currentCareer.id]: { ...currentPlan, food: selected ? '' : f.id } }))}
+                        title={d > 0 ? 'favourite (+1 happiness)' : d < 0 ? 'hated (−1 happiness)' : 'neutral'}>
+                        {foodName(f.id)}{currentPlan.food === f.id ? ' ✓' : ''} · {price}g{d > 0 ? ' ♥' : d < 0 ? ' ✖' : ''}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                <div className="carerow" style={{ marginTop: '1rem' }}>
+                  {decisionIdx < game.stable.length - 1 ? (
+                    <button className="enter" onClick={() => handleSetDecision(currentPlan.trainingType, currentPlan.food)}>Next Monster →</button>
+                  ) : (
+                    <button className="enter" onClick={() => handleSetDecision(currentPlan.trainingType, currentPlan.food)}>Continue to Review →</button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  // Review phase
+  const tournamentsThisMonth = TOURNAMENT_CALENDAR.filter((t) => t.month === calendarMonth)
 
   return (
     <>
       <div className="ranchtop">
         <button className="ghost" onClick={() => setGame((g) => goto(g, 'town'))}>🏛 Town</button>
         <span>🪙 {game.gold}g</span>
-        {game.stable.length > 1 && (
-          <select value={game.activeId} onChange={(e) => setGame((g) => setActive(g, e.target.value))}>
-            {game.stable.map((c) => <option key={c.id} value={c.id}>{c.name} · {c.species.name}</option>)}
-          </select>
-        )}
+        <button className="ghost" onClick={() => setPhase('decisions')}>← Back</button>
       </div>
-      <p className="sub">Raise {career.name} week by week — train, rest, feed, or explore. It ages, learns moves, and climbs the leagues; each action advances one week.</p>
+      <p className="sub">Review decisions before advancing. Inspect abilities, check tournaments, or return to town.</p>
 
-      <div className="career">
-        <div className="card">
-          <div className="careerbar">
-            <span>📅 {dateLabel(career.week)}</span>
-            <span>{st.stage} · age {st.ageYears}y / {career.species.lifespan}y</span>
-          </div>
-          <div className="meters">
-            <div className="meter"><label>Stamina {career.stamina}/{MAX_STAMINA}</label><div className="bar"><i style={{ width: `${career.stamina}%`, background: 'var(--dex)' }} /></div></div>
-            <div className="meter"><label>Happiness {career.happiness}/10</label><div className="bar"><i style={{ width: `${career.happiness * 10}%`, background: 'var(--cha)' }} /></div></div>
-          </div>
-          <MonsterCard m={m} />
+      <div className="townmap" style={{ gap: '1rem' }}>
+        {/* Abilities inspect */}
+        <div className="card loc">
+          <div className="loc-h"><span>⚔️ Abilities</span></div>
+          <div className="hint">Manage active abilities (coming soon)</div>
         </div>
 
-        <div className="card actions">
-          {career.retired ? (
-            <div className="retired">🏁 {career.name} has retired and can no longer compete. Freeze it at the Lab to bank its genome, or switch to another monster. (Sell / expert-trainer options arrive with M5–M6.)</div>
-          ) : (
-            <>
-              <div className="section-title">
-                Market — buy 1 food this week{career.fedThisWeek ? ' · ✓ fed' : ''}{game.bulkFood ? ' · 🛒 −20%' : ''}
-              </div>
-              <div className="foods">
-                {FOODS.map((f) => {
-                  const price = Math.max(1, Math.round(career.market[f.id] * discount))
-                  const d = feedDelta(f.id, career.favouriteFood, career.hatedFood)
-                  const afford = game.gold >= price
-                  return (
-                    <button key={f.id} className="food" disabled={career.fedThisWeek || !afford}
-                      onClick={() => setGame((g) => feed(g, f.id))}
-                      title={d > 0 ? 'favourite (+1 happiness)' : d < 0 ? 'hated (−1 happiness)' : 'neutral'}>
-                      {foodName(f.id)} · {price}g{d > 0 ? ' ♥' : d < 0 ? ' ✖' : ''}
-                    </button>
-                  )
-                })}
-              </div>
-              <div className="hint">Prices fluctuate weekly. Not feeding costs 1 happiness (hunger).</div>
-              <div className="section-title">Train — basic (+minor, no downside)</div>
-              <div className="drillgrid">
-                {BASIC_DRILLS.map((d) => (
-                  <button key={d.id} className="drill" onClick={() => setGame((g) => weekAct(g, { kind: 'train', drillId: d.id }))} title={d.desc}>{d.name}</button>
-                ))}
-              </div>
-              <div className="section-title">Train — intensive (+major / −minor)</div>
-              <div className="drillgrid">
-                {INTENSIVE_DRILLS.map((d) => (
-                  <button key={d.id} className="drill int" onClick={() => setGame((g) => weekAct(g, { kind: 'train', drillId: d.id }))} title={d.desc}>{d.name}</button>
-                ))}
-              </div>
-              <div className="section-title">Care &amp; explore</div>
-              <div className="carerow">
-                <button onClick={() => setGame((g) => weekAct(g, { kind: 'rest' }))}>😴 Rest</button>
-                <button onClick={() => setGame((g) => weekAct(g, { kind: 'excursion' }))}>🧭 Excursion</button>
-                {canRankUp(career) && <button className="rankup" onClick={() => setGame((g) => promote(g))}>⭐ Rank-up ({rankUpFee(career)}g)</button>}
-              </div>
-            </>
-          )}
-          <div className="section-title">Journal</div>
-          <div className="log careerlog">
-            {career.log.slice().reverse().map((line, i) => <div key={i} className={line.startsWith('⭐') || line.startsWith('🏁') ? 'win' : ''}>{line}</div>)}
+        {/* Calendar */}
+        <div className="card loc">
+          <div className="loc-h">
+            <span>📅 Tournament Calendar</span>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button className="ghost" onClick={() => setCalendarMonth((m) => m === 1 ? 12 : m - 1)}>◀</button>
+              <span>Month {calendarMonth}</span>
+              <button className="ghost" onClick={() => setCalendarMonth((m) => m === 12 ? 1 : m + 1)}>▶</button>
+            </div>
           </div>
+          <div className="hint">Tournaments this month: {tournamentsThisMonth.length}</div>
+          {tournamentsThisMonth.map((t) => (
+            <div key={t.id} className="offer" style={{ padding: '0.5rem', borderBottom: '1px solid var(--line)' }}>
+              <div><b>{t.name}</b> — {t.league} league</div>
+              <div className="dim">Rewards: {t.rewards.gold}g, {t.rewards.exp} exp</div>
+              <button className="enter">Sign Up →</button>
+            </div>
+          ))}
+        </div>
+
+        {/* Proceed */}
+        <div className="card loc">
+          <div className="loc-h"><span>⏭️ Advance Week</span></div>
+          <div className="hint">Decisions locked in. Ready to advance?</div>
+          <button className="enter" onClick={() => {
+            // Apply all week actions to each monster, then feed them (if selected).
+            // Important: we apply actions directly to each monster without calling weekAction,
+            // which would age all monsters multiple times.
+            let newGame = { ...game, stable: [...game.stable] }
+            const rental = game.frozen.length * RENTAL_PER_FROZEN
+            let totalGold = game.gold
+
+            for (let i = 0; i < newGame.stable.length; i++) {
+              const c = newGame.stable[i]
+              const plan = weekPlan[c.id]
+              if (!c.retired && plan) {
+                const action: WeeklyAction = plan.trainingType === 'rest'
+                  ? { kind: 'rest' }
+                  : { kind: 'train', trainType: plan.trainingType as 'weak' | 'strong' }
+                const { c: updated, gold } = applyWeek(c, action, totalGold, rental)
+                totalGold = gold
+                newGame.stable[i] = updated
+              }
+            }
+
+            // Feed selected monsters
+            for (let i = 0; i < newGame.stable.length; i++) {
+              const c = newGame.stable[i]
+              const plan = weekPlan[c.id]
+              if (plan && plan.food) {
+                const feedGame = feed({ ...newGame, stable: newGame.stable, gold: totalGold }, plan.food)
+                newGame = feedGame
+                totalGold = feedGame.gold
+              }
+            }
+
+            setGame({ ...newGame, gold: totalGold })
+            setWeekPlan({})
+            setDecisionIdx(0)
+            setPhase('decisions')
+          }}>⏭ Proceed to Next Week</button>
         </div>
       </div>
     </>
   )
 }
-
-// small alias so the JSX reads cleanly
-const weekAct = (g: GameState, a: WeeklyAction) => weekAction(g, a)
 
 export function App() {
   const [view, setView] = useState<'game' | 'sandbox'>('game')
