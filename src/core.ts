@@ -21,7 +21,7 @@ export interface BodyTypeStats { primary: Stat; secondary: Stat; weakness: Stat 
 export const BODY_TYPE_STATS: Record<BodyType, BodyTypeStats> = {
   Mammal: { primary: 'STR', secondary: 'CON', weakness: 'CHA' },
   Avian: { primary: 'DEX', secondary: 'CHA', weakness: 'CON' },
-  Marsupial: { primary: 'INT', secondary: 'DEX', weakness: 'CON' },
+  Marsupial: { primary: 'CHA', secondary: 'DEX', weakness: 'INT' },
   Aquatic: { primary: 'WIS', secondary: 'INT', weakness: 'STR' },
   Draconic: { primary: 'STR', secondary: 'WIS', weakness: 'CHA' },
   Abyssal: { primary: 'INT', secondary: 'DEX', weakness: 'CON' },
@@ -135,7 +135,7 @@ export function classForStats(stats: Stats): string {
 export const BODY_AVERAGES: Record<BodyType, Stats> = {
   Mammal: { STR: 37, DEX: 22, CON: 33, WIS: 13, INT: 10, CHA: 17 },
   Avian: { STR: 16, DEX: 34, CON: 16, WIS: 28, INT: 26, CHA: 20 },
-  Marsupial: { STR: 22, DEX: 33, CON: 19, WIS: 20, INT: 16, CHA: 33 },
+  Marsupial: { STR: 22, DEX: 33, CON: 19, WIS: 20, INT: 10, CHA: 37 },
   Aquatic: { STR: 14, DEX: 21, CON: 28, WIS: 31, INT: 33, CHA: 13 },
   Draconic: { STR: 40, DEX: 22, CON: 24, WIS: 26, INT: 20, CHA: 6 }, // STR+WIS focus, weak CHA
   Abyssal: { STR: 15, DEX: 33, CON: 12, WIS: 27, INT: 33, CHA: 11 }, // INT+DEX focus, weak CON
