@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Monster, STATS, Stat, hashString, mulberry32 } from './core'
+import { Monster, STATS, Stat, bodySignature, hashString, mulberry32 } from './core'
 import { generateMonster, maxHp, maxMana } from './monster'
 import { simulateBattle } from './battle'
 import { SPRITES, palette } from './sprites'
@@ -39,6 +39,19 @@ function StatBar({ stat, value, max }: { stat: Stat; value: number; max: number 
   )
 }
 
+// Individuality: which stats sit above/below the species' body-type average (§8.4).
+function Signature({ m }: { m: Monster }) {
+  const sig = bodySignature(m.species.base, m.species.body)
+  return (
+    <div className="meta sig">
+      {sig.above.length > 0 && <span className="up">▲ {sig.above.join(' ')}</span>}
+      {sig.below.length > 0 && <span className="down">▼ {sig.below.join(' ')}</span>}
+      {!sig.above.length && !sig.below.length && <span>balanced</span>}
+      <span className="dim">vs {m.species.body} avg</span>
+    </div>
+  )
+}
+
 function MonsterCard({ m }: { m: Monster }) {
   const barMax = Math.max(100, ...STATS.map((k) => m.stats[k])) * 1.05
   return (
@@ -49,6 +62,7 @@ function MonsterCard({ m }: { m: Monster }) {
           <div className="name">{m.name}</div>
           <div className="meta">{m.species.name} · {m.species.body} · {m.sex === 'M' ? '♂' : '♀'}</div>
           <div className="meta">{m.species.flavour}</div>
+          <Signature m={m} />
         </div>
       </div>
 

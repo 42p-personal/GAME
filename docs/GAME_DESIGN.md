@@ -408,7 +408,7 @@ Format: **STR · DEX · CON · WIS · INT · CHA**.
 | Aegisox    | Tank          | 30·14·44·16·10·14       | Armoured ox, immovable wall      |
 | Maneleo    | Captain       | 40·22·26·12·12·30       | Lion pride-leader, inspiring     |
 | Grivvel    | Rogue         | 34·40·22·12·10·14       | Wolverine brawler, off-lean DEX  |
-| Ursath     | Warrior       | 40·18·36·14·10·14       | Great bear, sturdy all-rounder   |
+| Ursath     | Warrior       | 40·14·38·14·10·12       | Great bear, slow but immensely sturdy |
 
 **Avian** *(lean: DEX / WIS)*
 | Species    | Natural class | STR·DEX·CON·WIS·INT·CHA | Flavour                          |
@@ -450,7 +450,7 @@ breeds grow more slowly**, so their extra seasons partly pay to reach the same c
 | Species  | Lifespan | Innate abilities                                                                 |
 |----------|:--------:|----------------------------------------------------------------------------------|
 | Bouldram | 4        | **Charge** (bonus damage on first melee hit) · **Momentum** (melee grows as it advances) |
-| Aegisox  | 6        | **Bulwark** (reduces incoming melee) · **Immovable** (resists knockback/displacement)    |
+| Aegisox  | 6        | **Ironclad** (reduces incoming melee) · **Immovable** (resists knockback/displacement)   |
 | Maneleo  | 4        | **Rallying Roar** (team attack/morale buff) · **Pride** (stronger while allies stand)    |
 | Grivvel  | 4        | **Rend** (attacks cause bleed/DoT) · **Frenzy** (attack speed up at low HP)              |
 | Ursath   | 5        | **Thick Hide** (flat damage reduction) · **Maul** (heavy melee crits)                   |
@@ -459,7 +459,7 @@ breeds grow more slowly**, so their extra seasons partly pay to reach the same c
 | Species  | Lifespan | Innate abilities                                                                 |
 |----------|:--------:|----------------------------------------------------------------------------------|
 | Skyrend  | 4        | **Dive Bomb** (high-damage opening ranged strike) · **Keen Eye** (ignores some dodge)   |
-| Strixil  | 5        | **Mana Font** (boosts team mana regen) · **Silent Wisdom** (passive mana over time)     |
+| Strixil  | 5        | **Wellspring** (boosts team mana regen) · **Silent Wisdom** (passive mana over time)    |
 | Zephyri  | 4        | **Evasion** (high dodge) · **Flurry** (multiple fast strikes)                            |
 | Corvaan  | 4        | **Arcane Bolt** (elemental nuke) · **Hex** (lowers enemy accuracy/mana)                  |
 | Larkessa | 4        | **Song of Valor** (voice AoE: buffs allies) · **Encore** (repeats last ally buff)       |
@@ -468,7 +468,7 @@ breeds grow more slowly**, so their extra seasons partly pay to reach the same c
 | Species    | Lifespan | Innate abilities                                                               |
 |------------|:--------:|--------------------------------------------------------------------------------|
 | Bruxaroo   | 4        | **Haymaker** (big melee blow, stun chance) · **Southpaw** (counter on dodge)          |
-| Koalio     | 5        | **Lullaby** (voice attack, can sleep/slow) · **Soothing Words** (steadies/heals allies)|
+| Koalio     | 5        | **Drowsy Aura** (nearby foes grow sleepy/slow) · **Soothing Words** (steadies/heals allies)|
 | Quokkade   | 4        | **Cheer** (team dodge/crit buff) · **Quickstep** (evasive)                            |
 | Sylvaglide | 4        | **Glide Strike** (ranged hit-and-retreat) · **Aerial** (briefly untargetable)         |
 | Tazzik     | 4        | **Devour** (lifesteal on melee) · **Whirlwind** (spinning AoE melee)                  |
@@ -479,7 +479,7 @@ breeds grow more slowly**, so their extra seasons partly pay to reach the same c
 | Maelurk   | 4        | **Ink Cloud** (lowers enemy accuracy) · **Tentacle Barrage** (multi-hit elemental)     |
 | Nautilux  | 5        | **Ward** (team absorb shield) · **Spiral Shell** (reflects part of magic damage)       |
 | Serapelle | 6        | **Tidal Wisdom** (team mana + heal over time) · **Ancient Carapace** (high defence)    |
-| Voltaray  | 4        | **Shock** (ranged hit, stun chance) · **Static Field** (chips enemy mana)              |
+| Voltaray  | 4        | **Live Wire** (ranged hit, stun chance) · **Static Field** (chips enemy mana)           |
 | Corallux  | 5        | **Spellblade** (melee hits add elemental damage) · **Coral Guard** (defence while casting)|
 
 **Ultimate signature moves** (unlock at 600 in a stat, §7.3) — one per species, fills the 4th slot:
@@ -503,6 +503,32 @@ breeds grow more slowly**, so their extra seasons partly pay to reach the same c
 > **Design note:** store innate abilities and the ultimate on the species record, and learned-move
 > milestones on the genome (§7). All moves are data — effect + trigger + magnitude — so the battle sim
 > (§11) and the fusion trait-picker (§10.4) read from one library.
+
+### 8.4 Individuality within a body type
+Body type gives shared identity (§8.1); each species is an **individual variation** on it, differing in
+three ways so no two feel the same even inside the same type:
+
+1. **Stat signature** — every species deviates from its **body-type average** below. The signature is
+   *which stats sit notably above / below that average* (e.g. Ursath is **▲ CON, ▼ DEX/CHA** vs the
+   Mammal average — sturdier and slower). Computed by `bodySignature()` in `src/core.ts` and shown on
+   each monster card.
+2. **Unique innate passives** — the 1–2 innate abilities in §8.3 are species-exclusive and named
+   distinctly from the shared learned-move pool (§7.5), so they read as that creature's signature trait
+   (e.g. Aegisox's *Ironclad*, Voltaray's *Live Wire*).
+3. **Unique ultimate** — one species-only ultimate each (§8.3), unlocked at 600.
+
+**Body-type average stat profiles** (`BODY_AVERAGES` in code) — *STR · DEX · CON · WIS · INT · CHA*:
+
+| Body type  | STR | DEX | CON | WIS | INT | CHA |
+|------------|:---:|:---:|:---:|:---:|:---:|:---:|
+| Mammal     | 37  | 22  | 33  | 13  | 10  | 17  |
+| Avian      | 16  | 34  | 16  | 28  | 26  | 20  |
+| Marsupial  | 22  | 33  | 19  | 20  | 16  | 33  |
+| Aquatic    | 14  | 21  | 28  | 31  | 33  | 13  |
+
+> When a monster is generated, its stats = species base (already the average + this signature) + small
+> individual variance (§10.2) — so even two same-species monsters differ slightly, and every species
+> differs meaningfully from its body-type norm.
 
 ---
 

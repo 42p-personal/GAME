@@ -109,6 +109,26 @@ export function classForStats(stats: Stats): string {
   return hit ? hit.name : 'Generalist'
 }
 
+// --- Body-type average stat profiles (§8.4) ---
+// Reference baseline for each body type; every species deviates from it (its
+// "signature"), giving individuality on top of shared body-type identity.
+export const BODY_AVERAGES: Record<BodyType, Stats> = {
+  Mammal: { STR: 37, DEX: 22, CON: 33, WIS: 13, INT: 10, CHA: 17 },
+  Avian: { STR: 16, DEX: 34, CON: 16, WIS: 28, INT: 26, CHA: 20 },
+  Marsupial: { STR: 22, DEX: 33, CON: 19, WIS: 20, INT: 16, CHA: 33 },
+  Aquatic: { STR: 14, DEX: 21, CON: 28, WIS: 31, INT: 33, CHA: 13 },
+}
+
+// A species' stat signature: which stats sit notably above / below its body-type
+// average. Returns up to two of each (deviation ≥ 4 counts as notable).
+export function bodySignature(base: Stats, body: BodyType): { above: Stat[]; below: Stat[] } {
+  const avg = BODY_AVERAGES[body]
+  const deltas = STATS.map((s) => ({ s, d: base[s] - avg[s] }))
+  const above = deltas.filter((x) => x.d >= 4).sort((a, b) => b.d - a.d).slice(0, 2).map((x) => x.s)
+  const below = deltas.filter((x) => x.d <= -4).sort((a, b) => a.d - b.d).slice(0, 2).map((x) => x.s)
+  return { above, below }
+}
+
 // --- Status descriptions (§7.6) ---
 export const STATUS_INFO: Record<StatusKind, string> = {
   blind: 'Lowers the target’s chance to hit.',
