@@ -83,24 +83,31 @@ build hard while choosing *which* weakness to accept. Data lives in `src/drills.
 *(Exact per-week values and stamina/injury interactions are tuning, §13.)*
 
 ### 2.5 Feeding & happiness
-Each monster is assigned a **random favourite** and **hated** food at birth. The **Feeding** weekly
-action buys a food and feeds it:
-- **Favourite → +1 happiness**, **hated → −1 happiness**, any other food is neutral.
-- **Happiness** runs **0–10**. It scales battle damage at **+1% per point** — a monster at max happiness
-  deals **×1.10** damage (`happinessMultiplier` in `src/core.ts`).
+Each monster is assigned a **random favourite** and **hated** food at birth. Feeding is a **start-of-week
+choice, separate from the weekly activity**: at the start of each week a **food market** opens and the
+player may buy **one** food for the monster.
 
-**Foods** (cheapest → most expensive; feeding costs money, §12):
+- **Favourite → +1 happiness**, **hated → −1**, any other food is neutral (0). **Not feeding → −1
+  (hunger).**
+- **Happiness** runs **0–10** and scales battle damage at **+1% per point** — max happiness deals
+  **×1.10** (`happinessMultiplier` in `src/core.ts`).
+- **Prices fluctuate weekly** — each food's price is rolled at **±40% around its base value** every week
+  (`rollMarket` in `src/game.ts`). Only **one food per week per monster** may be bought.
 
-| Food         | Rel. cost |
-|--------------|:---------:|
-| Vegetables   | cheapest  |
-| Fruit        | ↑         |
-| Meat         | ↑         |
-| Sweet Treats | dearest   |
+**Foods** (cheapest → most expensive base price; feeding costs money, §12):
 
-The tension: a monster whose favourite is **Sweet Treats** is expensive to keep happy, while a
-veggie-lover is cheap — and feeding the **hated** food (maybe the only cheap option that week) costs you
-happiness. Favourite/hated are stored on the monster; happiness is live state.
+| Food         | Base | 
+|--------------|:----:|
+| Vegetables   | 5    |
+| Fruit        | 10   |
+| Meat         | 20   |
+| Sweet Treats | 40   |
+
+**The complication:** a monster whose favourite is **Sweet Treats** is dear to keep happy, and even a
+veggie-lover can be priced out on a bad week. When the favourite spikes, the player must choose — pay the
+premium for **+1**, settle for a cheaper neutral food to *maintain* (0), or go **hungry (−1)** to save
+gold for training and rank-up fees. Favourite/hated are fixed on the monster; the market and happiness are
+live state.
 
 ---
 

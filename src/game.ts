@@ -54,13 +54,24 @@ export interface Career {
   gold: number
   week: number
   retired: boolean
+  market: Record<Food, number> // this week's fluctuating food prices
+  fedThisWeek: boolean // only one food may be bought per week per monster
   log: string[]
 }
+
+// Weekly food prices fluctuate ±40% around each food's base value (§2.5).
+export function rollMarket(id: string, week: number): Record<Food, number> {
+  const rng = mulberry32(hashString(id + ':mkt:' + week))
+  const m = {} as Record<Food, number>
+  for (const f of FOODS) m[f.id] = Math.max(1, Math.round(f.price * (0.6 + rng() * 0.8)))
+  return m
+}
+
+export const foodName = (id: Food) => FOODS.find((f) => f.id === id)!.name
 
 export type WeeklyAction =
   | { kind: 'train'; drillId: string }
   | { kind: 'rest' }
-  | { kind: 'feed'; food: Food }
   | { kind: 'excursion' }
 
 export function newCareer(seed: string): Career {
@@ -80,8 +91,22 @@ export function newCareer(seed: string): Career {
     gold: START_GOLD,
     week: 0,
     retired: false,
+    market: rollMarket(seed, 0),
+    fedThisWeek: false,
     log: [`${m.name} the ${m.species.name} (${m.sex === 'M' ? '♂' : '♀'}) joins your stable — a Wood-league hopeful.`],
   }
+}
+
+// Buy one food from this week's market. Does NOT advance the week — feeding is a
+// start-of-week choice, separate from the weekly activity.
+export function buyFood(c: Career, food: Food): Career {
+  if (c.retired || c.fedThisWeek) return c
+  const price = c.market[food]
+  if (c.gold < price) return push(c, `Wk ${c.week + 1}: can't afford ${foodName(food)} (${price}g).`)
+  const d = feedDelta(food, c.favouriteFood, c.hatedFood)
+  const happiness = Math.max(0, Math.min(MAX_HAPPINESS, c.happiness + d))
+  const n: Career = { ...c, gold: c.gold - price, happiness, fedThisWeek: true, log: [...c.log] }
+  return push(n, `Wk ${c.week + 1}: fed ${foodName(food)} (−${price}g). Happiness ${happiness}/10${d > 0 ? ' ♥' : d < 0 ? ' ✖' : ''}.`)
 }
 
 // Derive a display Monster from the career's current state.
@@ -134,14 +159,7 @@ export function applyWeek(c: Career, action: WeeklyAction): Career {
   const beforeMoves = learnedMoves(c.stats).length
   const wk = c.week + 1
 
-  if (action.kind === 'feed') {
-    const food = FOODS.find((f) => f.id === action.food)!
-    if (n.gold < food.price) return push(n, `Wk ${wk}: can't afford ${food.name} (${food.price}g).`)
-    n.gold -= food.price
-    const d = feedDelta(action.food, c.favouriteFood, c.hatedFood)
-    n.happiness = Math.max(0, Math.min(MAX_HAPPINESS, n.happiness + d))
-    n.log.push(`Wk ${wk}: fed ${food.name} (−${food.price}g). Happiness ${n.happiness}/10${d > 0 ? ' ♥' : d < 0 ? ' ✖' : ''}.`)
-  } else if (action.kind === 'train') {
+  if (action.kind === 'train') {
     const drill = ALL_DRILLS.find((d) => d.id === action.drillId)!
     const eff = trainMult * (n.stamina <= 0 ? 0.5 : 1)
     const changes: string[] = []
@@ -165,10 +183,18 @@ export function applyWeek(c: Career, action: WeeklyAction): Career {
     n.log.push(`Wk ${wk}: excursion — returned with ${purse}g.`)
   }
 
-  // weekly allowance, advance the calendar, age the monster
+  // hunger: a monster that wasn't fed this week loses a little happiness
+  if (!n.fedThisWeek) {
+    n.happiness = Math.max(0, n.happiness - 1)
+    n.log.push(`  ↳ ${n.name} went unfed — happiness ${n.happiness}/10.`)
+  }
+
+  // weekly allowance, advance the calendar, age the monster, reroll the market
   n.gold += WEEKLY_ALLOWANCE
   n.week += 1
   n.ageWeeks += 1
+  n.fedThisWeek = false
+  n.market = rollMarket(n.id, n.week)
 
   const afterMoves = learnedMoves(n.stats).length
   if (afterMoves > beforeMoves) n.log.push(`  ↳ learned ${afterMoves - beforeMoves} new move(s)!`)

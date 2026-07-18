@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { Dispatch, SetStateAction, useMemo, useState } from 'react'
 import {
   BODY_ELEMENT, BodyType, Element, FOODS, Monster, STATS, Stat, Species, bodySignature, feedDelta,
   happinessMultiplier, hashString, mulberry32,
@@ -10,8 +10,8 @@ import { SPECIES } from './species'
 import { BIOS } from './bestiary'
 import { BASIC_DRILLS, INTENSIVE_DRILLS } from './drills'
 import {
-  Career, MAX_STAMINA, WeeklyAction, applyWeek, canRankUp, careerMonster, dateLabel,
-  newCareer, rankUp, rankUpFee, stageInfo,
+  Career, MAX_STAMINA, WeeklyAction, applyWeek, buyFood, canRankUp, careerMonster, dateLabel,
+  foodName, newCareer, rankUp, rankUpFee, stageInfo,
 } from './game'
 
 const STAT_COLOR: Record<Stat, string> = {
@@ -227,10 +227,12 @@ function SandboxView() {
   )
 }
 
-// Career mode: raise one monster week by week (M2).
-function CareerView() {
-  const [seed, setSeed] = useState('Aki')
-  const [career, setCareer] = useState<Career>(() => newCareer('career-Aki'))
+// Career mode: raise one monster week by week (M2). State is held by App so it
+// survives tab switches.
+function CareerView({ career, setCareer, seed, setSeed }: {
+  career: Career; setCareer: Dispatch<SetStateAction<Career>>
+  seed: string; setSeed: Dispatch<SetStateAction<string>>
+}) {
   const m = careerMonster(career)
   const st = stageInfo(career.ageWeeks, career.species.lifespan)
   const act = (a: WeeklyAction) => setCareer((c) => applyWeek(c, a))
@@ -262,6 +264,24 @@ function CareerView() {
             <div className="retired">🏁 {career.name} has retired and can no longer compete. (Retirement options — sell / freeze / expert trainer / breeding — arrive with M5–M6.) Start a new career to keep playing.</div>
           ) : (
             <>
+              <div className="section-title">
+                Market — buy 1 food this week{career.fedThisWeek ? ' · ✓ fed' : ''}
+              </div>
+              <div className="foods">
+                {FOODS.map((f) => {
+                  const price = career.market[f.id]
+                  const d = feedDelta(f.id, career.favouriteFood, career.hatedFood)
+                  const afford = career.gold >= price
+                  return (
+                    <button key={f.id} className="food" disabled={career.fedThisWeek || !afford}
+                      onClick={() => setCareer(buyFood(career, f.id))}
+                      title={d > 0 ? 'favourite (+1 happiness)' : d < 0 ? 'hated (−1 happiness)' : 'neutral'}>
+                      {foodName(f.id)} · {price}g{d > 0 ? ' ♥' : d < 0 ? ' ✖' : ''}
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="hint">Prices fluctuate weekly. Not feeding costs 1 happiness (hunger).</div>
               <div className="section-title">Train — basic (+minor, no downside)</div>
               <div className="drillgrid">
                 {BASIC_DRILLS.map((d) => (
@@ -280,13 +300,6 @@ function CareerView() {
                 <button onClick={() => act({ kind: 'excursion' })}>🧭 Excursion</button>
                 {canRankUp(career) && <button className="rankup" onClick={() => setCareer(rankUp(career))}>⭐ Rank-up ({rankUpFee(career)}g)</button>}
               </div>
-              <div className="section-title">Feed</div>
-              <div className="foods">
-                {FOODS.map((f) => {
-                  const d = feedDelta(f.id, career.favouriteFood, career.hatedFood)
-                  return <button key={f.id} className="food" onClick={() => act({ kind: 'feed', food: f.id })} title={`${f.price}g`}>{f.name} · {f.price}g{d > 0 ? ' ♥' : d < 0 ? ' ✖' : ''}</button>
-                })}
-              </div>
             </>
           )}
           <div className="section-title">Journal</div>
@@ -301,6 +314,8 @@ function CareerView() {
 
 export function App() {
   const [view, setView] = useState<'career' | 'sandbox'>('career')
+  const [careerSeed, setCareerSeed] = useState('Aki')
+  const [career, setCareer] = useState<Career>(() => newCareer('career-Aki'))
   return (
     <div className="app">
       <h1>Monster Tamer <span className="tag">/ prototype</span></h1>
@@ -308,7 +323,9 @@ export function App() {
         <button className={'tab' + (view === 'career' ? ' on' : '')} onClick={() => setView('career')}>🎮 Career</button>
         <button className={'tab' + (view === 'sandbox' ? ' on' : '')} onClick={() => setView('sandbox')}>⚔️ Sandbox</button>
       </div>
-      {view === 'career' ? <CareerView /> : <SandboxView />}
+      {view === 'career'
+        ? <CareerView career={career} setCareer={setCareer} seed={careerSeed} setSeed={setCareerSeed} />
+        : <SandboxView />}
       <Bestiary />
     </div>
   )
