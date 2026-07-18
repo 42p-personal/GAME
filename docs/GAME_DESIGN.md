@@ -20,6 +20,10 @@ The central tension is **lifespan**: every monster has a limited competitive car
 fighter *will* age out, so you are always investing in the next generation via breeding, fusion,
 and expert trainers.
 
+Monsters are **sapient, willing partners**, not captured beasts — a Tamer provides training, care, and
+food; the monster brings its own ambition and reasons for competing. See the [Bestiary](BESTIARY.md) for
+the 20 launch species and their stories.
+
 ---
 
 ## 2. Game Loop
@@ -151,12 +155,13 @@ but **capped by the monster's current license/league** (see §3).
 | Dexterity    | Nimbleness          | **Dodging** and physical **ranged** damage      |
 | Constitution | Toughness           | **Hitpoints**                                   |
 | Wisdom       | Wisdom              | **Mana regeneration** and **total mana**        |
-| Intelligence | Smarts              | **Elemental magic** damage                      |
+| Intelligence | Arcane aptitude     | **Elemental magic** damage                      |
 | Charisma     | Charm               | **Non-elemental "voice"** damage                |
 
----
-
-## 6. Classes
+> **Intelligence ≠ sapience.** Every monster is a **fully intelligent, sapient creature** that competes
+> **willingly** (see the [Bestiary](BESTIARY.md)). The INT stat measures only a creature's aptitude for
+> **elemental magic** — a Warrior with INT 10 is as thoughtful and willful as a Wizard with INT 900; it
+> just channels no elemental power. A low INT never means "unintelligent."
 
 A monster's **class** is a label derived from its **stat priorities** — a *primary* (major) stat and
 a *secondary* (minor/lesser) stat. Class signals a monster's battle role, informs recommended
