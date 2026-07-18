@@ -91,10 +91,13 @@ warns in dev if they drift. Monster generation uses order-preserving ±5 varianc
 so a monster's class never flips from its species.
 
 ### Battle sim (`src/battle.ts`)
-- Magic/voice moves cost mana (`monster.ts:manaCost`); dry casters Struggle
-- Mitigation: physical vs CON + guard, magic/voice vs WIS
-- Innate abilities grant passives via `INNATE_EFFECTS` table (flat DR, dodge,
-  regen, damage mults, first-hit bonuses, lifesteal)
+- EVERY skill costs MP (`monster.ts:manaCost`); free universal Attack + Block
+  actions; per-turn choice policy in `chooseAction`
+- 90-skill pool (`src/moves.ts`, 15/stat) with mechanical effects
+  (`core.ts:MoveEffects`): pierce, multi-hit, execute, recoil, lifesteal,
+  mana burn, guard, ward shields, battle-long buffs/debuffs (atk/def/dodge/acc/regen)
+- Mitigation: physical vs CON + guard, magic/voice/support vs WIS
+- Innate abilities grant passives via `INNATE_EFFECTS` table
 - Ultimate (stat 600+) fires once per battle below 40% HP
 
 ### Body Types (9)

@@ -3,7 +3,7 @@ import {
   BODY_ELEMENT, BodyType, Element, FOODS, LEAGUES, Monster, STATS, Stat, Species, feedDelta,
   happinessMultiplier, hashString, mulberry32,
 } from './core'
-import { generateMonster, maxHp, maxMana } from './monster'
+import { generateMonster, manaCost, maxHp, maxMana } from './monster'
 import { BattleResult, simulateBattle } from './battle'
 import { SPRITES, palette } from './sprites'
 import { SPECIES, bodySignature } from './species'
@@ -110,7 +110,7 @@ function MonsterCard({ m }: { m: Monster }) {
           <div className="move" key={mv.id}>
             <span className="lvl">{mv.stat} {mv.learnLevel}</span>
             <span className="mn">{mv.name}</span>
-            <div className="md">{mv.desc} {mv.status ? `(${mv.status.kind})` : ''} · cd {mv.cooldown} · acc {mv.accuracy}</div>
+            <div className="md">{mv.desc} {mv.status ? `(${mv.status.kind})` : ''} · {manaCost(mv)} MP · cd {mv.cooldown} · acc {mv.accuracy}</div>
           </div>
         ))}
       </div>

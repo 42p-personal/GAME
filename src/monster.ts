@@ -31,9 +31,11 @@ export function learnedMoves(stats: Stats): Move[] {
   return ALL_MOVES.filter((m) => stats[m.stat] >= m.learnLevel)
 }
 
-// Pick a 3-move loadout: favour high-power damage, but keep it varied across stats.
+// Pick a 3-move loadout: favour high-output damage (multi-hit totals count),
+// but keep it varied across stats.
+const expectedOutput = (m: Move) => m.power * (m.effects?.hits ? (m.effects.hits[0] + m.effects.hits[1]) / 2 : 1)
 export function chooseLoadout(learned: Move[]): Move[] {
-  const damage = learned.filter((m) => m.type === 'damage').sort((a, b) => b.power - a.power)
+  const damage = learned.filter((m) => m.type === 'damage').sort((a, b) => expectedOutput(b) - expectedOutput(a))
   const support = learned.filter((m) => m.type !== 'damage').sort((a, b) => b.learnLevel - a.learnLevel)
   const out: Move[] = []
   const seenStats = new Set<Stat>()
@@ -107,8 +109,10 @@ export function attackStat(s: Stats, channel: Move['channel']): number {
 // Mana cost per skill (battle-choice design): EVERY skill costs MP, whatever its
 // channel — if a monster can't afford any equipped skill it must Attack or Block.
 // The universal Attack/Block actions (battle.ts) are the only free options.
+// Multi-hit skills pay for their expected total output, not the per-hit power.
 export function manaCost(m: Move): number {
-  if (m.type === 'damage') return Math.max(4, Math.round(m.power * 0.45))
+  const avgHits = m.effects?.hits ? (m.effects.hits[0] + m.effects.hits[1]) / 2 : 1
+  if (m.type === 'damage') return Math.max(4, Math.round(m.power * avgHits * 0.45))
   if (m.power > 0) return Math.max(6, Math.round(m.power * 0.4)) // heals
   return 6 // buffs / control / utility
 }

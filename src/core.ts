@@ -33,6 +33,29 @@ export type Food = 'vegetables' | 'fruit' | 'meat' | 'sweet treats'
 
 export interface MoveStatus { kind: StatusKind; chance: number; duration: number }
 
+// Mechanical effects a skill can carry (battle.ts implements each). Mixing these
+// with statuses, elements, targets, cooldowns, and MP costs is where skill
+// variety and strategy comes from.
+export interface MoveEffects {
+  pierce?: number // 0..1 — fraction of the target's mitigation ignored
+  lifesteal?: number // 0..1 — fraction of damage dealt returned as HP
+  recoil?: number // 0..1 — fraction of damage dealt taken by the user
+  hits?: [number, number] // multi-hit: strikes N times; `power` is per hit
+  execute?: number // 0..1 — 1.5× damage when target HP is below this fraction
+  manaBurn?: number // flat MP burned off the target
+  guard?: number // flat damage reduction until the user's next action
+  ward?: number // absorb shield (HP pool) that soaks damage before health
+  cleanse?: boolean // remove the user's negative statuses
+  atkBuff?: number // battle-long: +% damage dealt (0.2 = +20%)
+  defBuff?: number // battle-long: +flat mitigation
+  dodgeBuff?: number // battle-long: +% dodge
+  accBuff?: number // battle-long: +% accuracy
+  regenBuff?: number // battle-long: +flat mana regen per turn
+  atkDebuff?: number // battle-long on target: −% damage dealt
+  defDebuff?: number // battle-long on target: −flat mitigation (armour shred)
+  accDebuff?: number // battle-long on target: −% accuracy
+}
+
 export interface Move {
   id: string
   name: string
@@ -46,6 +69,7 @@ export interface Move {
   power: number // damage / heal scale; 0 for pure utility
   status?: MoveStatus
   element?: Element // magic moves carry an element (§8.5)
+  effects?: MoveEffects
   desc: string
 }
 

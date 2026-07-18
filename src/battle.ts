@@ -1,6 +1,6 @@
 // 1v1 auto-battle simulator (§11). Deterministic given a seed. Teamfight-Manager
 // style: no player input mid-fight — the monster's build decides the outcome.
-import { Monster, Move, RNG, StatusKind, chance, elementMultiplier, happinessMultiplier, hashString, mulberry32 } from './core'
+import { Monster, Move, RNG, StatusKind, chance, elementMultiplier, happinessMultiplier, hashString, mulberry32, randInt } from './core'
 import { attackStat, dodgeChance, manaCost, manaRegen, maxHp, maxMana } from './monster'
 
 interface ActiveStatus { kind: StatusKind; turns: number }
@@ -84,8 +84,17 @@ interface Combatant {
   maxMana: number
   cooldowns: Record<string, number> // moveId -> turns remaining
   statuses: ActiveStatus[]
-  guard: number // temporary flat damage reduction (from buff moves)
+  guard: number // temporary flat damage reduction until next action (guard effects)
+  ward: number // absorb shield HP — soaks damage before health (ward effects)
   blockAvoid: number // Block stance: bonus % chance to avoid hits until next action
+  // battle-long modifiers accumulated from buff/debuff effects
+  atkMod: number // multiplier on damage dealt (buffs raise, debuffs on self lower)
+  defFlat: number // flat mitigation delta (Iron Skin raises, armour shred lowers)
+  dodgeMod: number // additive % dodge
+  accMod: number // additive % accuracy
+  regenMod: number // additive mana regen
+  appliedBuffs: Set<string> // battle-long self-buff move ids already cast (no re-casting)
+  sufferedDebuffs: Set<string> // debuff move ids already landed on this combatant
   happiness: number // 0..10, scales damage dealt (§2.4)
   innate: Required<InnateEffect>
   hasLandedHit: boolean // first-hit bonuses spend after the first damaging hit
@@ -108,12 +117,31 @@ function makeCombatant(m: Monster, happiness: number): Combatant {
     cooldowns: {},
     statuses: [],
     guard: 0,
+    ward: 0,
     blockAvoid: 0,
+    atkMod: 1,
+    defFlat: 0,
+    dodgeMod: 0,
+    accMod: 0,
+    regenMod: 0,
+    appliedBuffs: new Set(),
+    sufferedDebuffs: new Set(),
     happiness,
     innate: innateEffects(m) as Required<InnateEffect>,
     hasLandedHit: false,
     ultimateUsed: false,
   }
+}
+
+// Does this move apply a battle-long self-buff (cast once, lasts all fight)?
+const isBattleLongBuff = (mv: Move) => {
+  const e = mv.effects
+  return !!e && (e.atkBuff !== undefined || e.defBuff !== undefined || e.dodgeBuff !== undefined
+    || e.accBuff !== undefined || e.regenBuff !== undefined)
+}
+const isDebuffMove = (mv: Move) => {
+  const e = mv.effects
+  return !!e && (e.atkDebuff !== undefined || e.defDebuff !== undefined || e.accDebuff !== undefined)
 }
 
 const hasStatus = (c: Combatant, k: StatusKind) => c.statuses.some((s) => s.kind === k)
@@ -157,19 +185,33 @@ const blockValue = (c: Combatant) => Math.min(55, Math.round(30 + c.m.stats.WIS 
 
 type Action = { kind: 'skill'; move: Move } | { kind: 'attack' } | { kind: 'block' }
 
+// Expected output of a damage skill, for comparing against the free Attack:
+// multi-hit totals count, and execute range boosts value against weakened foes.
+function effPower(mv: Move, foe: Combatant): number {
+  const avgHits = mv.effects?.hits ? (mv.effects.hits[0] + mv.effects.hits[1]) / 2 : 1
+  let p = mv.power * avgHits
+  if (mv.effects?.execute && foe.hp / foe.maxHp <= mv.effects.execute) p *= 1.5
+  return p
+}
+
 // The per-turn choice: skill vs Attack vs Block. First-pass policy, meant for tuning:
 // heal when hurt, block when hurt and a big hit looms or while charging MP for a
-// skill, spend MP on skills that clearly beat a basic Attack, otherwise Attack.
+// skill, open with battle-long buffs, land debuffs on threats, spend MP on skills
+// that clearly beat a basic Attack, otherwise Attack.
 function chooseAction(self: Combatant, foe: Combatant, rng: RNG): Action {
   const ready = self.m.loadout.filter((mv) => (self.cooldowns[mv.id] ?? 0) <= 0 && moveCost(mv) <= self.mana)
   const heals = ready.filter((mv) => mv.type !== 'damage' && mv.power > 0)
-  const dmgs = ready.filter((mv) => mv.type === 'damage').sort((a, b) => b.power - a.power)
-  const utils = ready.filter((mv) => mv.type !== 'damage' && mv.power === 0)
+  const dmgs = ready.filter((mv) => mv.type === 'damage').sort((a, b) => effPower(b, foe) - effPower(a, foe))
+  // battle-long buffs not yet cast; debuffs the foe hasn't suffered yet
+  const buffs = ready.filter((mv) => mv.type !== 'damage' && mv.power === 0 && mv.target !== 'enemy' && mv.target !== 'allEnemies'
+    && !(isBattleLongBuff(mv) && self.appliedBuffs.has(mv.id)))
+  const hostiles = ready.filter((mv) => mv.type !== 'damage' && (mv.target === 'enemy' || mv.target === 'allEnemies')
+    && !(isDebuffMove(mv) && foe.sufferedDebuffs.has(mv.id)))
   const hpFrac = self.hp / self.maxHp
 
   // What the foe can plausibly throw next turn (AI may peek — it's a sim).
   const foeThreats = foe.m.loadout.filter((mv) => (foe.cooldowns[mv.id] ?? 0) <= 1 && moveCost(mv) <= foe.mana + manaRegen(foe.m.stats))
-  const threat = Math.max(ATTACK_POWER, ...foeThreats.filter((mv) => mv.type === 'damage').map((mv) => mv.power))
+  const threat = Math.max(ATTACK_POWER, ...foeThreats.filter((mv) => mv.type === 'damage').map((mv) => effPower(mv, self)))
 
   // Emergency heal beats everything.
   if (hpFrac < 0.45 && heals.length) return { kind: 'skill', move: heals[0] }
@@ -177,23 +219,27 @@ function chooseAction(self: Combatant, foe: Combatant, rng: RNG): Action {
   // Hurt with a real hit incoming → guard up more often than not.
   if (hpFrac < 0.45 && threat >= 20 && chance(rng, 55)) return { kind: 'block' }
 
+  // Open with a battle-long buff (or shield up) while still healthy.
+  if (buffs.length && hpFrac > 0.6 && chance(rng, 40)) return { kind: 'skill', move: buffs[0] }
+
+  // Land a debuff / control move on a threatening foe.
+  if (hostiles.length && threat >= 18 && chance(rng, 35)) return { kind: 'skill', move: hostiles[0] }
+
   // A damage skill is worth its MP if it clearly out-hits a basic Attack, or if
-  // it can land a status effect that a plain Attack never could.
-  const worthIt = dmgs.filter((mv) => mv.power >= ATTACK_POWER + 4 || (mv.status !== undefined && mv.power >= ATTACK_POWER - 4))
+  // it carries a status/debuff rider that a plain Attack never could.
+  const worthIt = dmgs.filter((mv) => effPower(mv, foe) >= ATTACK_POWER + 4
+    || ((mv.status !== undefined || isDebuffMove(mv) || mv.effects?.manaBurn !== undefined) && effPower(mv, foe) >= ATTACK_POWER - 4))
   if (worthIt.length) return { kind: 'skill', move: worthIt[0] }
 
   // Nothing affordable, but one more turn of regen unlocks a skill → block to charge.
   if (ready.length === 0) {
     const upcoming = self.m.loadout.filter((mv) => (self.cooldowns[mv.id] ?? 0) <= 1).map(moveCost)
     const cheapest = upcoming.length ? Math.min(...upcoming) : Infinity
-    if (self.mana + manaRegen(self.m.stats) + self.innate.regen >= cheapest && chance(rng, 50)) return { kind: 'block' }
+    if (self.mana + manaRegen(self.m.stats) + self.innate.regen + self.regenMod >= cheapest && chance(rng, 50)) return { kind: 'block' }
   }
 
   // No worthwhile skill this turn and the foe threatens something heavy → parry window.
   if (threat >= 25 && chance(rng, 35)) return { kind: 'block' }
-
-  // Occasionally spend a turn (and MP) on a utility buff.
-  if (utils.length && chance(rng, 25)) return { kind: 'skill', move: utils[0] }
 
   return { kind: 'attack' }
 }
@@ -209,6 +255,39 @@ function ultimateMove(m: Monster): Move {
   }
 }
 
+// Land a debuff's battle-long effects on the target (once per debuff move).
+function applyDebuffs(target: Combatant, move: Move, log: string[]): void {
+  const e = move.effects
+  if (!e || target.sufferedDebuffs.has(move.id)) return
+  const notes: string[] = []
+  if (e.atkDebuff) { target.atkMod *= 1 - e.atkDebuff; notes.push(`−${Math.round(e.atkDebuff * 100)}% damage`) }
+  if (e.defDebuff) { target.defFlat -= e.defDebuff; notes.push(`−${e.defDebuff} mitigation`) }
+  if (e.accDebuff) { target.accMod -= e.accDebuff; notes.push(`−${e.accDebuff}% accuracy`) }
+  if (notes.length) {
+    target.sufferedDebuffs.add(move.id)
+    log.push(`    ${target.m.name} is weakened: ${notes.join(', ')}.`)
+  }
+}
+
+// Apply a move's self-side effects: guard, ward, cleanse, battle-long buffs.
+function applySelfEffects(user: Combatant, move: Move, log: string[]): void {
+  const e = move.effects
+  if (!e) return
+  const notes: string[] = []
+  if (e.guard) { user.guard += e.guard + Math.round(user.m.stats.CON * 0.1); notes.push(`guard ${user.guard}`) }
+  if (e.ward) { user.ward += e.ward; notes.push(`${user.ward} HP shield`) }
+  if (e.cleanse && user.statuses.length) { user.statuses = []; notes.push('ailments cleansed') }
+  if (isBattleLongBuff(move) && !user.appliedBuffs.has(move.id)) {
+    user.appliedBuffs.add(move.id)
+    if (e.atkBuff) { user.atkMod *= 1 + e.atkBuff; notes.push(`+${Math.round(e.atkBuff * 100)}% damage`) }
+    if (e.defBuff) { user.defFlat += e.defBuff; notes.push(`+${e.defBuff} mitigation`) }
+    if (e.dodgeBuff) { user.dodgeMod += e.dodgeBuff; notes.push(`+${e.dodgeBuff}% dodge`) }
+    if (e.accBuff) { user.accMod += e.accBuff; notes.push(`+${e.accBuff}% accuracy`) }
+    if (e.regenBuff) { user.regenMod += e.regenBuff; notes.push(`+${e.regenBuff} regen`) }
+  }
+  if (notes.length) log.push(`    (${notes.join(', ')})`)
+}
+
 function resolveMove(attacker: Combatant, defender: Combatant, move: Move, rng: RNG, log: string[]): void {
   // Confusion: chance to hit self
   let realTarget = defender
@@ -219,26 +298,50 @@ function resolveMove(attacker: Combatant, defender: Combatant, move: Move, rng: 
 
   attacker.cooldowns[move.id] = move.cooldown
   attacker.mana = Math.max(0, attacker.mana - moveCost(move))
+  const e = move.effects
 
+  // --- Non-damage moves: heals, shields, buffs on self; debuffs/control on the enemy ---
   if (move.type !== 'damage') {
-    // Utility: heal or guard. Everything else is flavour + spends the turn.
-    if (move.power > 0) {
-      const heal = Math.round(move.power * 1.2)
-      attacker.hp = Math.min(attacker.maxHp, attacker.hp + heal)
-      log.push(`  ${attacker.m.name} uses ${move.name}, healing ${heal} HP.`)
-    } else if (move.name === 'Guard' || move.name === 'Brace' || move.name === 'Bracer' || move.name === 'Iron Skin' || move.name === 'Fortify') {
-      attacker.guard += Math.round(attacker.m.stats.CON * 0.15) + 4
-      log.push(`  ${attacker.m.name} uses ${move.name} and braces (guard +${attacker.guard}).`)
-    } else {
-      log.push(`  ${attacker.m.name} uses ${move.name}.`)
+    const hostile = move.target === 'enemy' || move.target === 'allEnemies'
+    if (!hostile) {
+      if (move.power > 0) {
+        const heal = Math.round(move.power * 1.2)
+        attacker.hp = Math.min(attacker.maxHp, attacker.hp + heal)
+        log.push(`  ${attacker.m.name} uses ${move.name}, healing ${heal} HP.`)
+      } else {
+        log.push(`  ${attacker.m.name} uses ${move.name}.`)
+      }
+      applySelfEffects(attacker, move, log)
+      return
+    }
+    // Hostile utility (debuff / control) must land — dodge and Block apply.
+    let hacc = move.accuracy + attacker.innate.acc + attacker.accMod
+    if (hasStatus(attacker, 'blind')) hacc -= 25
+    const hdodge = dodgeChance(realTarget.m.stats) + realTarget.innate.dodge + realTarget.dodgeMod + realTarget.blockAvoid
+    if (!chance(rng, Math.max(5, hacc - hdodge))) {
+      if (realTarget.blockAvoid > 0) log.push(`  🛡 ${realTarget.m.name} blocks ${attacker.m.name}'s ${move.name}!`)
+      else log.push(`  ${attacker.m.name}'s ${move.name} misses ${realTarget.m.name}.`)
+      return
+    }
+    log.push(`  ${attacker.m.name} uses ${move.name} on ${realTarget.m.name}.`)
+    applyDebuffs(realTarget, move, log)
+    if (e?.manaBurn) {
+      const burned = Math.min(realTarget.mana, e.manaBurn)
+      realTarget.mana -= burned
+      if (burned > 0) log.push(`    ${realTarget.m.name} loses ${burned} MP.`)
+    }
+    if (move.status && chance(rng, move.status.chance)) {
+      realTarget.statuses.push({ kind: move.status.kind, turns: move.status.duration })
+      log.push(`    ${realTarget.m.name} is afflicted with ${move.status.kind}!`)
     }
     return
   }
 
-  // Accuracy vs dodge (+blind penalty, innate passives, Block stance avoidance)
-  let acc = move.accuracy + attacker.innate.acc
+  // --- Damage moves ---
+  // Accuracy vs dodge (+blind penalty, passives, buffs/debuffs, Block avoidance)
+  let acc = move.accuracy + attacker.innate.acc + attacker.accMod
   if (hasStatus(attacker, 'blind')) acc -= 25
-  const dodge = dodgeChance(realTarget.m.stats) + realTarget.innate.dodge + realTarget.blockAvoid
+  const dodge = dodgeChance(realTarget.m.stats) + realTarget.innate.dodge + realTarget.dodgeMod + realTarget.blockAvoid
   if (!chance(rng, Math.max(5, acc - dodge))) {
     if (realTarget.blockAvoid > 0) log.push(`  🛡 ${realTarget.m.name} blocks ${attacker.m.name}'s ${move.name}!`)
     else log.push(`  ${attacker.m.name}'s ${move.name} misses ${realTarget.m.name}.`)
@@ -247,12 +350,19 @@ function resolveMove(attacker: Combatant, defender: Combatant, move: Move, rng: 
 
   const atk = attackStat(attacker.m.stats, move.channel)
   const variance = 0.85 + rng() * 0.3
-  let dmg = move.power * (atk / 40) * variance
+  const hits = e?.hits ? randInt(rng, e.hits[0], e.hits[1]) : 1
+  let dmg = move.power * hits * (atk / 40) * variance
   dmg *= happinessMultiplier(attacker.happiness) // happy monsters hit harder (§2.4)
-  dmg *= attacker.innate.dmgMult
+  dmg *= attacker.innate.dmgMult * attacker.atkMod
   if (!attacker.hasLandedHit && attacker.innate.firstHitMult > 1) {
     dmg *= attacker.innate.firstHitMult
     log.push(`  ${attacker.m.name}'s opening strike hits with full force!`)
+  }
+  // execute: heavy bonus against weakened targets
+  let execNote = ''
+  if (e?.execute && realTarget.hp / realTarget.maxHp <= e.execute) {
+    dmg *= 1.5
+    execNote = ' — executes!'
   }
   // elemental affinity: resisted or super-effective vs the target's body type (§8.5)
   let effNote = ''
@@ -262,21 +372,51 @@ function resolveMove(attacker: Combatant, defender: Combatant, move: Move, rng: 
     if (em > 1) effNote = ' — super effective!'
     else if (em < 1) effNote = ' — resisted'
   }
-  // physical channels mitigated by target CON + guard; magic/voice by WIS (§11)
-  const mitigation = ((move.channel === 'melee' || move.channel === 'ranged')
+  // physical channels mitigated by target CON + guard; magic/voice/support by WIS
+  // (§11); buffs/shreds shift it; pierce ignores a fraction of the total.
+  let mitigation = ((move.channel === 'melee' || move.channel === 'ranged')
     ? realTarget.m.stats.CON * 0.06 + realTarget.guard
-    : realTarget.m.stats.WIS * 0.05) + realTarget.innate.flatDR
+    : realTarget.m.stats.WIS * 0.05) + realTarget.innate.flatDR + realTarget.defFlat
+  mitigation = Math.max(0, mitigation) * (1 - (e?.pierce ?? 0))
   dmg = Math.max(1, Math.round(dmg - mitigation))
+
+  // ward shields soak damage before health
+  let wardNote = ''
+  if (realTarget.ward > 0) {
+    const absorbed = Math.min(realTarget.ward, dmg)
+    realTarget.ward -= absorbed
+    dmg -= absorbed
+    wardNote = ` (${absorbed} absorbed by shield)`
+  }
   realTarget.hp -= dmg
   realTarget.guard = 0
   attacker.hasLandedHit = true
-  if (attacker.innate.lifesteal > 0) {
-    const heal = Math.max(1, Math.round(dmg * attacker.innate.lifesteal))
+
+  const hitNote = hits > 1 ? ` (${hits} hits)` : ''
+  const notes: string[] = []
+  // lifesteal: innate and skill effects stack
+  const steal = attacker.innate.lifesteal + (e?.lifesteal ?? 0)
+  if (steal > 0 && dmg > 0) {
+    const heal = Math.max(1, Math.round(dmg * steal))
     attacker.hp = Math.min(attacker.maxHp, attacker.hp + heal)
-    log.push(`  ${attacker.m.name} uses ${move.name} → ${dmg} damage to ${realTarget.m.name}${effNote} (drains ${heal} HP).`)
-  } else {
-    log.push(`  ${attacker.m.name} uses ${move.name} → ${dmg} damage to ${realTarget.m.name}${effNote}.`)
+    notes.push(`drains ${heal} HP`)
   }
+  if (e?.manaBurn) {
+    const burned = Math.min(realTarget.mana, e.manaBurn)
+    realTarget.mana -= burned
+    if (burned > 0) notes.push(`burns ${burned} MP`)
+  }
+  if (e?.recoil) {
+    const recoil = Math.max(1, Math.round(dmg * e.recoil))
+    attacker.hp -= recoil
+    notes.push(`${recoil} recoil`)
+  }
+  const noteStr = notes.length ? ` (${notes.join(', ')})` : ''
+  log.push(`  ${attacker.m.name} uses ${move.name}${hitNote} → ${dmg} damage to ${realTarget.m.name}${execNote}${effNote}${wardNote}${noteStr}.`)
+
+  // rider effects: armour shred / attack-down on damage moves, self-guard followups
+  applyDebuffs(realTarget, move, log)
+  if (e?.guard) applySelfEffects(attacker, move, log)
 
   // Apply status
   if (move.status && chance(rng, move.status.chance)) {
@@ -288,8 +428,8 @@ function resolveMove(attacker: Combatant, defender: Combatant, move: Move, rng: 
 function takeTurn(attacker: Combatant, defender: Combatant, rng: RNG, log: string[]): void {
   // A Block stance lasts until the blocker's next action — it ends now.
   attacker.blockAvoid = 0
-  // regen mana (innate mana engines add to it)
-  attacker.mana = Math.min(attacker.maxMana, attacker.mana + manaRegen(attacker.m.stats) + attacker.innate.regen)
+  // regen mana (innate mana engines + regen buffs add to it)
+  attacker.mana = Math.min(attacker.maxMana, attacker.mana + manaRegen(attacker.m.stats) + attacker.innate.regen + attacker.regenMod)
 
   if (hasStatus(attacker, 'stun')) { log.push(`  ${attacker.m.name} is stunned and cannot act.`); return }
   if (hasStatus(attacker, 'fear')) { log.push(`  ${attacker.m.name} flees in fear and loses its action.`); return }
