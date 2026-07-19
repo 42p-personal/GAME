@@ -39,21 +39,26 @@ export interface MoveStatus { kind: StatusKind; chance: number; duration: number
 export interface MoveEffects {
   pierce?: number // 0..1 — fraction of the target's mitigation ignored
   lifesteal?: number // 0..1 — fraction of damage dealt returned as HP
-  recoil?: number // 0..1 — fraction of damage dealt taken by the user
+  recoil?: number // 0..1 — fraction of damage dealt taken by the user (max 0.15 in practice)
   hits?: [number, number] // multi-hit: strikes N times; `power` is per hit
   execute?: number // 0..1 — 1.5× damage when target HP is below this fraction
   manaBurn?: number // flat MP burned off the target
   guard?: number // flat damage reduction until the user's next action
-  ward?: number // absorb shield (HP pool) that soaks damage before health
-  cleanse?: boolean // remove the user's negative statuses
-  atkBuff?: number // battle-long: +% damage dealt (0.2 = +20%)
-  defBuff?: number // battle-long: +flat mitigation
-  dodgeBuff?: number // battle-long: +% dodge
-  accBuff?: number // battle-long: +% accuracy
-  regenBuff?: number // battle-long: +flat mana regen per turn
-  atkDebuff?: number // battle-long on target: −% damage dealt
-  defDebuff?: number // battle-long on target: −flat mitigation (armour shred)
-  accDebuff?: number // battle-long on target: −% accuracy
+  ward?: number // absorb shield (HP pool) that soaks damage before health — CON-exclusive
+  cleanse?: boolean // remove negative statuses (self, or the whole team if target is 'team')
+  tauntForce?: boolean // forces the target to attack the taunter next turn (inert in 1v1; matters once team battles land)
+  // Timed modifiers — ALL of the below last `duration` rounds, then expire and are
+  // removed entirely (no more "for the fight" effects). Re-casting the same move
+  // refreshes its remaining duration rather than stacking a second copy.
+  duration?: number // rounds this move's buff/debuff fields below remain active
+  atkBuff?: number // +% damage dealt (0.2 = +20%)
+  defBuff?: number // +flat mitigation — CON-exclusive ("armour")
+  dodgeBuff?: number // +% dodge
+  accBuff?: number // +% accuracy
+  regenBuff?: number // +flat mana regen per turn
+  atkDebuff?: number // on target: −% damage dealt
+  defDebuff?: number // on target: −flat mitigation (armour shred)
+  accDebuff?: number // on target: −% accuracy
 }
 
 export interface Move {
@@ -101,6 +106,10 @@ export interface Monster {
   ultimateUnlocked: boolean
   favouriteFood: Food
   hatedFood: Food
+  stamina?: number // 0-100 at fight time; absent = fresh (rivals, sandbox) — see staminaDamageMult
+  hp?: number // current HP at fight time — injuries persist; absent = full (rivals, sandbox)
+  mp?: number // current MP at fight time — absent = full (rivals, sandbox)
+  tameness?: number // 0-100, HIDDEN wild-instinct roll — absent = fully tame (player monsters)
 }
 
 // --- Leagues (license -> stat cap), §3 ---
@@ -115,7 +124,7 @@ export const LEAGUES: League[] = [
   { name: 'Gold', cap: 700 },
   { name: 'Platinum', cap: 800 },
   { name: 'Masters', cap: 900 },
-  { name: 'Tamer Elite', cap: 999 },
+  { name: 'Tamer Elite', cap: 1000 },
 ]
 
 export function leagueForStat(maxStat: number): string {
@@ -147,6 +156,17 @@ export function classForStats(stats: Stats): string {
   return hit ? hit.name : 'Generalist'
 }
 
+// Battle role per class (user spec 2026-07-21): drives rival-team composition
+// templates ("a mixture of support and damage dealing classes") and class-aware
+// loadout/AI behavior. Tanks count as support — they enable, not carry, damage.
+export type ClassRole = 'damage' | 'support'
+export const CLASS_ROLES: Record<string, ClassRole> = {
+  Warrior: 'damage', Rogue: 'damage', Ranger: 'damage', Wizard: 'damage',
+  Spellsword: 'damage', Captain: 'damage',
+  Tank: 'support', Spellshield: 'support', Sage: 'support', Orator: 'support', Bard: 'support',
+}
+export const roleOfClass = (className: string): ClassRole => CLASS_ROLES[className] ?? 'damage'
+
 // Body-type averages + species signatures moved to species.ts — they're computed
 // from the actual SPECIES data so they can never drift out of sync again.
 
@@ -156,8 +176,8 @@ export function classForStats(stats: Stats): string {
 // so elemental matchups always distinguish body types (validated in validate.ts).
 export const BODY_ELEMENT: Record<BodyType, { resist: Element; weak: Element }> = {
   Mammal: { resist: 'water', weak: 'air' },
-  Avian: { resist: 'earth', weak: 'fire' },
-  Marsupial: { resist: 'air', weak: 'water' },
+  Avian: { resist: 'air', weak: 'water' }, // wind is a flier's home turf; waterlogged wings ground fast
+  Marsupial: { resist: 'earth', weak: 'fire' }, // sturdy against tremors; helpless in dry-brush fire
   Aquatic: { resist: 'fire', weak: 'earth' },
   Insectoid: { resist: 'earth', weak: 'water' }, // chitin shrugs off stone; rain drowns the swarm
   Reptilian: { resist: 'fire', weak: 'air' }, // desert-baskers; cold winds still cold blood

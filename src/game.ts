@@ -5,7 +5,7 @@ import {
   ULTIMATE_LEVEL, classForStats, feedDelta, hashString, mulberry32, randInt,
 } from './core'
 import { ALL_DRILLS } from './drills'
-import { chooseLoadout, generateMonster, learnedMoves } from './monster'
+import { chooseLoadout, generateMonster, learnedMoves, maxHp, maxMana } from './monster'
 
 export const WEEKS_PER_MONTH = 4
 export const MONTHS_PER_YEAR = 12
@@ -45,7 +45,8 @@ export interface TournamentResult {
   name: string
   league: string
   week: number // global week the tournament resolved
-  placement: 'champion' | 'none'
+  placement: number // 1-based final round-robin standing (1 = champion)
+  fieldSize: number // total participants that event, for a "2nd of 5" display
 }
 
 export interface Career {
@@ -57,6 +58,8 @@ export interface Career {
   hatedFood: Food
   stats: Stats
   ageWeeks: number
+  hp: number // current hit points — injuries persist between weeks; only Rest heals
+  mp: number // current mana — drained by battles; only Rest restores
   stamina: number
   happiness: number
   licenseIndex: number
@@ -112,6 +115,10 @@ export function statTrainingBonus(species: Species, stat: Stat): number {
 export interface WeekPreview {
   happinessDelta: number // feedDelta if food chosen, else the -1 unfed penalty
   statDeltas: Partial<Record<Stat, number>> // per-stat gain (+) or drill malus (-)
+  staminaDelta: number // rest gain (+) or drill/excursion cost (-), clamped to [0, MAX]
+  goldDelta: number // excursion purse — 0 for every other activity
+  hpDelta: number // rest healing (30-70% of max, capped) — 0 for other activities
+  mpDelta: number // rest mana recovery (25-80% of max, capped) — 0 for other activities
 }
 
 // A drill's positive gain is a happiness-weighted random roll, not a flat
@@ -138,11 +145,16 @@ function rollDrillGain(rng: RNG, base: number, happiness: number): number {
 export function previewWeekEffects(c: Career, activity: string, food: Food | ''): WeekPreview {
   const happinessDelta = food ? feedDelta(food, c.favouriteFood, c.hatedFood) : -1
   const statDeltas: Partial<Record<Stat, number>> = {}
+  let staminaDelta = 0
+  let goldDelta = 0
+  let hpDelta = 0
+  let mpDelta = 0
+  if (c.retired) return { happinessDelta, statDeltas, staminaDelta, goldDelta, hpDelta, mpDelta }
+  const rng = mulberry32(hashString(c.id + ':' + c.week))
   const drill = ALL_DRILLS.find((d) => d.id === activity)
-  if (drill && !c.retired) {
+  if (drill) {
     const cap = LEAGUES[c.licenseIndex].cap
     const { trainMult } = stageInfo(c.ageWeeks, c.species.lifespan)
-    const rng = mulberry32(hashString(c.id + ':' + c.week))
     const eff = trainMult * staminaMalus(c.stamina)
     // feeding resolves before training in the real weekly tick (advanceWeek),
     // so the roll below must use the POST-feed happiness to match exactly
@@ -155,8 +167,23 @@ export function previewWeekEffects(c: Career, activity: string, food: Food | '')
       const real = nv - c.stats[stat]
       if (real !== 0) statDeltas[stat] = real
     }
+    const stamCost = drill.kind === 'basic' ? BASIC_DRILL_STAMINA : INTENSIVE_DRILL_STAMINA
+    staminaDelta = Math.max(0, c.stamina - stamCost) - c.stamina
+  } else if (activity === 'rest') {
+    // same rng call ORDER as applyWeek's rest branch: stamina, then heal, then mana
+    const restMin = Math.round(0.3 * MAX_STAMINA)
+    const restMax = Math.round(1 * MAX_STAMINA)
+    const restAmount = restMin + Math.floor(rng() * ((restMax - restMin) / 5 + 1)) * 5
+    staminaDelta = Math.min(MAX_STAMINA, c.stamina + restAmount) - c.stamina
+    const healAmt = Math.round(maxHp(c.stats) * (0.3 + rng() * 0.4))
+    const mpAmt = Math.round(maxMana(c.stats) * (0.25 + rng() * 0.55))
+    hpDelta = Math.min(maxHp(c.stats), c.hp + healAmt) - c.hp
+    mpDelta = Math.min(maxMana(c.stats), c.mp + mpAmt) - c.mp
+  } else if (activity === 'excursion') {
+    staminaDelta = Math.max(0, c.stamina - EXCURSION_COST) - c.stamina
+    goldDelta = randInt(rng, 30, 80)
   }
-  return { happinessDelta, statDeltas }
+  return { happinessDelta, statDeltas, staminaDelta, goldDelta, hpDelta, mpDelta }
 }
 
 export interface NewCareerOpts {
@@ -182,6 +209,8 @@ export function newCareer(seed: string, opts: NewCareerOpts = {}): Career {
     hatedFood: m.hatedFood,
     stats: opts.stats ? { ...opts.stats } : { ...m.stats },
     ageWeeks: opts.ageWeeks ?? START_AGE_WEEKS,
+    hp: maxHp(opts.stats ?? m.stats),
+    mp: maxMana(opts.stats ?? m.stats),
     stamina: MAX_STAMINA,
     happiness: opts.happiness ?? 5,
     licenseIndex: opts.licenseIndex ?? 0,
@@ -220,7 +249,7 @@ export function careerMonster(c: Career): Monster {
   const persisted = c.loadout
     .map((id) => learned.find((mv) => mv.id === id))
     .filter((mv): mv is Move => !!mv)
-  const loadout = persisted.length > 0 ? persisted : chooseLoadout(learned)
+  const loadout = persisted.length > 0 ? persisted : chooseLoadout(learned, c.stats)
   return {
     seed: c.id,
     name: c.name,
@@ -234,6 +263,14 @@ export function careerMonster(c: Career): Monster {
     ultimateUnlocked: Math.max(...STATS.map((s) => c.stats[s])) >= ULTIMATE_LEVEL,
     favouriteFood: c.favouriteFood,
     hatedFood: c.hatedFood,
+    stamina: c.stamina,
+    hp: Math.min(c.hp, maxHp(c.stats)),
+    mp: Math.min(c.mp, maxMana(c.stats)),
+    // Care-derived instinct (roadmap item, player half): a well-kept monster
+    // obeys perfectly (happiness 10 → tameness 100, zero wild actions); a
+    // neglected one gets flighty (happiness 0 → 90 → 10% chance per turn of a
+    // random action in battle). HIDDEN — never shown in any UI, only felt.
+    tameness: 90 + c.happiness,
   }
 }
 
@@ -318,7 +355,14 @@ export function applyWeek(c: Career, action: WeeklyAction, gold: number, rental 
     const restMax = Math.round(1 * MAX_STAMINA)
     const restAmount = restMin + Math.floor(rng() * ((restMax - restMin) / 5 + 1)) * 5
     n.stamina = Math.min(MAX_STAMINA, n.stamina + restAmount)
-    n.log.push(`Wk ${wk}: rested. Stamina ${n.stamina}/${MAX_STAMINA}.`)
+    // Rest is also the ONLY way injuries mend: heal 30-70% of max HP and
+    // recover 25-80% of max MP (user spec 2026-07-19). Rolls share applyWeek's
+    // seeded rng so previewWeekEffects can show the exact numbers.
+    const healAmt = Math.round(maxHp(n.stats) * (0.3 + rng() * 0.4))
+    const mpAmt = Math.round(maxMana(n.stats) * (0.25 + rng() * 0.55))
+    n.hp = Math.min(maxHp(n.stats), n.hp + healAmt)
+    n.mp = Math.min(maxMana(n.stats), n.mp + mpAmt)
+    n.log.push(`Wk ${wk}: rested. Stamina ${n.stamina}/${MAX_STAMINA} · HP ${n.hp}/${maxHp(n.stats)} · MP ${n.mp}/${maxMana(n.stats)}.`)
   } else {
     n.stamina = Math.max(0, n.stamina - EXCURSION_COST)
     const purse = randInt(rng, 30, 80)
@@ -340,6 +384,9 @@ export function applyWeek(c: Career, action: WeeklyAction, gold: number, rental 
   n.week += 1
   n.ageWeeks += 1
   n.fedThisWeek = false
+  // training can shift CON/WIS, so current HP/MP never exceed the new maxima
+  n.hp = Math.max(1, Math.min(n.hp, maxHp(n.stats)))
+  n.mp = Math.max(0, Math.min(n.mp, maxMana(n.stats)))
 
   const afterMoves = learnedMoves(n.stats).length
   if (afterMoves > beforeMoves) n.log.push(`  ↳ learned ${afterMoves - beforeMoves} new move(s)!`)

@@ -427,7 +427,7 @@ carry stat and **Charisma has a dedicated home** (Marsupial). Constitution and I
 > the 20 base species × part combinations naturally produce the 100 varieties without hand-drawing
 > each one. Same-body-type restriction keeps part sets compatible when fusing.
 
-### 8.2 Base species (20)
+### 8.2 Base species (30 — this section covers the original 20; Insectoid/Reptilian added later, not yet tabled here — see `docs/BESTIARY.md` for all 30)
 Five per body type. **Natural class** = the class a fresh purebred emerges into from its two highest
 start stats (§6); it can change as the monster trains. Start stats are illustrative (all begin < 50,
 per §5) — starting totals are held roughly even (~130) so species differ in *shape*, not raw power.
@@ -436,7 +436,7 @@ Format: **STR · DEX · CON · WIS · INT · CHA**.
 **Mammal** *(lean: STR / CON)*
 | Species    | Natural class | STR·DEX·CON·WIS·INT·CHA | Flavour                          |
 |------------|---------------|-------------------------|----------------------------------|
-| Bouldram   | Warrior       | 42·20·34·12·10·16       | Bighorn ram, charging bruiser    |
+| Kongrath   | Warrior       | 42·20·34·12·10·16       | Silverback gorilla, quiet protector turned fighter |
 | Aegisox    | Tank          | 30·14·44·16·10·14       | Armoured ox, immovable wall      |
 | Maneleo    | Captain       | 40·22·26·12·12·30       | Lion pride-leader, inspiring     |
 | Grivvel    | Rogue         | 34·40·22·12·10·14       | Wolverine brawler, off-lean DEX  |
@@ -481,7 +481,7 @@ breeds grow more slowly**, so their extra seasons partly pay to reach the same c
 **Mammal**
 | Species  | Lifespan | Innate abilities                                                                 |
 |----------|:--------:|----------------------------------------------------------------------------------|
-| Bouldram | 4        | **Charge** (bonus damage on first melee hit) · **Momentum** (melee grows as it advances) |
+| Kongrath | 4        | **Chest Beat** (bonus damage on first melee hit) · **Rising Fury** (melee grows stronger as the fight goes on) |
 | Aegisox  | 6        | **Ironclad** (reduces incoming melee) · **Immovable** (resists knockback/displacement)   |
 | Maneleo  | 4        | **Rallying Roar** (team attack/morale buff) · **Pride** (stronger while allies stand)    |
 | Grivvel  | 4        | **Rend** (attacks cause bleed/DoT) · **Frenzy** (attack speed up at low HP)              |
@@ -518,7 +518,7 @@ breeds grow more slowly**, so their extra seasons partly pay to reach the same c
 
 | Species (Mammal) | Ultimate            | Species (Avian) | Ultimate          |
 |------------------|---------------------|-----------------|-------------------|
-| Bouldram         | Avalanche Charge    | Skyrend         | Death from Above  |
+| Kongrath         | Silverback Rampage  | Skyrend         | Death from Above  |
 | Aegisox          | Aegis Fortress      | Strixil         | Eclipse           |
 | Maneleo          | Pride's Roar        | Zephyri         | Thousand Cuts     |
 | Grivvel          | Blood Frenzy        | Corvaan         | Doomcaw           |
@@ -570,15 +570,19 @@ element is resisted by exactly one body type and exploited against exactly one:
 | Body type  | Resists (×0.7) | Weak to (×1.3) |
 |------------|:--------------:|:--------------:|
 | Aquatic    | 🔥 Fire        | ⛰️ Earth       |
-| Avian      | ⛰️ Earth       | 🔥 Fire        |
+| Avian      | 💨 Air         | 💧 Water       |
 | Mammal     | 💧 Water       | 💨 Air         |
-| Marsupial  | 💨 Air         | 💧 Water       |
+| Marsupial  | ⛰️ Earth       | 🔥 Fire        |
 
-*Theme:* water douses fire (Aquatic resists fire) but silt/ground unsettles it; fliers soar over ground
-attacks (Avian resists earth) but fire singes wings; grounded beasts shrug off water (Mammal) but are
-tossed by gusts; nimble marsupials ride the wind but swim poorly. Multipliers (`RESIST_MULT` /
-`WEAK_MULT` in `src/core.ts`) are tunable. Only moves with an `element` (the INT pool, §7.5) trigger
-affinity; melee/ranged/voice are non-elemental.
+*(Insectoid and Reptilian, added later, aren't in this table yet — see `src/core.ts:BODY_ELEMENT` for
+the current full set of 9.)*
+
+*Theme:* water douses fire (Aquatic resists fire) but silt/ground unsettles it; wind is a flier's home
+turf (Avian resists air) but waterlogged wings ground them fast; grounded beasts shrug off water (Mammal)
+but are tossed by gusts; earthbound marsupials shrug off tremors and rockslides (Marsupial resists earth)
+but are helpless against fire in dry brush. Multipliers (`RESIST_MULT` / `WEAK_MULT` in `src/core.ts`) are
+tunable. Only moves with an `element` (the INT pool, §7.5) trigger affinity; melee/ranged/voice are
+non-elemental.
 
 ---
 

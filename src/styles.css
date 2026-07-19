@@ -21,6 +21,9 @@ h1 .version { font-size: 12px; font-weight: 700; color: var(--muted); background
 
 .arena { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: start; }
 .vs { align-self: center; color: var(--muted); font-weight: 700; font-size: 20px; padding-top: 120px; }
+.sandbox-team { display: flex; flex-direction: column; gap: 14px; }
+.addfighter { width: 100%; text-align: center; }
+.addfighter:disabled { opacity: .4; cursor: not-allowed; }
 
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
 .controls { display: flex; gap: 8px; margin-bottom: 12px; }
@@ -47,6 +50,8 @@ button:hover { filter: brightness(1.08); }
 .move .mn { font-weight: 700; }
 .move .md { color: var(--muted); font-size: 12px; }
 .move .lvl { color: var(--accent); font-size: 11px; float: right; }
+.move.ultimate { border-color: var(--accent2); }
+.move.ultimate .lvl { color: var(--accent2); }
 .ability { font-size: 13px; color: var(--ink); }
 .ability small { color: var(--muted); }
 
@@ -150,14 +155,15 @@ input[type=range] { width: 100%; }
 
 /* ---------- Tournament calendar grid (Monster-Rancher style) ---------- */
 .calgrid { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 4px; }
-.calgrid-row { display: grid; grid-template-columns: 1fr repeat(4, 36px); align-items: center; gap: 4px; }
+.calgrid-row { display: grid; grid-template-columns: 90px repeat(4, 1fr); align-items: center; gap: 4px; }
 .calgrid-label { font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .calgrid-label .dim { font-weight: 400; font-size: 11px; }
-.calgrid-cell { height: 32px; display: flex; align-items: center; justify-content: center; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; }
+.calgrid-cell { height: 32px; display: flex; align-items: center; justify-content: center; gap: 2px; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; }
 .calgrid-cell.now { border-color: var(--accent); }
 .calicon { width: 28px; height: 28px; padding: 0; border-radius: 6px; font-size: 14px; line-height: 1; background: var(--panel2); border: 1px solid var(--line); color: var(--ink); }
 .calicon.open { background: var(--accent); color: #0c1a13; border-color: var(--accent); animation: calPulse 1.6s ease-in-out infinite; }
 .calicon.selected { outline: 2px solid var(--accent2); outline-offset: 1px; }
+.calicon.trial { width: auto; height: auto; background: none; border: none; font-size: 13px; cursor: help; }
 @keyframes calPulse { 50% { filter: brightness(1.15); } }
 .calgrid-footer { margin-top: 2px; }
 .calgrid-wk { text-align: center; font-size: 10.5px; color: var(--muted); font-weight: 700; }
@@ -176,9 +182,11 @@ input[type=range] { width: 100%; }
 .stablecard.selected { outline: 2px solid var(--accent); border-color: var(--accent); }
 .stablecard.retired { opacity: .6; }
 .stablecard .bn { display: block; font-weight: 700; font-size: 12.5px; margin-top: 4px; }
-.stablechip { display: inline-block; font-size: 10px; font-weight: 700; margin-top: 3px; }
+.stablechip { display: inline-block; font-size: 10px; font-weight: 700; margin-top: 3px; margin-right: 4px; }
 .stablechip.ok { color: var(--accent); }
 .stablechip.warn { color: var(--accent2); }
+.stablechip.hurt { color: #ef5350; }
+.stablechip.star { color: #ffd54f; }
 .detailgrid { display: grid; grid-template-columns: 220px 1fr; gap: 12px; margin-bottom: 12px; }
 .detail-namerow { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
 .detail-namerow .bn { font-weight: 700; font-size: 15px; flex: 1; }
@@ -203,6 +211,31 @@ input[type=range] { width: 100%; }
 .trainblock.selected { border-color: var(--accent2); box-shadow: inset 0 0 0 1px var(--accent2); }
 .trainblock-name { font-size: 9.5px; font-weight: 700; }
 .trainblock-sub { font-size: 8.5px; color: var(--muted); line-height: 1.3; margin-top: 2px; }
+/* Planned-action benefit preview on the feeding screen: gains white, maluses
+   black (user spec) — black text sits on a light chip so it stays readable on
+   the dark theme; the black bar segment reads as a darker notch on the track. */
+.planbenefit { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+.benefitrow { display: grid; grid-template-columns: 56px 1fr 76px 44px; align-items: center; gap: 8px; font-size: 12px; }
+.benefitrow.flat { grid-template-columns: 56px auto; justify-content: start; }
+.benefitrow .bar { height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden; display: flex; }
+.benefitrow .bar > i { display: block; height: 100%; }
+.benefitrow .v { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.benefit-gain { color: #fff; font-weight: 700; }
+.benefit-gain.big { font-size: 16px; }
+.benefit-malus { color: #000; background: #aab1c9; font-weight: 700; border-radius: 4px; padding: 0 4px; white-space: nowrap; }
+
+/* UI pass 2026-07-21: status/pre-flight/digest/sign-up polish */
+.rail-note { text-align: center; font-size: 11px; font-weight: 700; color: var(--muted); background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 2px; line-height: 1.5; }
+.lastweek { margin-bottom: 12px; font-size: 12.5px; line-height: 1.6; }
+.lastweek .lw-hl { color: var(--accent); font-weight: 700; }
+.feedhead { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
+.feedhead .name { font-size: 18px; font-weight: 800; }
+.feedhead .meta { font-size: 12px; color: var(--muted); }
+button.signup { background: var(--accent); color: #0c1a13; font-weight: 700; padding: 8px 16px; }
+button.signup:disabled { opacity: .4; cursor: not-allowed; }
+.arena-transcript { padding: 6px 12px 10px; border-top: 1px solid var(--line); }
+.arena-transcript summary { cursor: pointer; font-size: 12px; }
+
 .rail { display: flex; flex-direction: column; gap: 8px; position: sticky; top: 12px; }
 .railbtn { background: var(--panel2); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 10px 2px; font-weight: 700; font-size: 10px; line-height: 1.4; cursor: pointer; }
 .railbtn.primary { background: var(--accent); color: #0c1a13; border-color: var(--accent); }
@@ -217,7 +250,18 @@ input[type=range] { width: 100%; }
 .abilitypool { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; max-height: 300px; overflow-y: auto; }
 .abilitypool .move { cursor: pointer; }
 .abilitypool .move.dim-eq { opacity: .4; cursor: default; }
-@media (max-width: 820px) { .stablescreen { grid-template-columns: 1fr; } .rail { flex-direction: row; position: static; } .detailgrid { grid-template-columns: 1fr; } .trainrow { grid-template-columns: repeat(4, 1fr); } .abilitypool { grid-template-columns: 1fr; } }
+@media (max-width: 820px) {
+  .stablescreen { grid-template-columns: 1fr; padding-bottom: 64px; }
+  /* Sticky bottom action bar on small screens — Advance Week shouldn't need a
+     full-page scroll. */
+  .rail { flex-direction: row; position: fixed; left: 0; right: 0; bottom: 0; top: auto; z-index: 20;
+    background: var(--panel); border-top: 1px solid var(--line); padding: 8px 10px; justify-content: center; }
+  .rail .railbtn { flex: 1; max-width: 160px; padding: 8px 4px; }
+  .rail .rail-note { display: none; }
+  .detailgrid { grid-template-columns: 1fr; }
+  .trainrow { grid-template-columns: repeat(4, 1fr); }
+  .abilitypool { grid-template-columns: 1fr; }
+}
 
 /* ---------- Arena battle (animated replay) ---------- */
 .battle-arena { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: #10131c; margin: 12px 0; }
@@ -260,6 +304,27 @@ input[type=range] { width: 100%; }
 @keyframes ultFlash { 25% { filter: brightness(2.1) saturate(1.5); } }
 .arena-controls { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-top: 1px solid var(--line); background: var(--panel2); }
 .arena-caption { color: var(--muted, #9aa3b5); font-size: 12px; margin-left: auto; text-align: right; min-height: 1em; }
+.arena-log { max-height: 170px; overflow-y: auto; padding: 8px 12px; border-top: 1px solid var(--line); font-size: 11.5px; line-height: 1.55; color: var(--ink); }
+.arena-log .rnd { color: var(--muted); font-weight: 700; margin-top: 4px; }
+.arena-log .fin { font-weight: 700; color: var(--accent); margin-top: 4px; }
+
+/* Team battles (>1 per side): compact roster rows instead of the 1v1 lunge/
+   projectile choreography — stays legible up to 6v6. */
+.team-mode .arena-hud { justify-content: center; }
+.team-floor { height: auto; min-height: 160px; padding: 14px 16px; display: flex; align-items: center; justify-content: center; gap: 18px; flex-wrap: wrap; }
+.roster { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 340px; }
+.roster-vs { font-weight: 800; color: var(--muted); font-size: 13px; }
+.roster-tile { position: relative; width: 74px; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 4px; text-align: center; transition: opacity .3s, filter .3s; }
+.roster-tile.ko { opacity: .4; filter: grayscale(1); }
+.roster-tile.acting { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); animation: tilePulse .5s ease; }
+.roster-tile .rt-name { font-size: 9.5px; font-weight: 700; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.roster-tile .rt-bar { height: 5px; border-radius: 3px; background: #0b0d14; border: 1px solid var(--line); margin-top: 3px; overflow: hidden; }
+.roster-tile .rt-bar i { display: block; height: 100%; transition: width .35s ease; }
+.roster-tile .rt-bar.hp i { background: linear-gradient(90deg, #43a047, #7cb342); }
+.roster-tile .rt-bar.mp i { background: linear-gradient(90deg, #1e88e5, #42a5f5); }
+.roster-tile .rt-ward { font-size: 9px; color: #80cbc4; font-weight: 700; margin-top: 2px; }
+.roster-tile .floats { position: absolute; left: 50%; top: -4px; width: 0; z-index: 3; }
+@keyframes tilePulse { 40% { transform: scale(1.08); } }
 .battle-summary { text-align: center; font-size: 16px; font-weight: 700; margin: 10px 0; }
 
 @media (max-width: 720px) { .townmap { grid-template-columns: 1fr; } }

@@ -5,7 +5,7 @@ import { BODY_ELEMENT, BodyType, CLASSES, LEAGUES, STATS, classForStats } from '
 import { SPECIES } from './species'
 import { ALL_MOVES } from './moves'
 import { trainingProfileFor } from './game'
-import { tournamentCalendarFor } from './town'
+import { RANK_UP_MONTHS, RANK_UP_WEEK, tournamentCalendarFor } from './town'
 
 export function validateDesign(): void {
   const problems: string[] = []
@@ -81,6 +81,8 @@ export function validateDesign(): void {
         if (!LEAGUES.some((l) => l.name === t.league)) problems.push(`CALENDAR(${seed}/y${year}): unknown league "${t.league}".`)
         if (t.month < 1 || t.month > 12) problems.push(`CALENDAR(${seed}/y${year}): ${t.name} invalid month ${t.month}.`)
         if (t.week < 1 || t.week > 4) problems.push(`CALENDAR(${seed}/y${year}): ${t.name} invalid week ${t.week}.`)
+        if (RANK_UP_MONTHS.includes(t.month) && t.week === RANK_UP_WEEK)
+          problems.push(`CALENDAR(${seed}/y${year}): ${t.name} collides with the rank-up trials (month ${t.month}, week ${t.week}).`)
       }
       for (const league of circuit) {
         for (let q = 0; q < 4; q++) {

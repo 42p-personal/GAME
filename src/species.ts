@@ -6,8 +6,8 @@ const s = (STR: number, DEX: number, CON: number, WIS: number, INT: number, CHA:
 
 export const SPECIES: Species[] = [
   // --- Mammal (STR / CON) ---
-  { id: 'bouldram', name: 'Bouldram', body: 'Mammal', naturalClass: 'Warrior', base: s(42, 20, 34, 12, 10, 16), lifespan: 4, flavour: 'Bighorn ram, charging bruiser.',
-    innate: [{ name: 'Charge', desc: 'Bonus damage on first melee hit.' }, { name: 'Momentum', desc: 'Melee grows as it advances.' }], ultimate: { name: 'Avalanche Charge', desc: 'Massive unavoidable melee rush that stuns.' } },
+  { id: 'kongrath', name: 'Kongrath', body: 'Mammal', naturalClass: 'Warrior', base: s(42, 20, 34, 12, 10, 16), lifespan: 4, flavour: 'Silverback gorilla, quiet protector turned fighter.',
+    innate: [{ name: 'Chest Beat', desc: 'Bonus damage on first melee hit.' }, { name: 'Rising Fury', desc: 'Melee grows stronger as the fight goes on.' }], ultimate: { name: 'Silverback Rampage', desc: 'A world-shaking two-fisted slam that stuns on impact.' } },
   { id: 'aegisox', name: 'Aegisox', body: 'Mammal', naturalClass: 'Tank', base: s(30, 14, 44, 16, 10, 14), lifespan: 6, flavour: 'Armoured ox, immovable wall.',
     innate: [{ name: 'Ironclad', desc: 'Reduces incoming melee damage.' }, { name: 'Immovable', desc: 'Resists knockback/displacement.' }], ultimate: { name: 'Aegis Fortress', desc: 'Near-immune for a few ticks; taunts all enemies.' } },
   { id: 'maneleo', name: 'Maneleo', body: 'Mammal', naturalClass: 'Captain', base: s(40, 22, 26, 12, 12, 30), lifespan: 4, flavour: 'Lion pride-leader, inspiring.',
