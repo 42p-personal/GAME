@@ -24,50 +24,62 @@ export interface Tournament {
   rewards: { gold: number; exp: number }
 }
 
-// Calendar (§3): the lower leagues run all year — repeating them is the game's
-// financial backbone. Wood monthly, Copper bi-monthly, Tin quarterly, Bronze
-// tri-annually, Iron twice; Silver+ are one-per-year prestige events.
-// A monster may also enter BELOW its league at reduced rewards (§rewardMultiplier).
-export const TOURNAMENT_CALENDAR: Tournament[] = [
-  // Wood circuit (cap 100) — one event every month
-  { id: 'wood-m1', name: 'January Classic', month: 1, league: 'Wood', rewards: { gold: 100, exp: 50 } },
-  { id: 'wood-m2', name: 'Sapling Cup', month: 2, league: 'Wood', rewards: { gold: 100, exp: 50 } },
-  { id: 'wood-m3', name: 'Splinter Series', month: 3, league: 'Wood', rewards: { gold: 100, exp: 50 } },
-  { id: 'wood-m4', name: 'Timber Trial', month: 4, league: 'Wood', rewards: { gold: 100, exp: 50 } },
-  { id: 'wood-m5', name: 'Grove Gauntlet', month: 5, league: 'Wood', rewards: { gold: 100, exp: 50 } },
-  { id: 'wood-m6', name: 'Heartwood Open', month: 6, league: 'Wood', rewards: { gold: 100, exp: 50 } },
-  { id: 'wood-m7', name: 'Sawdust Scuffle', month: 7, league: 'Wood', rewards: { gold: 100, exp: 50 } },
-  { id: 'wood-m8', name: 'Branchline Bout', month: 8, league: 'Wood', rewards: { gold: 100, exp: 50 } },
-  { id: 'wood-m9', name: 'Rootstock Rally', month: 9, league: 'Wood', rewards: { gold: 100, exp: 50 } },
-  { id: 'wood-m10', name: 'Lumber League', month: 10, league: 'Wood', rewards: { gold: 100, exp: 50 } },
-  { id: 'wood-m11', name: 'November Novice', month: 11, league: 'Wood', rewards: { gold: 100, exp: 50 } },
-  { id: 'wood-m12', name: 'Yule Log Jam', month: 12, league: 'Wood', rewards: { gold: 100, exp: 50 } },
-  // Copper circuit (cap 200) — even months
-  { id: 'copper-m2', name: 'February Clash', month: 2, league: 'Copper', rewards: { gold: 150, exp: 75 } },
-  { id: 'copper-m4', name: 'Kettle Cup', month: 4, league: 'Copper', rewards: { gold: 150, exp: 75 } },
-  { id: 'copper-m6', name: 'Verdigris Trophy', month: 6, league: 'Copper', rewards: { gold: 150, exp: 75 } },
-  { id: 'copper-m8', name: 'Penny Prix', month: 8, league: 'Copper', rewards: { gold: 150, exp: 75 } },
-  { id: 'copper-m10', name: 'Ingot Invitational', month: 10, league: 'Copper', rewards: { gold: 150, exp: 75 } },
-  { id: 'copper-m12', name: 'December Dash', month: 12, league: 'Copper', rewards: { gold: 150, exp: 75 } },
-  // Tin circuit (cap 300) — quarterly
-  { id: 'tin-m3', name: 'March Melee', month: 3, league: 'Tin', rewards: { gold: 200, exp: 100 } },
-  { id: 'tin-m6', name: 'Tin Whistle Open', month: 6, league: 'Tin', rewards: { gold: 200, exp: 100 } },
-  { id: 'tin-m9', name: 'Alloy Rumble', month: 9, league: 'Tin', rewards: { gold: 200, exp: 100 } },
-  { id: 'tin-m12', name: 'Solder Cup', month: 12, league: 'Tin', rewards: { gold: 200, exp: 100 } },
-  // Bronze (cap 400) — three a year
-  { id: 'bronze-m4', name: 'April Bout', month: 4, league: 'Bronze', rewards: { gold: 250, exp: 125 } },
-  { id: 'bronze-m8', name: 'Bronze Bell Classic', month: 8, league: 'Bronze', rewards: { gold: 250, exp: 125 } },
-  { id: 'bronze-m12', name: 'Patina Prize', month: 12, league: 'Bronze', rewards: { gold: 250, exp: 125 } },
-  // Iron (cap 500) — twice a year
-  { id: 'iron-m5', name: 'May Invitational', month: 5, league: 'Iron', rewards: { gold: 300, exp: 150 } },
-  { id: 'iron-m11', name: 'Anvil Championship', month: 11, league: 'Iron', rewards: { gold: 300, exp: 150 } },
-  // Prestige tier — one each per year
-  { id: 'silver-m6', name: 'June Showdown', month: 6, league: 'Silver', rewards: { gold: 350, exp: 175 } },
-  { id: 'gold-m7', name: 'July Grand Prix', month: 7, league: 'Gold', rewards: { gold: 400, exp: 200 } },
-  { id: 'plat-m8', name: 'August Crown', month: 8, league: 'Platinum', rewards: { gold: 450, exp: 225 } },
-  { id: 'masters-m9', name: 'September Summit', month: 9, league: 'Masters', rewards: { gold: 500, exp: 250 } },
-  { id: 'elite-m10', name: 'October Elite', month: 10, league: 'Tamer Elite', rewards: { gold: 600, exp: 300 } },
+// Calendar (§3): the below-Silver circuit is drawn fresh each game year from the
+// seed — every league is GUARANTEED at least one event per quarter, sometimes
+// two, in unpredictable months (never a fixed monthly slot). Repeating these is
+// the game's financial backbone; scarcity makes the calendar worth planning
+// around. Silver+ are fixed one-per-year prestige events. A monster may also
+// enter BELOW its league at reduced rewards (§rewardMultiplier).
+const CIRCUIT_REWARDS: Record<string, { gold: number; exp: number }> = {
+  Wood: { gold: 100, exp: 50 },
+  Copper: { gold: 150, exp: 75 },
+  Tin: { gold: 200, exp: 100 },
+  Bronze: { gold: 250, exp: 125 },
+  Iron: { gold: 300, exp: 150 },
+}
+
+const CIRCUIT_EVENT_NAMES: Record<string, string[]> = {
+  Wood: ['January Classic', 'Sapling Cup', 'Splinter Series', 'Timber Trial', 'Grove Gauntlet', 'Heartwood Open', 'Sawdust Scuffle', 'Branchline Bout', 'Rootstock Rally', 'Lumber League', 'November Novice', 'Yule Log Jam'],
+  Copper: ['February Clash', 'Kettle Cup', 'Verdigris Trophy', 'Penny Prix', 'Ingot Invitational', 'December Dash', 'Copperfield Cup', 'Patina Punch-Up'],
+  Tin: ['March Melee', 'Tin Whistle Open', 'Alloy Rumble', 'Solder Cup', "Tinker's Trophy", 'Canteen Clash', 'Foil Fracas', 'Pewter Prize'],
+  Bronze: ['April Bout', 'Bronze Bell Classic', 'Patina Prize', 'Statuary Showdown', 'Medalist Melee', 'Olive Branch Open', "Gladiator's Gong", 'Verdant Bronze'],
+  Iron: ['May Invitational', 'Anvil Championship', 'Forge Trial', 'Hammerfall Cup', 'Quench Quarrel', 'Ironclad Open', "Smelter's Stand", 'Pig-Iron Prix'],
+}
+
+const PRESTIGE_EVENTS: Omit<Tournament, 'id'>[] = [
+  { name: 'June Showdown', month: 6, league: 'Silver', rewards: { gold: 350, exp: 175 } },
+  { name: 'July Grand Prix', month: 7, league: 'Gold', rewards: { gold: 400, exp: 200 } },
+  { name: 'August Crown', month: 8, league: 'Platinum', rewards: { gold: 450, exp: 225 } },
+  { name: 'September Summit', month: 9, league: 'Masters', rewards: { gold: 500, exp: 250 } },
+  { name: 'October Elite', month: 10, league: 'Tamer Elite', rewards: { gold: 600, exp: 300 } },
 ]
+
+export const yearOfWeek = (week: number) => Math.floor(week / WEEKS_PER_YEAR)
+
+// Draw the year's tournament calendar. Deterministic per (seed, year): each
+// circuit league gets 1 event per quarter, ~40% of quarters get a second one.
+export function tournamentCalendarFor(seed: string, year: number): Tournament[] {
+  const out: Tournament[] = []
+  for (const league of Object.keys(CIRCUIT_REWARDS)) {
+    const rng = mulberry32(hashString(seed + ':calendar:' + year + ':' + league))
+    const names = [...CIRCUIT_EVENT_NAMES[league]]
+    const takeName = () => names.length ? names.splice(Math.floor(rng() * names.length), 1)[0] : `${league} Open`
+    for (let q = 0; q < 4; q++) {
+      const months = [q * 3 + 1, q * 3 + 2, q * 3 + 3]
+      const count = rng() < 0.4 ? 2 : 1
+      for (let i = 0; i < count; i++) {
+        const month = months.splice(Math.floor(rng() * months.length), 1)[0]
+        out.push({
+          id: `${league.toLowerCase()}-y${year}-m${month}`,
+          name: takeName(), month, league,
+          rewards: CIRCUIT_REWARDS[league],
+        })
+      }
+    }
+  }
+  for (const p of PRESTIGE_EVENTS) out.push({ ...p, id: `${p.league.toLowerCase().replace(' ', '-')}-y${year}-m${p.month}` })
+  return out.sort((a, b) => a.month - b.month || leagueIndexOf(a.league) - leagueIndexOf(b.league))
+}
 
 export const leagueIndexOf = (league: string): number => LEAGUES.findIndex((l) => l.name === league)
 
@@ -293,7 +305,7 @@ export function eligibleForTournament(g: GameState, t: Tournament): Career[] {
 }
 
 export function signUp(g: GameState, tournamentId: string, monsterId: string): GameState {
-  const t = TOURNAMENT_CALENDAR.find((x) => x.id === tournamentId)
+  const t = tournamentCalendarFor(g.seed, yearOfWeek(g.week)).find((x) => x.id === tournamentId)
   if (!t || monthOfWeek(g.week) !== t.month) return g
   if ((g.enteredThisMonth ?? []).includes(tournamentId)) return g // one entry per event
   const c = g.stable.find((x) => x.id === monsterId)
@@ -330,7 +342,7 @@ function generateRival(seedBase: string, player: Monster, t: Tournament): Monste
 function resolveTournament(g: GameState, stable: Career[], gold: number): { gold: number; lastBattle: LastBattle | null } {
   const pending = g.pendingTournament
   if (!pending) return { gold, lastBattle: null }
-  const t = TOURNAMENT_CALENDAR.find((x) => x.id === pending.tournamentId)
+  const t = tournamentCalendarFor(g.seed, yearOfWeek(g.week)).find((x) => x.id === pending.tournamentId)
   const idx = stable.findIndex((x) => x.id === pending.monsterId)
   if (!t || idx < 0 || stable[idx].retired) return { gold, lastBattle: null }
 

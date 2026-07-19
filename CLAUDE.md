@@ -52,9 +52,11 @@ conserve, when to block (low HP / out of MP / expecting a big hit) vs attack.
   floating numbers, KO topple, 1×/2×/4×/skip. Sandbox uses it too.
 
 ### 2b. Tournament economy (user spec 2026-07-19) — DONE on `preview`
-- 32-event calendar: Wood EVERY month (the financial backbone — enforced by
-  validate.ts), Copper even months, Tin quarterly, Bronze ×3, Iron ×2, Silver+
-  one prestige event each per year
+- SEEDED calendar generator (`town.ts:tournamentCalendarFor(seed, year)`), drawn
+  fresh each game year: every circuit league (Wood→Iron) is GUARANTEED ≥1 event
+  per quarter, ~40% of quarters get a second, in unpredictable months — never a
+  fixed monthly slot (user spec). Silver+ keep fixed annual prestige events.
+  validate.ts probes 12 seed-years to enforce the quarterly invariant.
 - Monsters may enter their own league or ANY league below it, never above
 - `rewardMultiplier`: same league 100%, 1 league above the event 50%, 2+ 20%
   (applies to gold AND exp; UI warns before sign-up, log records the reduction)

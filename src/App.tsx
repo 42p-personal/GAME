@@ -15,9 +15,10 @@ import {
 } from './game'
 import {
   BULK_FOOD_COST, ELITE_LICENSE_COST, FUSION_COST, GameState, RENTAL_PER_FROZEN, SPECIAL_LICENSE_COST,
-  TOURNAMENT_CALENDAR, WeekPlanEntry, advanceWeek, barnCost, buyBulkFood, buyEliteLicense, buyMonster,
+  WeekPlanEntry, advanceWeek, barnCost, buyBulkFood, buyEliteLicense, buyMonster,
   buySpecialLicense, cancelSignUp, eligibleForTournament, freeze, fuse, fusionRoom, goto, monthOfWeek,
-  newGame, offerMonster, promoteMonster, rewardMultiplier, signUp, thaw, upgradeBarn,
+  newGame, offerMonster, promoteMonster, rewardMultiplier, signUp, thaw, tournamentCalendarFor,
+  upgradeBarn, yearOfWeek,
 } from './town'
 
 const STAT_COLOR: Record<Stat, string> = {
@@ -559,7 +560,7 @@ function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSt
 
   // Review phase
   const currentMonth = monthOfWeek(game.week)
-  const tournamentsThisMonth = TOURNAMENT_CALENDAR.filter((t) => t.month === calendarMonth)
+  const tournamentsThisMonth = tournamentCalendarFor(game.seed, yearOfWeek(game.week)).filter((t) => t.month === calendarMonth)
   const activityName = (p?: WeekPlanEntry) => {
     if (!p) return '—'
     if (p.activity === 'rest') return '😴 Rest'
