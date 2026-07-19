@@ -143,4 +143,48 @@ input[type=range] { width: 100%; }
 .ranchtop { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; font-size: 14px; font-weight: 700; }
 .ranchtop select { background: var(--panel2); border: 1px solid var(--line); color: var(--ink); border-radius: 8px; padding: 6px 8px; margin-left: auto; }
 .food:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ---------- Arena battle (animated replay) ---------- */
+.arena { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: #10131c; margin: 12px 0; }
+.arena-hud { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 8px 12px; background: var(--panel2); border-bottom: 1px solid var(--line); }
+.arena-fighter-hud { flex: 1; min-width: 0; }
+.arena-fighter-hud.right { text-align: right; }
+.ahn { font-weight: 700; font-size: 14px; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.abar { position: relative; height: 13px; border-radius: 7px; background: #0b0d14; border: 1px solid var(--line); margin-top: 4px; overflow: hidden; }
+.abar i { position: absolute; left: 0; top: 0; bottom: 0; display: block; transition: width .35s ease; }
+.abar.hp i { background: linear-gradient(90deg, #43a047, #7cb342); }
+.abar.mp i { background: linear-gradient(90deg, #1e88e5, #42a5f5); }
+.abar span { position: absolute; inset: 0; font-size: 9px; display: flex; align-items: center; justify-content: center; color: #fff; text-shadow: 0 1px 2px #000c; font-weight: 700; }
+.award { font-size: 11px; color: #80cbc4; margin-top: 3px; font-weight: 700; }
+.arena-round { min-width: 120px; text-align: center; font-weight: 800; font-size: 15px; }
+.arena-floor { position: relative; height: 200px; display: flex; align-items: center; justify-content: space-between; padding: 0 11%;
+  background: radial-gradient(ellipse at 50% 130%, #4a3826 0%, #2e2519 55%, #191510 100%); }
+.combatant { position: relative; z-index: 1; }
+.combatant.ko { filter: grayscale(1) brightness(.5); transform: rotate(90deg); transition: all .6s ease; }
+.combatant .floats { position: absolute; left: 50%; top: -6px; width: 0; z-index: 3; }
+.float { position: absolute; transform: translateX(-50%); white-space: nowrap; font-weight: 800; font-size: 16px; animation: floatUp 1.05s ease-out forwards; text-shadow: 0 1px 3px #000; }
+.float.dmg { color: #ef5350; }
+.float.heal { color: #66bb6a; }
+.float.mana { color: #42a5f5; }
+.float.burn { color: #ff9800; }
+.float.info { color: #eceff1; font-size: 12px; }
+@keyframes floatUp { from { opacity: 1; top: -4px; } to { opacity: 0; top: -46px; } }
+.mirror { display: inline-block; transform: scaleX(-1); }
+.lungeA { animation: lungeA .5s ease; }
+.lungeB { animation: lungeB .5s ease; }
+@keyframes lungeA { 35% { transform: translateX(52px); } 100% { transform: none; } }
+@keyframes lungeB { 35% { transform: translateX(-52px); } 100% { transform: none; } }
+.stancePulse { animation: stancePulse .55s ease; }
+@keyframes stancePulse { 40% { filter: drop-shadow(0 0 12px #80cbc4); transform: scale(.95); } }
+.proj { position: absolute; top: 50%; width: 14px; height: 14px; border-radius: 50%; z-index: 2; box-shadow: 0 0 12px 3px currentColor; }
+.projA { left: 17%; animation: projA .45s linear forwards; }
+.projB { right: 17%; animation: projB .45s linear forwards; }
+@keyframes projA { to { left: 78%; } }
+@keyframes projB { to { right: 78%; } }
+.ult-flash { animation: ultFlash .85s ease; }
+@keyframes ultFlash { 25% { filter: brightness(2.1) saturate(1.5); } }
+.arena-controls { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-top: 1px solid var(--line); background: var(--panel2); }
+.arena-caption { color: var(--muted, #9aa3b5); font-size: 12px; margin-left: auto; text-align: right; min-height: 1em; }
+.battle-summary { text-align: center; font-size: 16px; font-weight: 700; margin: 10px 0; }
+
 @media (max-width: 720px) { .townmap { grid-template-columns: 1fr; } }

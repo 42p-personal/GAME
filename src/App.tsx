@@ -1,11 +1,12 @@
-import { Dispatch, SetStateAction, useEffect, useMemo, useRef, useState } from 'react'
+import { Dispatch, SetStateAction, useEffect, useMemo, useState } from 'react'
 import {
-  BODY_ELEMENT, BodyType, Element, FOODS, LEAGUES, Monster, STATS, Stat, Species, feedDelta,
+  BODY_ELEMENT, BodyType, Element, FOODS, LEAGUES, Monster, STATS, Stat, feedDelta,
   happinessMultiplier, hashString, mulberry32,
 } from './core'
 import { generateMonster, manaCost, maxHp, maxMana } from './monster'
 import { BattleResult, simulateBattle } from './battle'
-import { SPRITES, palette } from './sprites'
+import { ArenaBattle } from './arena'
+import { Sprite } from './Sprite'
 import { SPECIES, bodySignature } from './species'
 import { BIOS } from './bestiary'
 import { BASIC_DRILLS, Drill, INTENSIVE_DRILLS } from './drills'
@@ -15,8 +16,8 @@ import {
 import {
   BULK_FOOD_COST, ELITE_LICENSE_COST, FUSION_COST, GameState, RENTAL_PER_FROZEN, SPECIAL_LICENSE_COST,
   TOURNAMENT_CALENDAR, WeekPlanEntry, advanceWeek, barnCost, buyBulkFood, buyEliteLicense, buyMonster,
-  buySpecialLicense, freeze, fuse, fusionRoom, goto, monthOfWeek, newGame, offerMonster, promoteMonster,
-  thaw, upgradeBarn,
+  buySpecialLicense, cancelSignUp, eligibleForTournament, freeze, fuse, fusionRoom, goto, monthOfWeek,
+  newGame, offerMonster, promoteMonster, signUp, thaw, upgradeBarn,
 } from './town'
 
 const STAT_COLOR: Record<Stat, string> = {
@@ -24,26 +25,6 @@ const STAT_COLOR: Record<Stat, string> = {
   WIS: 'var(--wis)', INT: 'var(--int)', CHA: 'var(--cha)',
 }
 const ELEMENT_ICON: Record<Element, string> = { fire: '🔥', water: '💧', earth: '⛰️', air: '💨' }
-
-// Pixel-art sprite: the species' body-type silhouette, tinted by a per-species hue.
-function Sprite({ species, size = 96 }: { species: Species; size?: number }) {
-  const pal = useMemo(() => palette(hashString(species.id) % 360), [species.id])
-  const grid = SPRITES[species.body]
-  const u = size / 16
-  const cells: JSX.Element[] = []
-  grid.forEach((row, y) => {
-    for (let x = 0; x < row.length; x++) {
-      const ch = row[x]
-      if (ch === '.') continue
-      cells.push(<rect key={y * 16 + x} x={x * u} y={y * u} width={u} height={u} fill={pal[ch]} />)
-    }
-  })
-  return (
-    <svg width={size} height={size} style={{ imageRendering: 'pixelated', background: '#0c0e15', borderRadius: 8, border: '1px solid var(--line)' }}>
-      {cells}
-    </svg>
-  )
-}
 
 function StatBar({ stat, value, max }: { stat: Stat; value: number; max: number }) {
   return (
@@ -202,38 +183,22 @@ function Bestiary({ specialLicense, eliteLicense }: { specialLicense: boolean; e
   )
 }
 
-// Reveals the battle log turn-by-turn (~1.5s per action) so the fight plays out
-// like a match you're watching, even though the sim is resolved instantly.
-function BattleReplay({ result, onClear }: { result: BattleResult; onClear: () => void }) {
-  const [revealed, setRevealed] = useState(0)
-  const logRef = useRef<HTMLDivElement>(null)
-  const done = revealed >= result.log.length
-
-  useEffect(() => {
-    if (done) return
-    const line = result.log[revealed]
-    const isTurn = / uses |^🏆|^🏳️/.test(line) // an action (or the finale) = a beat
-    const t = setTimeout(() => setRevealed((r) => r + 1), isTurn ? 1500 : 300)
-    return () => clearTimeout(t)
-  }, [result, revealed, done])
-
-  useEffect(() => {
-    const el = logRef.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [revealed])
-
+// The animated arena (arena.tsx) plays the fight; the raw transcript stays
+// available underneath for the numbers-minded.
+function BattleLog({ result, onClear }: { result: BattleResult; onClear: () => void }) {
   return (
     <>
       <div className="battlebar">
-        {!done && <button className="ghost" onClick={() => setRevealed(result.log.length)}>skip ⏭</button>}
         <button className="ghost" onClick={onClear}>clear</button>
       </div>
-      {done && <div className="result">{result.winner === 'draw' ? 'Draw!' : `🏆 ${result.winnerName} wins`}</div>}
-      <div className="log" ref={logRef}>
-        {result.log.slice(0, revealed).map((line, i) => (
-          <div key={i} className={line.startsWith('🏆') || line.startsWith('🏳️') ? 'win' : ''}>{line}</div>
-        ))}
-      </div>
+      <details>
+        <summary className="dim">📜 full battle transcript</summary>
+        <div className="log">
+          {result.log.map((line, i) => (
+            <div key={i} className={line.startsWith('🏆') || line.startsWith('🏳️') ? 'win' : ''}>{line}</div>
+          ))}
+        </div>
+      </details>
     </>
   )
 }
@@ -270,7 +235,12 @@ function SandboxView() {
         <button onClick={runBattle}>⚔️ Auto-Battle</button>
       </div>
 
-      {result && <BattleReplay key={battleKey} result={result} onClear={() => setResult(null)} />}
+      {result && (
+        <div key={battleKey}>
+          <ArenaBattle a={monA} b={monB} result={result} />
+          <BattleLog result={result} onClear={() => setResult(null)} />
+        </div>
+      )}
     </>
   )
 }
@@ -418,10 +388,12 @@ const drillLabel = (d: Drill) =>
   Object.entries(d.gains).map(([st, v]) => `${(v as number) > 0 ? '+' : ''}${v} ${st}`).join(' ')
 
 function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetStateAction<GameState>> }) {
-  const [phase, setPhase] = useState<'decisions' | 'review'>('decisions')
+  const [phase, setPhase] = useState<'decisions' | 'review' | 'battle'>('decisions')
   const [decisionIdx, setDecisionIdx] = useState(0)
   const [weekPlan, setWeekPlan] = useState<Record<string, WeekPlanEntry>>({})
   const [calendarMonth, setCalendarMonth] = useState(() => monthOfWeek(game.week))
+  const [signupPick, setSignupPick] = useState<Record<string, string>>({})
+  const [battleOver, setBattleOver] = useState(false)
 
   if (game.stable.length === 0) {
     return (
@@ -430,6 +402,34 @@ function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSt
           <button className="ghost" onClick={() => setGame((g) => goto(g, 'town'))}>🏛 Town</button>
         </div>
         <p className="sub">Your stable is empty. Head to Town → Market to buy a monster.</p>
+      </>
+    )
+  }
+
+  // Tournament battle screen: the week resolved with a signed-up fight — watch it live.
+  if (phase === 'battle' && game.lastBattle) {
+    const lb = game.lastBattle
+    return (
+      <>
+        <div className="ranchtop">
+          <span>🏟 {lb.tournamentName}</span>
+          <span>📅 {dateLabel(game.week)}</span>
+          <span>🪙 {game.gold}g</span>
+        </div>
+        <p className="sub">{lb.playerMonster.name} the {lb.playerMonster.species.name} faces {lb.rival.name} the {lb.rival.species.name} ({lb.rival.className})!</p>
+        <ArenaBattle a={lb.playerMonster} b={lb.rival} result={lb.result} onDone={() => setBattleOver(true)} />
+        {battleOver && (
+          <>
+            <div className="battle-summary">
+              {lb.won ? `🏆 Victory! +${lb.goldReward}g · training bonus: ${lb.expNote}`
+                : lb.result.winner === 'draw' ? '🏳️ A draw — no rewards.'
+                  : '💔 Defeat — no rewards this time. Train harder and try again.'}
+            </div>
+            <div className="carerow" style={{ justifyContent: 'center' }}>
+              <button className="enter" onClick={() => setPhase('decisions')}>Continue →</button>
+            </div>
+          </>
+        )}
       </>
     )
   }
@@ -608,15 +608,36 @@ function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSt
               <button className="ghost" onClick={() => setCalendarMonth((mo) => mo === 12 ? 1 : mo + 1)}>▶</button>
             </div>
           </div>
-          <div className="hint">Tournaments this month: {tournamentsThisMonth.length}</div>
+          <div className="hint">Tournaments this month: {tournamentsThisMonth.length}. Battles resolve when the week advances.</div>
           {tournamentsThisMonth.map((t) => {
-            const eligible = game.stable.some((c) => !c.retired && LEAGUES[c.licenseIndex].name === t.league)
+            const eligible = eligibleForTournament(game, t)
+            const isCurrentMonth = calendarMonth === currentMonth
+            const signedHere = game.pendingTournament?.tournamentId === t.id
+            const signedMonster = signedHere ? game.stable.find((c) => c.id === game.pendingTournament!.monsterId) : undefined
+            const pick = signupPick[t.id] ?? eligible[0]?.id
             return (
               <div key={t.id} className="offer" style={{ padding: '0.5rem', borderBottom: '1px solid var(--line)' }}>
                 <div><b>{t.name}</b> — {t.league} league</div>
-                <div className="dim">Rewards: {t.rewards.gold}g, {t.rewards.exp} exp</div>
-                {!eligible && <div className="dim">Requires a {t.league}-league monster.</div>}
-                <button className="enter" disabled title="Tournament battles arrive in the next update">Sign Up →</button>
+                <div className="dim">Rewards: {t.rewards.gold}g + training exp (winner only)</div>
+                {signedHere ? (
+                  <div>
+                    ✅ {signedMonster?.name ?? '?'} competes this week{' '}
+                    <button className="ghost" onClick={() => setGame((g) => cancelSignUp(g))}>cancel</button>
+                  </div>
+                ) : !isCurrentMonth ? (
+                  <div className="dim">Sign-ups open in Month {t.month}.</div>
+                ) : eligible.length === 0 ? (
+                  <div className="dim">Requires a {t.league}-league monster.</div>
+                ) : game.pendingTournament ? (
+                  <div className="dim">Already entered a tournament this week.</div>
+                ) : (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center' }}>
+                    <select value={pick} onChange={(ev) => setSignupPick((sp) => ({ ...sp, [t.id]: ev.target.value }))}>
+                      {eligible.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.species.name})</option>)}
+                    </select>
+                    <button className="enter" onClick={() => setGame((g) => signUp(g, t.id, pick))}>Sign Up →</button>
+                  </div>
+                )}
               </div>
             )
           })}
@@ -625,13 +646,18 @@ function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSt
         {/* Proceed */}
         <div className="card loc">
           <div className="loc-h"><span>⏭️ Advance Week</span></div>
-          <div className="hint">Feeding resolves first at this week's prices, then each monster's activity. The market restocks monthly.</div>
+          <div className="hint">
+            Feeding resolves first at this week's prices, then each monster's activity
+            {game.pendingTournament ? ', then the tournament battle' : ''}. The market restocks monthly.
+          </div>
           <button className="enter" onClick={() => {
-            setGame((g) => advanceWeek(g, weekPlan))
-            setCalendarMonth(monthOfWeek(game.week + 1))
+            const next = advanceWeek(game, weekPlan)
+            setGame(next)
+            setCalendarMonth(monthOfWeek(next.week))
             setWeekPlan({})
             setDecisionIdx(0)
-            setPhase('decisions')
+            setBattleOver(false)
+            setPhase(next.lastBattle ? 'battle' : 'decisions')
           }}>⏭ Proceed to Next Week</button>
         </div>
       </div>

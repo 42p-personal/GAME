@@ -41,17 +41,26 @@ conserve, when to block (low HP / out of MP / expecting a big hit) vs attack.
 - Add "Change Abilities" in review phase: 3 active slots, swap from learned pool
 - Persist loadout choice on Career (currently auto-chosen by chooseLoadout)
 
-### 2. Tournament Battle System
-- Sign Up button exists (disabled) with league-eligibility check in review phase
-- On sign-up, simulate battle that week vs a generated rival (use simulateBattle)
-- Apply results + display outcome in week summary
+### 2. Tournament Battle System — DONE on `preview` (2026-07-19)
+- Sign up in review phase (eligible-monster select, one entry/week, cancelable)
+- `town.ts:resolveTournament` runs during advanceWeek: rival generated at ±15%
+  of the player's total stats (`generateRival`; exclusives only Silver+)
+- Win → gold + training exp on the aptitude stats; loss/draw → nothing; logged
+- Battle plays in the ANIMATED ARENA (`src/arena.tsx`): battle.ts emits a
+  structured `BattleEvent[]` stream (hits, misses, stances, dots, ultimates,
+  HP/MP snapshots) that the arena renders as beats — lunges, projectiles,
+  floating numbers, KO topple, 1×/2×/4×/skip. Sandbox uses it too.
+- KNOWN GAP: Wood-league tournaments only exist in months 1 & 11 — new monsters
+  can wait ~10 months for their first fight. Calendar needs a Wood/Copper event
+  every month or two.
 
-### 3. Tournament Rewards
-- Gold: varies by league tier (values already in TOURNAMENT_CALENDAR)
-- Training exp: bonus for winning
+### 3. Tournament Rewards polish
 - Rare items: champion-only drops (TBD)
 
-### 4. Other Ranch Features
+### 4. Later: tameness/instinct roll, class AI priorities, team battles (3v3),
+  real-time positional sim (designs agreed in chat, not yet implemented)
+
+### 5. Other Ranch Features
 - (Deferred: user said "we will look at the other options when in the ranch")
 
 ## Architecture Notes
@@ -118,7 +127,9 @@ monsters have, so all six stats appear as both strengths and weaknesses somewher
 | `src/App.tsx` | UI: TownView, RanchView, saves, sequential decisions |
 | `src/core.ts` | Types, classes, elements, learn ladder, RNG |
 | `src/species.ts` | 45 species (30 base across 6 body types + 15 exclusive) + computed BODY_AVERAGES |
-| `src/battle.ts` | Auto-battle sim: mana, innates, ultimates |
+| `src/battle.ts` | Auto-battle sim: mana, innates, ultimates, BattleEvent stream |
+| `src/arena.tsx` | Animated arena replay (plays BattleEvent[] as live beats) |
+| `src/Sprite.tsx` | Shared pixel-sprite component |
 | `src/validate.ts` | Dev-only design consistency checks |
 | `src/sprites.ts` | 16x16 pixel art per body type |
 

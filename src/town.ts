@@ -1,12 +1,13 @@
 // Shared game state + the Town hub economy (§13). One gold wallet and one stable
 // span all areas; the Ranch (src/game.ts) raises the active monster week by week.
 import {
-  Food, Sex, Species, Stat, STATS, Stats, hashString, mulberry32,
+  Food, LEAGUES, Monster, Sex, Species, Stat, STATS, Stats, hashString, mulberry32,
 } from './core'
 import { generateMonster } from './monster'
+import { BattleResult, simulateBattle } from './battle'
 import {
   Career, START_GOLD, WEEKS_PER_MONTH, WEEKS_PER_YEAR, WeeklyAction, ageOneWeek, applyWeek, buyFood,
-  newCareer, rankUp, rollMarket,
+  careerMonster, newCareer, rankUp, rollMarket, trainingProfileFor,
 } from './game'
 
 export type Area = 'town' | 'ranch'
@@ -57,6 +58,20 @@ export interface MarketOffer {
   price: number
 }
 
+// A tournament entry locked in for this week; resolved during advanceWeek.
+export interface PendingTournament { tournamentId: string; monsterId: string }
+
+// The most recent tournament battle, kept for the arena replay screen.
+export interface LastBattle {
+  tournamentName: string
+  playerMonster: Monster
+  rival: Monster
+  result: BattleResult
+  won: boolean
+  goldReward: number
+  expNote: string
+}
+
 export interface GameState {
   seed: string
   gold: number
@@ -72,6 +87,8 @@ export interface GameState {
   market: MarketOffer[] // monster market; restocks at the start of each month
   foodMarket: Record<Food, number> // this week's town food prices (shared by all monsters)
   nextId: number // monotonic id counter, survives save/load
+  pendingTournament: PendingTournament | null
+  lastBattle: LastBattle | null
 }
 
 // Calendar helpers off the global week clock.
@@ -101,6 +118,8 @@ export function newGame(seed = 'start'): GameState {
     market: rollMarketOffers(seed, 0, false, false),
     foodMarket: rollMarket(seed, 0),
     nextId: 0,
+    pendingTournament: null,
+    lastBattle: null,
   }
 }
 
@@ -192,6 +211,10 @@ export function advanceWeek(g: GameState, plans: Record<string, WeekPlanEntry>):
   })
   if (rentalDue > 0) gold -= rentalDue // no monster processed the charge (all retired/unplanned)
 
+  // Tournament battle (if signed up) fights with this week's training applied.
+  const { gold: goldAfterBattle, lastBattle } = resolveTournament(g, stable, gold)
+  gold = goldAfterBattle
+
   const week = g.week + 1
   const monthTurned = week % WEEKS_PER_MONTH === 0
   return {
@@ -203,6 +226,8 @@ export function advanceWeek(g: GameState, plans: Record<string, WeekPlanEntry>):
     market: monthTurned
       ? rollMarketOffers(g.seed, week / WEEKS_PER_MONTH, g.specialLicense, g.eliteLicense)
       : g.market,
+    pendingTournament: null,
+    lastBattle,
   }
 }
 
@@ -211,6 +236,84 @@ export function promoteMonster(g: GameState, id: string): GameState {
   if (!c) return g
   const { c: nc, gold } = rankUp(c, g.gold)
   return { ...g, gold, stable: g.stable.map((x) => (x.id === id ? nc : x)) }
+}
+
+// --- Tournaments (§3): sign up in the review phase, battle resolves on the weekly tick ---
+export function eligibleForTournament(g: GameState, t: Tournament): Career[] {
+  return g.stable.filter((c) => !c.retired && LEAGUES[c.licenseIndex].name === t.league)
+}
+
+export function signUp(g: GameState, tournamentId: string, monsterId: string): GameState {
+  const t = TOURNAMENT_CALENDAR.find((x) => x.id === tournamentId)
+  if (!t || monthOfWeek(g.week) !== t.month) return g
+  const c = g.stable.find((x) => x.id === monsterId)
+  if (!c || c.retired || LEAGUES[c.licenseIndex].name !== t.league) return g
+  return { ...g, pendingTournament: { tournamentId, monsterId } }
+}
+
+export const cancelSignUp = (g: GameState): GameState => ({ ...g, pendingTournament: null })
+
+// A rival scaled to the player's total stats (±15%), so fights stay competitive.
+// Exclusive body types only show up as rivals in Silver-league events and above.
+const EXCLUSIVE_BODIES = ['Draconic', 'Abyssal', 'Mythical']
+function generateRival(seedBase: string, player: Monster, allowExclusive: boolean): Monster {
+  const playerTotal = STATS.reduce((sum, k) => sum + player.stats[k], 0)
+  for (let i = 0; i < 50; i++) {
+    const seed = 'rival-' + hashString(seedBase + ':' + i).toString(36)
+    const preview = generateMonster(seed, { train: 0 })
+    if (!allowExclusive && EXCLUSIVE_BODIES.includes(preview.species.body)) continue
+    const baseTotal = STATS.reduce((sum, k) => sum + preview.stats[k], 0)
+    const rng = mulberry32(hashString(seed + ':scale'))
+    const train = Math.max(0, Math.round((playerTotal - baseTotal) * (0.85 + rng() * 0.3)))
+    return generateMonster(seed, { train })
+  }
+  return generateMonster('rival-fallback-' + seedBase, { train: 0 })
+}
+
+const HIGH_LEAGUES = ['Silver', 'Gold', 'Platinum', 'Masters', 'Tamer Elite']
+
+// Resolve a signed-up tournament using the post-week stable. Mutates `stable`
+// in place (called from advanceWeek on its freshly-built array).
+function resolveTournament(g: GameState, stable: Career[], gold: number): { gold: number; lastBattle: LastBattle | null } {
+  const pending = g.pendingTournament
+  if (!pending) return { gold, lastBattle: null }
+  const t = TOURNAMENT_CALENDAR.find((x) => x.id === pending.tournamentId)
+  const idx = stable.findIndex((x) => x.id === pending.monsterId)
+  if (!t || idx < 0 || stable[idx].retired) return { gold, lastBattle: null }
+
+  const c = stable[idx]
+  const playerMonster = careerMonster(c)
+  const rival = generateRival(g.seed + ':' + g.week + ':' + t.id, playerMonster, HIGH_LEAGUES.includes(t.league))
+  const result = simulateBattle(playerMonster, rival, c.happiness, 5)
+  const won = result.winner === 'A'
+
+  const nc: Career = { ...c, stats: { ...c.stats }, log: [...c.log] }
+  let expNote = ''
+  if (won) {
+    gold += t.rewards.gold
+    const prof = trainingProfileFor(c.species)
+    const pts = Math.max(2, Math.round(t.rewards.exp / 10))
+    const p1 = Math.ceil(pts * 0.6)
+    const p2 = pts - p1
+    const cap = LEAGUES[c.licenseIndex].cap
+    nc.stats[prof.primary] = Math.min(cap, nc.stats[prof.primary] + p1)
+    nc.stats[prof.secondary] = Math.min(cap, nc.stats[prof.secondary] + p2)
+    expNote = `${prof.primary} +${p1} · ${prof.secondary} +${p2}`
+    nc.log.push(`🏆 Won the ${t.name} vs ${rival.name} the ${rival.species.name}! +${t.rewards.gold}g · ${expNote}.`)
+  } else if (result.winner === 'draw') {
+    nc.log.push(`🏳️ Drew the ${t.name} vs ${rival.name} the ${rival.species.name}. No rewards.`)
+  } else {
+    nc.log.push(`💔 Lost the ${t.name} to ${rival.name} the ${rival.species.name}. No rewards this time.`)
+  }
+  stable[idx] = nc
+
+  return {
+    gold,
+    lastBattle: {
+      tournamentName: t.name, playerMonster, rival, result, won,
+      goldReward: won ? t.rewards.gold : 0, expNote,
+    },
+  }
 }
 
 // --- Lab (§13.1): freeze / thaw / fuse ---

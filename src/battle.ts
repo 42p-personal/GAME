@@ -1,9 +1,25 @@
 // 1v1 auto-battle simulator (§11). Deterministic given a seed. Teamfight-Manager
 // style: no player input mid-fight — the monster's build decides the outcome.
-import { Monster, Move, RNG, StatusKind, chance, elementMultiplier, happinessMultiplier, hashString, mulberry32, randInt } from './core'
+import { Channel, Element, Monster, Move, RNG, StatusKind, chance, elementMultiplier, happinessMultiplier, hashString, mulberry32, randInt } from './core'
 import { attackStat, dodgeChance, manaCost, manaRegen, maxHp, maxMana } from './monster'
 
 interface ActiveStatus { kind: StatusKind; turns: number }
+
+// --- Structured battle events: the animatable beat stream the arena renders.
+// The text log is kept alongside for the readable transcript.
+export type BattleSide = 'A' | 'B'
+export type BattleEvent =
+  | { kind: 'round'; n: number }
+  | { kind: 'hit'; side: BattleSide; move: string; channel: Channel; element?: Element; dmg: number; hits: number; execute: boolean; eff: 'super' | 'resist' | null; lifesteal: number; manaBurn: number; recoil: number; warded: number; self: boolean }
+  | { kind: 'miss'; side: BattleSide; move: string; channel: Channel; blocked: boolean }
+  | { kind: 'stance'; side: BattleSide; avoid: number }
+  | { kind: 'utility'; side: BattleSide; move: string; heal: number; hostile: boolean }
+  | { kind: 'status'; side: BattleSide; status: StatusKind } // side = the afflicted
+  | { kind: 'dot'; side: BattleSide; status: 'burn' | 'poison'; amount: number }
+  | { kind: 'skip'; side: BattleSide; reason: 'stun' | 'fear' }
+  | { kind: 'ultimate'; side: BattleSide; name: string }
+  | { kind: 'snap'; aHp: number; bHp: number; aMana: number; bMana: number; aWard: number; bWard: number }
+  | { kind: 'end'; winner: 'A' | 'B' | 'draw' }
 
 // Passive effects granted by innate abilities (§8.3). Curated table by ability
 // name; unlisted innates stay flavour-only for now. A species' two innates stack.
@@ -78,6 +94,7 @@ const activePassives = (m: Monster) => m.species.innate.filter((ab) => INNATE_EF
 
 interface Combatant {
   m: Monster
+  side: BattleSide
   hp: number
   maxHp: number
   mana: number
@@ -103,13 +120,15 @@ interface Combatant {
 
 export interface BattleResult {
   log: string[]
+  events: BattleEvent[]
   winner: 'A' | 'B' | 'draw'
   winnerName: string
 }
 
-function makeCombatant(m: Monster, happiness: number): Combatant {
+function makeCombatant(m: Monster, happiness: number, side: BattleSide): Combatant {
   return {
     m,
+    side,
     hp: maxHp(m.stats),
     maxHp: maxHp(m.stats),
     mana: maxMana(m.stats),
@@ -146,16 +165,18 @@ const isDebuffMove = (mv: Move) => {
 
 const hasStatus = (c: Combatant, k: StatusKind) => c.statuses.some((s) => s.kind === k)
 
-function tickStatuses(c: Combatant, log: string[]): void {
+function tickStatuses(c: Combatant, log: string[], ev: BattleEvent[]): void {
   for (const st of c.statuses) {
     if (st.kind === 'burn') {
       const dmg = Math.max(1, Math.round(c.maxHp * 0.05))
       c.hp -= dmg
       log.push(`  ${c.m.name} suffers ${dmg} burn damage.`)
+      ev.push({ kind: 'dot', side: c.side, status: 'burn', amount: dmg })
     } else if (st.kind === 'poison') {
       const dmg = Math.max(1, Math.round(c.maxMana * 0.15))
       c.mana = Math.max(0, c.mana - dmg)
       log.push(`  ${c.m.name} loses ${dmg} mana to poison.`)
+      ev.push({ kind: 'dot', side: c.side, status: 'poison', amount: dmg })
     }
     st.turns--
   }
@@ -288,7 +309,7 @@ function applySelfEffects(user: Combatant, move: Move, log: string[]): void {
   if (notes.length) log.push(`    (${notes.join(', ')})`)
 }
 
-function resolveMove(attacker: Combatant, defender: Combatant, move: Move, rng: RNG, log: string[]): void {
+function resolveMove(attacker: Combatant, defender: Combatant, move: Move, rng: RNG, log: string[], ev: BattleEvent[]): void {
   // Confusion: chance to hit self
   let realTarget = defender
   if (hasStatus(attacker, 'confusion') && chance(rng, 20)) {
@@ -304,14 +325,16 @@ function resolveMove(attacker: Combatant, defender: Combatant, move: Move, rng: 
   if (move.type !== 'damage') {
     const hostile = move.target === 'enemy' || move.target === 'allEnemies'
     if (!hostile) {
+      let heal = 0
       if (move.power > 0) {
-        const heal = Math.round(move.power * 1.2)
+        heal = Math.round(move.power * 1.2)
         attacker.hp = Math.min(attacker.maxHp, attacker.hp + heal)
         log.push(`  ${attacker.m.name} uses ${move.name}, healing ${heal} HP.`)
       } else {
         log.push(`  ${attacker.m.name} uses ${move.name}.`)
       }
       applySelfEffects(attacker, move, log)
+      ev.push({ kind: 'utility', side: attacker.side, move: move.name, heal, hostile: false })
       return
     }
     // Hostile utility (debuff / control) must land — dodge and Block apply.
@@ -321,9 +344,11 @@ function resolveMove(attacker: Combatant, defender: Combatant, move: Move, rng: 
     if (!chance(rng, Math.max(5, hacc - hdodge))) {
       if (realTarget.blockAvoid > 0) log.push(`  🛡 ${realTarget.m.name} blocks ${attacker.m.name}'s ${move.name}!`)
       else log.push(`  ${attacker.m.name}'s ${move.name} misses ${realTarget.m.name}.`)
+      ev.push({ kind: 'miss', side: attacker.side, move: move.name, channel: move.channel, blocked: realTarget.blockAvoid > 0 })
       return
     }
     log.push(`  ${attacker.m.name} uses ${move.name} on ${realTarget.m.name}.`)
+    ev.push({ kind: 'utility', side: attacker.side, move: move.name, heal: 0, hostile: true })
     applyDebuffs(realTarget, move, log)
     if (e?.manaBurn) {
       const burned = Math.min(realTarget.mana, e.manaBurn)
@@ -333,6 +358,7 @@ function resolveMove(attacker: Combatant, defender: Combatant, move: Move, rng: 
     if (move.status && chance(rng, move.status.chance)) {
       realTarget.statuses.push({ kind: move.status.kind, turns: move.status.duration })
       log.push(`    ${realTarget.m.name} is afflicted with ${move.status.kind}!`)
+      ev.push({ kind: 'status', side: realTarget.side, status: move.status.kind })
     }
     return
   }
@@ -345,13 +371,15 @@ function resolveMove(attacker: Combatant, defender: Combatant, move: Move, rng: 
   if (!chance(rng, Math.max(5, acc - dodge))) {
     if (realTarget.blockAvoid > 0) log.push(`  🛡 ${realTarget.m.name} blocks ${attacker.m.name}'s ${move.name}!`)
     else log.push(`  ${attacker.m.name}'s ${move.name} misses ${realTarget.m.name}.`)
+    ev.push({ kind: 'miss', side: attacker.side, move: move.name, channel: move.channel, blocked: realTarget.blockAvoid > 0 })
     return
   }
 
   const atk = attackStat(attacker.m.stats, move.channel)
   const variance = 0.85 + rng() * 0.3
   const hits = e?.hits ? randInt(rng, e.hits[0], e.hits[1]) : 1
-  let dmg = move.power * hits * (atk / 40) * variance
+  // softened growth curve so high-stat monsters don't one-shot before defense matters
+  let dmg = move.power * hits * Math.pow(atk / 40, 0.8) * variance
   dmg *= happinessMultiplier(attacker.happiness) // happy monsters hit harder (§2.4)
   dmg *= attacker.innate.dmgMult * attacker.atkMod
   if (!attacker.hasLandedHit && attacker.innate.firstHitMult > 1) {
@@ -382,8 +410,9 @@ function resolveMove(attacker: Combatant, defender: Combatant, move: Move, rng: 
 
   // ward shields soak damage before health
   let wardNote = ''
+  let absorbed = 0
   if (realTarget.ward > 0) {
-    const absorbed = Math.min(realTarget.ward, dmg)
+    absorbed = Math.min(realTarget.ward, dmg)
     realTarget.ward -= absorbed
     dmg -= absorbed
     wardNote = ` (${absorbed} absorbed by shield)`
@@ -395,24 +424,32 @@ function resolveMove(attacker: Combatant, defender: Combatant, move: Move, rng: 
   const hitNote = hits > 1 ? ` (${hits} hits)` : ''
   const notes: string[] = []
   // lifesteal: innate and skill effects stack
+  let stolen = 0
   const steal = attacker.innate.lifesteal + (e?.lifesteal ?? 0)
   if (steal > 0 && dmg > 0) {
-    const heal = Math.max(1, Math.round(dmg * steal))
-    attacker.hp = Math.min(attacker.maxHp, attacker.hp + heal)
-    notes.push(`drains ${heal} HP`)
+    stolen = Math.max(1, Math.round(dmg * steal))
+    attacker.hp = Math.min(attacker.maxHp, attacker.hp + stolen)
+    notes.push(`drains ${stolen} HP`)
   }
+  let burned = 0
   if (e?.manaBurn) {
-    const burned = Math.min(realTarget.mana, e.manaBurn)
+    burned = Math.min(realTarget.mana, e.manaBurn)
     realTarget.mana -= burned
     if (burned > 0) notes.push(`burns ${burned} MP`)
   }
+  let recoil = 0
   if (e?.recoil) {
-    const recoil = Math.max(1, Math.round(dmg * e.recoil))
+    recoil = Math.max(1, Math.round(dmg * e.recoil))
     attacker.hp -= recoil
     notes.push(`${recoil} recoil`)
   }
   const noteStr = notes.length ? ` (${notes.join(', ')})` : ''
   log.push(`  ${attacker.m.name} uses ${move.name}${hitNote} → ${dmg} damage to ${realTarget.m.name}${execNote}${effNote}${wardNote}${noteStr}.`)
+  ev.push({
+    kind: 'hit', side: attacker.side, move: move.name, channel: move.channel, element: move.element,
+    dmg, hits, execute: execNote !== '', eff: effNote.includes('super') ? 'super' : effNote.includes('resisted') ? 'resist' : null,
+    lifesteal: stolen, manaBurn: burned, recoil, warded: absorbed, self: realTarget === attacker,
+  })
 
   // rider effects: armour shred / attack-down on damage moves, self-guard followups
   applyDebuffs(realTarget, move, log)
@@ -422,23 +459,25 @@ function resolveMove(attacker: Combatant, defender: Combatant, move: Move, rng: 
   if (move.status && chance(rng, move.status.chance)) {
     realTarget.statuses.push({ kind: move.status.kind, turns: move.status.duration })
     log.push(`    ${realTarget.m.name} is afflicted with ${move.status.kind}!`)
+    ev.push({ kind: 'status', side: realTarget.side, status: move.status.kind })
   }
 }
 
-function takeTurn(attacker: Combatant, defender: Combatant, rng: RNG, log: string[]): void {
+function takeTurn(attacker: Combatant, defender: Combatant, rng: RNG, log: string[], ev: BattleEvent[]): void {
   // A Block stance lasts until the blocker's next action — it ends now.
   attacker.blockAvoid = 0
   // regen mana (innate mana engines + regen buffs add to it)
   attacker.mana = Math.min(attacker.maxMana, attacker.mana + manaRegen(attacker.m.stats) + attacker.innate.regen + attacker.regenMod)
 
-  if (hasStatus(attacker, 'stun')) { log.push(`  ${attacker.m.name} is stunned and cannot act.`); return }
-  if (hasStatus(attacker, 'fear')) { log.push(`  ${attacker.m.name} flees in fear and loses its action.`); return }
+  if (hasStatus(attacker, 'stun')) { log.push(`  ${attacker.m.name} is stunned and cannot act.`); ev.push({ kind: 'skip', side: attacker.side, reason: 'stun' }); return }
+  if (hasStatus(attacker, 'fear')) { log.push(`  ${attacker.m.name} flees in fear and loses its action.`); ev.push({ kind: 'skip', side: attacker.side, reason: 'fear' }); return }
 
   // Ultimate: unlocked at 600+ in a stat, fires once when pushed below 40% HP
   if (attacker.m.ultimateUnlocked && !attacker.ultimateUsed && attacker.hp <= attacker.maxHp * 0.4) {
     attacker.ultimateUsed = true
     log.push(`  ★ ${attacker.m.name} unleashes its ultimate!`)
-    resolveMove(attacker, defender, ultimateMove(attacker.m), rng, log)
+    ev.push({ kind: 'ultimate', side: attacker.side, name: attacker.m.species.ultimate.name })
+    resolveMove(attacker, defender, ultimateMove(attacker.m), rng, log, ev)
     return
   }
 
@@ -447,22 +486,29 @@ function takeTurn(attacker: Combatant, defender: Combatant, rng: RNG, log: strin
   if (action.kind === 'block') {
     attacker.blockAvoid = blockValue(attacker)
     log.push(`  🛡 ${attacker.m.name} braces to block (+${attacker.blockAvoid}% avoid).`)
+    ev.push({ kind: 'stance', side: attacker.side, avoid: attacker.blockAvoid })
     return
   }
-  resolveMove(attacker, defender, action.kind === 'attack' ? basicAttack(attacker.m) : action.move, rng, log)
+  resolveMove(attacker, defender, action.kind === 'attack' ? basicAttack(attacker.m) : action.move, rng, log, ev)
 }
 
 export function simulateBattle(a: Monster, b: Monster, happA = 0, happB = 0): BattleResult {
   const rng = mulberry32(hashString(a.seed + '|' + b.seed + '|vs'))
-  const A = makeCombatant(a, happA)
-  const B = makeCombatant(b, happB)
+  const A = makeCombatant(a, happA, 'A')
+  const B = makeCombatant(b, happB, 'B')
   const log: string[] = []
+  const ev: BattleEvent[] = []
+  const snap = () => ev.push({
+    kind: 'snap', aHp: Math.max(0, A.hp), bHp: Math.max(0, B.hp),
+    aMana: Math.round(A.mana), bMana: Math.round(B.mana), aWard: A.ward, bWard: B.ward,
+  })
   log.push(`⚔️  ${a.name} the ${a.species.name} (${a.className}) vs ${b.name} the ${b.species.name} (${b.className})`)
   log.push(`   ${a.name}: ${A.maxHp} HP · ${b.name}: ${B.maxHp} HP`)
   for (const c of [A, B]) {
     const p = activePassives(c.m)
     if (p.length) log.push(`   ${c.m.name}'s innate: ${p.join(' · ')}`)
   }
+  snap()
 
   // faster monster (DEX) acts first each round
   const aFirst = a.stats.DEX >= b.stats.DEX
@@ -473,14 +519,17 @@ export function simulateBattle(a: Monster, b: Monster, happA = 0, happB = 0): Ba
   const MAX_ROUNDS = 60
   while (A.hp > 0 && B.hp > 0 && round <= MAX_ROUNDS) {
     log.push(`— Round ${round} —`)
+    ev.push({ kind: 'round', n: round })
     // decrement cooldowns at the start of the round
     for (const c of [A, B]) for (const id in c.cooldowns) if (c.cooldowns[id] > 0) c.cooldowns[id]--
 
-    takeTurn(first, second, rng, log)
-    if (second.hp > 0) takeTurn(second, first, rng, log)
+    takeTurn(first, second, rng, log, ev)
+    snap()
+    if (second.hp > 0) { takeTurn(second, first, rng, log, ev); snap() }
 
-    tickStatuses(A, log)
-    tickStatuses(B, log)
+    tickStatuses(A, log, ev)
+    tickStatuses(B, log, ev)
+    snap()
     log.push(`   ${a.name}: ${Math.max(0, A.hp)} HP · ${b.name}: ${Math.max(0, B.hp)} HP`)
     round++
   }
@@ -492,5 +541,6 @@ export function simulateBattle(a: Monster, b: Monster, happA = 0, happB = 0): Ba
   else winner = A.hp >= B.hp ? 'A' : 'B' // timeout → higher HP
   const winnerName = winner === 'A' ? a.name : winner === 'B' ? b.name : '—'
   log.push(winner === 'draw' ? '🏳️  Double knockout — a draw!' : `🏆  ${winnerName} wins!`)
-  return { log, winner, winnerName }
+  ev.push({ kind: 'end', winner })
+  return { log, events: ev, winner, winnerName }
 }
