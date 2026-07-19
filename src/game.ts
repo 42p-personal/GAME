@@ -72,7 +72,7 @@ export type WeeklyAction =
   | { kind: 'excursion' }
 
 // Stamina malus: exp penalty scales with stamina level
-function staminaMalus(stamina: number): number {
+export function staminaMalus(stamina: number): number {
   if (stamina > 70) return 1 // no penalty
   if (stamina > 50) return 0.95 // -5%
   if (stamina > 30) return 0.9 // -10%
@@ -95,6 +95,32 @@ export function statTrainingBonus(species: Species, stat: Stat): number {
   if (stat === prof.secondary) return 1.1
   if (stat === prof.weakness) return 0.8
   return 1
+}
+
+export interface WeekPreview {
+  happinessDelta: number // feedDelta if food chosen, else the -1 unfed penalty
+  statDeltas: Partial<Record<Stat, number>> // per-stat gain (+) or drill malus (-)
+}
+
+// Preview what applyWeek would do THIS week, without mutating state — mirrors
+// its training + feeding math exactly so the Ranch review screen can show the
+// happiness swing and stat gains/maluses before the player commits.
+export function previewWeekEffects(c: Career, activity: string, food: Food | ''): WeekPreview {
+  const happinessDelta = food ? feedDelta(food, c.favouriteFood, c.hatedFood) : -1
+  const statDeltas: Partial<Record<Stat, number>> = {}
+  const drill = ALL_DRILLS.find((d) => d.id === activity)
+  if (drill && !c.retired) {
+    const cap = LEAGUES[c.licenseIndex].cap
+    const { trainMult } = stageInfo(c.ageWeeks, c.species.lifespan)
+    const eff = trainMult * staminaMalus(c.stamina)
+    for (const [stat, delta] of Object.entries(drill.gains) as [Stat, number][]) {
+      const applied = delta > 0 ? Math.round(delta * eff * statTrainingBonus(c.species, stat)) : delta
+      const nv = Math.max(1, Math.min(cap, c.stats[stat] + applied))
+      const real = nv - c.stats[stat]
+      if (real !== 0) statDeltas[stat] = real
+    }
+  }
+  return { happinessDelta, statDeltas }
 }
 
 export interface NewCareerOpts {

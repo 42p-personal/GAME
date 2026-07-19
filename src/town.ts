@@ -20,6 +20,7 @@ export interface Tournament {
   id: string
   name: string
   month: number // 1-12
+  week: number // 1-4 — the specific week within the month it's held
   league: string // Wood, Copper, Tin, etc.
   rewards: { gold: number; exp: number }
 }
@@ -47,17 +48,18 @@ const CIRCUIT_EVENT_NAMES: Record<string, string[]> = {
 }
 
 const PRESTIGE_EVENTS: Omit<Tournament, 'id'>[] = [
-  { name: 'June Showdown', month: 6, league: 'Silver', rewards: { gold: 350, exp: 175 } },
-  { name: 'July Grand Prix', month: 7, league: 'Gold', rewards: { gold: 400, exp: 200 } },
-  { name: 'August Crown', month: 8, league: 'Platinum', rewards: { gold: 450, exp: 225 } },
-  { name: 'September Summit', month: 9, league: 'Masters', rewards: { gold: 500, exp: 250 } },
-  { name: 'October Elite', month: 10, league: 'Tamer Elite', rewards: { gold: 600, exp: 300 } },
+  { name: 'June Showdown', month: 6, week: 2, league: 'Silver', rewards: { gold: 350, exp: 175 } },
+  { name: 'July Grand Prix', month: 7, week: 2, league: 'Gold', rewards: { gold: 400, exp: 200 } },
+  { name: 'August Crown', month: 8, week: 2, league: 'Platinum', rewards: { gold: 450, exp: 225 } },
+  { name: 'September Summit', month: 9, week: 2, league: 'Masters', rewards: { gold: 500, exp: 250 } },
+  { name: 'October Elite', month: 10, week: 2, league: 'Tamer Elite', rewards: { gold: 600, exp: 300 } },
 ]
 
 export const yearOfWeek = (week: number) => Math.floor(week / WEEKS_PER_YEAR)
 
 // Draw the year's tournament calendar. Deterministic per (seed, year): each
-// circuit league gets 1 event per quarter, ~40% of quarters get a second one.
+// circuit league gets 1 event per quarter, ~40% of quarters get a second one,
+// each landing on a specific (unpredictable) week within its month.
 export function tournamentCalendarFor(seed: string, year: number): Tournament[] {
   const out: Tournament[] = []
   for (const league of Object.keys(CIRCUIT_REWARDS)) {
@@ -69,16 +71,17 @@ export function tournamentCalendarFor(seed: string, year: number): Tournament[] 
       const count = rng() < 0.4 ? 2 : 1
       for (let i = 0; i < count; i++) {
         const month = months.splice(Math.floor(rng() * months.length), 1)[0]
+        const week = 1 + Math.floor(rng() * WEEKS_PER_MONTH)
         out.push({
           id: `${league.toLowerCase()}-y${year}-m${month}`,
-          name: takeName(), month, league,
+          name: takeName(), month, week, league,
           rewards: CIRCUIT_REWARDS[league],
         })
       }
     }
   }
   for (const p of PRESTIGE_EVENTS) out.push({ ...p, id: `${p.league.toLowerCase().replace(' ', '-')}-y${year}-m${p.month}` })
-  return out.sort((a, b) => a.month - b.month || leagueIndexOf(a.league) - leagueIndexOf(b.league))
+  return out.sort((a, b) => a.month - b.month || a.week - b.week || leagueIndexOf(a.league) - leagueIndexOf(b.league))
 }
 
 export const leagueIndexOf = (league: string): number => LEAGUES.findIndex((l) => l.name === league)
@@ -146,6 +149,7 @@ export interface GameState {
 
 // Calendar helpers off the global week clock.
 export const monthOfWeek = (week: number) => Math.floor((week % WEEKS_PER_YEAR) / WEEKS_PER_MONTH) + 1
+export const weekOfMonth = (week: number) => (week % WEEKS_PER_MONTH) + 1
 
 // --- Economy constants (§13.3) ---
 export const RENTAL_PER_FROZEN = 8 // weekly upkeep per frozen genome
@@ -306,7 +310,7 @@ export function eligibleForTournament(g: GameState, t: Tournament): Career[] {
 
 export function signUp(g: GameState, tournamentId: string, monsterId: string): GameState {
   const t = tournamentCalendarFor(g.seed, yearOfWeek(g.week)).find((x) => x.id === tournamentId)
-  if (!t || monthOfWeek(g.week) !== t.month) return g
+  if (!t || monthOfWeek(g.week) !== t.month || weekOfMonth(g.week) !== t.week) return g
   if ((g.enteredThisMonth ?? []).includes(tournamentId)) return g // one entry per event
   const c = g.stable.find((x) => x.id === monsterId)
   if (!c || c.retired || c.licenseIndex < leagueIndexOf(t.league)) return g

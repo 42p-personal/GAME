@@ -11,14 +11,15 @@ import { SPECIES, bodySignature } from './species'
 import { BIOS } from './bestiary'
 import { BASIC_DRILLS, Drill, INTENSIVE_DRILLS } from './drills'
 import {
-  MAX_STAMINA, canRankUp, careerMonster, dateLabel, foodName, rankUpFee, stageInfo, trainingProfileFor,
+  MAX_STAMINA, WeekPreview, canRankUp, careerMonster, dateLabel, foodName, previewWeekEffects, rankUpFee,
+  stageInfo, trainingProfileFor,
 } from './game'
 import {
   BULK_FOOD_COST, ELITE_LICENSE_COST, FUSION_COST, GameState, RENTAL_PER_FROZEN, SPECIAL_LICENSE_COST,
   WeekPlanEntry, advanceWeek, barnCost, buyBulkFood, buyEliteLicense, buyMonster,
   buySpecialLicense, cancelSignUp, eligibleForTournament, freeze, fuse, fusionRoom, goto, monthOfWeek,
   newGame, offerMonster, promoteMonster, rewardMultiplier, signUp, thaw, tournamentCalendarFor,
-  upgradeBarn, yearOfWeek,
+  upgradeBarn, weekOfMonth, yearOfWeek,
 } from './town'
 import { APP_VERSION } from './version'
 
@@ -34,6 +35,32 @@ function StatBar({ stat, value, max }: { stat: Stat; value: number; max: number 
       <span>{stat}</span>
       <span className="bar"><i style={{ width: `${Math.min(100, (value / max) * 100)}%`, background: STAT_COLOR[stat] }} /></span>
       <span className="v">{value}</span>
+    </div>
+  )
+}
+
+// Preview of this week's planned training: a bar per affected stat — gains
+// highlighted yellow, drill maluses highlighted red. Scaled against the
+// biggest plausible single-drill gain/malus so bars stay readable.
+const WEEKSTAT_GAIN_SCALE = 15 // ≈ INTENSIVE_GAIN(12) at max bonus/life-stage
+const WEEKSTAT_MALUS_SCALE = 4 // INTENSIVE_COST — the fixed drill malus
+function WeekStatDeltaBars({ deltas }: { deltas: Partial<Record<Stat, number>> }) {
+  const affected = STATS.filter((s) => deltas[s])
+  if (affected.length === 0) return <div className="weekstats-empty">No stat change.</div>
+  return (
+    <div className="weekstats">
+      {affected.map((s) => {
+        const d = deltas[s]!
+        const gain = d > 0
+        const pct = Math.min(100, (Math.abs(d) / (gain ? WEEKSTAT_GAIN_SCALE : WEEKSTAT_MALUS_SCALE)) * 100)
+        return (
+          <div className="weekstat" key={s}>
+            <span className="weekstat-label">{s}</span>
+            <span className="weekstat-bar"><i className={gain ? 'gain' : 'malus'} style={{ width: `${pct}%` }} /></span>
+            <span className={'weekstat-val ' + (gain ? 'pos' : 'neg')}>{gain ? '+' : ''}{d}</span>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -395,6 +422,7 @@ function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSt
   const [weekPlan, setWeekPlan] = useState<Record<string, WeekPlanEntry>>({})
   const [calendarMonth, setCalendarMonth] = useState(() => monthOfWeek(game.week))
   const [signupPick, setSignupPick] = useState<Record<string, string>>({})
+  const [selectedTournamentId, setSelectedTournamentId] = useState<string | null>(null)
   const [battleOver, setBattleOver] = useState(false)
 
   if (game.stable.length === 0) {
@@ -561,7 +589,10 @@ function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSt
 
   // Review phase
   const currentMonth = monthOfWeek(game.week)
+  const currentWeek = weekOfMonth(game.week)
+  const isCurrentMonth = calendarMonth === currentMonth
   const tournamentsThisMonth = tournamentCalendarFor(game.seed, yearOfWeek(game.week)).filter((t) => t.month === calendarMonth)
+  const selectedTournament = tournamentsThisMonth.find((t) => t.id === selectedTournamentId) ?? null
   const activityName = (p?: WeekPlanEntry) => {
     if (!p) return '—'
     if (p.activity === 'rest') return '😴 Rest'
@@ -584,16 +615,32 @@ function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSt
         {/* This week's plan */}
         <div className="card loc">
           <div className="loc-h"><span>📋 This week's plan</span></div>
-          <div className="labrows">
+          <div className="planrows">
             {game.stable.map((c) => {
               const p = weekPlan[c.id]
+              const preview: WeekPreview | null = !c.retired && p ? previewWeekEffects(c, p.activity, p.food) : null
               return (
-                <div className="labrow" key={c.id}>
+                <div className="planrow" key={c.id}>
                   <Sprite species={c.species} size={28} />
-                  <span className="bn">{c.name}</span>
-                  <span className="dim">
-                    {c.retired ? '🏁 Retired' : activityName(p)}{p?.food ? ` · 🍽 ${foodName(p.food)}` : ''}
-                  </span>
+                  <div className="planrow-body">
+                    <div className="planrow-head">
+                      <span className="bn">{c.name}</span>
+                      <span className="dim">
+                        {c.retired ? '🏁 Retired' : activityName(p)}{p?.food ? ` · 🍽 ${foodName(p.food)}` : ''}
+                      </span>
+                    </div>
+                    {preview && (
+                      <>
+                        <div className="plan-happiness">
+                          ❤ Happiness {c.happiness}/10{' '}
+                          <span className={preview.happinessDelta > 0 ? 'pos' : preview.happinessDelta < 0 ? 'neg' : 'dim'}>
+                            ({preview.happinessDelta > 0 ? '+' : ''}{preview.happinessDelta})
+                          </span>
+                        </div>
+                        <WeekStatDeltaBars deltas={preview.statDeltas} />
+                      </>
+                    )}
+                  </div>
                 </div>
               )
             })}
@@ -606,23 +653,67 @@ function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSt
             <span>📅 Tournament Calendar</span>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button className="ghost" onClick={() => setCalendarMonth((mo) => mo === 1 ? 12 : mo - 1)}>◀</button>
-              <span>Month {calendarMonth}{calendarMonth === currentMonth ? ' · now' : ''}</span>
+              <span>Month {calendarMonth}{isCurrentMonth ? ` · Week ${currentWeek} now` : ''}</span>
               <button className="ghost" onClick={() => setCalendarMonth((mo) => mo === 12 ? 1 : mo + 1)}>▶</button>
             </div>
           </div>
-          <div className="hint">Tournaments this month: {tournamentsThisMonth.length}. Battles resolve when the week advances.</div>
-          {tournamentsThisMonth.map((t) => {
+          <div className="hint">Tournaments this month: {tournamentsThisMonth.length}. Click a trophy to view entry details.</div>
+
+          {tournamentsThisMonth.length === 0 ? (
+            <div className="dim" style={{ padding: '0.5rem 0' }}>No tournaments scheduled this month.</div>
+          ) : (
+            <div className="calgrid">
+              {tournamentsThisMonth.map((t) => {
+                const signedHere = game.pendingTournament?.tournamentId === t.id
+                const alreadyEntered = (game.enteredThisMonth ?? []).includes(t.id)
+                const isPastWeek = isCurrentMonth && currentWeek > t.week
+                const icon = signedHere ? '✅' : alreadyEntered ? '✔' : isPastWeek ? '➖' : '🏆'
+                const isOpenNow = isCurrentMonth && currentWeek === t.week && !alreadyEntered && !signedHere
+                return (
+                  <div className="calgrid-row" key={t.id}>
+                    <div className="calgrid-label">{t.name}<span className="dim"> · {t.league}</span></div>
+                    {[1, 2, 3, 4].map((w) => (
+                      <div key={w} className={'calgrid-cell' + (isCurrentMonth && w === currentWeek ? ' now' : '')}>
+                        {w === t.week && (
+                          <button
+                            className={'calicon' + (isOpenNow ? ' open' : '') + (selectedTournamentId === t.id ? ' selected' : '')}
+                            onClick={() => setSelectedTournamentId(t.id)}
+                            title={`${t.name} — Week ${t.week}`}
+                          >
+                            {icon}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )
+              })}
+              <div className="calgrid-row calgrid-footer">
+                <div className="calgrid-label" />
+                {[1, 2, 3, 4].map((w) => (
+                  <div key={w} className={'calgrid-wk' + (isCurrentMonth && w === currentWeek ? ' now' : '')}>Wk {w}</div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Entry phase: appears once a tournament icon is clicked */}
+          {selectedTournament ? (() => {
+            const t = selectedTournament
             const eligible = eligibleForTournament(game, t)
-            const isCurrentMonth = calendarMonth === currentMonth
             const signedHere = game.pendingTournament?.tournamentId === t.id
             const signedMonster = signedHere ? game.stable.find((c) => c.id === game.pendingTournament!.monsterId) : undefined
             const alreadyEntered = (game.enteredThisMonth ?? []).includes(t.id)
+            const isOpenWeek = isCurrentMonth && currentWeek === t.week
             const pick = signupPick[t.id] ?? eligible[0]?.id
             const picked = eligible.find((c) => c.id === pick) ?? eligible[0]
             const mult = picked ? rewardMultiplier(picked.licenseIndex, t.league) : 1
             return (
-              <div key={t.id} className="offer" style={{ padding: '0.5rem', borderBottom: '1px solid var(--line)' }}>
-                <div><b>{t.name}</b> — {t.league} league</div>
+              <div className="tour-entry">
+                <div className="tour-entry-head">
+                  <div><b>{t.name}</b> — {t.league} league · Week {t.week}</div>
+                  <button className="ghost" onClick={() => setSelectedTournamentId(null)}>✕</button>
+                </div>
                 <div className="dim">Rewards: {t.rewards.gold}g + training exp (winner only)</div>
                 {signedHere ? (
                   <div>
@@ -631,8 +722,12 @@ function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSt
                   </div>
                 ) : alreadyEntered ? (
                   <div className="dim">✔ Already competed this month.</div>
-                ) : !isCurrentMonth ? (
-                  <div className="dim">Sign-ups open in Month {t.month}.</div>
+                ) : !isOpenWeek ? (
+                  <div className="dim">
+                    {!isCurrentMonth ? `Sign-ups open in Month ${t.month}, Week ${t.week}.`
+                      : currentWeek < t.week ? `Sign-ups open on Week ${t.week} (currently Week ${currentWeek}).`
+                        : `Week ${t.week} has passed for this event.`}
+                  </div>
                 ) : eligible.length === 0 ? (
                   <div className="dim">Requires a {t.league}-league monster (or higher).</div>
                 ) : game.pendingTournament ? (
@@ -652,7 +747,9 @@ function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSt
                 )}
               </div>
             )
-          })}
+          })() : tournamentsThisMonth.length > 0 && (
+            <div className="dim tour-entry-hint">Click a tournament above to view entry details.</div>
+          )}
         </div>
 
         {/* Proceed */}
