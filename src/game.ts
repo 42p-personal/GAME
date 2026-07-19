@@ -1,7 +1,7 @@
 // Weekly calendar / career loop (M2, §2). A single monster you raise week by week:
 // weekly actions (train drill / rest / feed / excursion), stamina, gold, aging.
 import {
-  FOODS, Food, LEAGUES, MAX_HAPPINESS, Monster, STATS, Sex, Species, Stats, Stat, TrainingProfile,
+  FOODS, Food, LEAGUES, MAX_HAPPINESS, Monster, Move, RNG, STATS, Sex, Species, Stats, Stat, TrainingProfile,
   ULTIMATE_LEVEL, classForStats, feedDelta, hashString, mulberry32, randInt,
 } from './core'
 import { ALL_DRILLS } from './drills'
@@ -38,6 +38,16 @@ export function dateLabel(week: number): string {
   return `Yr ${y} · Month ${mo} · Wk ${wk}`
 }
 
+// A past tournament entry, kept for the ranch's Tournament History panel.
+// `placement` is binary for now (a tournament is one battle vs one rival) —
+// becomes richer (1st/2nd/3rd/...) once multi-participant brackets land.
+export interface TournamentResult {
+  name: string
+  league: string
+  week: number // global week the tournament resolved
+  placement: 'champion' | 'none'
+}
+
 export interface Career {
   id: string
   name: string
@@ -53,6 +63,8 @@ export interface Career {
   week: number // weeks since this monster joined the stable (age/log bookkeeping)
   retired: boolean
   fedThisWeek: boolean // only one food may be bought per week per monster
+  loadout: string[] // persisted equipped-move ids (≤3); empty = auto-pick (chooseLoadout)
+  tournamentHistory: TournamentResult[]
   log: string[]
 }
 
@@ -102,9 +114,27 @@ export interface WeekPreview {
   statDeltas: Partial<Record<Stat, number>> // per-stat gain (+) or drill malus (-)
 }
 
+// A drill's positive gain is a happiness-weighted random roll, not a flat
+// number (user spec 2026-07-19): the roll ranges ±1/3 of the drill's base
+// gain, and `happiness` skews it toward the top of that range — 0 happiness
+// rolls uniformly, 10 happiness leans hard toward the ceiling. Combined with
+// the existing aptitude multiplier (statTrainingBonus, applied after this
+// roll), a favoured stat at high happiness can exceed the old flat number —
+// intentionally not advertised as a stated max anywhere in the UI. Malus
+// values stay flat/unscaled, as before — only positive gains roll.
+// Deterministic per (monster, week) via the caller's seeded `rng`, so the
+// review screen's preview can show the EXACT roll, not just an estimate.
+function rollDrillGain(rng: RNG, base: number, happiness: number): number {
+  const range = Math.round(base / 3)
+  const skew = 1 / (1 + happiness / 5) // 1 = uniform (happiness 0) → 1/3 = top-skewed (happiness 10)
+  const t = Math.pow(rng(), skew)
+  return base - range + Math.round(t * range * 2)
+}
+
 // Preview what applyWeek would do THIS week, without mutating state — mirrors
-// its training + feeding math exactly so the Ranch review screen can show the
-// happiness swing and stat gains/maluses before the player commits.
+// its training + feeding math exactly (same seeded rng as applyWeek, so the
+// roll shown IS the roll that will land) so the Ranch screen can show the
+// happiness swing and exact stat gains/maluses before the player commits.
 export function previewWeekEffects(c: Career, activity: string, food: Food | ''): WeekPreview {
   const happinessDelta = food ? feedDelta(food, c.favouriteFood, c.hatedFood) : -1
   const statDeltas: Partial<Record<Stat, number>> = {}
@@ -112,9 +142,15 @@ export function previewWeekEffects(c: Career, activity: string, food: Food | '')
   if (drill && !c.retired) {
     const cap = LEAGUES[c.licenseIndex].cap
     const { trainMult } = stageInfo(c.ageWeeks, c.species.lifespan)
+    const rng = mulberry32(hashString(c.id + ':' + c.week))
     const eff = trainMult * staminaMalus(c.stamina)
+    // feeding resolves before training in the real weekly tick (advanceWeek),
+    // so the roll below must use the POST-feed happiness to match exactly
+    const trainHappiness = food ? Math.max(0, Math.min(MAX_HAPPINESS, c.happiness + feedDelta(food, c.favouriteFood, c.hatedFood))) : c.happiness
     for (const [stat, delta] of Object.entries(drill.gains) as [Stat, number][]) {
-      const applied = delta > 0 ? Math.round(delta * eff * statTrainingBonus(c.species, stat)) : delta
+      const applied = delta > 0
+        ? Math.round(rollDrillGain(rng, delta, trainHappiness) * eff * statTrainingBonus(c.species, stat))
+        : delta
       const nv = Math.max(1, Math.min(cap, c.stats[stat] + applied))
       const real = nv - c.stats[stat]
       if (real !== 0) statDeltas[stat] = real
@@ -152,6 +188,8 @@ export function newCareer(seed: string, opts: NewCareerOpts = {}): Career {
     week: 0,
     retired: false,
     fedThisWeek: false,
+    loadout: [],
+    tournamentHistory: [],
     log: [`${m.name} the ${m.species.name} (${m.sex === 'M' ? '♂' : '♀'}) joins your stable — a Wood-league hopeful.`],
   }
 }
@@ -172,9 +210,17 @@ export function buyFood(c: Career, gold: number, food: Food, market: Record<Food
   }
 }
 
-// Derive a display Monster from the career's current state.
+// Derive a display Monster from the career's current state. Uses the
+// player's persisted `loadout` (Ability Selection UI) when set and still
+// valid; falls back to auto-pick (chooseLoadout) otherwise — including the
+// edge case where a drill malus dropped a stat below a move's learnLevel,
+// silently shrinking the persisted loadout below 3.
 export function careerMonster(c: Career): Monster {
   const learned = learnedMoves(c.stats)
+  const persisted = c.loadout
+    .map((id) => learned.find((mv) => mv.id === id))
+    .filter((mv): mv is Move => !!mv)
+  const loadout = persisted.length > 0 ? persisted : chooseLoadout(learned)
   return {
     seed: c.id,
     name: c.name,
@@ -184,7 +230,7 @@ export function careerMonster(c: Career): Monster {
     className: classForStats(c.stats),
     league: LEAGUES[c.licenseIndex].name,
     learned,
-    loadout: chooseLoadout(learned),
+    loadout,
     ultimateUnlocked: Math.max(...STATS.map((s) => c.stats[s])) >= ULTIMATE_LEVEL,
     favouriteFood: c.favouriteFood,
     hatedFood: c.hatedFood,
@@ -255,8 +301,11 @@ export function applyWeek(c: Career, action: WeeklyAction, gold: number, rental 
     const eff = trainMult * malus
     const changes: string[] = []
     for (const [stat, delta] of Object.entries(drill.gains) as [Stat, number][]) {
-      // gains scale with life stage, stamina, and species aptitude; drill maluses apply flat
-      const applied = delta > 0 ? Math.round(delta * eff * statTrainingBonus(c.species, stat)) : delta
+      // positive gains roll (happiness-weighted, see rollDrillGain), then scale by
+      // life stage, stamina, and species aptitude; drill maluses apply flat
+      const applied = delta > 0
+        ? Math.round(rollDrillGain(rng, delta, n.happiness) * eff * statTrainingBonus(c.species, stat))
+        : delta
       const nv = Math.max(1, Math.min(cap, n.stats[stat] + applied))
       const real = nv - n.stats[stat]
       n.stats[stat] = nv

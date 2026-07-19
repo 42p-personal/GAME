@@ -9,6 +9,7 @@ import {
   Career, START_GOLD, WEEKS_PER_MONTH, WEEKS_PER_YEAR, WeeklyAction, ageOneWeek, applyWeek, buyFood,
   careerMonster, newCareer, rankUp, rollMarket, trainingProfileFor,
 } from './game'
+import { learnedMoves } from './monster'
 
 export type Area = 'town' | 'ranch'
 
@@ -300,6 +301,25 @@ export function promoteMonster(g: GameState, id: string): GameState {
   return { ...g, gold, stable: g.stable.map((x) => (x.id === id ? nc : x)) }
 }
 
+export function renameMonster(g: GameState, id: string, name: string): GameState {
+  const trimmed = name.trim().slice(0, 24)
+  if (!trimmed) return g
+  return { ...g, stable: g.stable.map((c) => (c.id === id ? { ...c, name: trimmed } : c)) }
+}
+
+// Ability Selection UI (§1b): free any time EXCEPT the week a monster is
+// signed up for a tournament (can't reroll abilities mid-entry). `moveIds`
+// must all be moves the monster has actually learned; an empty array resets
+// to auto-pick (careerMonster falls back to chooseLoadout).
+export function setLoadout(g: GameState, id: string, moveIds: string[]): GameState {
+  if (g.pendingTournament?.monsterId === id) return g
+  const c = g.stable.find((x) => x.id === id)
+  if (!c) return g
+  const learnedIds = new Set(learnedMoves(c.stats).map((mv) => mv.id))
+  const valid = moveIds.filter((mid) => learnedIds.has(mid)).slice(0, 3)
+  return { ...g, stable: g.stable.map((x) => (x.id === id ? { ...x, loadout: valid } : x)) }
+}
+
 // --- Tournaments (§3): sign up in the review phase, battle resolves on the weekly tick ---
 // A monster may enter its own league's events (full rewards) or any league BELOW
 // it (reduced rewards via rewardMultiplier) — never above its license.
@@ -361,7 +381,7 @@ function resolveTournament(g: GameState, stable: Career[], gold: number): { gold
   const goldPrize = Math.round(t.rewards.gold * mult)
   const reducedNote = mult < 1 ? ` (${Math.round(mult * 100)}% — below ${LEAGUES[c.licenseIndex].name} league)` : ''
 
-  const nc: Career = { ...c, stats: { ...c.stats }, log: [...c.log] }
+  const nc: Career = { ...c, stats: { ...c.stats }, log: [...c.log], tournamentHistory: [...c.tournamentHistory] }
   let expNote = ''
   if (won) {
     gold += goldPrize
@@ -379,6 +399,9 @@ function resolveTournament(g: GameState, stable: Career[], gold: number): { gold
   } else {
     nc.log.push(`💔 Lost the ${t.name} to ${rival.name} the ${rival.species.name}. No rewards this time.`)
   }
+  // A tournament is one battle vs one rival today, so placement is binary —
+  // becomes 1st/2nd/3rd/... once multi-participant brackets land (2c).
+  nc.tournamentHistory.push({ name: t.name, league: t.league, week: g.week, placement: won ? 'champion' : 'none' })
   stable[idx] = nc
 
   return {

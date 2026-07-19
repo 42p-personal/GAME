@@ -1,6 +1,6 @@
 import { Dispatch, SetStateAction, useEffect, useMemo, useState } from 'react'
 import {
-  BODY_ELEMENT, BodyType, Element, FOODS, LEAGUES, Monster, STATS, Stat, feedDelta,
+  BODY_ELEMENT, BodyType, Element, FOODS, LEAGUES, Monster, Move, STATS, Stat, feedDelta,
   happinessMultiplier, hashString, mulberry32,
 } from './core'
 import { generateMonster, manaCost, maxHp, maxMana } from './monster'
@@ -11,15 +11,15 @@ import { SPECIES, bodySignature } from './species'
 import { BIOS } from './bestiary'
 import { BASIC_DRILLS, Drill, INTENSIVE_DRILLS } from './drills'
 import {
-  MAX_STAMINA, WeekPreview, canRankUp, careerMonster, dateLabel, foodName, previewWeekEffects, rankUpFee,
-  stageInfo, trainingProfileFor,
+  BASIC_DRILL_STAMINA, Career, INTENSIVE_DRILL_STAMINA, MAX_STAMINA, canRankUp, careerMonster,
+  dateLabel, foodName, previewWeekEffects, rankUpFee, stageInfo, trainingProfileFor,
 } from './game'
 import {
   BULK_FOOD_COST, ELITE_LICENSE_COST, FUSION_COST, GameState, RENTAL_PER_FROZEN, SPECIAL_LICENSE_COST,
   WeekPlanEntry, advanceWeek, barnCost, buyBulkFood, buyEliteLicense, buyMonster,
   buySpecialLicense, cancelSignUp, eligibleForTournament, freeze, fuse, fusionRoom, goto, monthOfWeek,
-  newGame, offerMonster, promoteMonster, rewardMultiplier, signUp, thaw, tournamentCalendarFor,
-  upgradeBarn, weekOfMonth, yearOfWeek,
+  newGame, offerMonster, promoteMonster, renameMonster, rewardMultiplier, setLoadout, signUp, thaw,
+  tournamentCalendarFor, upgradeBarn, weekOfMonth, yearOfWeek,
 } from './town'
 import { APP_VERSION } from './version'
 
@@ -39,31 +39,6 @@ function StatBar({ stat, value, max }: { stat: Stat; value: number; max: number 
   )
 }
 
-// Preview of this week's planned training: a bar per affected stat — gains
-// highlighted yellow, drill maluses highlighted red. Scaled against the
-// biggest plausible single-drill gain/malus so bars stay readable.
-const WEEKSTAT_GAIN_SCALE = 15 // ≈ INTENSIVE_GAIN(12) at max bonus/life-stage
-const WEEKSTAT_MALUS_SCALE = 4 // INTENSIVE_COST — the fixed drill malus
-function WeekStatDeltaBars({ deltas }: { deltas: Partial<Record<Stat, number>> }) {
-  const affected = STATS.filter((s) => deltas[s])
-  if (affected.length === 0) return <div className="weekstats-empty">No stat change.</div>
-  return (
-    <div className="weekstats">
-      {affected.map((s) => {
-        const d = deltas[s]!
-        const gain = d > 0
-        const pct = Math.min(100, (Math.abs(d) / (gain ? WEEKSTAT_GAIN_SCALE : WEEKSTAT_MALUS_SCALE)) * 100)
-        return (
-          <div className="weekstat" key={s}>
-            <span className="weekstat-label">{s}</span>
-            <span className="weekstat-bar"><i className={gain ? 'gain' : 'malus'} style={{ width: `${pct}%` }} /></span>
-            <span className={'weekstat-val ' + (gain ? 'pos' : 'neg')}>{gain ? '+' : ''}{d}</span>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
 
 // Individuality: which stats sit above/below the species' body-type average (§8.4).
 function Signature({ m }: { m: Monster }) {
@@ -413,17 +388,114 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
 }
 
 // ============================ Ranch (raising loop) ============================
-const drillLabel = (d: Drill) =>
-  Object.entries(d.gains).map(([st, v]) => `${(v as number) > 0 ? '+' : ''}${v} ${st}`).join(' ')
+// The stat a drill primarily trains — the one with a positive gain (basic
+// drills have exactly one entry; intensive drills pair it with a malus stat).
+const primaryStatOf = (d: Drill): Stat => Object.entries(d.gains).find(([, v]) => (v as number) > 0)![0] as Stat
+
+// One training-row block: a drill's LIVE preview for the selected monster this
+// week (exact, not estimated — previewWeekEffects shares applyWeek's seeded
+// rng) so the happiness-weighted roll shows the real number, not a nominal one.
+function TrainBlock({ d, career, food, selected, onClick }: {
+  d: Drill; career: Career; food: WeekPlanEntry['food']; selected: boolean; onClick: () => void
+}) {
+  const stat = primaryStatOf(d)
+  const preview = previewWeekEffects(career, d.id, food)
+  const gain = preview.statDeltas[stat]
+  const malusEntry = (Object.entries(d.gains) as [Stat, number][]).find(([, v]) => v < 0)
+  const malus = malusEntry ? preview.statDeltas[malusEntry[0]] ?? malusEntry[1] : undefined
+  const stamCost = d.kind === 'basic' ? BASIC_DRILL_STAMINA : INTENSIVE_DRILL_STAMINA
+  return (
+    <button className={'trainblock' + (selected ? ' selected' : '')} onClick={onClick} title={d.desc}>
+      <div className="trainblock-name" style={{ color: STAT_COLOR[stat] }}>{d.name}</div>
+      <div className="trainblock-sub">
+        {gain !== undefined ? `${gain > 0 ? '+' : ''}${gain} ${stat}` : `+${d.gains[stat]} ${stat}`}
+        {malusEntry && `, ${malus} ${malusEntry[0]}`} · −{stamCost} stam
+      </div>
+    </button>
+  )
+}
+
+// The Ability Selection UI (§1b, mockup approved 2026-07-19): click a slot,
+// then a pool move to swap it in. Filter by stat; equipped moves show dimmed
+// in the pool. Changes apply immediately via onSetLoadout (no separate save
+// step) — free any time except a monster's active tournament week.
+function AbilitySelector({ career, onSetLoadout, onClose }: {
+  career: Career; onSetLoadout: (ids: string[]) => void; onClose: () => void
+}) {
+  const [selectedSlot, setSelectedSlot] = useState<number | null>(null)
+  const [filter, setFilter] = useState<Stat | 'All'>('All')
+  const m = careerMonster(career)
+  const loadout = m.loadout
+  const pool = filter === 'All' ? m.learned : m.learned.filter((mv) => mv.stat === filter)
+
+  const swap = (move: Move) => {
+    const slot = selectedSlot ?? 0
+    const ids = [0, 1, 2]
+      .map((i) => (i === slot ? move.id : loadout[i]?.id))
+      .filter((id): id is string => !!id)
+    onSetLoadout(ids)
+    setSelectedSlot(null)
+  }
+
+  return (
+    <div className="card abilityeditor">
+      <div className="loc-h">
+        <span>⚔ Edit Abilities — {career.name}</span>
+        <button className="ghost" onClick={onClose}>✕ close</button>
+      </div>
+      <div className="hint">Click a slot below, then a move from the pool to swap it in.</div>
+      <div className="abilityslots">
+        {[0, 1, 2].map((i) => {
+          const mv = loadout[i]
+          return (
+            <div key={i} className={'abilityslot' + (selectedSlot === i ? ' selected' : '')}
+              onClick={() => setSelectedSlot(selectedSlot === i ? null : i)}>
+              {mv ? (
+                <>
+                  <div className="mn">{mv.name}</div>
+                  <div className="md">{mv.stat} · {manaCost(mv)} MP · cd {mv.cooldown}</div>
+                </>
+              ) : <div className="dim">empty slot</div>}
+            </div>
+          )
+        })}
+      </div>
+      <div className="abilitychips">
+        {(['All', ...STATS] as const).map((s) => (
+          <button key={s} className={'abilitychip' + (filter === s ? ' on' : '')} onClick={() => setFilter(s)}>{s}</button>
+        ))}
+      </div>
+      <div className="abilitypool">
+        {pool.length === 0 && <div className="dim">No moves learned yet — train a stat past 40.</div>}
+        {pool.map((mv) => {
+          const equipped = loadout.some((l) => l.id === mv.id)
+          return (
+            <div key={mv.id} className={'move' + (equipped ? ' dim-eq' : '')} onClick={() => !equipped && swap(mv)}>
+              <span className="lvl">{mv.stat} {mv.learnLevel}</span>
+              <span className="mn">{mv.name}</span>
+              <div className="md">{mv.desc} · {manaCost(mv)} MP · cd {mv.cooldown} · acc {mv.accuracy}{equipped ? ' · equipped' : ''}</div>
+            </div>
+          )
+        })}
+      </div>
+      <button className="ghost" style={{ marginTop: 8 }} onClick={() => onSetLoadout([])}>reset to suggested loadout</button>
+    </div>
+  )
+}
 
 function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetStateAction<GameState>> }) {
-  const [phase, setPhase] = useState<'decisions' | 'review' | 'battle'>('decisions')
+  const [phase, setPhase] = useState<'feeding' | 'stable' | 'battle'>('feeding')
   const [decisionIdx, setDecisionIdx] = useState(0)
   const [weekPlan, setWeekPlan] = useState<Record<string, WeekPlanEntry>>({})
   const [calendarMonth, setCalendarMonth] = useState(() => monthOfWeek(game.week))
   const [signupPick, setSignupPick] = useState<Record<string, string>>({})
   const [selectedTournamentId, setSelectedTournamentId] = useState<string | null>(null)
   const [battleOver, setBattleOver] = useState(false)
+  const [selectedMonsterId, setSelectedMonsterId] = useState(() => game.stable.find((c) => !c.retired)?.id ?? game.stable[0]?.id ?? '')
+  const [abilityEditorFor, setAbilityEditorFor] = useState<string | null>(null)
+  const [showHistoryFor, setShowHistoryFor] = useState<string | null>(null)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [showCalendar, setShowCalendar] = useState(false)
 
   if (game.stable.length === 0) {
     return (
@@ -456,7 +528,7 @@ function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSt
                   : '💔 Defeat — no rewards this time. Train harder and try again.'}
             </div>
             <div className="carerow" style={{ justifyContent: 'center' }}>
-              <button className="enter" onClick={() => setPhase('decisions')}>Continue →</button>
+              <button className="enter" onClick={() => setPhase('feeding')}>Continue →</button>
             </div>
           </>
         )}
@@ -465,33 +537,32 @@ function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSt
   }
 
   const currentCareer = game.stable[decisionIdx]
-  const m = careerMonster(currentCareer)
-  const st = stageInfo(currentCareer.ageWeeks, currentCareer.species.lifespan)
-  const discount = game.bulkFood ? 0.8 : 1
   const currentPlan: WeekPlanEntry = weekPlan[currentCareer.id] || { activity: 'rest', food: '' }
-  const prof = trainingProfileFor(currentCareer.species)
+  const discount = game.bulkFood ? 0.8 : 1
 
-  // Selecting an activity or food only records the plan — advancing to the next
-  // monster is always an explicit button press, so both can be chosen in any order.
-  const setActivity = (activity: string) =>
-    setWeekPlan((wp) => ({ ...wp, [currentCareer.id]: { ...currentPlan, activity } }))
-  const advanceDecision = () => {
-    setWeekPlan((wp) => ({ ...wp, [currentCareer.id]: currentPlan }))
+  const advanceFeeding = () => {
     if (decisionIdx < game.stable.length - 1) setDecisionIdx((i) => i + 1)
-    else setPhase('review')
+    else {
+      setPhase('stable')
+      setSelectedMonsterId(game.stable.find((c) => !c.retired)?.id ?? game.stable[0].id)
+    }
   }
 
-  if (phase === 'decisions') {
+  // --- Feeding: sequential per-monster, food only (each monster has its own
+  // tastes, so a single bulk-feed button can't work) — happens BEFORE the
+  // stable screen every week.
+  if (phase === 'feeding') {
+    const st = stageInfo(currentCareer.ageWeeks, currentCareer.species.lifespan)
     return (
       <>
         <div className="ranchtop">
           <button className="ghost" onClick={() => setGame((g) => goto(g, 'town'))}>🏛 Town</button>
           <span>📅 {dateLabel(game.week)}</span>
           <span>🪙 {game.gold}g</span>
-          <span>Monster {decisionIdx + 1}/{game.stable.length}</span>
+          <span>Feeding {decisionIdx + 1}/{game.stable.length}</span>
           {decisionIdx > 0 && <button className="ghost" onClick={() => setDecisionIdx((i) => i - 1)}>← Previous</button>}
         </div>
-        <p className="sub">Choose an activity &amp; food for {currentCareer.name}.</p>
+        <p className="sub">Feed {currentCareer.name} for this week — favourites and hated foods differ per monster.</p>
 
         <div className="career">
           <div className="card">
@@ -503,60 +574,14 @@ function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSt
               <div className="meter"><label>Stamina {currentCareer.stamina}/{MAX_STAMINA}</label><div className="bar"><i style={{ width: `${currentCareer.stamina}%`, background: 'var(--dex)' }} /></div></div>
               <div className="meter"><label>Happiness {currentCareer.happiness}/10</label><div className="bar"><i style={{ width: `${currentCareer.happiness * 10}%`, background: 'var(--cha)' }} /></div></div>
             </div>
-            <MonsterCard m={m} />
+            <MonsterCard m={careerMonster(currentCareer)} />
           </div>
 
           <div className="card actions">
             {currentCareer.retired ? (
-              <>
-                <div className="retired">🏁 {currentCareer.name} has retired and can no longer compete.</div>
-                <div className="carerow" style={{ marginTop: '1rem' }}>
-                  <button className="enter" onClick={advanceDecision}>
-                    {decisionIdx < game.stable.length - 1 ? 'Next Monster →' : 'Continue to Review →'}
-                  </button>
-                </div>
-              </>
+              <div className="retired">🏁 {currentCareer.name} has retired and can no longer compete.</div>
             ) : (
               <>
-                {canRankUp(currentCareer) && (
-                  <div className="carerow">
-                    <button className="rankup" disabled={game.gold < rankUpFee(currentCareer)}
-                      onClick={() => setGame((g) => promoteMonster(g, currentCareer.id))}>
-                      ⭐ Rank-up trial · {rankUpFee(currentCareer)}g → {LEAGUES[currentCareer.licenseIndex + 1].name} league
-                    </button>
-                  </div>
-                )}
-
-                <div className="section-title">Activity — rest, go exploring, or train a drill</div>
-                <div className="hint">
-                  Aptitude: trains {prof.primary} fastest (+20%), {prof.secondary} well (+10%), {prof.weakness} poorly (−20%).
-                  Low stamina weakens gains.
-                </div>
-                <div className="carerow">
-                  <button className={currentPlan.activity === 'rest' ? 'selected' : ''} onClick={() => setActivity('rest')}>😴 Rest (+stamina)</button>
-                  <button className={currentPlan.activity === 'excursion' ? 'selected' : ''} onClick={() => setActivity('excursion')}>🧭 Excursion (−25 stamina, finds gold)</button>
-                </div>
-
-                <div className="section-title">Basic drills — one stat, −10 stamina</div>
-                <div className="foods">
-                  {BASIC_DRILLS.map((d) => (
-                    <button key={d.id} className={`food ${currentPlan.activity === d.id ? 'selected' : ''}`}
-                      onClick={() => setActivity(d.id)} title={d.desc}>
-                      {d.name}{currentPlan.activity === d.id ? ' ✓' : ''} · {drillLabel(d)}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="section-title">Intensive drills — bigger gains, a cost, −25 stamina</div>
-                <div className="foods">
-                  {INTENSIVE_DRILLS.map((d) => (
-                    <button key={d.id} className={`food ${currentPlan.activity === d.id ? 'selected' : ''}`}
-                      onClick={() => setActivity(d.id)} title={d.desc}>
-                      {d.name}{currentPlan.activity === d.id ? ' ✓' : ''} · {drillLabel(d)}
-                    </button>
-                  ))}
-                </div>
-
                 <div className="section-title">Food — buy 1 food this week{game.bulkFood ? ' · 🛒 −20%' : ''}</div>
                 <div className="foods">
                   {FOODS.map((f) => {
@@ -573,201 +598,299 @@ function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSt
                     )
                   })}
                 </div>
-
-                <div className="carerow" style={{ marginTop: '1rem' }}>
-                  <button className="enter" onClick={advanceDecision}>
-                    {decisionIdx < game.stable.length - 1 ? 'Next Monster →' : 'Continue to Review →'}
-                  </button>
-                </div>
               </>
             )}
+            <div className="carerow" style={{ marginTop: '1rem' }}>
+              <button className="enter" onClick={advanceFeeding}>
+                {decisionIdx < game.stable.length - 1 ? 'Next Monster →' : 'Continue to Stable →'}
+              </button>
+            </div>
           </div>
         </div>
       </>
     )
   }
 
-  // Review phase
+  // --- Stable screen (§1c): free-navigation stable strip + detail panel +
+  // training row condensed by stat, with a persistent right-hand action rail.
+  const selectedCareer = game.stable.find((c) => c.id === selectedMonsterId) ?? game.stable[0]
+  const selM = careerMonster(selectedCareer)
+  const selProf = trainingProfileFor(selectedCareer.species)
+  const selPlan: WeekPlanEntry = weekPlan[selectedCareer.id] || { activity: 'rest', food: '' }
+  const setSelActivity = (activity: string) =>
+    setWeekPlan((wp) => ({ ...wp, [selectedCareer.id]: { ...selPlan, activity } }))
+
+  const activityName = (p?: WeekPlanEntry) => {
+    if (!p) return null
+    if (p.activity === 'rest') return '😴 Resting'
+    if (p.activity === 'excursion') return '🧭 Excursion'
+    const d = [...BASIC_DRILLS, ...INTENSIVE_DRILLS].find((x) => x.id === p.activity)
+    return d ? `💪 ${d.name}` : null
+  }
+
   const currentMonth = monthOfWeek(game.week)
   const currentWeek = weekOfMonth(game.week)
   const isCurrentMonth = calendarMonth === currentMonth
   const tournamentsThisMonth = tournamentCalendarFor(game.seed, yearOfWeek(game.week)).filter((t) => t.month === calendarMonth)
   const selectedTournament = tournamentsThisMonth.find((t) => t.id === selectedTournamentId) ?? null
-  const activityName = (p?: WeekPlanEntry) => {
-    if (!p) return '—'
-    if (p.activity === 'rest') return '😴 Rest'
-    if (p.activity === 'excursion') return '🧭 Excursion'
-    const d = [...BASIC_DRILLS, ...INTENSIVE_DRILLS].find((x) => x.id === p.activity)
-    return d ? `💪 ${d.name}` : p.activity
+
+  const doAdvanceWeek = () => {
+    const next = advanceWeek(game, weekPlan)
+    setGame(next)
+    setCalendarMonth(monthOfWeek(next.week))
+    setWeekPlan({})
+    setDecisionIdx(0)
+    setBattleOver(false)
+    setSelectedMonsterId(next.stable.find((c) => !c.retired)?.id ?? next.stable[0]?.id ?? '')
+    setPhase(next.lastBattle ? 'battle' : 'feeding')
   }
 
   return (
     <>
-      <div className="ranchtop">
-        <button className="ghost" onClick={() => setGame((g) => goto(g, 'town'))}>🏛 Town</button>
-        <span>📅 {dateLabel(game.week)}</span>
-        <span>🪙 {game.gold}g</span>
-        <button className="ghost" onClick={() => { setDecisionIdx(0); setPhase('decisions') }}>← Back</button>
-      </div>
-      <p className="sub">Review decisions before advancing. Check the tournament calendar, or return to town.</p>
+      <div className="feedok">✓ feeding complete for this week — plan training below, or check the calendar</div>
 
-      <div className="townmap" style={{ gap: '1rem' }}>
-        {/* This week's plan */}
-        <div className="card loc">
-          <div className="loc-h"><span>📋 This week's plan</span></div>
-          <div className="planrows">
+      <div className="stablescreen">
+        <div className="stablemain">
+          {/* Stable strip */}
+          <div className="stablestrip">
             {game.stable.map((c) => {
-              const p = weekPlan[c.id]
-              const preview: WeekPreview | null = !c.retired && p ? previewWeekEffects(c, p.activity, p.food) : null
+              const label = activityName(weekPlan[c.id])
               return (
-                <div className="planrow" key={c.id}>
-                  <Sprite species={c.species} size={28} />
-                  <div className="planrow-body">
-                    <div className="planrow-head">
-                      <span className="bn">{c.name}</span>
-                      <span className="dim">
-                        {c.retired ? '🏁 Retired' : activityName(p)}{p?.food ? ` · 🍽 ${foodName(p.food)}` : ''}
-                      </span>
-                    </div>
-                    {preview && (
-                      <>
-                        <div className="plan-happiness">
-                          ❤ Happiness {c.happiness}/10{' '}
-                          <span className={preview.happinessDelta > 0 ? 'pos' : preview.happinessDelta < 0 ? 'neg' : 'dim'}>
-                            ({preview.happinessDelta > 0 ? '+' : ''}{preview.happinessDelta})
-                          </span>
-                        </div>
-                        <WeekStatDeltaBars deltas={preview.statDeltas} />
-                      </>
-                    )}
-                  </div>
+                <div key={c.id} className={'stablecard' + (c.id === selectedCareer.id ? ' selected' : '') + (c.retired ? ' retired' : '')}
+                  onClick={() => { setSelectedMonsterId(c.id); setAbilityEditorFor(null); setShowHistoryFor(null); setRenamingId(null) }}>
+                  <Sprite species={c.species} size={40} />
+                  <span className="bn">{c.name}</span>
+                  <div className="dim" style={{ fontSize: 10.5 }}>{c.species.name}</div>
+                  {c.retired ? <span className="stablechip warn">🏁 retired</span>
+                    : label ? <span className="stablechip ok">{label}</span>
+                      : <span className="stablechip warn">⚠ needs a plan</span>}
                 </div>
               )
             })}
           </div>
-        </div>
 
-        {/* Calendar */}
-        <div className="card loc">
-          <div className="loc-h">
-            <span>📅 Tournament Calendar</span>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button className="ghost" onClick={() => setCalendarMonth((mo) => mo === 1 ? 12 : mo - 1)}>◀</button>
-              <span>Month {calendarMonth}{isCurrentMonth ? ` · Week ${currentWeek} now` : ''}</span>
-              <button className="ghost" onClick={() => setCalendarMonth((mo) => mo === 12 ? 1 : mo + 1)}>▶</button>
-            </div>
-          </div>
-          <div className="hint">Tournaments this month: {tournamentsThisMonth.length}. Click a trophy to view entry details.</div>
-
-          {tournamentsThisMonth.length === 0 ? (
-            <div className="dim" style={{ padding: '0.5rem 0' }}>No tournaments scheduled this month.</div>
-          ) : (
-            <div className="calgrid">
-              {tournamentsThisMonth.map((t) => {
-                const signedHere = game.pendingTournament?.tournamentId === t.id
-                const alreadyEntered = (game.enteredThisMonth ?? []).includes(t.id)
-                const isPastWeek = isCurrentMonth && currentWeek > t.week
-                const icon = signedHere ? '✅' : alreadyEntered ? '✔' : isPastWeek ? '➖' : '🏆'
-                const isOpenNow = isCurrentMonth && currentWeek === t.week && !alreadyEntered && !signedHere
-                return (
-                  <div className="calgrid-row" key={t.id}>
-                    <div className="calgrid-label">{t.name}<span className="dim"> · {t.league}</span></div>
-                    {[1, 2, 3, 4].map((w) => (
-                      <div key={w} className={'calgrid-cell' + (isCurrentMonth && w === currentWeek ? ' now' : '')}>
-                        {w === t.week && (
-                          <button
-                            className={'calicon' + (isOpenNow ? ' open' : '') + (selectedTournamentId === t.id ? ' selected' : '')}
-                            onClick={() => setSelectedTournamentId(t.id)}
-                            title={`${t.name} — Week ${t.week}`}
-                          >
-                            {icon}
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )
-              })}
-              <div className="calgrid-row calgrid-footer">
-                <div className="calgrid-label" />
-                {[1, 2, 3, 4].map((w) => (
-                  <div key={w} className={'calgrid-wk' + (isCurrentMonth && w === currentWeek ? ' now' : '')}>Wk {w}</div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Entry phase: appears once a tournament icon is clicked */}
-          {selectedTournament ? (() => {
-            const t = selectedTournament
-            const eligible = eligibleForTournament(game, t)
-            const signedHere = game.pendingTournament?.tournamentId === t.id
-            const signedMonster = signedHere ? game.stable.find((c) => c.id === game.pendingTournament!.monsterId) : undefined
-            const alreadyEntered = (game.enteredThisMonth ?? []).includes(t.id)
-            const isOpenWeek = isCurrentMonth && currentWeek === t.week
-            const pick = signupPick[t.id] ?? eligible[0]?.id
-            const picked = eligible.find((c) => c.id === pick) ?? eligible[0]
-            const mult = picked ? rewardMultiplier(picked.licenseIndex, t.league) : 1
-            return (
-              <div className="tour-entry">
-                <div className="tour-entry-head">
-                  <div><b>{t.name}</b> — {t.league} league · Week {t.week}</div>
-                  <button className="ghost" onClick={() => setSelectedTournamentId(null)}>✕</button>
-                </div>
-                <div className="dim">Rewards: {t.rewards.gold}g + training exp (winner only)</div>
-                {signedHere ? (
-                  <div>
-                    ✅ {signedMonster?.name ?? '?'} competes this week{' '}
-                    <button className="ghost" onClick={() => setGame((g) => cancelSignUp(g))}>cancel</button>
-                  </div>
-                ) : alreadyEntered ? (
-                  <div className="dim">✔ Already competed this month.</div>
-                ) : !isOpenWeek ? (
-                  <div className="dim">
-                    {!isCurrentMonth ? `Sign-ups open in Month ${t.month}, Week ${t.week}.`
-                      : currentWeek < t.week ? `Sign-ups open on Week ${t.week} (currently Week ${currentWeek}).`
-                        : `Week ${t.week} has passed for this event.`}
-                  </div>
-                ) : eligible.length === 0 ? (
-                  <div className="dim">Requires a {t.league}-league monster (or higher).</div>
-                ) : game.pendingTournament ? (
-                  <div className="dim">Already entered a tournament this week.</div>
+          {/* Detail panel */}
+          <div className="detailgrid">
+            <div className="card detail-portrait">
+              <Sprite species={selectedCareer.species} size={96} />
+              <div className="detail-namerow">
+                {renamingId === selectedCareer.id ? (
+                  <input autoFocus defaultValue={selectedCareer.name} className="detail-nameinput" maxLength={24}
+                    onBlur={(e) => { setGame((g) => renameMonster(g, selectedCareer.id, e.target.value)); setRenamingId(null) }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
                 ) : (
                   <>
-                    <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center' }}>
-                      <select value={pick} onChange={(ev) => setSignupPick((sp) => ({ ...sp, [t.id]: ev.target.value }))}>
-                        {eligible.map((c) => <option key={c.id} value={c.id}>{c.name} ({LEAGUES[c.licenseIndex].name})</option>)}
-                      </select>
-                      <button className="enter" onClick={() => setGame((g) => signUp(g, t.id, pick))}>Sign Up →</button>
-                    </div>
-                    {mult < 1 && (
-                      <div className="dim">⚠ {picked?.name} is above {t.league} league — rewards reduced to {Math.round(mult * 100)}%.</div>
-                    )}
+                    <span className="bn">{selectedCareer.name}</span>
+                    <button className="ghost iconbtn" title="rename" onClick={() => setRenamingId(selectedCareer.id)}>✎</button>
                   </>
                 )}
               </div>
-            )
-          })() : tournamentsThisMonth.length > 0 && (
-            <div className="dim tour-entry-hint">Click a tournament above to view entry details.</div>
+              <div className="dim" style={{ fontSize: 11 }}>{selectedCareer.species.name} · {selM.className}</div>
+
+              <button className="detail-actionbtn" disabled={game.pendingTournament?.monsterId === selectedCareer.id}
+                onClick={() => setAbilityEditorFor(abilityEditorFor === selectedCareer.id ? null : selectedCareer.id)}>
+                ⚔ Edit Abilities{game.pendingTournament?.monsterId === selectedCareer.id ? ' (locked — competing)' : ''}
+              </button>
+              <button className="detail-actionbtn" onClick={() => setShowHistoryFor(showHistoryFor === selectedCareer.id ? null : selectedCareer.id)}>
+                🏆 Tournament History
+              </button>
+              {showHistoryFor === selectedCareer.id && (
+                <div className="tour-history">
+                  <div className="tour-history-podiums">
+                    🏆 {selectedCareer.tournamentHistory.filter((h) => h.placement === 'champion').length} podium finishes
+                  </div>
+                  {selectedCareer.tournamentHistory.length === 0
+                    ? <div className="dim">No tournaments entered yet.</div>
+                    : selectedCareer.tournamentHistory.slice().reverse().map((h, i) => (
+                      <div className="tour-history-row" key={i}>
+                        <span>{h.name} <span className="dim">· {h.league}</span></span>
+                        <span className={h.placement === 'champion' ? 'pos' : 'dim'}>{h.placement === 'champion' ? '🏆 champion' : 'not placed'}</span>
+                      </div>
+                    ))}
+                </div>
+              )}
+
+              <div className="detail-meters">
+                <div className="meter"><label>Stamina {selectedCareer.stamina}/{MAX_STAMINA}</label><div className="bar"><i style={{ width: `${selectedCareer.stamina}%`, background: 'var(--dex)' }} /></div></div>
+                <div className="meter"><label>Happiness {selectedCareer.happiness}/10</label><div className="bar"><i style={{ width: `${selectedCareer.happiness * 10}%`, background: 'var(--cha)' }} /></div></div>
+              </div>
+            </div>
+
+            <div className="card detail-stats">
+              {STATS.map((s) => {
+                const tag = selProf.primary === s ? 'PRIMARY +20%' : selProf.secondary === s ? 'SECONDARY +10%' : selProf.weakness === s ? 'WEAKNESS −20%' : ''
+                const tagClass = selProf.primary === s ? 'pos' : selProf.weakness === s ? 'neg' : 'dim'
+                return (
+                  <div className="detailstat" key={s}>
+                    <span style={{ color: STAT_COLOR[s], fontWeight: 700 }}>{s}</span>
+                    <span className="bar"><i style={{ width: `${Math.min(100, (selectedCareer.stats[s] / LEAGUES[selectedCareer.licenseIndex].cap) * 100)}%`, background: STAT_COLOR[s] }} /></span>
+                    <span className="v">{selectedCareer.stats[s]}</span>
+                    <span className={'detailstat-tag ' + tagClass}>{tag}</span>
+                  </div>
+                )
+              })}
+              {canRankUp(selectedCareer) && (
+                <button className="carerow rankup" style={{ width: '100%', marginTop: 10 }}
+                  disabled={game.gold < rankUpFee(selectedCareer)}
+                  onClick={() => setGame((g) => promoteMonster(g, selectedCareer.id))}>
+                  ⭐ Rank-up trial · {rankUpFee(selectedCareer)}g → {LEAGUES[selectedCareer.licenseIndex + 1].name} league
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Ability editor OR training row */}
+          {abilityEditorFor === selectedCareer.id ? (
+            <AbilitySelector
+              career={selectedCareer}
+              onSetLoadout={(ids) => setGame((g) => setLoadout(g, selectedCareer.id, ids))}
+              onClose={() => setAbilityEditorFor(null)}
+            />
+          ) : selectedCareer.retired ? (
+            <div className="retired">🏁 {selectedCareer.name} has retired and can no longer train.</div>
+          ) : (
+            <>
+              <div className="section-title">Training — condensed by stat</div>
+              <div className="trainrow">
+                {STATS.map((stat) => {
+                  const basic = BASIC_DRILLS.find((d) => primaryStatOf(d) === stat)!
+                  const intensives = INTENSIVE_DRILLS.filter((d) => primaryStatOf(d) === stat)
+                  return (
+                    <div className="traincol" key={stat}>
+                      <div className="traincol-h" style={{ color: STAT_COLOR[stat] }}>{stat}</div>
+                      <TrainBlock d={basic} career={selectedCareer} food={selPlan.food} selected={selPlan.activity === basic.id} onClick={() => setSelActivity(basic.id)} />
+                      {intensives.map((d) => (
+                        <TrainBlock key={d.id} d={d} career={selectedCareer} food={selPlan.food} selected={selPlan.activity === d.id} onClick={() => setSelActivity(d.id)} />
+                      ))}
+                    </div>
+                  )
+                })}
+                <div className="traincol">
+                  <div className="traincol-h dim">OTHER</div>
+                  <button className={'trainblock' + (selPlan.activity === 'rest' ? ' selected' : '')} onClick={() => setSelActivity('rest')}>
+                    <div className="trainblock-name">Rest</div><div className="trainblock-sub">+30–100 stam</div>
+                  </button>
+                  <button className={'trainblock' + (selPlan.activity === 'excursion' ? ' selected' : '')} onClick={() => setSelActivity('excursion')}>
+                    <div className="trainblock-name">Excursion</div><div className="trainblock-sub">−25 stam, +gold</div>
+                  </button>
+                </div>
+              </div>
+              <div className="hint">Rolls skew toward the top of the range as happiness rises · always some random variation.</div>
+            </>
+          )}
+
+          {/* Tournament calendar (toggled from the rail) */}
+          {showCalendar && (
+            <div className="card loc" style={{ marginTop: 12 }}>
+              <div className="loc-h">
+                <span>📅 Tournament Calendar</span>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button className="ghost" onClick={() => setCalendarMonth((mo) => mo === 1 ? 12 : mo - 1)}>◀</button>
+                  <span>Month {calendarMonth}{isCurrentMonth ? ` · Week ${currentWeek} now` : ''}</span>
+                  <button className="ghost" onClick={() => setCalendarMonth((mo) => mo === 12 ? 1 : mo + 1)}>▶</button>
+                </div>
+              </div>
+              <div className="hint">Tournaments this month: {tournamentsThisMonth.length}. Click a trophy to view entry details.</div>
+
+              {tournamentsThisMonth.length === 0 ? (
+                <div className="dim" style={{ padding: '0.5rem 0' }}>No tournaments scheduled this month.</div>
+              ) : (
+                <div className="calgrid">
+                  {tournamentsThisMonth.map((t) => {
+                    const signedHere = game.pendingTournament?.tournamentId === t.id
+                    const alreadyEntered = (game.enteredThisMonth ?? []).includes(t.id)
+                    const isPastWeek = isCurrentMonth && currentWeek > t.week
+                    const icon = signedHere ? '✅' : alreadyEntered ? '✔' : isPastWeek ? '➖' : '🏆'
+                    const isOpenNow = isCurrentMonth && currentWeek === t.week && !alreadyEntered && !signedHere
+                    return (
+                      <div className="calgrid-row" key={t.id}>
+                        <div className="calgrid-label">{t.name}<span className="dim"> · {t.league}</span></div>
+                        {[1, 2, 3, 4].map((w) => (
+                          <div key={w} className={'calgrid-cell' + (isCurrentMonth && w === currentWeek ? ' now' : '')}>
+                            {w === t.week && (
+                              <button
+                                className={'calicon' + (isOpenNow ? ' open' : '') + (selectedTournamentId === t.id ? ' selected' : '')}
+                                onClick={() => setSelectedTournamentId(t.id)}
+                                title={`${t.name} — Week ${t.week}`}
+                              >
+                                {icon}
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })}
+                  <div className="calgrid-row calgrid-footer">
+                    <div className="calgrid-label" />
+                    {[1, 2, 3, 4].map((w) => (
+                      <div key={w} className={'calgrid-wk' + (isCurrentMonth && w === currentWeek ? ' now' : '')}>Wk {w}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedTournament ? (() => {
+                const t = selectedTournament
+                const eligible = eligibleForTournament(game, t)
+                const signedHere = game.pendingTournament?.tournamentId === t.id
+                const signedMonster = signedHere ? game.stable.find((c) => c.id === game.pendingTournament!.monsterId) : undefined
+                const alreadyEntered = (game.enteredThisMonth ?? []).includes(t.id)
+                const isOpenWeek = isCurrentMonth && currentWeek === t.week
+                const pick = signupPick[t.id] ?? eligible[0]?.id
+                const picked = eligible.find((c) => c.id === pick) ?? eligible[0]
+                const mult = picked ? rewardMultiplier(picked.licenseIndex, t.league) : 1
+                return (
+                  <div className="tour-entry">
+                    <div className="tour-entry-head">
+                      <div><b>{t.name}</b> — {t.league} league · Week {t.week}</div>
+                      <button className="ghost" onClick={() => setSelectedTournamentId(null)}>✕</button>
+                    </div>
+                    <div className="dim">Rewards: {t.rewards.gold}g + training exp (winner only)</div>
+                    {signedHere ? (
+                      <div>
+                        ✅ {signedMonster?.name ?? '?'} competes this week{' '}
+                        <button className="ghost" onClick={() => setGame((g) => cancelSignUp(g))}>cancel</button>
+                      </div>
+                    ) : alreadyEntered ? (
+                      <div className="dim">✔ Already competed this month.</div>
+                    ) : !isOpenWeek ? (
+                      <div className="dim">
+                        {!isCurrentMonth ? `Sign-ups open in Month ${t.month}, Week ${t.week}.`
+                          : currentWeek < t.week ? `Sign-ups open on Week ${t.week} (currently Week ${currentWeek}).`
+                            : `Week ${t.week} has passed for this event.`}
+                      </div>
+                    ) : eligible.length === 0 ? (
+                      <div className="dim">Requires a {t.league}-league monster (or higher).</div>
+                    ) : game.pendingTournament ? (
+                      <div className="dim">Already entered a tournament this week.</div>
+                    ) : (
+                      <>
+                        <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center' }}>
+                          <select value={pick} onChange={(ev) => setSignupPick((sp) => ({ ...sp, [t.id]: ev.target.value }))}>
+                            {eligible.map((c) => <option key={c.id} value={c.id}>{c.name} ({LEAGUES[c.licenseIndex].name})</option>)}
+                          </select>
+                          <button className="enter" onClick={() => setGame((g) => signUp(g, t.id, pick))}>Sign Up →</button>
+                        </div>
+                        {mult < 1 && (
+                          <div className="dim">⚠ {picked?.name} is above {t.league} league — rewards reduced to {Math.round(mult * 100)}%.</div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )
+              })() : tournamentsThisMonth.length > 0 && (
+                <div className="dim tour-entry-hint">Click a tournament above to view entry details.</div>
+              )}
+            </div>
           )}
         </div>
 
-        {/* Proceed */}
-        <div className="card loc">
-          <div className="loc-h"><span>⏭️ Advance Week</span></div>
-          <div className="hint">
-            Feeding resolves first at this week's prices, then each monster's activity
-            {game.pendingTournament ? ', then the tournament battle' : ''}. The market restocks monthly.
-          </div>
-          <button className="enter" onClick={() => {
-            const next = advanceWeek(game, weekPlan)
-            setGame(next)
-            setCalendarMonth(monthOfWeek(next.week))
-            setWeekPlan({})
-            setDecisionIdx(0)
-            setBattleOver(false)
-            setPhase(next.lastBattle ? 'battle' : 'decisions')
-          }}>⏭ Proceed to Next Week</button>
+        {/* Action rail */}
+        <div className="rail">
+          <button className="railbtn primary" onClick={doAdvanceWeek}>⏭<br />Advance<br />Week</button>
+          <button className="railbtn" onClick={() => setGame((g) => goto(g, 'town'))}>🏛<br />Back to<br />Town</button>
+          <button className={'railbtn' + (showCalendar ? ' on' : '')} onClick={() => setShowCalendar((v) => !v)}>📅<br />Tournaments</button>
         </div>
       </div>
     </>
@@ -775,7 +898,7 @@ function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSt
 }
 
 // --- Persistence: the whole GameState is plain JSON, saved on every change ---
-const SAVE_KEY = 'monster-tamer-save-v1'
+const SAVE_KEY = 'monster-tamer-save-v2' // v2: Career gained loadout/tournamentHistory (1b/1c)
 const randomSeed = () => Math.random().toString(36).slice(2, 8)
 
 function loadSavedGame(): GameState | null {
