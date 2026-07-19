@@ -20,6 +20,7 @@ import {
   newGame, offerMonster, promoteMonster, rewardMultiplier, signUp, thaw, tournamentCalendarFor,
   upgradeBarn, yearOfWeek,
 } from './town'
+import { APP_VERSION } from './version'
 
 const STAT_COLOR: Record<Stat, string> = {
   STR: 'var(--str)', DEX: 'var(--dex)', CON: 'var(--con)',
@@ -703,7 +704,7 @@ export function App() {
 
   return (
     <div className="app">
-      <h1>Monster Tamer <span className="tag">/ prototype</span></h1>
+      <h1>Monster Tamer <span className="tag">/ prototype</span> <span className="version">v{APP_VERSION}</span></h1>
       <div className="tabs">
         <button className={'tab' + (view === 'game' ? ' on' : '')} onClick={() => setView('game')}>🎮 Game</button>
         <button className={'tab' + (view === 'sandbox' ? ' on' : '')} onClick={() => setView('sandbox')}>⚔️ Sandbox</button>

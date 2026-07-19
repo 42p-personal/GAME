@@ -134,7 +134,7 @@ export function ArenaBattle({ a, b, result, onDone }: { a: Monster; b: Monster; 
   const ko = (side: BattleSide) => (done && ((side === 'A' && result.winner === 'B') || (side === 'B' && result.winner === 'A')) ? ' ko' : '')
 
   return (
-    <div className="arena">
+    <div className="battle-arena">
       <div className="arena-hud">
         <div className="arena-fighter-hud">
           <div className="ahn">{a.name} <span className="dim">· {a.className}</span></div>
