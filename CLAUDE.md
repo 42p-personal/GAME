@@ -50,9 +50,17 @@ conserve, when to block (low HP / out of MP / expecting a big hit) vs attack.
   structured `BattleEvent[]` stream (hits, misses, stances, dots, ultimates,
   HP/MP snapshots) that the arena renders as beats — lunges, projectiles,
   floating numbers, KO topple, 1×/2×/4×/skip. Sandbox uses it too.
-- KNOWN GAP: Wood-league tournaments only exist in months 1 & 11 — new monsters
-  can wait ~10 months for their first fight. Calendar needs a Wood/Copper event
-  every month or two.
+
+### 2b. Tournament economy (user spec 2026-07-19) — DONE on `preview`
+- 32-event calendar: Wood EVERY month (the financial backbone — enforced by
+  validate.ts), Copper even months, Tin quarterly, Bronze ×3, Iron ×2, Silver+
+  one prestige event each per year
+- Monsters may enter their own league or ANY league below it, never above
+- `rewardMultiplier`: same league 100%, 1 league above the event 50%, 2+ 20%
+  (applies to gold AND exp; UI warns before sign-up, log records the reduction)
+- Rivals scale to the TOURNAMENT league budget (cap × 3.5, never above the
+  player's total) — punching down means stomping genuine league-locals
+- One entry per event per month (`GameState.enteredThisMonth`, resets monthly)
 
 ### 3. Tournament Rewards polish
 - Rare items: champion-only drops (TBD)

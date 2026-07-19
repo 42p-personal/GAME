@@ -17,7 +17,7 @@ import {
   BULK_FOOD_COST, ELITE_LICENSE_COST, FUSION_COST, GameState, RENTAL_PER_FROZEN, SPECIAL_LICENSE_COST,
   TOURNAMENT_CALENDAR, WeekPlanEntry, advanceWeek, barnCost, buyBulkFood, buyEliteLicense, buyMonster,
   buySpecialLicense, cancelSignUp, eligibleForTournament, freeze, fuse, fusionRoom, goto, monthOfWeek,
-  newGame, offerMonster, promoteMonster, signUp, thaw, upgradeBarn,
+  newGame, offerMonster, promoteMonster, rewardMultiplier, signUp, thaw, upgradeBarn,
 } from './town'
 
 const STAT_COLOR: Record<Stat, string> = {
@@ -614,7 +614,10 @@ function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSt
             const isCurrentMonth = calendarMonth === currentMonth
             const signedHere = game.pendingTournament?.tournamentId === t.id
             const signedMonster = signedHere ? game.stable.find((c) => c.id === game.pendingTournament!.monsterId) : undefined
+            const alreadyEntered = (game.enteredThisMonth ?? []).includes(t.id)
             const pick = signupPick[t.id] ?? eligible[0]?.id
+            const picked = eligible.find((c) => c.id === pick) ?? eligible[0]
+            const mult = picked ? rewardMultiplier(picked.licenseIndex, t.league) : 1
             return (
               <div key={t.id} className="offer" style={{ padding: '0.5rem', borderBottom: '1px solid var(--line)' }}>
                 <div><b>{t.name}</b> — {t.league} league</div>
@@ -624,19 +627,26 @@ function RanchView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSt
                     ✅ {signedMonster?.name ?? '?'} competes this week{' '}
                     <button className="ghost" onClick={() => setGame((g) => cancelSignUp(g))}>cancel</button>
                   </div>
+                ) : alreadyEntered ? (
+                  <div className="dim">✔ Already competed this month.</div>
                 ) : !isCurrentMonth ? (
                   <div className="dim">Sign-ups open in Month {t.month}.</div>
                 ) : eligible.length === 0 ? (
-                  <div className="dim">Requires a {t.league}-league monster.</div>
+                  <div className="dim">Requires a {t.league}-league monster (or higher).</div>
                 ) : game.pendingTournament ? (
                   <div className="dim">Already entered a tournament this week.</div>
                 ) : (
-                  <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center' }}>
-                    <select value={pick} onChange={(ev) => setSignupPick((sp) => ({ ...sp, [t.id]: ev.target.value }))}>
-                      {eligible.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.species.name})</option>)}
-                    </select>
-                    <button className="enter" onClick={() => setGame((g) => signUp(g, t.id, pick))}>Sign Up →</button>
-                  </div>
+                  <>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center' }}>
+                      <select value={pick} onChange={(ev) => setSignupPick((sp) => ({ ...sp, [t.id]: ev.target.value }))}>
+                        {eligible.map((c) => <option key={c.id} value={c.id}>{c.name} ({LEAGUES[c.licenseIndex].name})</option>)}
+                      </select>
+                      <button className="enter" onClick={() => setGame((g) => signUp(g, t.id, pick))}>Sign Up →</button>
+                    </div>
+                    {mult < 1 && (
+                      <div className="dim">⚠ {picked?.name} is above {t.league} league — rewards reduced to {Math.round(mult * 100)}%.</div>
+                    )}
+                  </>
                 )}
               </div>
             )

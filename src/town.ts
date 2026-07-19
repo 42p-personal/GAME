@@ -24,21 +24,61 @@ export interface Tournament {
   rewards: { gold: number; exp: number }
 }
 
-// Calendar: 12 tournaments, one per month, ranging from Wood to Gold leagues
+// Calendar (§3): the lower leagues run all year — repeating them is the game's
+// financial backbone. Wood monthly, Copper bi-monthly, Tin quarterly, Bronze
+// tri-annually, Iron twice; Silver+ are one-per-year prestige events.
+// A monster may also enter BELOW its league at reduced rewards (§rewardMultiplier).
 export const TOURNAMENT_CALENDAR: Tournament[] = [
-  { id: 'jan-wood', name: 'January Classic', month: 1, league: 'Wood', rewards: { gold: 100, exp: 50 } },
-  { id: 'feb-copper', name: 'February Clash', month: 2, league: 'Copper', rewards: { gold: 150, exp: 75 } },
-  { id: 'mar-tin', name: 'March Melee', month: 3, league: 'Tin', rewards: { gold: 200, exp: 100 } },
-  { id: 'apr-bronze', name: 'April Bout', month: 4, league: 'Bronze', rewards: { gold: 250, exp: 125 } },
-  { id: 'may-iron', name: 'May Invitational', month: 5, league: 'Iron', rewards: { gold: 300, exp: 150 } },
-  { id: 'jun-silver', name: 'June Showdown', month: 6, league: 'Silver', rewards: { gold: 350, exp: 175 } },
-  { id: 'jul-gold', name: 'July Grand Prix', month: 7, league: 'Gold', rewards: { gold: 400, exp: 200 } },
-  { id: 'aug-plat', name: 'August Crown', month: 8, league: 'Platinum', rewards: { gold: 450, exp: 225 } },
-  { id: 'sep-masters', name: 'September Summit', month: 9, league: 'Masters', rewards: { gold: 500, exp: 250 } },
-  { id: 'oct-elite', name: 'October Elite', month: 10, league: 'Tamer Elite', rewards: { gold: 600, exp: 300 } },
-  { id: 'nov-wood2', name: 'November Novice', month: 11, league: 'Wood', rewards: { gold: 100, exp: 50 } },
-  { id: 'dec-charity', name: 'December Dash', month: 12, league: 'Copper', rewards: { gold: 150, exp: 75 } },
+  // Wood circuit (cap 100) — one event every month
+  { id: 'wood-m1', name: 'January Classic', month: 1, league: 'Wood', rewards: { gold: 100, exp: 50 } },
+  { id: 'wood-m2', name: 'Sapling Cup', month: 2, league: 'Wood', rewards: { gold: 100, exp: 50 } },
+  { id: 'wood-m3', name: 'Splinter Series', month: 3, league: 'Wood', rewards: { gold: 100, exp: 50 } },
+  { id: 'wood-m4', name: 'Timber Trial', month: 4, league: 'Wood', rewards: { gold: 100, exp: 50 } },
+  { id: 'wood-m5', name: 'Grove Gauntlet', month: 5, league: 'Wood', rewards: { gold: 100, exp: 50 } },
+  { id: 'wood-m6', name: 'Heartwood Open', month: 6, league: 'Wood', rewards: { gold: 100, exp: 50 } },
+  { id: 'wood-m7', name: 'Sawdust Scuffle', month: 7, league: 'Wood', rewards: { gold: 100, exp: 50 } },
+  { id: 'wood-m8', name: 'Branchline Bout', month: 8, league: 'Wood', rewards: { gold: 100, exp: 50 } },
+  { id: 'wood-m9', name: 'Rootstock Rally', month: 9, league: 'Wood', rewards: { gold: 100, exp: 50 } },
+  { id: 'wood-m10', name: 'Lumber League', month: 10, league: 'Wood', rewards: { gold: 100, exp: 50 } },
+  { id: 'wood-m11', name: 'November Novice', month: 11, league: 'Wood', rewards: { gold: 100, exp: 50 } },
+  { id: 'wood-m12', name: 'Yule Log Jam', month: 12, league: 'Wood', rewards: { gold: 100, exp: 50 } },
+  // Copper circuit (cap 200) — even months
+  { id: 'copper-m2', name: 'February Clash', month: 2, league: 'Copper', rewards: { gold: 150, exp: 75 } },
+  { id: 'copper-m4', name: 'Kettle Cup', month: 4, league: 'Copper', rewards: { gold: 150, exp: 75 } },
+  { id: 'copper-m6', name: 'Verdigris Trophy', month: 6, league: 'Copper', rewards: { gold: 150, exp: 75 } },
+  { id: 'copper-m8', name: 'Penny Prix', month: 8, league: 'Copper', rewards: { gold: 150, exp: 75 } },
+  { id: 'copper-m10', name: 'Ingot Invitational', month: 10, league: 'Copper', rewards: { gold: 150, exp: 75 } },
+  { id: 'copper-m12', name: 'December Dash', month: 12, league: 'Copper', rewards: { gold: 150, exp: 75 } },
+  // Tin circuit (cap 300) — quarterly
+  { id: 'tin-m3', name: 'March Melee', month: 3, league: 'Tin', rewards: { gold: 200, exp: 100 } },
+  { id: 'tin-m6', name: 'Tin Whistle Open', month: 6, league: 'Tin', rewards: { gold: 200, exp: 100 } },
+  { id: 'tin-m9', name: 'Alloy Rumble', month: 9, league: 'Tin', rewards: { gold: 200, exp: 100 } },
+  { id: 'tin-m12', name: 'Solder Cup', month: 12, league: 'Tin', rewards: { gold: 200, exp: 100 } },
+  // Bronze (cap 400) — three a year
+  { id: 'bronze-m4', name: 'April Bout', month: 4, league: 'Bronze', rewards: { gold: 250, exp: 125 } },
+  { id: 'bronze-m8', name: 'Bronze Bell Classic', month: 8, league: 'Bronze', rewards: { gold: 250, exp: 125 } },
+  { id: 'bronze-m12', name: 'Patina Prize', month: 12, league: 'Bronze', rewards: { gold: 250, exp: 125 } },
+  // Iron (cap 500) — twice a year
+  { id: 'iron-m5', name: 'May Invitational', month: 5, league: 'Iron', rewards: { gold: 300, exp: 150 } },
+  { id: 'iron-m11', name: 'Anvil Championship', month: 11, league: 'Iron', rewards: { gold: 300, exp: 150 } },
+  // Prestige tier — one each per year
+  { id: 'silver-m6', name: 'June Showdown', month: 6, league: 'Silver', rewards: { gold: 350, exp: 175 } },
+  { id: 'gold-m7', name: 'July Grand Prix', month: 7, league: 'Gold', rewards: { gold: 400, exp: 200 } },
+  { id: 'plat-m8', name: 'August Crown', month: 8, league: 'Platinum', rewards: { gold: 450, exp: 225 } },
+  { id: 'masters-m9', name: 'September Summit', month: 9, league: 'Masters', rewards: { gold: 500, exp: 250 } },
+  { id: 'elite-m10', name: 'October Elite', month: 10, league: 'Tamer Elite', rewards: { gold: 600, exp: 300 } },
 ]
+
+export const leagueIndexOf = (league: string): number => LEAGUES.findIndex((l) => l.name === league)
+
+// Competing below your league pays less: same league 100%, one league above the
+// event 50%, two or more above 20%. (You can never enter above your license.)
+export function rewardMultiplier(monsterLeagueIndex: number, tournamentLeague: string): number {
+  const d = monsterLeagueIndex - leagueIndexOf(tournamentLeague)
+  if (d <= 0) return 1
+  if (d === 1) return 0.5
+  return 0.2
+}
 
 // A banked genome: enough of a monster to restore it (thaw) or fuse it later.
 export interface Frozen {
@@ -89,6 +129,7 @@ export interface GameState {
   nextId: number // monotonic id counter, survives save/load
   pendingTournament: PendingTournament | null
   lastBattle: LastBattle | null
+  enteredThisMonth: string[] // tournament ids already competed in this month (one entry per event)
 }
 
 // Calendar helpers off the global week clock.
@@ -120,6 +161,7 @@ export function newGame(seed = 'start'): GameState {
     nextId: 0,
     pendingTournament: null,
     lastBattle: null,
+    enteredThisMonth: [],
   }
 }
 
@@ -214,6 +256,9 @@ export function advanceWeek(g: GameState, plans: Record<string, WeekPlanEntry>):
   // Tournament battle (if signed up) fights with this week's training applied.
   const { gold: goldAfterBattle, lastBattle } = resolveTournament(g, stable, gold)
   gold = goldAfterBattle
+  const entered = lastBattle && g.pendingTournament
+    ? [...(g.enteredThisMonth ?? []), g.pendingTournament.tournamentId]
+    : (g.enteredThisMonth ?? [])
 
   const week = g.week + 1
   const monthTurned = week % WEEKS_PER_MONTH === 0
@@ -228,6 +273,7 @@ export function advanceWeek(g: GameState, plans: Record<string, WeekPlanEntry>):
       : g.market,
     pendingTournament: null,
     lastBattle,
+    enteredThisMonth: monthTurned ? [] : entered,
   }
 }
 
@@ -239,38 +285,45 @@ export function promoteMonster(g: GameState, id: string): GameState {
 }
 
 // --- Tournaments (§3): sign up in the review phase, battle resolves on the weekly tick ---
+// A monster may enter its own league's events (full rewards) or any league BELOW
+// it (reduced rewards via rewardMultiplier) — never above its license.
 export function eligibleForTournament(g: GameState, t: Tournament): Career[] {
-  return g.stable.filter((c) => !c.retired && LEAGUES[c.licenseIndex].name === t.league)
+  const tIdx = leagueIndexOf(t.league)
+  return g.stable.filter((c) => !c.retired && c.licenseIndex >= tIdx)
 }
 
 export function signUp(g: GameState, tournamentId: string, monsterId: string): GameState {
   const t = TOURNAMENT_CALENDAR.find((x) => x.id === tournamentId)
   if (!t || monthOfWeek(g.week) !== t.month) return g
+  if ((g.enteredThisMonth ?? []).includes(tournamentId)) return g // one entry per event
   const c = g.stable.find((x) => x.id === monsterId)
-  if (!c || c.retired || LEAGUES[c.licenseIndex].name !== t.league) return g
+  if (!c || c.retired || c.licenseIndex < leagueIndexOf(t.league)) return g
   return { ...g, pendingTournament: { tournamentId, monsterId } }
 }
 
 export const cancelSignUp = (g: GameState): GameState => ({ ...g, pendingTournament: null })
 
-// A rival scaled to the player's total stats (±15%), so fights stay competitive.
-// Exclusive body types only show up as rivals in Silver-league events and above.
+// A rival appropriate to the TOURNAMENT's league: its total stats target the
+// league's typical competitive budget (cap × 3.5), never exceeding the player's
+// own total (so at-league fights stay close, and punching down means stomping
+// genuinely weaker league-locals). Exclusive bodies only appear Silver+.
 const EXCLUSIVE_BODIES = ['Draconic', 'Abyssal', 'Mythical']
-function generateRival(seedBase: string, player: Monster, allowExclusive: boolean): Monster {
+function generateRival(seedBase: string, player: Monster, t: Tournament): Monster {
+  const allowExclusive = leagueIndexOf(t.league) >= leagueIndexOf('Silver')
   const playerTotal = STATS.reduce((sum, k) => sum + player.stats[k], 0)
+  const leagueBudget = LEAGUES[leagueIndexOf(t.league)].cap * 3.5
+  const targetTotal = Math.min(playerTotal, leagueBudget)
   for (let i = 0; i < 50; i++) {
     const seed = 'rival-' + hashString(seedBase + ':' + i).toString(36)
     const preview = generateMonster(seed, { train: 0 })
     if (!allowExclusive && EXCLUSIVE_BODIES.includes(preview.species.body)) continue
     const baseTotal = STATS.reduce((sum, k) => sum + preview.stats[k], 0)
     const rng = mulberry32(hashString(seed + ':scale'))
-    const train = Math.max(0, Math.round((playerTotal - baseTotal) * (0.85 + rng() * 0.3)))
+    const train = Math.max(0, Math.round((targetTotal - baseTotal) * (0.85 + rng() * 0.3)))
     return generateMonster(seed, { train })
   }
   return generateMonster('rival-fallback-' + seedBase, { train: 0 })
 }
-
-const HIGH_LEAGUES = ['Silver', 'Gold', 'Platinum', 'Masters', 'Tamer Elite']
 
 // Resolve a signed-up tournament using the post-week stable. Mutates `stable`
 // in place (called from advanceWeek on its freshly-built array).
@@ -283,23 +336,28 @@ function resolveTournament(g: GameState, stable: Career[], gold: number): { gold
 
   const c = stable[idx]
   const playerMonster = careerMonster(c)
-  const rival = generateRival(g.seed + ':' + g.week + ':' + t.id, playerMonster, HIGH_LEAGUES.includes(t.league))
+  const rival = generateRival(g.seed + ':' + g.week + ':' + t.id, playerMonster, t)
   const result = simulateBattle(playerMonster, rival, c.happiness, 5)
   const won = result.winner === 'A'
+
+  // Competing below your league pays a fraction (100% / 50% / 20%).
+  const mult = rewardMultiplier(c.licenseIndex, t.league)
+  const goldPrize = Math.round(t.rewards.gold * mult)
+  const reducedNote = mult < 1 ? ` (${Math.round(mult * 100)}% — below ${LEAGUES[c.licenseIndex].name} league)` : ''
 
   const nc: Career = { ...c, stats: { ...c.stats }, log: [...c.log] }
   let expNote = ''
   if (won) {
-    gold += t.rewards.gold
+    gold += goldPrize
     const prof = trainingProfileFor(c.species)
-    const pts = Math.max(2, Math.round(t.rewards.exp / 10))
+    const pts = Math.max(1, Math.round((t.rewards.exp * mult) / 10))
     const p1 = Math.ceil(pts * 0.6)
     const p2 = pts - p1
     const cap = LEAGUES[c.licenseIndex].cap
     nc.stats[prof.primary] = Math.min(cap, nc.stats[prof.primary] + p1)
     nc.stats[prof.secondary] = Math.min(cap, nc.stats[prof.secondary] + p2)
-    expNote = `${prof.primary} +${p1} · ${prof.secondary} +${p2}`
-    nc.log.push(`🏆 Won the ${t.name} vs ${rival.name} the ${rival.species.name}! +${t.rewards.gold}g · ${expNote}.`)
+    expNote = p2 > 0 ? `${prof.primary} +${p1} · ${prof.secondary} +${p2}` : `${prof.primary} +${p1}`
+    nc.log.push(`🏆 Won the ${t.name} vs ${rival.name} the ${rival.species.name}! +${goldPrize}g${reducedNote} · ${expNote}.`)
   } else if (result.winner === 'draw') {
     nc.log.push(`🏳️ Drew the ${t.name} vs ${rival.name} the ${rival.species.name}. No rewards.`)
   } else {
@@ -311,7 +369,7 @@ function resolveTournament(g: GameState, stable: Career[], gold: number): { gold
     gold,
     lastBattle: {
       tournamentName: t.name, playerMonster, rival, result, won,
-      goldReward: won ? t.rewards.gold : 0, expNote,
+      goldReward: won ? goldPrize : 0, expNote,
     },
   }
 }

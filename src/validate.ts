@@ -1,10 +1,11 @@
 // Dev-only design validation. Catches data drift that produced real bugs before:
 // species whose stats derive a different class than their naturalClass, duplicate
 // class stat-pairs (which shadow each other), and degenerate stat spreads.
-import { BODY_ELEMENT, BodyType, CLASSES, STATS, classForStats } from './core'
+import { BODY_ELEMENT, BodyType, CLASSES, LEAGUES, STATS, classForStats } from './core'
 import { SPECIES } from './species'
 import { ALL_MOVES } from './moves'
 import { trainingProfileFor } from './game'
+import { TOURNAMENT_CALENDAR } from './town'
 
 export function validateDesign(): void {
   const problems: string[] = []
@@ -63,6 +64,21 @@ export function validateDesign(): void {
     if (mv.type === 'damage' && mv.power <= 0) problems.push(`MOVES: damage move ${mv.name} has no power.`)
   }
 
+  // Tournament calendar: valid leagues/months, unique ids, and the economy rule —
+  // a Wood-league event must run EVERY month (repeatable low-league income).
+  const tourIds = new Set<string>()
+  const woodMonths = new Set<number>()
+  for (const t of TOURNAMENT_CALENDAR) {
+    if (tourIds.has(t.id)) problems.push(`CALENDAR: duplicate tournament id ${t.id}.`)
+    tourIds.add(t.id)
+    if (!LEAGUES.some((l) => l.name === t.league)) problems.push(`CALENDAR: ${t.name} has unknown league "${t.league}".`)
+    if (t.month < 1 || t.month > 12) problems.push(`CALENDAR: ${t.name} has invalid month ${t.month}.`)
+    if (t.league === 'Wood') woodMonths.add(t.month)
+  }
+  for (let mo = 1; mo <= 12; mo++) {
+    if (!woodMonths.has(mo)) problems.push(`CALENDAR: no Wood-league event in month ${mo} — new monsters have no income there.`)
+  }
+
   if (problems.length) console.warn('[design-validation] issues found:\n - ' + problems.join('\n - '))
-  else console.info(`[design-validation] ${SPECIES.length} species, ${CLASSES.length} classes, ${ALL_MOVES.length} moves — all consistent ✓`)
+  else console.info(`[design-validation] ${SPECIES.length} species, ${CLASSES.length} classes, ${ALL_MOVES.length} moves, ${TOURNAMENT_CALENDAR.length} tournaments — all consistent ✓`)
 }
