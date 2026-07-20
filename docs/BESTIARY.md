@@ -20,7 +20,7 @@
 > is a story about *that monster*, not its species. (Class also determines battle tactics — see
 > CLAUDE.md item 4 — keyed off current stats at fight time, same as the label.)
 
-Each entry: **species · common name · element (resist/weak)**, an **Appearance** line (reference for
+Each entry: **species · common name · training (major/flaw)**, an **Appearance** line (reference for
 sprite/concept art — not yet built; every species currently shares one 16×16 silhouette per body type,
 tinted by a per-species hue, per `src/sprites.ts`), and a backstory.
 
@@ -36,15 +36,15 @@ Abyssal, Mythical) aren't in this pass.
 
 ---
 
-## Mammals — *sturdy, grounded; resist 💧 Water, weak to 💨 Air*
-### Theme: Displacement & Renewed Purpose
+## Mammals — *sturdy, grounded; minor STR; resist 💧 Water, weak to 💨 Air*
+### Bio: Displacement & Renewed Purpose
 
 The land the mammals once held — cliffs, mountain roads, forests, prides — has been steadily reshaped:
 roads paved, timber felled, territories fragmented, packs scattered. Every mammal below has lost the
 place or role that once defined them. None of them are still looking backward. Each has found, or is
 still hunting for, a reason to matter again.
 
-### Kongrath — silverback gorilla · resist Water / weak Air
+### Kongrath — silverback gorilla · minor only
 **Appearance:** Broad, heavy-shouldered silverback with a wide grey saddle of fur across his back and
 forearms like tree trunks. Knuckles callused from a lifetime of ground-slams; still, watchful eyes that
 rarely need to blink first.
@@ -57,7 +57,7 @@ Circuit looking for the same thing he always had: someone worth guarding, even i
 own reputation. Every **Chest Beat** is the same warning he used to give circling predators, and every
 **Silverback Rampage** is thrown for teammates who, for once, get to watch instead of hide.
 
-### Aegisox — armoured ox · resist Water / weak Air
+### Aegisox — armoured ox · major CON / flaw DEX
 **Appearance:** Massive, square-shouldered ox plated in weathered iron-grey hide that folds like natural
 armor. Broad flat horns, deep-set patient eyes, and the slow deliberate weight of something built to not
 be moved.
@@ -68,7 +68,7 @@ caravans traded their oxen for engines, she found herself a wall with nothing to
 endless patience and her **Ironclad** stance to the Circuit, reasoning that in the arena, at least, a
 wall still has worth. Stoic and protective, she fights to shield her teammates more than to win.
 
-### Maneleo — lion pride-leader · resist Water / weak Air
+### Maneleo — lion pride-leader · major CHA / flaw CON
 **Appearance:** Golden-maned lion with a scarred muzzle and proud, upright bearing. The mane is kept
 immaculate despite the scars — he carries himself like he's still being watched by a pride that no
 longer exists.
@@ -78,7 +78,7 @@ off to die in exile; Maneleo refused. He entered the Circuit to rebuild his name
 importantly, to gather a new pride — a team of monsters who'll stand and roar at his side. Every
 **Rallying Roar** is a small act of defiance against the day he was cast out.
 
-### Grivvel — wolverine brawler · resist Water / weak Air
+### Grivvel — wolverine · major DEX / flaw CHA
 **Appearance:** Compact, wiry-muscled wolverine with matted dark-brown fur, permanently bared teeth, and
 fresh scratches he never bothers to let heal. Low, aggressive stance — always coiled, never relaxed.
 
@@ -90,7 +90,7 @@ eaten away season by season. Sharp-tongued and always half a step from a fight, 
 opponent with **Rend**, and quicker to pick the next one before the last has cooled — some restlessness,
 it turns out, doesn't go away just because you've finally found somewhere to stand.
 
-### Ursath — great bear · resist Water / weak Air
+### Ursath — great bear · major WIS / flaw INT
 **Appearance:** Enormous shaggy brown bear, slow-moving, with claw-scarred forepaws and a calm, unhurried
 gaze. Fur matted from long hibernations; moves like a landslide that hasn't started yet.
 
@@ -101,26 +101,26 @@ Maul** landing true. The oldest fighters speak of him gently. He never rushes; h
 
 ---
 
-## Avians — *swift, keen; resist 💨 Air, weak to 💧 Water*
-### Theme: Scarcity, Migration, and the Long Way Back
+## Avians — *swift, keen; minor WIS; resist 💨 Air, weak to 💧 Water*
+### Bio: Scarcity, Migration, and the Long Way Back
 
 Years of drought and shrinking hunting grounds forced the old flightways further from home than they'd
 ever gone, scattering a generation of flocks across half a continent. The old grounds are recovering
 now. Some are finally flying back. Some never really wanted to.
 
-### Skyrend — peregrine raptor · resist Air / weak Water
-**Appearance:** Sleek slate-blue raptor with a hooked yellow beak and folded, dive-built wings. Sharp
-golden eyes fixed forward, body always angled like she's about to drop.
+### Pinguox — penguin · major CON
+**Appearance:** Stocky, torpedo-shaped body in sharp black-and-white countershading, flippers folded
+tight, a determined waddle that breaks into a sprint the instant the ice gives way to water.
 
-Skyrend was born mid-migration, in a generation that never saw the ancestral cliffs her parents fled when
-the hunting grounds first dried up. She taught herself to dive using whatever crag or rooftop the flock
-passed through, chasing a perfect, unanswerable **Death from Above** with no one left to teach her the
-old way properly. Word has finally reached the flock that the old cliffs are green again, and she's
-flying home for the first time in her life — testing every wingbeat of the journey on the Circuit along
+Pinguox was born mid-trek, in a generation that never saw the ancestral colony her parents fled when the
+ice sheet first fractured beneath them. She taught herself to dive using whatever floe or harbor wall the
+colony passed through, chasing a perfect, unanswerable **Death from Above** with no one left to teach her
+the old way properly. Word has finally reached the colony that the ice has reformed, and she's making the
+long trek home for the first time in her life — testing every plunge of the journey on the Circuit along
 the way. Aloof and exacting, she regards most opponents as practice — until one survives her strike, and
 then she regards them with something close to love.
 
-### Strixil — scholar owl · resist Air / weak Water
+### Strixil — scholar owl · major INT / flaw STR
 **Appearance:** Round-faced owl with soft grey-brown plumage and oversized amber eyes. Wears her feathers
 like a scholar's robe, perpetually still except for a slow, deliberate blink.
 
@@ -131,18 +131,19 @@ patience for company. Now the flock is trickling home in twos and threes, and sh
 archivist they all quietly rely on. Calm and quietly formidable, she'd rather out-think a foe and fuel her
 team's magic with **Wellspring** than trade blows.
 
-### Zephyri — swallow · resist Air / weak Water
-**Appearance:** Tiny, quick, iridescent blue-black swallow with a forked tail that never stops flicking.
-Always mid-motion — blurred at the edges even when technically standing still.
+### Balaenix — shoebill · major STR / flaw CHA
+**Appearance:** Tall grey stork with an enormous, clog-shaped bill and pale, unblinking eyes. Stands
+utterly motionless for hours, broken only by a slow, deliberate head-tilt.
 
-Zephyri hatched somewhere over open country during the worst of the scattering, and has never really
-stopped moving since. While the rest of the flock finally settles back into the recovered roosts, she's
-discovered she doesn't actually want to. To her the arena is simply the grandest playground of speed a
-restless life ever built, and the crowd's gasp when she blurs untouched through a **Thousand Cuts** is
-the only homecoming she's interested in. Playful and impossible to pin down, she competes for the sheer
-joy of never being caught, or settled, or still.
+Balaenix hatched in a wetland the flock abandoned mid-scattering, and — unlike the rest — never really
+wanted to leave. While the flock finally resettles the recovered roosts, she's discovered that stillness
+suits her better than any migration ever did. She can stand motionless in silt for hours, a patience the
+rest of the flock never had time to learn, and treats the arena as one long, glorious wait for the single
+perfect opening. The crowd holds its breath right along with her, and the instant of a **Sudden Reckoning**
+is the only homecoming she's interested in. Unnerving and unhurried, she competes for the sheer certainty
+of an ambush that never misses.
 
-### Corvaan — raven · resist Air / weak Water
+### Corvaan — raven · minor only
 **Appearance:** Glossy black raven with a mischievous tilt to the head and a beak that seems to smirk. A
 stolen glint of trinkets — a chain, a ring — tangled permanently in his neck feathers.
 
@@ -153,7 +154,7 @@ instead of a nest these days, competing to be known as the cleverest, most theat
 Circuit. Every **Doomcaw** is delivered with a showman's flourish and just a hint of menace, and not even
 the smallest bit of homesickness.
 
-### Larkessa — songlark · resist Air / weak Water
+### Larkessa — songlark · major CHA / flaw INT
 **Appearance:** Warm amber-and-cream songbird with a puffed, theatrical chest and a wide expressive throat
 built for volume. Feathers ruffle like a performer taking a bow.
 
@@ -166,15 +167,15 @@ and always playing to the back row, the way a rallying call always has to.
 
 ---
 
-## Marsupials — *charismatic, agile; resist ⛰️ Earth, weak to 🔥 Fire*
-### Theme: The Itinerant Fair
+## Marsupials — *charismatic, agile; minor CHA; resist ⛰️ Earth, weak to 🔥 Fire*
+### Bio: The Itinerant Fair
 
 Marsupial country burns easily and often — dry brush, quick winds, unpredictable seasons — so nobody in
 this family ever built anything meant to last. Marsupial culture is portable: traveling troupes, fairs
 that assemble and vanish and reassemble somewhere else, a sense of home built from company kept rather
 than ground held.
 
-### Bruxaroo — boxing kangaroo · resist Earth / weak Fire
+### Bruxaroo — boxing kangaroo · major STR / flaw INT
 **Appearance:** Broad-chested red kangaroo with taped forepaws, bandage-wrapped like a boxer's. Confident
 grin, thick tail planted like a third leg mid-stance.
 
@@ -184,7 +185,7 @@ genuine competition, genuine glory, and the honest thud of a **Knockout Combo** 
 Boisterous and big-hearted, he's always up for one more round, at whatever fairground the world sets up
 next.
 
-### Koalio — crooning koala · resist Earth / weak Fire
+### Koalio — crooning koala · major CON / flaw STR
 **Appearance:** Round, soft grey koala with heavy-lidded sleepy eyes and huge tufted ears. Moves slow,
 speaks slower, always looks one breath from a lullaby.
 
@@ -195,7 +196,7 @@ lullaby. He entered the Circuit to prove a quiet thesis: that gentleness can win
 rather sing an opponent into a peaceful **Dreamsong** than strike them, and the fact that this often *is*
 how he wins delights him to no end. Serene, persuasive, and far more dangerous than he looks.
 
-### Quokkade — quokka · resist Earth / weak Fire
+### Quokkade — quokka · minor only
 **Appearance:** Small, round-cheeked quokka with a permanent wide grin and bright inquisitive eyes.
 Bounces rather than walks, practically vibrating with cheer.
 
@@ -204,7 +205,7 @@ the crowds, the friendships, and above all the party after every match — she t
 in whatever field the troupe has pitched camp, win or lose. Sunny and nimble, she's beaten fighters twice
 her size simply because they couldn't bring themselves to take her seriously until it was too late.
 
-### Sylvaglide — sugar glider · resist Earth / weak Fire
+### Sylvaglide — sugar glider · major WIS
 **Appearance:** Tiny grey glider with huge dark eyes and a stretched membrane between limbs like a small
 cape. Perpetually crouched, as if about to leap.
 
@@ -214,7 +215,7 @@ prove that the smallest competitor in the bracket can still soar clean over the 
 above in a dizzying **Skydance**. Bold and acrobatic, she's spent her whole career being underestimated —
 which is, she's found, an excellent place to attack from.
 
-### Tazzik — Tasmanian devil · resist Earth / weak Fire
+### Tazzik — Tasmanian devil · major DEX / flaw CON
 **Appearance:** Stocky black-furred devil with a wide fanged jaw, patchy scars, and a constant low snarl.
 Restless and twitchy — always mid-fidget.
 
@@ -227,25 +228,25 @@ his storm and grin back.
 
 ---
 
-## Aquatics — *wise, arcane; resist 🔥 Fire, weak to ⛰️ Earth*
-### Theme: The Deep Stirs
+## Aquatics — *wise, ancient; minor INT; resist 🔥 Fire, weak to ⛰️ Earth*
+### Bio: The Deep Stirs
 
 For longer than anyone above the waves can measure, the deep trenches kept to themselves — vast, patient,
 undisturbed. Something is changing. The depths are stirring, and one by one, the oldest and newest of the
 aquatic world alike are finding their way to the surface for the first time in generations.
 
-### Maelurk — octopus mage · resist Fire / weak Earth
+### Maelurk — octopus · minor only
 **Appearance:** Deep-purple octopus with luminous ink-blue rune markings along each of eight arms. Drifts
 rather than walks, arms in constant idle motion.
 
 Maelurk was one of the first to feel the trenches stir, and unlike most of his kind he swam straight
 toward the strangeness instead of away from it. He surfaced for no better reason than curiosity — the
 surface world simply *looked interesting* — and stayed for the Circuit, delighted by the chance to test
-eight-armed spellwork against creatures utterly unlike anything in his trenches. Inquisitive and
+eight-armed reach against creatures utterly unlike anything in his trenches. Inquisitive and
 cheerfully alien, he treats each **Abyssal Grasp** less as an attack than as an experiment he's very much
 enjoying.
 
-### Nautilux — nautilus · resist Fire / weak Earth
+### Nautilux — nautilus · major CON / flaw STR
 **Appearance:** Spiral-shelled nautilus in banded cream and rust stripes, ancient and weathered. Slow,
 deliberate, shell catching light like polished stone.
 
@@ -254,47 +255,48 @@ the deep dark now. She surfaced not to conquer but to *endure*, taking a slow, d
 **Pearl Barrier** no storm — old or new — has ever broken. Timeless and gentle, she measures victory in
 the teammates still standing behind her at the final bell.
 
-### Serapelle — sea-turtle sage · resist Fire / weak Earth
-**Appearance:** Enormous barnacle-crusted sea turtle with a deep-green shell worn smooth by age. Moves
-unhurried, eyes half-closed in permanent, patient calm.
+### Carcharun — reef shark · major STR / flaw CHA
+**Appearance:** Ancient grey reef shark, countless pale scars crossing weathered skin. Patrols in slow,
+deliberate figure-eights, eyes calm and unreadable.
 
-The oldest competitor in the Circuit's records, Serapelle surfaced long before anyone spoke of the
+The oldest competitor in the Circuit's records, Carcharun surfaced long before anyone spoke of the
 trenches stirring, and has watched entire leagues rise, crumble, and be rebuilt since. He returns each
 season not to climb — he's climbed it all — but to mentor the young monsters now following him up from
 the dark, and to remind an impatient Circuit that patience outlasts power. His **Ancient Tide** has
-turned more hopeless matches than anyone can count. Kindly, unhurried, and universally respected.
+turned more hopeless matches than anyone can count. Kindly, unhurried, and universally respected, despite —
+or perhaps because of — the countless scars.
 
-### Voltaray — electric ray · resist Fire / weak Earth
-**Appearance:** Sleek blue-black ray with faint crackling yellow static along its fin edges. Glides low
-and fast, trailing small sparks.
+### Mantaris — manta ray · major DEX / flaw CON
+**Appearance:** Vast, graceful black-and-white ray, wing-like fins rippling in slow figure-eights,
+cephalic lobes curled like a crown. A trailing remora or two never far behind.
 
-Voltaray was one of the first in the deep to feel it — a stirring in the old dark trenches, faint as
-static, that no one else could quite explain. Instead of retreating deeper like his kin, he chased the
-feeling straight up to the surface and then onto the Circuit, hooked on the electric jolt of competition
-the way others crave calm. Flashy and energetic, he's a showman who genuinely believes a match you didn't
-make *thrilling* was a match half-wasted.
+Mantaris was one of the first in the deep to feel it — a stirring in the old dark trenches, faint as
+current, that no one else could quite explain. Instead of retreating deeper like his kin, he glided
+straight up to the surface and then onto the Circuit, hooked on the hush of a crowd the way others crave
+calm water. Flashy and unhurried at once, he's a showman who turns every **Tidal Wingsweep** into a slow,
+sweeping performance before the strike ever lands.
 
-### Corallux — coral crustacean · resist Fire / weak Earth
-**Appearance:** Crab-like creature fused with living coral, pink-and-white branching growths crowning its
-shell. Carries itself with quiet, deliberate dignity.
+### Lanterix — lanternfish · major WIS / flaw DEX
+**Appearance:** Small, dark, deep-sea fish with a glowing lure dangling above a wide, needle-toothed
+mouth. Skin faintly bioluminescent along both flanks, flickering when agitated.
 
-Corallux grew from a single surviving fragment of a bleached, dying reef — one small piece of the same
-deep unsettling that's stirring everything else below the waves. He surfaced to carry that lost home's
-name back into the light, fighting for it the way nothing left down there could. Every victory is a small
-monument to the reef that made him, every **Reef Blade** swung in its memory. Resolute and dignified, he
-grieves quietly and competes fiercely, and he never once forgets what he's fighting for.
+Lanterix grew up in true darkness, far below where the stirring first began, with nothing but his own
+glow for company. He surfaced to carry that deep-sea light into the open — the only creature down there
+who ever thought to follow it up instead of hiding from what it might attract. Every **Abyssal Flare** is
+a small piece of the abyss trailing him into the light. Quiet and watchful, he still flinches at open
+water, and still refuses to go home.
 
 ---
 
-## Insectoids — *tireless, chitinous; resist ⛰️ Earth, weak to 💧 Water*
-### Theme: Decline & New Nests
+## Insectoids — *tireless, chitinous; minor CON; resist ⛰️ Earth, weak to 💧 Water*
+### Bio: Decline & New Nests
 
 The old colonies are dwindling — hives grown so efficient they no longer need their queens, guardians who
 outlived the thing they guarded, solitary lineages thinning out one generation at a time. But scattered
 reports keep surfacing of new nests, young and small, appearing in territories no one seeded them. The
 insectoid world isn't dying. It's changing hands.
 
-### Scarabrute — colossal beetle · resist Earth / weak Water
+### Scarabrute — colossal beetle · minor only
 **Appearance:** Massive iron-black beetle with a thick, ridged carapace like riveted plate armor. Slow,
 ponderous, built like a moving fortress.
 
@@ -305,7 +307,7 @@ hold. The Circuit is the only place that can still hit him as hard as that river
 every match grateful for the impact. Unshakeable and quietly content, he measures a good fight not by
 whether he wins but by whether his **Fortress Carapace** actually felt the blow.
 
-### Mantevoke — mantis duellist · resist Earth / weak Water
+### Mantevoke — mantis · major STR / flaw INT
 **Appearance:** Lean, jade-green mantis with folded blade-forearms and an utterly still posture. Only
 moves in one sudden, final motion.
 
@@ -317,8 +319,8 @@ the Circuit to test whether that discipline still means anything in a world that
 lets his **Scything Execution** do all his talking. Patient, precise, and unsettlingly calm, he has never
 once needed a second cut.
 
-### Arachnyx — web-weaver mage · resist Earth / weak Water
-**Appearance:** Pale violet spider with too many eyes glowing faint arcane blue, half-hidden in strands of
+### Arachnyx — web-weaver spider · major WIS / flaw DEX
+**Appearance:** Pale violet spider with too many eyes glowing faint blue, half-hidden in strands of
 silk. Rarely fully visible — always partly veiled in web.
 
 Arachnyx has never once left her lair to fight anyone — opponents are escorted in, every match played on
@@ -329,7 +331,7 @@ still regards footwork as a confession that a fighter didn't prepare properly, a
 with a **Silken Cataclysm** before her opponent even realizes they walked into one. Cold, meticulous, and
 — lately — a little less certain that isolation is the only way to live.
 
-### Vespera — wasp queen · resist Earth / weak Water
+### Vespera — wasp queen · major CHA / flaw STR
 **Appearance:** Regal golden-and-black wasp with an ornate, oversized abdomen and a commanding, still
 posture. A faint hum follows her, as if a hive rides just behind.
 
@@ -341,7 +343,7 @@ early. She entered the Circuit chasing the one feeling her perfect hive could no
 needed. Ten thousand loyal wings follow her into the arena regardless, answering a **Swarm Decree** she
 almost feels guilty giving. Regal, a little melancholy, and utterly commanding when she speaks.
 
-### Odonatra — dragonfly skirmisher · resist Earth / weak Water
+### Odonatra — dragonfly · major DEX / flaw WIS
 **Appearance:** Slender, iridescent teal dragonfly with four blurred wings and huge compound eyes. Never
 fully still — a shimmer of motion even at rest.
 
@@ -355,14 +357,14 @@ decline is just a story the elders tell.
 
 ---
 
-## Reptilians — *patient, cold-blooded; resist 🔥 Fire, weak to 💨 Air*
-### Theme: The Long Wait Ends
+## Reptilians — *patient, cold-blooded; minor DEX; resist 🔥 Fire, weak to 💨 Air*
+### Bio: The Long Wait Ends
 
 Reptiles measure time on a scale nothing else in this bestiary can match — decades of stillness are
 nothing to them. Every reptile below has been waiting, patient beyond reckoning, for a reason good enough
 to finally move. The Circuit turned out to be that reason.
 
-### Crocmaw — river crocodile · resist Fire / weak Air
+### Crocmaw — river crocodile · major STR / flaw WIS
 **Appearance:** Massive, algae-green crocodile with a scarred armored hide and eyes barely above the
 waterline. Low, ambush-still, terrifyingly fast once it finally moves.
 
@@ -373,7 +375,7 @@ time in a generation, Crocmaw moved. The arena floor still shakes when he does, 
 closes with the same patient inevitability that let him become a landmark in the first place. Silent,
 ancient, and terrifyingly sudden once provoked.
 
-### Iguanor — crested iguana · resist Fire / weak Air
+### Iguanor — crested iguana · major INT / flaw CON
 **Appearance:** Vivid emerald-and-orange iguana with a tall, sail-like crest running the length of his
 spine. Postures and displays constantly — magnificent and self-assured.
 
@@ -385,7 +387,7 @@ he inspired all that idle time was deserved and not just aesthetic, punctuating 
 of Scales** display he's been quietly practicing his whole patient life. Vain, magnetic, and more insecure
 than his posture ever admits.
 
-### Serpwyn — hooded cobra oracle · resist Fire / weak Air
+### Serpwyn — hooded cobra · major WIS / flaw STR
 **Appearance:** Slender grey-blue cobra with a wide ceremonial hood marked in pale, faded symbols.
 Unnervingly still, with an unblinking gaze.
 
@@ -396,7 +398,7 @@ alcove to find out. She has never once been surprised by an opponent — not the
 desperate last gambit, not the moment they realize her **Serpent's Prophecy** already accounted for all of
 it. Unblinking, unhurried, and quietly certain of everything before it happens.
 
-### Geckari — gecko wall-runner · resist Fire / weak Air
+### Geckari — gecko wall-runner · minor only
 **Appearance:** Small, mottled brown-green gecko with oversized adhesive toe-pads and quick, darting eyes.
 Always poised at an odd angle, like it's about to run up a wall.
 
@@ -408,7 +410,7 @@ a competitor himself, he fought the only way he knew how: from angles nobody thi
 every match with a **Ceiling Ambush** that starts from somewhere the crowd was never watching. Scrappy,
 resourceful, and always one step sideways of where you expect him.
 
-### Tortavos — ancient tortoise mystic · resist Fire / weak Air
+### Tortavos — ancient tortoise · major CON / flaw INT
 **Appearance:** Huge, moss-covered tortoise with a cracked, stone-like shell etched in faded runes. Moves
 so slowly it seems to barely move at all.
 

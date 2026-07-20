@@ -1,10 +1,36 @@
 # Monster Tamer — Development Guide
 
-## Handover state (2026-07-20)
+## Handover state (2026-07-25)
 
-**Everything below is COMMITTED and shipped as v0.21** — committed on `preview`, merged to
-`main`, and pushed (Cloudflare Pages auto-deploys `main`). The "What changed this session" list
-below is the change history for that release, newest first.
+**Everything below through item -27 is UNCOMMITTED on `preview`** (working tree has changes to
+`src/App.tsx`, `src/battle.ts`, `src/core.ts`, `src/game.ts`, `src/monster.ts`, `src/species.ts`,
+`src/town.ts`, `src/bestiary.ts`, `src/styles.css`, `src/validate.ts`, `src/Sprite.tsx`,
+`docs/BESTIARY.md`, plus new files `src/mammalSprites.ts` and `public/sprite-preview.html`) — the
+2026-07-22 playtest-feedback pass, its bracket/scouting follow-ups, the 2026-07-23/24 per-species
+training aptitude overhaul, the Mammal per-species sprite pass, the 2026-07-25 innate-ability
+rework, the 2026-07-25 innate CHOICE system, its balance-fix follow-up, the thematic innate
+redistribution, the cluster differentiation pass, the ultimates-removal + synergy-framework pass,
+the 5-more-statuses pass, the 22-move synergy revamp, the 3v3-6v6 sweep, and the chooseLoadout
+fix (items -6 through -27), sim/build-verified
+throughout (see item -18 for the innate rework's verification specifics; item -17 has a note on
+one sprite check that couldn't be screenshotted at the time), but not yet committed/merged/
+deployed at the user's own pace. Everything from item -5 down (v0.21) is COMMITTED and shipped —
+committed on `preview`, merged to `main`, and pushed (Cloudflare Pages auto-deploys `main`).
+
+**Sprites are on pause, not abandoned**: the user rejected the flat-color procedural pixel grids
+(twice — see item -17 and the follow-up feedback) in favour of a much richer hand-illustrated
+style (reference: an AI-generated evolution-line sheet with real shading/dithering). I don't have
+an image-generation tool in this environment, so I can't produce that style myself. Next step,
+whenever picked back up: the user supplies real image files (or a way to generate them) and
+`Sprite.tsx` gets switched from computed canvas grids to loading actual image assets. `src/
+mammalSprites.ts` and `public/sprite-preview.html` (a dev-only, localhost-served page for
+visually checking sprite output — not part of the shipped game) are left in place for that.
+
+**Resolved**: the `Pinguox`/`Sylvaglide` flaw-vs-class-stat validator warning from the prior
+session is gone — user's call (2026-07-24) was to drop the flaw entirely for both rather than
+pick a different stat or relax the validator. `validateDesign()` now reports fully clean
+(`45 species, 11 classes, 90 moves, ~32 tournaments/yr — all consistent ✓`), confirmed via a
+standalone run.
 
 One caveat carried forward: the item marked **UNTESTED** below (the 2026-07-20 formula tuning
 pass) was only compile-checked at the user's direction ("do not do any more testing") and then
@@ -13,6 +39,821 @@ individually. If battle balance feels off in play, that pass plus the later dama
 CON/turn-order changes are the tuning knobs to revisit.
 
 ### What changed this session, newest first
+
+-27. **`chooseLoadout` auto-pick rework (2026-07-25), sim-verified across 4 iterations, uncommitted
+    — the fix for the 3v3-6v6 sweep's findings.** Follow-up to item -26 below: user asked how to
+    fix the dead synergies and unused abilities the sweep found, was given a recommendation to fix
+    the AI's move-categorization first (root cause) rather than buff numbers or add more combos on
+    top of a broken filter, then said "amend this and run further tests." `monster.ts:chooseLoadout`
+    had 4 real coverage bugs, found via direct inspection, not guessed at:
+    - **Self-buff moves (atkBuff/dodgeBuff/accBuff/regenBuff, target self) matched NO utility
+      predicate at all** — invisible to every class, not just the 5 with a `CLASS_UTILITY_SLOTS`
+      entry. New `isSelfBuff` predicate, added as a universal last-resort fallback.
+    - **`isWardOrGuard` only recognized literal `ward`/`guard` fields** — Iron Skin/Barbed
+      Carapace and Stone Wall (defBuff-only) were invisible even to Tank's OWN utility slot.
+      Widened to include `defBuff`/`thorns`.
+    - **`isEnemyDebuff` was scoped to Orator/Bard only** — Field of Doom and Marked for the Pack
+      (debuff-type combo setters) were invisible to every other class regardless of whether the
+      monster had also learned the matching payoff move.
+    - **New `isComboPiece` predicate**: flags a learned move as one half of a designed pair — a
+      `bonusVsStatus` payoff whose target status is also set by another learned move (or vice
+      versa), OR the non-status taunt+thorns pair (`tauntForce` + `thorns`, scoped specifically
+      to the MASS taunt — see the taunt-scope bug below).
+    - **Iteration 1 (broken)**: appended `isComboPiece`/`isSelfBuff` to the END of each class's
+      existing utility-slot array. Useless for Tank/Spellshield/Sage/Orator/Bard — their own 2-
+      slot reservation already hit the `out.length >= 2` loop-break before the appended checks
+      were ever reached (confirmed directly: a Sage with BOTH Field of Doom and Mind Crush
+      learned still got Tranquility+Ward Against Ruin, Field of Doom never considered).
+    - **Iteration 2 (fixed the priority bug, introduced a duplicate-move bug)**: restructured so
+      a learned combo pair claims up to 2 slots BEFORE class-signature utility runs, since a
+      genuine synergy beats generic utility. This surfaced a pre-existing latent bug: the "fill
+      remaining slots" loop never checked `!out.includes(m)`, safe only because `out` used to
+      hold exclusively non-damage moves at that point (support/damage are disjoint arrays) — no
+      longer true once damage-type combo payoffs (Mind Crush, Bloodletter) could land in `out`
+      early via the new priority pass. Produced actual duplicate-move loadouts (`Field of Doom,
+      Mind Crush, Mind Crush`). Fixed by adding the missing guard.
+    - **Iteration 3 (taunt-scope bug — the big one)**: the taunt+thorns half of `isComboPiece`
+      initially matched ANY `tauntForce` move, which includes the baseline single-target Taunt
+      (level 90, unchanged, learnable at CON>=90 — a bar nearly every monster clears regardless
+      of class). This made the "combo" fire for almost every monster, not just CON specialists —
+      confirmed by a full sweep showing thorns/taunt usage spike to 19-20/20 battles and total
+      move diversity collapse from ~55 to ~35 moves used, crowding out everything else. Fixed by
+      scoping the check to `target === 'allEnemies'` (Bulwark's Challenge specifically).
+    - **Also added**: a smaller, unconditional `dmgScore` nudge (×1.15) for ANY move carrying a
+      `status` field, not just designed combo pieces — vulnerable-setters (Bonebreaker,
+      Fracturing Stones, Static Chain) and Cacophony's charm were never part of a `bonusVsStatus`
+      pair in the actual move design (a "charm combo" I'd assumed existed while reasoning about
+      this turned out not to — charm was always a standalone tool), so the combo-priority pass
+      structurally can't rescue them; this milder boost lets status-carrying moves compete against
+      a stat's pure-damage capstone without a full priority override.
+    - **Final verified results** (identical seeds across all 3 iterations for direct comparison,
+      20 battles × 4 team sizes = 80 battles/pass): burn-payoff went from 0/80 to firing in
+      **32-47/80** across passes (the single biggest win — Cinderburst/Ember coexist reliably
+      now); thorns from 0/80 to a stable **24/80**; vulnerable recovered from a mid-fix regression
+      back to **26/80**, better than the original 12/80; doom (all 3 stages, including the
+      early-cash tradeoff) confirmed working end-to-end in an isolated high-stat test (22/60
+      apply, 12/60 auto-burst, 10/60 early-cash via Mind Crush) though rare in a mixed-level
+      random sweep since it needs WIS>=780 for the payoff; mass-taunt+thorns confirmed **60/60**
+      in an isolated CON-vs-CON test. **Never-cast move count**: still ~28-29/90 (didn't shrink
+      much in aggregate), but the SET changed — self-buffs and debuff-type setters are no longer
+      structurally invisible; what remains uncompetitive is mostly genuine "outranked by a
+      stronger sibling in the same stat," a real design fact, not a categorization bug.
+    - **Iteration 4 (same turn, user follow-up "how can you fix this?"): best-combo-pair
+      selection.** The multi-combo-eligible case above (Titanrex/Vespera getting the incidental
+      CON combo instead of their own STR/CHA one) was fixed properly rather than left as a
+      standing limitation. The old greedy `comboPool.find` (grab whichever piece scans first)
+      was replaced with: collect EVERY eligible combo pair the monster currently qualifies for
+      (bonusVsStatus pairs + the taunt+thorns pair), score each pair by
+      `stats[gatingStat_a] + stats[gatingStat_b]`, PLUS a class-fit bonus (+300 if a piece's
+      gating stat is the monster's `classForStats` primary stat per `CLASSES`, +150 for
+      secondary), then equip the highest-scoring pair. Re-verified the exact two broken cases
+      directly: Titanrex (Warrior, STR=CON=1000 tied on raw stats) now correctly gets
+      `Rending Blow, Bloodletter, Titanfall` (Warrior's primary=STR tips the tie) instead of the
+      CON combo; Vespera (Orator, CHA=1000) now gets `Screech, Siren's Call, Crescendo` instead
+      of the CON combo. A third case (Tortavos, Spellshield, CON=WIS=1000 tied) confirms the
+      scoring generalizes correctly too — Spellshield's primary=CON/secondary=WIS both point at
+      CON, so it correctly keeps the CON combo there instead of switching to WIS's doom combo.
+      Re-ran the full 80-battle sweep after this change: aggregate synergy-firing numbers held
+      steady or improved slightly (burn-payoff 10-16/20 across sizes, up from the prior pass) —
+      confirms the smarter tie-break didn't regress anything achieved in iterations 1-3.
+    - Verified: tsc/build/validateDesign clean at every iteration; zero duplicate-move loadouts
+      across every sweep (iteration-2's bug, permanently fixed and re-confirmed each pass); all
+      improvements measured against identical random seeds so before/after numbers are directly
+      comparable, not cherry-picked.
+
+-26. **3v3-6v6 battle-scale sweep — auto-pick coverage audit, no code changes (2026-07-25).** User
+    asked to run battle tests at team-fight scale and check for dead synergies/unused abilities.
+    Built a sweep harness (20 battles each at 3v3/4v4/5v5/6v6, randomized species/training level,
+    REAL auto-picked loadouts — the same path rivals and any player who never opens the Ability
+    Selector use) and tallied structured-event move usage plus synergy log markers. Findings: 28
+    of 90 moves never cast in 80 battles; 5 of 12 core synergy mechanics fired 0/80 despite each
+    being individually verified correct when manually equipped. Root-caused to `chooseLoadout`
+    (the auto-pick heuristic), not the battle engine: self-buff moves matched no utility category
+    for ANY class; debuff-typed moves were only ever considered by Orator/Bard; a stat's single
+    strongest move permanently shadowed its own siblings including combo setups. This diagnosis
+    directly enabled item -27's fix.
+
+-25. **Synergy revamp of 22 learnable moves, level 120+ ONLY (2026-07-25), sim/build-verified,
+    uncommitted — the actual adoption pass for the item -23/-24 frameworks, staying within the
+    fixed 90-move pool (renames + effect additions, zero new/removed moves).** User's explicit
+    scope: nothing at level 40 or 90 changes (confirmed by name-diffing the pool pre/post — the 18
+    level-40/90 moves are byte-identical); every stat gets at least one INTRA-stat setup→payoff
+    combo, not just cross-stat webs; AoE and "big" (full-hijack) statuses get lower proc chances;
+    a new non-status framework field for INT specifically.
+    - **New MoveEffects field `firstStrikeMult`**: bonus damage if the TARGET hasn't acted yet
+      this round (attacker moved first in the live initiative order — reacts to haste/knockback
+      dynamically). New `Combatant.actedThisRound`, set true at the very top of `takeTurn`
+      (before any stun/sleep short-circuit — reaching the call IS "acting" for this purpose),
+      reset false at the top of every round. `Thunderclap` (INT, was Shock/160) is the one move
+      using it — replaces Shock's redundant 3rd-stun-in-the-pool with a genuine speed-reward.
+    - **STR**: Rending Blow (was Crushing Blow/200) sets bleed 50%/3r; Bonebreaker (was Sunder
+      Armor/330) sets vulnerable 40%/2r; Bloodletter (was Rampage/780) is STR's OWN payoff —
+      `bonusVsStatus{bleed,×1.5,consume}` — a full intra-stat combo.
+    - **DEX**: Twin Fangs (was Twin Shot/160) sets bleed 30%/3r (mirrors STR's, cross-stat);
+      Fleetfoot Riposte (was Riposte/430) self-grants haste 2r; Marked for the Pack (was Hunter's
+      Mark/540) sets vulnerable at guaranteed chance (100 — a pure-utility mark, no damage
+      attached, so unlike a proc it should never whiff); Deadeye (920) gained its OWN bleed
+      payoff (`bonusVsStatus{bleed,×1.5,consume}` alongside its existing pierce) — DEX can now
+      combo bleed without needing a STR ally.
+    - **CON**: Barbed Carapace (was Iron Skin/120) adds thorns 6/3r to the mitigation buff;
+      Steady Vigil (was Regenerate/200) adds hpRegenBuff 5/3r to the heal — CON's two previously-
+      unused frameworks finally used, closing the balance-review gap. **Bulwark's Challenge** (was
+      Last Stand/650) retargeted self→allEnemies: mass-taunts the WHOLE enemy team for 2 rounds
+      while still self-guarding 20 (the guard-application check fires regardless of move target,
+      confirmed by reading `resolveMove`'s unconditional post-loop guard call) — combos directly
+      with Barbed Carapace: force every enemy onto this tank, punish every hit with thorns. This
+      is CON's own intra-stat combo (mass-taunt sets up, thorns pays off) and the pass's flagship
+      team-fight tool, deliberately scaling with roster size. Colossus Crash (was Juggernaut/850)
+      adds maxHpDmg 0.03 — CON finally threatens enemy tanks' HP pools too, not just soaks damage.
+    - **WIS**: Silencing Spike (was Mind Spike/200) sets silence 25%/2r; Field of Doom (was Null
+      Field/540) sets doom 28%/4r; Mind Crush (780) gained `bonusVsStatus{doom,×1.6,consume}` —
+      WIS's OWN intra-stat combo, with a real strategic choice: let doom ride for its automatic
+      25%-maxHp burst later, or cash it early via Mind Crush for a smaller guaranteed hit now
+      (consuming removes the pending status, so it's genuinely one-or-the-other). Ward Against
+      Ruin (renamed from Spirit Ward/650, mechanically unchanged team cleanse) becomes the
+      team-fight answer to the whole doom/silence/sleep/charm/healblock web in one cast.
+    - **INT — all 5 bare-nuke gaps closed**: Fracturing Stones (was Pebble Storm/120) sets
+      vulnerable 30%; Thunderclap (160, firstStrikeMult, see above); Cinderburst (was
+      Fireball/200) gained `bonusVsStatus{burn,×1.5,consume}` — INT's OWN intra-stat combo with
+      its own Ember (unchanged, level 40); Static Chain (was Chain Lightning/330) sets vulnerable
+      20% AoE; Deep Freeze (was Blizzard/650) gained pierce 0.2; World Ender (was Meteor/920)
+      gained maxHpDmg 0.02 to every enemy hit — INT's capstone now threatens the whole enemy
+      team's HP pools at once. Inferno's burn 35%→25%, Glacial Prison's stun 30%→25% (AoE/big-
+      status trims).
+    - **CHA**: Grand Mockery (was Mockery/120) sets healblock 20%/2r AoE; Screech's fear
+      30%→20% AND duration 1→**2 rounds** (a real bugfix found during verification — a 1-round
+      fear ticks away in the SAME round it's applied, before ANY payoff move could ever be cast
+      against it; the combo was mathematically impossible at 1 round); Battle Hymn (was
+      Anthem/240) team-grants haste 2r — a whole-roster tempo swing; Lullaby's status swapped
+      stun→**sleep** 50%→35% (now matches its own name, and gains sleep's real wake-on-damage
+      counterplay it never had as stun); Standing Ovation (540) gained hpRegenBuff 3/3r;
+      Cacophony's status swapped confusion→**charm** 40%→15% (charm scales with roster size,
+      confusion doesn't — and charm/AoE/big-status trims land it at the lowest chance in the pool
+      per spec); Siren's Call (780) gained `bonusVsStatus{fear,×1.5,consume}` — CHA's OWN
+      intra-stat combo with Screech.
+    - **Chance-tuning rule applied uniformly**: AoE statuses capped ~20-25% (was up to 40%); "big"
+      full-hijack statuses (sleep/charm/doom/silence) trimmed even single-target; "smaller"
+      partial debuffs (bleed/vulnerable/healblock) stayed at their originally-designed 30-50%
+      range (healblock's AoE copy still capped at 20% since it's AoE, per the same rule).
+    - Verified: tsc/build/validateDesign clean; name-diff confirmed all 18 level-40/90 moves
+      untouched; a forced-loadout sim suite confirmed 15 of 16 new mechanics fire in NATURAL AI
+      play (bleed apply+tick, vulnerable, silence, doom apply+auto-burst+early-cash, healblock,
+      haste, sleep, charm+redirect, thorns, burn-payoff, fear-payoff, Thunderclap firing) — one
+      early failure round (doom/healblock/sleep all silently not firing) was traced to a TEST
+      HARNESS bug, not game code: giving the AI opponent an empty loadout made its threat estimate
+      too low (12 < the 18 threshold) to ever enter the hostile/debuff decision branch where those
+      three statuses live; fixed by giving the opponent one real move. **Bloodletter/Rending
+      Blow's bleed combo initially never fired under 60 trials of natural AI play** — traced to
+      Bloodletter's raw power (16, hits[3,5]) making it the AI's preferred damage move regardless
+      of bleed state, so it fired on cooldown instead of waiting. **Reworked by user request**
+      (2026-07-25 follow-up: "lower the base damage, raise the combo damage"): power 16→10,
+      `bonusVsStatus` mult 1.5→2.5 (MP cost auto-dropped 58→36 too, since `manaCost` derives from
+      power). Re-verified: the combo now fires in 14/100 natural-AI battles (was 0/100) — note
+      Bloodletter's base `effPower` (40) is still numerically above Rending Blow's (24), so this
+      isn't a clean ranking reversal; the improvement is empirically real (confirmed by direct
+      sim count and a sample log showing Rending Blow cast ahead of Bloodletter's next window) but
+      the exact mechanism is likely the lower MP cost changing cast timing/cadence rather than a
+      pure priority swap. 14% is still opportunistic, not scripted — full reliable sequencing
+      would need `chooseAction` to explicitly value a setup move's enabling worth, left as a
+      known follow-up.
+
+-24. **5 more statuses (2026-07-25), sim-verified, uncommitted — framework-only, per user request
+    ("add all the strong candidates") from a follow-up options list; no moves adopt them yet.**
+    - **Sleep**: skips the turn like stun, but — the one thing that makes it different —
+      **wakes on any HP damage** (`wakeIfSleeping`, hooked into both `tickStatuses`, for DoT
+      wake-ups, and the main damage-hit site). Sets up a real team decision: leave the sleeper
+      alone and focus elsewhere, or spend a big hit to wake it. Thematically owed to Koalio's
+      whole kit (Lullaby/Drowsy Aura/Dreamsong).
+    - **Doom**: nothing happens for `duration` rounds, then a heavy TRUE-damage burst (25% of the
+      victim's own maxHp, no mitigation) when the countdown hits zero — ticked inside
+      `tickStatuses` at `st.turns === 1`. Cleansable (the counterplay), same as any other status.
+    - **Healblock** ("grievous wounds"): multiplies healing, lifesteal, AND passive HP regen by
+      `HEALBLOCK_MULT` (0.4) while it holds — hooked at all three sites (`resolveUtilityOnTarget`'s
+      heal, the lifesteal calc in `resolveDamageOnTarget`, and `takeTurn`'s passive regen line).
+      The sweep flagged sustain/regen stacking as the strongest low-league strategy with zero
+      counterplay before this — this is that counter.
+    - **Haste**: the buff-side mirror of knockback — acts FIRST next round regardless of CON.
+      `turnOrderCompare` now buckets on `haste(-1)/knockback(+1)` before the CON-ascending sort; a
+      combatant with both nets to neutral. THE one BENEFICIAL status (`BENEFICIAL_STATUSES` set) —
+      cleanses only strip non-beneficial statuses (`cleanseStatuses()` replaces the old
+      `statuses = []`). Log line reads "gains haste" not "afflicted with", the only status that
+      does. Required a small engine gap-fill: `resolveUtilityOnTarget` (self/ally-targeted
+      beneficial moves) never applied `move.status` at all before now — only the two hostile
+      resolvers did — since no existing move needed it; added so a self-cast "Haste Self"-style
+      move can actually work.
+    - **Charm**: confusion's team-battle sibling — single-target hostile actions strike the
+      charmed monster's OWN team instead of the enemy's. Slots into `resolveTargets`'s existing
+      precedence chain right after confusion (confusion > charm > taunt > lowest-HP%), same
+      single-target-only scoping as confusion (an `allEnemies` volley isn't redirected by either),
+      and is inert in a solo-team fight (no ally to strike — falls through to normal targeting).
+    - `applyStatus`'s stack/refresh rule (item -23) extends cleanly — bleed still the only
+      stacker, everything else including these 5 refreshes duration on reapply.
+    - Verified: tsc/build/validateDesign clean; a synthetic-move sim suite (9 checks) confirmed
+      every mechanic fires — sleep application/skip/wake, doom application AND the delayed burst,
+      healblock application AND a visibly reduced heal number, haste application, charm
+      redirecting a hostile hit onto an ally ("turns on its own team!"); a second targeted sim
+      confirmed haste's actual turn-order effect end-to-end — a high-CON tank that normally acts
+      last cast Haste Self in round 2 and was confirmed acting FIRST in round 3's raw log, ahead
+      of a much-lower-CON opponent.
+
+-23. **Ultimates REMOVED + synergy/status framework pass (2026-07-25), sim/build/browser-verified,
+    uncommitted — frameworks ONLY, no moves changed yet (user: "we need to create the frameworks
+    first").** User's directives from the non-innate-abilities review:
+    - **Species ultimates are GONE** — all 45 `ultimate` entries stripped from species.ts (their
+      descs promised effects the engine never delivered — every ultimate was a generic pwr-70
+      hit), `Species.ultimate`/`Monster.ultimateUnlocked`/`ULTIMATE_LEVEL` removed from core.ts,
+      the whole once-per-battle-below-40%-HP trigger + `ultimateMove()` + `ultimateUsed` +
+      'ultimate' BattleEvent removed from battle.ts, MonsterCard's ★ block + Bestiary's
+      "★ ultimate-name" + the Sandbox blurb updated in App.tsx, arena's ult caption/fx/ult-flash
+      removed. Old saves are fine (stale `ultimate` keys in stored species snapshots are inert and
+      the item -20 re-link migration replaces them with live data anyway). docs/GAME_DESIGN.md
+      still mentions ultimates — left per its standing stale-doc caveat.
+    - **Mass taunt confirmed as a real framework**: `tauntForce` cast via `target: 'allEnemies'`
+      taunts the WHOLE enemy team onto one monster (applyDebuffs runs per fanned target; each
+      enemy's `tauntedBy` is set independently) — sim-verified with a synthetic Challenge-All move
+      forcing 2 enemies at once. MoveEffects doc comment updated to state this. User note: a
+      proper targeting-logic pass (beyond lowest-HP% + taunt precedence) is planned LATER.
+    - **3 new statuses** (StatusKind + STATUS_INFO + arena icons 🩸🤐🎯): `bleed` (physical HP
+      DoT, 2% maxHp per stack per round, the ONLY stacking status — capped at 3 stacks via the
+      new `applyStatus()` helper, which also makes every other status REFRESH duration instead of
+      duplicating), `silence` (skills sealed — Attack/Block only, enforced in chooseAction AND
+      wildAction), `vulnerable` (takes +20% damage from all sources, `VULNERABLE_MULT`).
+    - **Knockback is finally LIVE** (was an unused StatusKind since launch): a knocked-back
+      combatant acts LAST in the initiative while the status holds (turnOrderCompare's new first
+      key) — the pool's first turn-order manipulation tool, composing with CON-ascending order.
+    - **4 new MoveEffects frameworks** (engine support wired, zero moves use them yet):
+      `maxHpDmg` (bonus damage = fraction of TARGET's maxHp — the giant-killer tools chosen over
+      changing sudden-death chip), `bonusVsStatus {kind, mult, consume?}` (setup→payoff combos —
+      extra damage vs a status-carrying target, optionally consuming the status, log line
+      "exploits X's bleed!"), `thorns` (timed buff: flat reflect per hit taken —
+      ActiveMod/recomputeMods gained `thorns`→`Combatant.thornsFlat`), `hpRegenBuff` (timed flat
+      HP/turn — `hpRegenMod`, added into takeTurn's regen line). isTimedBuff/applyBeneficialEffects
+      updated so the last two ride the normal buff pipeline (duration, refresh, Encore-extend).
+    - **Combo-aware AI, the cheap way**: `effPower()` — the single function every damage-skill
+      ranking in chooseAction flows through — now surges a move's value when the foe CARRIES the
+      status its `bonusVsStatus` exploits, and prices `maxHpDmg` against the actual foe's pool.
+      No bespoke policy branch needed; the existing tree cashes combos naturally. Silenced
+      monsters short-circuit to Attack/Block (with the block-when-hurt personality check kept).
+    - **CON mitigation coefficient trimmed 0.06 → 0.05** (physical channel) — the second half of
+      the anti-tank package, per user's choice of giant-killer tools + coefficient over
+      chip-damage changes.
+    - Verified: tsc/build/validateDesign clean; a synthetic-move sim suite confirmed EVERY
+      framework fires in real battles (bleed tick + stack, consume-combo log, silence/vulnerable/
+      knockback application, thorns buff + reflect, HP-regen buff, 2-enemy mass taunt) — synthetic
+      Move objects injected into loadouts at test time, moves.ts untouched; browser reload clean
+      (transient Bestiary HMR errors during the edit sequence confirmed gone after the ★ removal
+      landed — full Bestiary expands with zero ultimate markers).
+    - **NEXT (user-approved direction, not yet started)**: the abilities adoption pass — new
+      synergy moves using these frameworks (Flashpoint/Shatter/Venom Burst/Fanfare/Mark of Ruin/
+      Shield Slam-style), heal scaling, physical-finisher MP-cost trims, reworking within the
+      15-per-stat ladder. Then a targeting-logic design pass for taunt/focus-fire.
+
+-22. **Innate cluster differentiation — all 90 profiles now mechanically UNIQUE (2026-07-25),
+    sim/build-verified, uncommitted.** User's follow-up to item -21: several innate families
+    shared identical numbers (5× opener 1.5, 6× flatDR 2, 4× crit 8, 3× dodge 6/8, 3× acc 8,
+    etc.) — "we want them to feel a bit more unique and not have the same numbers", explicitly
+    including the DR family. Every family is now a ladder of distinct values, with small thematic
+    riders where flavour supports one (riders reuse EXISTING InnateEffect fields — zero new
+    engine code this pass):
+    - **Openers** 1.2→1.7: Prehistoric Roar 1.2, Skim Dart 1.25, Glide Strike 1.3, Haymaker 1.35,
+      Chest Beat 1.5, Dive Bomb 1.6 (full-momentum dive), Ambush 1.7 (the mantis strike tops the
+      ladder); composites Ambush Strike {1.4 + acc 4, "the patient strike does not miss"} and
+      Silent Strike {1.4 + crit 5}.
+    - **Flat-DR family**, each a different defensive texture: Thick Hide 3 (plain thickest),
+      Ironclad 2 (textbook plate), Spiral Shell {2 + dodge 2}, Weathered Hide {2 + debuffResist
+      10, "old scars"}, Aegis Bond {2 + hpRegen 2, "the bond mends" — still self-beats aura-twin
+      Unison}, Armored Scales {1 + hpRegen 1, crocodile wounds knit fast}, Chitin Plate {1 +
+      startWard 12}, Unstoppable {1 + debuffResist 15}, Shell Ward → pure startWard 18,
+      Glacial Wisdom {regen 2 + flatDR 1}, Truth's Word 1 (unchanged).
+    - **Crit** 6-10: Current Rider {6 + acc 2}, Whirlwind 7, Rend 8, Stellar Shot 9 (was a dmg
+      clone), Tail Drop 10 (ceiling drop = biggest crit); riders Dodge Storm 3, Silent Strike 5.
+    - **Pierce** 0.1/0.12/0.15/0.18: Whip Strike 0.1 (was dmg clone — wraps around shields),
+      Southpaw 0.12, Maul 0.15, Serrated Claws 0.18 (serrated cuts deepest).
+    - **Echo** 6/8/10/12: Rift Magic 6 (was dmg clone), Tentacle Barrage 8 (eight arms!),
+      Wellspring 10, Spell Echo 12.
+    - **Accuracy** 7/8/10/11: Hypnotic Gaze 7, Keen Eye 8, Cosmic Precision 10, Compound Eyes 11.
+    - **Pure-dodge ladder** 4-10: Burrow 4, Ancient Knowing 5, Quickstep 6 (> Cheer 4, aura-twin
+      rule), Aerial 7, Cloak of Shadow 8, Phase Shift 9, Wing Current 10; composites Dodge Storm
+      {6 + crit 3} and Wall Runner {6 + acc 2}; Web Trap unchanged.
+    - **Mana regen** 2/3/4/5: Inner Calm 2, Abyssal Glow 3, Silent Wisdom 4, Arcane Mastery 5.
+    - **Exclusive dmg-clone block re-textured**: Flame Aura → burn-on-hit 8%, Blizzard →
+      stun-on-hit 6%, Void Pulse → lifesteal 0.1, plus the pierce/echo/crit conversions above;
+      remaining flat dmg is a clean 1.05/1.06/1.07/1.08 ladder (Rising Fury/Draconic Pride/
+      Overload/Pride). statusOnHit family: poison 12, blind 10, burn 8, stun 6 — all distinct.
+    - **Others**: Cold Blood debuffResist 25→20 (Immovable keeps 25); Hive Command debuffExtend
+      25→30 (vs Encore's buffExtend 25 — also narrows Vespera's pair gap); Psychic Aura →
+      {auraDodge 3 + auraRegen 1}; Life Bloom → {auraHpRegen 2 + auraRegen 1}; Royal Jelly stays
+      pure auraHpRegen 2 (unique once its neighbours became composites — a first-draft self-rider
+      was reverted when the sweep showed it overshooting Vespera's pair balance).
+    - All 40+ changed descs regenerated in species.ts (desc==table invariant held).
+    - Verified: tsc/build/validateDesign clean; deep-canonical duplicate check confirms **zero
+      identical profiles across all 90**; A/B sweep re-run — mean intra-pair |delta| 3.7%, worst
+      12% (the residual gaps are the same situational-vs-flat seesaws already documented in item
+      -20, within noise at n=50); browser reload clean.
+
+-21. **Thematic innate redistribution + 8 new passive mechanics (2026-07-25), sim/build/browser-
+    verified, uncommitted.** User's follow-up to the item -20 balance review: half the pool was
+    three generic stat nudges (23× flat "+X% damage", 13× flat-DR, 11× dodge). User's explicit
+    theme mapping, applied with thematic fit deciding ties: **auras** → CHA-major species
+    (Maneleo, Larkessa, Vespera) then Marsupials (Quokkade, Koalio) — the three off-theme base-
+    species aura holders converted (Nautilux's Ward → opening shield, Strixil's Wellspring →
+    double-cast, Carcharun's Tidal Wisdom → self +2 regen/+2 HP regen); **crit** → DEX majors
+    (Rend/Grivvel, Whirlwind/Tazzik, Current Rider/Mantaris) then Reptilians (Tail Drop/Geckari),
+    all at crit 8; **pierce** → STR majors (Serrated Claws 15%/Mantevoke, Southpaw 12%/Bruxaroo)
+    then Mammals (Maul 15%/Ursath); **mana regen** → WIS majors/Avians (Abyssal Glow/Lanterix now
+    regen 3; Silent Wisdom/Strixil kept); **elemental damage or double-cast** → INT majors +
+    Aquatics (Arcane Bolt/Corvaan +10% elem, Spellblade/Lanterix +12% elem, Wellspring/Strixil +
+    Tentacle Barrage/Maelurk echo 10, exclusive Spell Echo → echo 12 — finally does what its name
+    says); **CON-tank innate trim** (the 6 sweep-dominant species): Ironclad, Unstoppable, Chitin
+    Plate, Armored Scales, Shell Ward all flatDR 3→2, Death Roll/Crocmaw's flat +8% converted to a
+    conditional execute. NOTE: the tanks' win rates barely moved (88-90% post-trim) — their
+    dominance is base-stat-driven (CON → HP pool + mitigation), still the standing species-balance
+    roadmap item, not an innate problem.
+    - **8 new `InnateEffect` mechanics** (all hooked at existing calc sites in battle.ts, ~one
+      line each): `crit` (stacks with DEX critChance), `pierce` (stacks with STR pierce + skill
+      pierce), `echo` (stacks with INT echoChance), `elemDmgMult` (elemental moves only),
+      `executeMult` (vs targets <30% HP — Death Roll), `highHpDmgMult` (own HP >70% — Statue
+      Stance/Balaenix, "+10% while composed"), `startWard` (opens battle with an absorb shield —
+      Ward/Nautilux 25 HP), `manaSteal` (drains target mana by fraction of damage — Mana Theft/
+      Abyssomancer 20%), `buffExtend`/`debuffExtend` (% chance, rolled on apply, that a cast
+      buff/inflicted debuff lasts +1 round — Encore/Larkessa "the song plays again", Hive
+      Command/Vespera "the queen's decree lingers"; log lines "encore!"/"— it lingers!"),
+      `debuffResist` (% off incoming debuff magnitudes, stacks with CHA debuffReduction —
+      Immovable/Aegisox, Cold Blood/Serpwyn), `statusOnHit` (chance to afflict on EVERY damaging
+      hit, independent of move statuses, no CHA bonus — Venom Fang/Arachnyx poison 12%, Crest
+      Display/Iguanor blind 10%). `lowHpDmgMult`'s threshold moved 50%→30% and Frenzy 1.15→1.25
+      per the user's "below 30%" spec. `applyDebuffs`/`applyBeneficialEffects`/
+      `resolveUtilityOnTarget` gained an `rng` param (and `applyBeneficialEffects` a `caster`
+      param) for the extend rolls — deliberate rng-stream change, no golden-output constraint.
+    - Post-change flat "+X% damage" holders are down from 23 to 10 (2 base species — Rising Fury/
+      Kongrath and Pride/Maneleo — plus 8 exclusives, deliberately untouched per the standing
+      exclusives scope). Every base species' pair is now two DIFFERENT mechanic categories.
+    - All 30 changed descs regenerated in species.ts (desc==table invariant held; patch script).
+    - Verified: tsc/build/validateDesign clean; full A/B sweep re-run at train 600 — mean
+      intra-pair |delta| 3.4%, worst 12% (within noise at n=50/side); a mechanics-proof sim
+      confirmed every new hook actually fires at runtime (poison-on-hit, opening ward absorb,
+      execute log, MP steal, debuff linger, buff encore all observed in battle logs); browser
+      reload clean with the re-linked save showing the new descs.
+
+-20. **Innate balance fixes + stale-species save bug (2026-07-25), sim/build/browser-verified,
+    uncommitted.** User asked for a balance sanity-check of the 90 innates. Ran an empirical sweep
+    (each species vs a 10-species reference pool with innate A then B, at train 150/600/1800,
+    ~4,500 sims per level) plus a code read of every field's cash-out point. Verdict: pairs mostly
+    within a few % win rate of each other — three structural issues found and fixed:
+    - **Three self-only innates were strictly dominated by their aura twins** (auras include the
+      owner via `recomputeInnateAuras`'s `[c, ...allies]` loop, so at equal magnitude the aura is
+      identical in 1v1 and strictly better in teams): Aegis Bond flatDR 2→**3** (vs Unison's aura
+      2), Pride dmgMult 1.05→**1.08** (vs Rallying Roar's aura 1.05), Silent Wisdom regen 3→**4**
+      (vs Wellspring's aura 3). Balance rule now documented atop `INNATE_EFFECTS`: a self-only
+      field must carry a HIGHER magnitude than its aura twin (Quickstep 6 vs Cheer 4 was already
+      the correct pattern). Re-sweep: all three pairs now within ±4%.
+    - **Truth's Word was near-dead weight** (cleanse only fires if the bearer is debuffed; blank
+      vs teams with no debuff moves, while its twin Foresight auraDodge 5 is one of the best
+      auras): gained an always-on `flatDR: 1` rider alongside the cleanse. Re-sweep: 52% vs
+      Foresight's 48% at train 600 (was 32% vs 40% at 1800).
+    - **Enemy-dodge-debuffs are structurally weak** — dodge has no floor at 0 and hit chance past
+      100 is wasted, so shaving dodge off low-DEX foes buys nothing (attackers already sit at
+      ~85-100% to hit). The sweep's two worst pairs were both here. Drowsy Aura converted to
+      `enemyAccDebuff: 3` (acc-debuffs are nearly always live — Hex/Ink Cloud sim fine); Root
+      Grasp split into `enemyDodgeDebuff: 3, enemyAccDebuff: 2`. Web Trap/Temporal Distortion keep
+      their dodge-debuff riders (secondary effects, still live vs dodgy teams).
+    - All six touched `desc` strings in `species.ts` updated to match (desc==table invariant held).
+    - **Residual, accepted as design**: flat per-turn HP-regen effects (Soothing Words, Life
+      Bloom, Sun Basking) are the strongest low-league category (3 HP/turn over a ~25-round Wood
+      fight ≈ a full extra health bar) and fade to nothing at high leagues; %-based effects do the
+      opposite. Koalio/Verdantdrake's regen-vs-debuff pairs still gap ~20-25% at train 150 for
+      this reason. Left as an "early innate vs late innate" seesaw rather than nerfing all heals —
+      flagged that making regen %-of-maxHp would kill the seesaw structurally if ever wanted.
+    - **Stale-species save bug found & fixed while verifying**: saves serialize the whole
+      `Species` object into `Career.species`/`Frozen.species`, so every species.ts change
+      (renames, desc fixes, the item -18 regeneration) was INVISIBLE to existing saves — the
+      live Ranch monster was still showing pre-rework "Elemental nuke."-style descs.
+      `loadSavedGame` now re-links both to the live `SPECIES` table by id on load (a species
+      whose id itself was renamed keeps its stored snapshot rather than crashing). Browser-
+      verified: the persisted save's Corvaan now carries the current numeric descs after reload.
+
+-19. **Innate CHOICE system (2026-07-25), sim/build/browser-verified, uncommitted — the actual
+    "2 choices, 1 auto-unlocked, 1 gated" mechanic the item -18 rework was prerequisite for.**
+    User spec: "the secondary passive will cost 300 to unlock, there is no superiority in the
+    second passive it is another option — note only 1 innate can be active at a time, it is
+    changed like abilities." Implemented exactly: species.innate[0] is available from the start;
+    species.innate[1] unlocks once the monster's HIGHEST current stat reaches
+    `core.ts:INNATE_SECONDARY_LEVEL` (300) — same pattern as `ULTIMATE_LEVEL` (600), just a lower
+    bar. Only ONE innate is ever mechanically live at a time (no more "both stack," which is what
+    item -18 had built) — `Monster` gained `innateUnlocked: boolean` and `activeInnate: number`
+    (0|1); `battle.ts`'s `innateEffects`/`activePassives`/`hasInnate` now read only
+    `species.innate[activeInnate]` via a new `currentInnate(m)` helper, replacing the old
+    "sum both" loop entirely. `Career` gained a persisted `activeInnate` field (default 0), exactly
+    mirroring how `loadout` already persists equipped moves; `game.ts:careerMonster` resolves it
+    with the same shrink-safety `ultimateUnlocked` already had — if a stat drop (e.g. an intensive-
+    drill malus) knocks the monster back under 300, `activeInnate` silently reverts to 0 rather
+    than leaving an inaccessible choice active. `town.ts:setActiveInnate(g, id, index)` is the
+    mutator (blocked mid tournament-entry, same restriction as `setLoadout`; refuses index 1 unless
+    actually unlocked). **UI, "changed like abilities" taken literally**: the swap lives INSIDE the
+    existing `AbilitySelector` (Ranch's "⚔ Edit Abilities" panel), not a separate screen — a new
+    section below the loadout pool shows both of the species' innates as cards, the active one
+    marked "· ACTIVE", the locked one (if not yet unlocked) shown dim with "🔒 unlocks at 300 in a
+    stat" and un-clickable; click the inactive-and-unlocked one to swap. `MonsterCard`'s Innate
+    section now shows only the currently-active innate plus a one-line hint ("2nd choice unlocked
+    — edit abilities to switch" / "2nd choice unlocks at 300 in a stat") instead of listing both
+    unconditionally. Sandbox got the same treatment for parity — `FighterSlot` gained
+    `activeInnate: number | null` (null = default 0, same convention as its existing
+    `loadout: string[] | null`), `buildSandboxMonster` applies the override, and the Sandbox
+    `AbilitySelector` call site wires the same `onSetInnate` callback. Old saves migrate in
+    `loadSavedGame` (missing `activeInnate` → 0, i.e. the original always-available choice — no
+    behavior change for existing monsters until the player explicitly swaps). The Bestiary (species
+    reference, not an owned monster) is intentionally unchanged — it still lists both of a
+    species' innate names, since that's the two available OPTIONS, not one monster's current pick.
+    Verified: `tsc --noEmit` clean, production build clean, `validateDesign()` clean, a standalone
+    scratch sim confirmed only the switched-to innate appears in the battle log's "innate:" line
+    (not both), and a full live-browser pass — Ranch monster (stat 37, well under 300) shows its
+    2nd choice correctly locked with the unlock hint in both MonsterCard and the ability editor;
+    a Sandbox monster trained to 2400 pts (max stat 914) shows "2nd choice unlocked," and clicking
+    the previously-locked innate in the editor swapped `ACTIVE` from Unison to Aegis Bond live,
+    with zero console errors throughout.
+
+-18. **Innate ability rework (2026-07-25), sim/build-verified, uncommitted — first piece of the
+    "abilities" pass the user is starting on (innate abilities first, class/synergy work later).**
+    User's audit request: "review the innate abilities, they must all be passive effects, add
+    numbers... must translate into real stats/effects." Auditing all 90 (45 species × 2) against
+    the actual mechanical table in `battle.ts` surfaced real problems, all now fixed:
+    - **7 abilities had ZERO mechanical effect** (pure flavour text): Frenzy, Hex, Encore, Drowsy
+      Aura, Root Grasp, Entropy, Truth's Word. All now have real numbers.
+    - **Several descriptions contradicted their actual coded effect**: Rend claimed "bleed (DoT)"
+      but was a flat +5% damage boost; Maul claimed "heavy melee crits" but was also flat damage.
+      Reworded both descriptions to honestly state what they do (no new DoT/crit mechanic built —
+      flagged as a further engine option if the user wants literal proc-based DoT/crit later).
+      Ink Cloud and Mana Theft claimed to weaken the ENEMY but were coded as self-buffs — fixed to
+      actually debuff enemies (see below). Sun Basking ("recovers strength between blows") was
+      coded as mana regen — fixed to HP regen, which the description actually describes.
+    - **Team-wide auras are now a real mechanic**, not just flavour text — user's explicit choice
+      over rewriting the ~10 "team"/"allies"-worded abilities as self-only. `InnateEffect` (battle.ts)
+      gained `auraFlatDR`/`auraDodge`/`auraRegen`/`auraHpRegen`/`auraDmgMult`: every living ally
+      (owner included) gets these each round, vanishing the round after the owner falls. New
+      `recomputeInnateAuras(ctx)` runs once at battle start and once per round (same cadence as
+      `tickMods`), building each `Combatant.innate` (the EFFECTIVE totals battle code reads) from
+      `Combatant.selfInnate` (static, own two innates) + living allies' aura contributions. Zero
+      changes needed at any of the 8 existing `c.innate.X` read sites — same field names, now
+      dynamically correct. Converted: Rallying Roar, Wellspring, Ward, Cheer, Tidal Wisdom, Unison,
+      Song of Valor, Psychic Aura, Foresight, Soothing Words, Life Bloom, Royal Jelly, Encore.
+    - **Enemy-facing debuff auras are the mirror mechanic**: `enemyAccDebuff`/`enemyDodgeDebuff`/
+      `enemyRegenDebuff`/`enemyDmgDebuff` apply to every living ENEMY each round (same recompute
+      pass, opposite side). Used for Ink Cloud, Mana Theft (also fixed, see above), and the 3
+      previously-unhooked debuff-flavoured abilities: Hex, Drowsy Aura, Root Grasp, Entropy. Web
+      Trap ("hard to reach" + "foes arrive slowed") got both a self-dodge AND an enemy-dodge-debuff
+      field in one entry — the first ability whose description genuinely described two effects at
+      once, so it's the first to carry two.
+    - **Frenzy** ("Attack speed up at low HP") reworked into a real conditional: new self-only
+      `lowHpDmgMult` field, checked dynamically against CURRENT hp/maxHp (not a static roll) in the
+      damage calc — +15% damage while below 50% HP. The only field that reads live battle state
+      rather than being a flat/summed number.
+    - **Truth's Word** ("Dispel all buffs/debuffs at will") was the one ability that read as an
+      ACTIVE, on-demand action — directly conflicting with "must all be passive." User's choice:
+      automatic interval cleanse. New special-cased function `truthsWordCleanse(ctx, round, ...)`
+      (keyed by ability name, same pattern as `tauntForce`) — every 3rd round, a bearer
+      automatically removes one random debuff mod from itself. No generic field for this since
+      it's the only ability that removes a mod outright rather than adjusting a number.
+    - **Every one of the 90 descriptions was regenerated FROM the mechanical data**, not hand-typed
+      — a script imported the (temporarily exported) `INNATE_EFFECTS` table and produced exact
+      wording per field (`"+8% damage."`, `"Team: +3 HP regen/turn."`, `"Enemies: -4% accuracy."`,
+      etc.), then patched every `{ name, desc }` pair in `species.ts` by name match. This means
+      description and mechanic can never drift apart again — the desc IS the table, rendered to
+      text. `INNATE_EFFECTS` stayed exported afterward (harmless, and available if a future UI
+      pass wants to show real numbers in an ability tooltip).
+    - Verified: `tsc`/production build clean; a script cross-checked all 90 species' innate names
+      against the table's 90 keys (0 missing, exact 1:1, no typos); `validateDesign()` clean; a
+      live `simulateTeamBattle` sim (Maneleo+Kongrath vs Aegisox+Grivvel, real species via a
+      seed-search helper) ran multiple full rounds with no exceptions, confirming the aura/enemy-
+      debuff recompute pass, the low-HP conditional, and the innate log line all execute correctly
+      at runtime — not just type-check clean.
+
+-17. **Unique per-species-per-stage Mammal sprites (2026-07-24), structurally verified, uncommitted
+    — the start of the long-flagged "unique per-species sprites" roadmap item.** New file
+    `src/mammalSprites.ts`: hand-authored 16×16 pixel-art grids (same '.'/X/B/L/A/E/P legend as
+    `sprites.ts`) for all 5 Mammal species at 3 life stages each — child, teen, adult — with each
+    stage's filled-pixel count deliberately increasing (verified programmatically: e.g. Kongrath
+    58→116→162, Ursath 70→130→180 across all 5 species, zero exceptions) so a monster visibly
+    grows in size/detail stage to stage, "like a Pokémon evolution" per the user's own framing.
+    `Elder`/`Retiree` deliberately do NOT get a 4th hand-drawn grid — `Sprite.tsx` reuses the adult
+    silhouette and applies a CSS filter (`grayscale(0.55) brightness(0.75) saturate(0.6)`) to read
+    as visibly aged/faded, since proportions don't change further at that point, only condition
+    does (satisfies "when the monster reaches elder it must start to look older, less able to
+    fight" without doubling the art workload). `Sprite.tsx` gained an optional `stage` prop
+    (`'Baby'|'Teen'|'Fully Grown'|'Elder'|'Retiree'`, mirroring `game.ts`'s `Stage` type without an
+    import to avoid pulling the career module into a leaf component) — species with a
+    `SPECIES_SPRITES` entry use it to pick child/teen/adult; everything else (all other body
+    types, not yet migrated) falls back to the original shared body-type silhouette unchanged, so
+    this is purely additive. Threaded `stage` through every `<Sprite>` call site that has a
+    `Career` (hence `ageWeeks`) available — feeding screen, stable strip cards, stable detail
+    portrait, Lab freeze list — via the already-imported `stageInfo()`; the Lab's Thaw list passes
+    a hardcoded `stage="Teen"` since `Frozen` genomes carry no age and always return as Teen on
+    thaw. Left at adult/default for contexts with no persisted individual (Bestiary — showing the
+    species' canonical form — Sandbox, ScoutReport, BracketGrid).
+    - **Verification note**: the screenshot tool was unavailable for this pass (`computer` timed
+      out repeatedly across two fresh tabs, even for unrelated pages — an environment issue, not a
+      rendering bug, since `read_console_messages` showed zero errors throughout). Verified
+      instead via `tsc`/production build (both clean), a DOM query confirming 5 Bestiary rows
+      render with 5 *different* rect counts (128–167, proving unique-not-shared silhouettes are
+      actually live, not just present in source), and a standalone Node script counting filled
+      pixels per stage per species (all 5 monotonically increasing, printed above). No live visual
+      screenshot was taken — if the rendered sprites look off once the screenshot tool recovers,
+      this is the first thing to check.
+
+-16. **Pinguox/Sylvaglide flaw removed (2026-07-24):** resolved the open question from the prior
+    handover — user's call was to drop the flaw entirely (major-only `trainingProfile`) rather
+    than pick a different stat. `species.ts` updated for both; `docs/BESTIARY.md` headers updated
+    to `major STAT` with no `/ flaw STAT` suffix; `App.tsx`'s Bestiary row rendering fixed to
+    handle major-without-flaw gracefully (previously assumed flaw always existed alongside major,
+    would have rendered `▼ undefined`). `validateDesign()` re-run standalone, fully clean.
+
+-15. **Bestiary group headers keep elemental info too (2026-07-24):** correction to item -13/-14 —
+    user clarified "the species should still list its elemental effects, but only the species, not
+    the monster": the body-type/group-level header (e.g. "Mammals") is "the species" in the user's
+    terminology here and should show BOTH the minor training stat AND resist/weak elements;
+    individual monster rows correctly stayed major/flaw-only (no element) per the prior pass — no
+    change needed there. Restored `· resist X · weak Y` alongside `· minor STAT` in both
+    `App.tsx:Bestiary`'s group header and `docs/BESTIARY.md`'s 6 `## BodyType` tagline headers.
+
+-14. **`docs/BESTIARY.md` header rework to match (2026-07-24), uncommitted:** immediate follow-up
+    to item -13 — that pass only touched the in-game Bestiary UI; the static doc's per-body-type
+    and per-species headers still read `resist X / weak Y`, which the user was looking at directly
+    (screenshotted) and flagged as the same problem in a different place. Applied the identical
+    substitution here: all 6 `## BodyType — *tagline; resist X, weak to Y*` headers now end
+    `minor STAT` instead; all 30 `### Species — animal · resist X / weak Y` headers now read
+    `major STAT / flaw STAT` (or `minor only` for the 6 vanilla species), sourced directly from
+    each species' `trainingProfile` in `species.ts` (same data item -10 authored, just surfaced in
+    the doc too). Also fixed the doc's own format-description line ("Each entry: species · common
+    name · element (resist/weak)" → "...· training (major/flaw)"). Scope stayed the 30 base
+    species per the doc's own stated scope (line 34-35 already excludes the 15 exclusives) — no
+    element-vs-training tension there since that section was never touched.
+
+-13. **Bestiary redesign around training aptitude (2026-07-24), live-verified, uncommitted:** user
+    feedback after seeing the item -10 training system: the in-game Bestiary (`App.tsx:Bestiary`)
+    still centered on elemental resist/weak (a body-wide, not per-monster, property) and still had
+    class-flavored words baked into several species' `flavour` text — both worked against the new
+    "training determines class" framing.
+    - **Group header** now shows the body type's MINOR training stat (`BODY_MINOR[bt]`, tinted to
+      the stat's own colour) instead of the resist/weak element line — e.g. "MAMMAL · minor STR".
+      The exclusive body types (Draconic/Abyssal/Mythical) correctly show no minor stat at all
+      (they're not on the new system yet — `BODY_MINOR` has no entry for them, handled gracefully).
+    - **Each species row** now shows its individually-authored `▲ major · ▼ flaw` (colour-tinted
+      per stat) instead of nothing — this is the actual per-row payoff, since major/flaw is what
+      makes two same-body-type species train differently. The 6 vanilla species (Kongrath,
+      Corvaan, Quokkade, Maelurk, Scarabrute, Geckari — minor-only, no authored major/flaw) show
+      "minor only" instead of blank. New CSS: `.bestrow > summary .bsmall` forces this line onto
+      its own row under the sprite/name for readability.
+    - **"Theme:" renamed to "Bio:"** in `docs/BESTIARY.md`'s 6 per-body-type section headers
+      (`### Theme: Displacement & Renewed Purpose` → `### Bio: ...`, etc.) — user's own wording,
+      applied verbatim via a global find/replace.
+    - **Class jargon scrubbed from flavour text** (user: "remove any mentions of classes such as
+      'mage' or 'skirmisher'... class is determined by training itself," reinforcing the existing
+      "class is emergent, never species-locked" principle at the WRITING level, not just the code
+      level): rewrote 18 of the 30 base species' `flavour` field in `species.ts` to drop
+      class-implying words (mage, brawler, skirmisher, duellist, warder, oracle, mystic, warlord,
+      juggernaut, rampart, "commanding voice," "voice performer," "nimble performer," "gliding
+      ranged," "immovable wall") in favor of pure animal/physical description — e.g. Grivvel
+      "Wolverine brawler" → "Wolverine, relentless and short-tempered"; Corvaan "Sorcerous raven,
+      arcane" → "Raven, sharp-eyed and light-fingered." Mirrored the same scrub across
+      `docs/BESTIARY.md`'s 7 affected long-form entry headers (Grivvel, Maelurk, Mantevoke,
+      Arachnyx, Odonatra, Serpwyn, Tortavos) plus two in-prose instances ("eight-armed spellwork"
+      → "eight-armed reach," "glowing faint arcane blue" → "glowing faint blue") and the Aquatics
+      group tagline ("wise, arcane" → "wise, ancient"). **Scope note, not yet done**: the 15
+      exclusive-body species (Draconic/Abyssal/Mythical — e.g. Frostwyren "patient mage",
+      Wisdomkeeper "Ancient oracle") still have class jargon; left alone consistent with the
+      standing "not yet" on migrating exclusives to the new training system, flagged here as a
+      known follow-up if the user wants full consistency later.
+    - Live-verified: full Bestiary page-text dump confirmed every group header, every row's
+      major/flaw (or "minor only"), scrubbed flavour text, and correctly-locked exclusive groups
+      (no minor shown) all render as designed — zero console errors.
+
+-12. **Feeding-screen food gate (2026-07-24), live-verified, uncommitted:** the Advance Week food
+    gate (item -6 below) only covered the STABLE screen — a player could still click "Next
+    Monster"/"Continue to Stable" on the FEEDING screen itself with no food picked, which used to
+    just silently leave that monster unfed rather than blocking anything. Now the same pattern
+    applies one screen earlier: `App.tsx`'s per-monster "Next Monster →"/"Continue to Stable →"
+    button disables (`!currentCareer.retired && !currentPlan.food`) and the food-picker panel gets
+    a pulsing red outline (`.foods-missing` in `styles.css`) until a food is chosen for that
+    monster — retired monsters are exempt (they were already skipped from feeding). Live-verified:
+    button `disabled=true` + `.foods-missing` present with no food picked, both clear the instant
+    a food button is clicked.
+
+-11. **Bestiary content sync for the training-aptitude reimagines (2026-07-24), live-verified:**
+    `src/bestiary.ts`'s condensed BIOS and `docs/BESTIARY.md`'s full entries were still keyed to
+    the pre-rename ids (`skyrend`/`zephyri`/`serapelle`/`voltaray`/`corallux`) after item -10's
+    species.ts renames — the in-game Bestiary already showed the new NAMES (pulled from
+    `Species.name`) but fell back to the one-line `flavour` text instead of a full bio paragraph,
+    since the BIOS lookup by id was missing. Wrote new condensed + long-form bios for all 5
+    renamed species (Pinguox/penguin, Balaenix/shoebill, Carcharun/shark, Mantaris/manta ray,
+    Lanterix/lanternfish), keeping each within its body type's existing theme (Avian's
+    "migration/scattering," Aquatic's "the deep stirs") and referencing the correct
+    post-rename ability names. `docs/GAME_DESIGN.md` still has stale references to the old names —
+    left alone per the file's own "increasingly stale, code + CLAUDE.md are more current" caveat.
+    Live-verified: Bestiary index shows all 5 new names/flavours, Pinguox's expanded entry shows
+    the full new bio + correct innate names, zero console errors.
+
+-10. **Per-species training aptitude overhaul (2026-07-23/24), live-verified, uncommitted — the
+    biggest single change this session.** User's stated problem: "modifiers for training currently
+    depend entirely on body type, the individual monster makes no difference." Replaces the old
+    3-tier derived system (primary +20%/secondary +10%/weakness −20%, ALWAYS the top/2nd/lowest of
+    a species' base stats — meaning two same-body-type species trained identically in practice)
+    with a 2-source model: **body type grants one MINOR bonus** (+10%, same stat for every species
+    of that body — `core.ts:BODY_MINOR`, one of the 6 base types → one of the 6 stats, all
+    distinct: Mammal→STR, Avian→WIS, Marsupial→CHA, Aquatic→INT, Insectoid→CON, Reptilian→DEX),
+    and **each species individually authors its own MAJOR bonus (+20%) and training FLAW
+    (−20%, renamed from "weakness")** via `Species.trainingProfile` (now `{major?, flaw?}`,
+    always excluding the body's own minor stat — verified no species' major/flaw ever duplicates
+    its body-type minor). A handful of "vanilla" species (exactly one per body type — Kongrath,
+    Corvaan, Quokkade, Maelurk, Scarabrute, Geckari) intentionally get NO major/flaw, just the body
+    minor — the textbook example of their body type. All 30 base species' major/flaw assignments
+    came directly from the user's own notes (two typos caught and fixed in review: Arachnyx's
+    flaw was corrected from CON — which collided with the Insectoid CON minor — to DEX; Nautilux
+    and Corallux/Lanterix had "minor" written where "flaw" was meant). The 15 exclusive-body
+    species (Draconic/Abyssal/Mythical) are explicitly NOT migrated yet (user's own choice when
+    asked) — they fall back to the legacy derivation unchanged, reshaped into the same
+    `{minor, major, flaw}` return shape so every consumer only needs one code path
+    (`game.ts:trainingProfileFor`: `species.trainingProfile` present → new authored system;
+    absent → legacy sort-of-base-stats derivation, secondary→minor/primary→major/weakness→flaw).
+    `core.ts` gained a distinct `AuthoredAptitude` type (`{major?, flaw?}`, what a species DATA
+    ENTRY writes) separate from the resolved `TrainingProfile` (`{minor, major?, flaw?}`, what
+    `trainingProfileFor` RETURNS) — needed because authored entries never specify minor themselves.
+    Every consumer updated: `game.ts:statTrainingBonus`/`statMalusMultiplier` (field renames only,
+    same magnitudes), `town.ts`'s post-tournament exp-reward split (60/40 major/minor, or 100% into
+    minor for a vanilla species with no major), `App.tsx`'s `Signature` component/`TrainBlock`
+    aptitude-coloring/stable-screen stat tags (all renamed primary→major, secondary→minor,
+    weakness→flaw; `Signature` and the stat tags now handle the vanilla no-major/no-flaw case
+    gracefully), `validate.ts`'s class-stat-collision check (renamed field, see the open question
+    at the top of this file).
+    - **5 species fully reimagined** (name + appearance + backstory), each keeping its original
+      base stats/class/lifespan/id-slot but getting a new identity to fit its user-assigned
+      major/flaw: **Skyrend→Pinguox** (raptor→penguin, CON major fits an armoured diver; kept its
+      original innate/ultimate names since they already fit a diving hunter), **Zephyri→Balaenix**
+      (swallow→shoebill, STR major flips the old "evasive multi-hit skirmisher" kit to a
+      patience/ambush kit — innates renamed Evasion→Ambush Strike, Flurry→Statue Stance, ultimate
+      Thousand Cuts→Sudden Reckoning), **Serapelle→Carcharun** (sea-turtle→reef shark, kept Sage
+      class/WIS-INT base stats as a deliberate "ancient wise elder" subversion rather than a raw
+      brawler; only renamed the shell-specific innate Ancient Carapace→Weathered Hide),
+      **Voltaray→Mantaris** (electric ray→manta ray, user-approved via AskUserQuestion; fully
+      re-themed since the old kit was explicitly electric — Live Wire→Current Rider, Static
+      Field→Wing Current, ultimate Thunderstorm→Tidal Wingsweep), **Corallux→Lanterix** (coral
+      crab→lanternfish; renamed the shell-specific Coral Guard→Abyssal Glow and ultimate Reef
+      Blade→Abyssal Flare). `battle.ts`'s `INNATE_EFFECTS` table updated in lockstep for every
+      renamed ability (same mechanical values, new keys) — verified no other species shared any
+      renamed key before removing the old ones. Species ids also changed
+      (skyrend/zephyri/serapelle/voltaray/corallux → pinguox/balaenix/carcharun/mantaris/lanterix)
+      — see item -11 for the bestiary-text follow-up this required.
+    - Verified: `tsc --noEmit` clean, production build clean, `validateDesign()` run standalone
+      (surfaced the two flagged cases noted at the top of this file, both traced to explicit user
+      data, not implementation bugs).
+
+-9. **Scouting report UI overhaul (2026-07-22), live-verified, uncommitted:** the plain
+    "Name — Class · move, move, move" text line is replaced with `App.tsx:ScoutReport`, a card
+    shaped exactly like `MonsterCard` (sprite, name, species/body/sex, flavour, badges, element,
+    stat bars, loadout) — the tier split itself is unchanged (`basic` = class + loadout, `full` =
+    + stats; user explicitly chose to keep the existing 2-tier split rather than add more after I
+    raised the option). Design principle, user-specified: the card renders in the SAME shape
+    whether or not a tier's been bought — identity fields never gated behind any tier (sprite,
+    name, species, body, flavour, element resist/weak, league, lifespan) render immediately since
+    they're already visible once you're facing the team in the bracket; only `className` (badge)
+    and `loadout` gate on `knowsKit` (`tier === 'basic' || 'full'`), and only the 6 stat bars gate
+    on `knowsStats` (`tier === 'full'`). Ungated-and-not-yet-bought fields render as `??` text; an
+    ungated stat renders as a flat locked bar (`.stat .bar.locked`, a dim `>` glyph) instead of a
+    filled one — the row never disappears or reflows when the tier is later purchased, it just
+    fills in. The buy buttons for `Fight` and both scout tiers now sit alongside the always-visible
+    card (previously the card only rendered AFTER a purchase, buttons before). Live-verified all
+    three states in one playthrough: pre-purchase (`??` badge, `>` bars, `?? — pay to scout` in
+    place of the loadout list), post-basic (real class badge + real loadout, stats still `??`/`>`),
+    post-full (real colored stat bars matching MonsterCard's exact bar styling) — gold deducted
+    correctly at each step (5g then 15g), zero console errors.
+
+-8. **Progressive bracket reveal (2026-07-22), live-verified across two full playthroughs,
+    uncommitted:** immediate follow-up to item -7's grid — "the bracket must begin empty, and only
+    fill up with X's on a loss and O on a win... must not start complete." The whole event is still
+    pre-simulated in one shot (`resolveTournament` inside `advanceWeek`, unchanged), so this is a
+    pure display-layer fix: `BracketGrid` now takes `allMatches` (full event, used ONLY for
+    name/icon identity — a team shouldn't stay anonymous just because it hasn't fought yet) and a
+    separate `revealed` list (used for the actual O/✕/– cells). `revealed` is computed in the
+    `'bracket'` sub-phase as `lb.matches.slice(0, indexOf(last-completed player match) + 1)` — 0
+    completed player matches → empty slice → fully blank grid on first entry; each "Back to
+    Bracket" reveals exactly the one match just fought (verified: screenshot after match 1 of 3
+    showed precisely one filled cell pair, everything else blank). "Other results" is filtered
+    to the same `revealed` subset so it doesn't spoil rival-vs-rival outcomes early either; it's
+    hidden entirely while empty. The `'announce'` screen passes `lb.matches` as both props (event
+    is over, everything revealed). Re-verified end-to-end in a **fresh browser tab** (no HMR
+    history) specifically because the live-edit session itself threw one stale
+    `<BracketGrid>` prop-shape error from Vite hot-reloading mid-edit — confirmed via a clean
+    reload that it was an HMR artifact, not a real bug (zero console errors across a full 3-match
+    Wood-cup playthrough in the fresh tab).
+
+-7. **Bracket follow-ups (2026-07-22), live-verified, uncommitted:** three fixes/requests raised
+    right after playing the item -6 bracket screen for the first time.
+    - **Real names/icons instead of "Rival Team N"** (`App.tsx:teamRoster`/`teamName`): the internal
+      `label` on `EventStanding`/`EventMatch` ("Your Team"/"Rival Team 1"...) is still used as the
+      stable bookkeeping key (must stay unique for matching), but every place it's SHOWN to the
+      player now resolves through the roster instead — `teamRoster(label, matches)` finds the
+      first match containing that label and returns its `Monster[]`, `teamName(...)` joins member
+      names with " & ". Applied to the bracket grid's row headers (name + lead-monster `Sprite`),
+      "Other results", "Next up: X", and the fight screen's "Match N of M: X vs Y" header.
+    - **Round-robin results GRID replaces the old win/loss list** (`App.tsx:BracketGrid`, new
+      component, reference: a Monster Rancher bracket screenshot the user attached): numbered rows
+      (placement order) with icon + full team name, numbered columns, diagonal hatched/blank, each
+      off-diagonal cell is the ROW team's result against the COLUMN team — `O` green (win), `✕` red
+      (loss), `–` grey (draw), resolved per-cell from `lb.matches` (no new data needed, matches
+      already contain every pairwise result). Used in both the bracket hub and the final
+      announcement screen (was previously two different truncated lists — top-3 only on
+      announce). New CSS block at the end of `styles.css` (`.bracket-grid*`), scrolls inside its
+      own wrapper (`overflow-x: auto`) rather than the page, since a 6-team Masters field is 7
+      columns wide.
+    - **License-vs-tournament-league gating — confirmed ALREADY correct, no code change**: user
+      asked to prevent entering a tournament above license. `town.ts:eligibleForTournament`
+      (`c.licenseIndex >= tIdx`) already blocks this both in the `TeamPicker`/1v1-select pool
+      population AND again at `signUp`'s own validation — a Wood-license monster (`licenseIndex
+      0`) was already unable to appear in a Copper+ tournament's eligible pool or sign up for one.
+      Verified by re-reading both call sites; no gap found, nothing to fix.
+
+-6. **Playtest-feedback pass (2026-07-22), live-verified end-to-end in the browser, uncommitted:**
+    a batch of fixes/features from the user's own playtest notes, each confirmed via a follow-up
+    Q&A round before implementation (excursion economy, injury model, bracket UX, lore, sudden
+    death) — see the git-uncommitted diff in `src/App.tsx`/`battle.ts`/`game.ts`/`town.ts`.
+    - **Excursion gold now scales by league, capped low on purpose** (`game.ts:excursionGold`):
+      was a flat 30-80g regardless of monster rank; now min/max is derived from ~1/3 of that
+      league's own 1st-place tournament reward (`LEAGUE_TOP_GOLD`, hand-kept in sync with
+      `town.ts`'s `CIRCUIT_REWARDS`/`PRESTIGE_EVENTS`), so Wood tops out at 33g, Tamer Elite at
+      200g — user-specified as "we don't want this to be hugely profitable." The roll is
+      squared-uniform (`rng()*rng()`, one draw) so it skews hard toward the bottom of its range —
+      user spec: "more likely to give the bottom end... eventually this will be turned into a
+      minigame" (that minigame itself is NOT built — this is just the payout curve it'll plug
+      into). Both `previewWeekEffects` and `applyWeek` call the same function, same rng-call-order
+      contract as before.
+    - **Advance Week is gated on every active monster having food chosen** (`App.tsx` rail): user
+      spec "monsters always require food" — the button disables (with a title tooltip naming which
+      monsters are unfed) and the rail note swaps to a `🍽 N unfed` warning instead of the normal
+      💪/😴/🧭 pre-flight summary. Live-verified: selecting one of two monsters' food left the
+      button disabled with the correct monster named; picking the second food re-enabled it.
+    - **Intensive-drill malus hits harder on a training weakness** (`game.ts:statMalusMultiplier`):
+      a malus landing on the species' training weakness stat is ×1.5 instead of flat — weakness
+      stats already train 20% slower, so losing one now stings more too. Primary/secondary/neutral
+      maluses are unchanged. Applied identically in `applyWeek` and `previewWeekEffects`.
+    - **Tournament injury model simplified** (`town.ts:resolveTournament`), replacing the whole
+      per-individual `wasKOd`/HP-MP-carry-forward system built in the NvN team-battle work below:
+      user spec "we want a monster to heal to full health inbetween each fight, they do not carry
+      injuries throughout the tournament... they are only injured when they return to the ranch."
+      Every match — for both the player's team AND every rival team — now starts at full HP/MP
+      (`playerTeam` is forced to `maxHp`/`maxMana` before the round robin; rival `Monster` objects
+      already default to full since they carry no `hp`/`mp` fields). No mid-event carry-forward,
+      no per-match KO tracking. Post-event, regardless of placement or how any match went, each of
+      the player's own monsters comes home at a flat random 0-50% of max HP *and* MP (independent
+      seeded roll per monster: `g.seed:week:tournamentId:injury:careerId`) — this is strictly
+      simpler code, not just a different number (removed `wasKOdEver`, `lastPlayerFinals`, and the
+      per-match `pa.team =`/`pb.team =` reassignment block entirely). Live-verified: a monster
+      entered its match at full 90/90 HP (previously-injured state from an earlier fight in the
+      same session did NOT carry in), then came home at 29/90 (32%) — within the promised band.
+    - **Rival-team generation extracted into `town.ts:generateRivalTeamsForTournament(g, t)`** —
+      pure/deterministic (same `(seed, week, tournamentId)` → same teams), pulled out of
+      `resolveTournament` so it can be called ahead of resolution for scouting/bracket preview
+      without duplicating the band-roll/role-composition logic. `resolveTournament` now just calls
+      it instead of inlining.
+    - **Scouting** (`town.ts:scoutFee(league, tier)`, UI in `App.tsx`'s bracket hub): pay gold to
+      reveal the next opponent team before fighting them — `'basic'` (class + loadout) costs
+      `(leagueIndex+1)*5`g, `'full'` (also raw stats) costs `(leagueIndex+1)*15`g, both scaling
+      with league same shape as `entryFee`. Implemented as a pure UI reveal-gate over data that's
+      already present in `lastBattle.matches` (matches are pre-simulated when the week advances,
+      same as before) — scouting doesn't change any outcome, it only unlocks display, paid via a
+      direct `game.gold` debit at click time. Per-match reveal state (`scouted: Record<matchIdx,
+      'basic'|'full'>`) is local component state, reset each new tournament event. Live-verified:
+      480g→465g (15g full-scout fee charged), correct class/loadout/stats rendered for the
+      upcoming rival team.
+    - **Monster-Rancher-style bracket hub replaces the old linear step-through-matches screen**
+      (`App.tsx`, the whole `phase === 'battle'` block rewritten): a `battleSub` state machine
+      (`'preamble' → 'bracket' → 'fight' → 'bracket' → ... → 'announce'`) — the player returns to
+      a real bracket/standings view between every one of their own matches (not just at the very
+      end), sees the scouting panel for the next opponent there, and only enters `ArenaBattle` when
+      they click Fight. `matchIdx`/`battleOver` state (pre-existing) still drives which match plays;
+      `battleSub` is new and reset alongside them in `doAdvanceWeek`. Rival-vs-rival results still
+      shown as plain text ("Other results"), not replayed. Live-verified the full loop: preamble →
+      bracket → scout → fight → back-to-bracket → next opponent → fight → back-to-bracket →
+      See Results → final announcement → Continue → feeding screen digest.
+    - **Pre-cup lore preamble + post-cup announcement** (`town.ts:cupLore(t)`, new `CupLore`
+      interface `{intro, outroFlavour}`): hybrid sourcing per user's own choice of the three
+      options offered — hand-authored `PRESTIGE_LORE` (one paragraph + closing line each) for the
+      5 fixed annual prestige events (Silver Crescent → Apex Invitational), templated
+      `CIRCUIT_LORE_FLAVOUR` (one setting phrase + one closer phrase per league, Wood→Iron) for the
+      circuit cups that regenerate a new name every game-year. `LastBattle` gained a
+      `tournamentId` field (previously absent — nothing needed to re-look-up the `Tournament`
+      object post-resolution) so the battle screen can re-fetch the full `Tournament` for `cupLore`
+      and its `rewards.gold` display. The preamble screen shows before the bracket; the outro
+      flavour line shows on the final announcement screen alongside the real standings/placement
+      (which come from actual match data, not the lore table).
+    - **Round-35 sudden-death chip damage** (`battle.ts`, inside `simulateTeamBattle`'s round
+      loop): from round 35, every living combatant takes flat TRUE damage (bypasses ward and
+      mitigation entirely — `c.hp -= chip` directly) equal to `2^(round-35)` — 1, 2, 4, 8...
+      doubling each round — applied after normal turns/status-ticks, before the round's final
+      `snap()`. Guarantees a winner within ~12 rounds of the clock starting regardless of HP pool
+      size, well inside the pre-existing 60-round hard timeout (which stays as an untriggerable
+      backstop now). User chose this flat-doubling design over the alternative offered
+      (a stacking %-damage-taken/dealt modifier), reasoning it stays predictable and can't be
+      out-mitigated by a defensive team comp. Not yet triggered in an actual live playthrough fight
+      (early-game matchups rarely run this long) — verified by code review of the exact
+      round-gate/chip-formula/true-damage-application logic instead.
 
 -5. **UI overhaul (2026-07-21, full review implemented, live-verified at desktop + mobile):**
     - **Default-rest bug FIXED** (`town.ts:advanceWeek`): a monster with no plan now genuinely
@@ -446,8 +1287,18 @@ rework above.
   burn, guard, ward shields (CON-exclusive), ROUND-LIMITED buffs/debuffs via `Combatant.mods`
 - Mitigation: physical vs CON + guard, magic/voice/support vs WIS
 - Innate abilities grant passives via `INNATE_EFFECTS` table (keyed by ability NAME — renaming a
-  species' innate in `species.ts` requires renaming the matching key here too)
-- Ultimate (stat 600+) fires once per battle below 40% HP
+  species' innate in `species.ts` requires renaming the matching key here too). Each species has
+  TWO innates but only ONE is ever active (`Monster.activeInnate`, 0 or 1) — the 2nd is an
+  alternative, not an upgrade, and unlocks at `INNATE_SECONDARY_LEVEL` (300) in a stat; swapped via
+  the Ability Selection UI, same as loadout moves.
+- Ultimates were REMOVED (2026-07-25) — no once-per-battle trigger exists anymore
+- Statuses: blind/poison/burn/fear/confusion/stun + (2026-07-25) bleed (stacking, cap 3),
+  silence (Attack/Block only), vulnerable (+20% taken), knockback (acts LAST — live turn-order
+  manipulation), sleep (wakes on damage), doom (delayed burst, cleansable), healblock (heals/
+  lifesteal/regen ×0.4), haste (acts FIRST — the one BENEFICIAL status, cleanses don't strip it),
+  charm (hostile hits strike own team). Framework move-effects awaiting adoption: maxHpDmg,
+  bonusVsStatus (combo setup→payoff, AI-aware via effPower), thorns, hpRegenBuff; tauntForce via
+  'allEnemies' = mass taunt
 
 ### Tournaments (`town.ts`)
 - Seeded calendar generator (`tournamentCalendarFor(seed, year)`), drawn fresh each game year:

@@ -1,6 +1,6 @@
 import { Dispatch, SetStateAction, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  BODY_ELEMENT, BodyType, Element, FOODS, LEAGUES, Monster, Move, STATS, Stat, classForStats,
+  BODY_ELEMENT, BODY_MINOR, BodyType, Element, FOODS, INNATE_SECONDARY_LEVEL, LEAGUES, Monster, Move, STATS, Stat, classForStats,
   feedDelta, happinessMultiplier, hashString, mulberry32, roleOfClass,
 } from './core'
 import { generateMonster, manaCost, maxHp, maxMana, staminaDamageMult } from './monster'
@@ -15,11 +15,11 @@ import {
   dateLabel, foodName, previewWeekEffects, rankUpFee, stageInfo, trainingProfileFor,
 } from './game'
 import {
-  BULK_FOOD_COST, ELITE_LICENSE_COST, EventMatch, FUSION_COST, GameState, RENTAL_PER_FROZEN, SPECIAL_LICENSE_COST,
+  BULK_FOOD_COST, ELITE_LICENSE_COST, EventMatch, EventStanding, FUSION_COST, GameState, RENTAL_PER_FROZEN, SPECIAL_LICENSE_COST,
   WeekPlanEntry, advanceWeek, barnCost, buyBulkFood, buyEliteLicense, buyMonster,
-  buySpecialLicense, cancelSignUp, eligibleForTournament, freeze, fuse, fusionRoom, goto, monthOfWeek,
-  RANK_UP_MONTHS, RANK_UP_WEEK, entryFee, isRankUpWeek, placementLabel, teamSizeForLeague,
-  newGame, offerMonster, promoteMonster, renameMonster, rewardMultiplier, setLoadout, signUp, thaw,
+  buySpecialLicense, cancelSignUp, cupLore, eligibleForTournament, freeze, fuse, fusionRoom, goto, monthOfWeek,
+  RANK_UP_MONTHS, RANK_UP_WEEK, entryFee, isRankUpWeek, placementLabel, scoutFee, teamSizeForLeague,
+  newGame, offerMonster, promoteMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, signUp, thaw,
   tournamentCalendarFor, upgradeBarn, visibleLeagueCount, weekOfMonth, yearOfWeek,
 } from './town'
 import { APP_VERSION } from './version'
@@ -49,8 +49,11 @@ function Signature({ m }: { m: Monster }) {
   const prof = trainingProfileFor(m.species)
   return (
     <div className="meta sig">
-      <span className="up">▲ {prof.primary} <small>+20%</small> · {prof.secondary} <small>+10%</small></span>
-      <span className="down">▼ {prof.weakness} <small>−20%</small></span>
+      <span className="up">
+        {prof.major && <>▲ {prof.major} <small>+20%</small> · </>}
+        {prof.minor} <small>+10%</small>
+      </span>
+      {prof.flaw && <span className="down">▼ {prof.flaw} <small>−20%</small></span>}
       <span className="dim">training aptitude</span>
     </div>
   )
@@ -112,9 +115,13 @@ function MonsterCard({ m }: { m: Monster }) {
       {STATS.map((k) => <StatBar key={k} stat={k} value={m.stats[k]} max={barMax} />)}
 
       <div className="section-title">Innate</div>
-      {m.species.innate.map((a) => (
-        <div className="ability" key={a.name}>{a.name} — <small>{a.desc}</small></div>
-      ))}
+      {(() => {
+        const a = m.species.innate[m.activeInnate] ?? m.species.innate[0]
+        return <div className="ability" key={a.name}>{a.name} — <small>{a.desc}</small></div>
+      })()}
+      <div className="md dim">
+        {m.innateUnlocked ? '2nd choice unlocked — edit abilities to switch.' : `2nd choice unlocks at ${INNATE_SECONDARY_LEVEL} in a stat.`}
+      </div>
 
       <div className="section-title">Loadout (equipped 3 of {m.learned.length} learned)</div>
       <div className="moves">
@@ -126,15 +133,61 @@ function MonsterCard({ m }: { m: Monster }) {
             <div className="md">{mv.desc} {mv.status ? `(${mv.status.kind})` : ''} · {manaCost(mv)} MP · cd {mv.cooldown} · acc {mv.accuracy}</div>
           </div>
         ))}
-        {/* Ultimate: invisible until a stat crosses 600 — then appears as a
-            4th ability below the loadout (user spec), never as a "(600)" teaser. */}
-        {m.ultimateUnlocked && (
-          <div className="move ultimate">
-            <span className="lvl">★ ultimate</span>
-            <span className="mn">{m.species.ultimate.name}</span>
-            <div className="md">{m.species.ultimate.desc}</div>
+      </div>
+    </div>
+  )
+}
+
+// Scouting profile (user spec 2026-07-22, reference: the full MonsterCard
+// layout) — same shape whether or not you've paid: identity (sprite, name,
+// species, element) is always visible since it's plainly on display in the
+// bracket already; class + loadout unlock at the 'basic' tier, stats unlock
+// at 'full'. Whatever tier hasn't been bought renders as "??" text / a
+// locked ">" bar instead of being omitted, so the card never reflows.
+function ScoutReport({ m, tier }: { m: Monster; tier: 'basic' | 'full' | undefined }) {
+  const knowsKit = tier === 'basic' || tier === 'full'
+  const knowsStats = tier === 'full'
+  const barMax = Math.max(100, ...STATS.map((k) => m.stats[k])) * 1.05
+  return (
+    <div className="scoutcard">
+      <div className="mhead">
+        <Sprite species={m.species} />
+        <div>
+          <div className="name">{m.name}</div>
+          <div className="meta">{m.species.name} · {m.species.body} · {m.sex === 'M' ? '♂' : '♀'}</div>
+          <div className="meta">{m.species.flavour}</div>
+        </div>
+      </div>
+
+      <div className="badges">
+        <span className={'badge' + (knowsKit ? '' : ' locked')}>{knowsKit ? m.className : '??'}</span>
+        <span className="badge">{m.league} league</span>
+        <span className="badge">Lifespan {m.species.lifespan}y</span>
+      </div>
+
+      <div className="afftaste">
+        <span>Element: <b className="up">{ELEMENT_ICON[BODY_ELEMENT[m.species.body].resist]} resist</b> · <b className="down">{ELEMENT_ICON[BODY_ELEMENT[m.species.body].weak]} weak</b></span>
+      </div>
+
+      {STATS.map((k) => knowsStats
+        ? <StatBar key={k} stat={k} value={m.stats[k]} max={barMax} />
+        : (
+          <div className="stat" key={k}>
+            <span>{k}</span>
+            <span className="bar locked">&gt;</span>
+            <span className="v">??</span>
           </div>
-        )}
+        ))}
+
+      <div className="section-title">Loadout</div>
+      <div className="moves">
+        {knowsKit ? m.loadout.map((mv) => (
+          <div className="move" key={mv.id}>
+            <span className="lvl">{mv.stat} {mv.learnLevel}</span>
+            <span className="mn">{mv.element ? ELEMENT_ICON[mv.element] + ' ' : ''}{mv.name}</span>
+            <div className="md">{mv.desc} {mv.status ? `(${mv.status.kind})` : ''} · {manaCost(mv)} MP · cd {mv.cooldown} · acc {mv.accuracy}</div>
+          </div>
+        )) : <div className="md dim">?? — pay to scout its class &amp; loadout.</div>}
       </div>
     </div>
   )
@@ -200,28 +253,43 @@ function Bestiary({ specialLicense, eliteLicense }: { specialLicense: boolean; e
     <details className="bestiary">
       <summary>📖 Bestiary — {SPECIES.length} monsters</summary>
       <div className="bestbody">
-        {groups.map(({ bt, locked, licenseName }) => (
+        {groups.map(({ bt, locked, licenseName }) => {
+          const minor = BODY_MINOR[bt]
+          return (
           <div className="bestgroup" key={bt}>
             <div className="bestgroup-h">
-              {bt} · resist {ELEMENT_ICON[BODY_ELEMENT[bt].resist]} · weak {ELEMENT_ICON[BODY_ELEMENT[bt].weak]}
+              {bt}{minor && <> · minor <span style={{ color: STAT_COLOR[minor] }}>{minor}</span></>}
+              {' '}· resist {ELEMENT_ICON[BODY_ELEMENT[bt].resist]} · weak {ELEMENT_ICON[BODY_ELEMENT[bt].weak]}
             </div>
             {locked
               ? <div className="dim bsmall">🔒 {SPECIES.filter((s) => s.body === bt).length} species — unlock with the {licenseName}.</div>
-              : SPECIES.filter((s) => s.body === bt).map((s) => (
+              : SPECIES.filter((s) => s.body === bt).map((s) => {
+                const prof = trainingProfileFor(s)
+                return (
                 <details className="bestrow" key={s.id}>
                   <summary>
                     <Sprite species={s} size={36} />
                     <span className="bn">{s.name}</span>
-                    <span className="dim">· {s.flavour} · ★ {s.ultimate.name}</span>
+                    <span className="dim">· {s.flavour}</span>
+                    <span className="dim bsmall">
+                      {prof.major
+                        ? <>
+                            <span style={{ color: STAT_COLOR[prof.major] }}>▲ {prof.major}</span>
+                            {prof.flaw && <> · <span style={{ color: STAT_COLOR[prof.flaw] }}>▼ {prof.flaw}</span></>}
+                          </>
+                        : 'minor only'}
+                    </span>
                   </summary>
                   <p className="bio">{BIOS[s.id] ?? s.flavour}</p>
                   <p className="dim bsmall">
                     Innate: {s.innate.map((a) => a.name).join(' · ')} · Lifespan {s.lifespan}y
                   </p>
                 </details>
-              ))}
+                )
+              })}
           </div>
-        ))}
+          )
+        })}
       </div>
     </details>
   )
@@ -241,7 +309,7 @@ function BattleLog({ onClear }: { onClear: () => void }) {
 // deterministically. `loadout: null` means auto-pick (chooseLoadout inside
 // generateMonster); a non-null array is a player-chosen override, same
 // slot-swap mechanism as the Ranch's AbilitySelector.
-interface FighterSlot { id: number; seed: string; train: number; happiness: number; loadout: string[] | null }
+interface FighterSlot { id: number; seed: string; train: number; happiness: number; loadout: string[] | null; activeInnate: number | null }
 const SANDBOX_MAX_TEAM = 6
 const SEED_POOL_A = ['Kongrath', 'Wyna', 'Rex', 'Zeta', 'Ashen', 'Nova']
 const SEED_POOL_B = ['Maelurk', 'Ashryn', 'Doom', 'Vex', 'Iris', 'Talon']
@@ -252,12 +320,13 @@ function buildSandboxMonster(f: FighterSlot): Monster {
     const picked = f.loadout.map((mid) => m.learned.find((mv) => mv.id === mid)).filter((mv): mv is Move => !!mv)
     if (picked.length) m.loadout = picked
   }
+  if (f.activeInnate != null && (f.activeInnate !== 1 || m.innateUnlocked)) m.activeInnate = f.activeInnate
   return m
 }
 
 function SandboxView() {
-  const [teamA, setTeamA] = useState<FighterSlot[]>([{ id: 0, seed: SEED_POOL_A[0], train: 300, happiness: 5, loadout: null }])
-  const [teamB, setTeamB] = useState<FighterSlot[]>([{ id: 1, seed: SEED_POOL_B[0], train: 300, happiness: 5, loadout: null }])
+  const [teamA, setTeamA] = useState<FighterSlot[]>([{ id: 0, seed: SEED_POOL_A[0], train: 300, happiness: 5, loadout: null, activeInnate: null }])
+  const [teamB, setTeamB] = useState<FighterSlot[]>([{ id: 1, seed: SEED_POOL_B[0], train: 300, happiness: 5, loadout: null, activeInnate: null }])
   const nextId = useRef(2)
   const [editing, setEditing] = useState<{ side: 'A' | 'B'; id: number } | null>(null)
   const [result, setResult] = useState<BattleResult | null>(null)
@@ -272,7 +341,7 @@ function SandboxView() {
     const id = nextId.current++
     const pool = side === 'A' ? SEED_POOL_A : SEED_POOL_B
     const seed = pool[list.length] ?? `${side}-${id}`
-    setTeamFor(side)((l) => [...l, { id, seed, train: 300, happiness: 5, loadout: null }])
+    setTeamFor(side)((l) => [...l, { id, seed, train: 300, happiness: 5, loadout: null, activeInnate: null }])
     setResult(null) // roster shape changed — the old result no longer lines up
   }
   const removeFighter = (side: 'A' | 'B', id: number) => {
@@ -300,6 +369,7 @@ function SandboxView() {
         m={editingMonster}
         name={editingMonster.name}
         onSetLoadout={(ids) => updateFighter(editing.side, editing.id, { loadout: ids.length ? ids : null })}
+        onSetInnate={(index) => updateFighter(editing.side, editing.id, { activeInnate: index })}
         onClose={() => setEditing(null)}
       />
     )
@@ -307,7 +377,7 @@ function SandboxView() {
 
   return (
     <>
-      <p className="sub">Type a seed to generate a monster, invest training to unlock moves &amp; its ultimate (at 600), add fighters to build a team, edit abilities, then auto-battle. Same seeds → same monsters &amp; same fight.</p>
+      <p className="sub">Type a seed to generate a monster, invest training to unlock moves (2nd innate at 300), add fighters to build a team, edit abilities, then auto-battle. Same seeds → same monsters &amp; same fight.</p>
 
       <div className="arena">
         <div className="sandbox-team">
@@ -402,7 +472,7 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
             {game.stable.length === 0 && <div className="dim">No monsters in the stable.</div>}
             {game.stable.map((c) => (
               <div className="labrow" key={c.id}>
-                <Sprite species={c.species} size={28} />
+                <Sprite species={c.species} size={28} stage={stageInfo(c.ageWeeks, c.species.lifespan).stage} />
                 <span className="bn">{c.name}</span>
                 <span className="dim">{c.species.name}</span>
                 <button className="ghost" onClick={() => setGame((g) => freeze(g, c.id))}>Freeze ❄️</button>
@@ -414,7 +484,8 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
             {game.frozen.length === 0 && <div className="dim">No frozen genomes.</div>}
             {game.frozen.map((f) => (
               <div className="labrow" key={f.id}>
-                <Sprite species={f.species} size={28} />
+                {/* Frozen genomes carry no age — thaw always returns a Teen. */}
+                <Sprite species={f.species} size={28} stage="Teen" />
                 <span className="bn">{f.name}</span>
                 <span className="dim">{f.species.name}</span>
                 <button className="ghost" disabled={barnFull} onClick={() => setGame((g) => thaw(g, f.id))}>Thaw</button>
@@ -512,12 +583,12 @@ function TrainBlock({ d, career, food, selected, onClick }: {
   const stamCost = d.kind === 'basic' ? BASIC_DRILL_STAMINA : INTENSIVE_DRILL_STAMINA
   const gainText = gain !== undefined ? `${gain > 0 ? '+' : ''}${gain} ${stat}` : `+${d.gains[stat]} ${stat}`
   // Aptitude coloring (user spec 2026-07-20): a stat this species trains FASTER
-  // (primary/secondary) gets its number tinted to the stat's own colour instead
+  // (major/minor) gets its number tinted to the stat's own colour instead
   // of plain white, so the boost is visible right on the number, uniformly
   // across every drill. No box on the gain — the box is reserved for the
   // intensive-drill malus stat, which keeps its existing boxed treatment.
   const prof = trainingProfileFor(career.species)
-  const hasBenefit = stat === prof.primary || stat === prof.secondary
+  const hasBenefit = stat === prof.major || stat === prof.minor
   return (
     <button className={'trainblock' + (selected ? ' selected' : '')} onClick={onClick} title={d.desc}>
       <div className="trainblock-name" style={{ color: STAT_COLOR[stat] }}>{d.name}</div>
@@ -619,8 +690,9 @@ function PlanBenefit({ career, plan }: { career: Career; plan: WeekPlanEntry }) 
 // then a pool move to swap it in. Filter by stat; equipped moves show dimmed
 // in the pool. Changes apply immediately via onSetLoadout (no separate save
 // step) — free any time except a monster's active tournament week.
-function AbilitySelector({ m, name, onSetLoadout, onClose }: {
-  m: Monster; name: string; onSetLoadout: (ids: string[]) => void; onClose: () => void
+function AbilitySelector({ m, name, onSetLoadout, onSetInnate, onClose }: {
+  m: Monster; name: string; onSetLoadout: (ids: string[]) => void
+  onSetInnate: (index: number) => void; onClose: () => void
 }) {
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null)
   const [filter, setFilter] = useState<Stat | 'All'>('All')
@@ -678,6 +750,22 @@ function AbilitySelector({ m, name, onSetLoadout, onClose }: {
         })}
       </div>
       <button className="ghost" style={{ marginTop: 8 }} onClick={() => onSetLoadout([])}>reset to suggested loadout</button>
+
+      <div className="section-title" style={{ marginTop: 14 }}>Innate — 1 active at a time</div>
+      <div className="hint">The 2nd choice is an alternative, not an upgrade — click to switch.</div>
+      <div className="abilitypool">
+        {m.species.innate.map((a, i) => {
+          const locked = i === 1 && !m.innateUnlocked
+          const active = m.activeInnate === i
+          return (
+            <div key={a.name} className={'ability innatepick' + (active ? ' active' : '') + (locked ? ' locked' : '')}
+              onClick={() => !locked && !active && onSetInnate(i)}>
+              <span className="mn">{a.name}</span>
+              <div className="md">{a.desc} {active ? '· ACTIVE' : locked ? `· 🔒 unlocks at ${INNATE_SECONDARY_LEVEL} in a stat` : ''}</div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -740,6 +828,80 @@ function TeamPicker({ pool, teamSize, monsterIds, onChange }: {
   )
 }
 
+// A round-robin event's internal `label` ("Your Team" / "Rival Team N") is
+// just a stable bookkeeping key — resolve it to the actual roster (for a
+// name and an icon) wherever it's shown to the player (user spec 2026-07-22:
+// "instead of rival teams, give them names or use the icons of the
+// monsters"). Every match a label appears in carries the same fixed-full
+// roster, so the first match found is enough.
+function teamRoster(label: string, matches: EventMatch[]): Monster[] | null {
+  const m = matches.find((mm) => mm.aLabel === label || mm.bLabel === label)
+  if (!m) return null
+  return m.aLabel === label ? m.teamA : m.teamB
+}
+function teamName(label: string, matches: EventMatch[]): string {
+  const roster = teamRoster(label, matches)
+  return roster ? roster.map((m) => m.name).join(' & ') : label
+}
+
+// Round-robin results grid (user spec 2026-07-22, reference: Monster
+// Rancher's bracket screen) — rows/columns are the field in placement order;
+// each off-diagonal cell shows the ROW participant's result against the
+// COLUMN participant (O win, ✕ loss, – draw). Row headers carry the lead
+// monster's sprite + full team name instead of the internal label.
+//
+// The whole event is actually pre-simulated in one shot (advanceWeek), but
+// the grid must not just dump every result at once (user spec 2026-07-22:
+// "the bracket must begin empty... must not start complete") — `revealed`
+// is the subset of `allMatches` treated as "already happened" so far, and
+// ONLY that subset fills in cells. `allMatches` (always the full event) is
+// still used for name/icon identity, since a team's roster shouldn't stay
+// anonymous just because none of its matches have been revealed yet.
+function BracketGrid({ standings, allMatches, revealed }: { standings: EventStanding[]; allMatches: EventMatch[]; revealed: EventMatch[] }) {
+  const resultFor = (rowLabel: string, colLabel: string): 'win' | 'loss' | 'draw' | null => {
+    const m = revealed.find((mm) => (mm.aLabel === rowLabel && mm.bLabel === colLabel) || (mm.aLabel === colLabel && mm.bLabel === rowLabel))
+    if (!m) return null
+    if (m.result.winner === 'draw') return 'draw'
+    const rowIsA = m.aLabel === rowLabel
+    return (rowIsA && m.result.winner === 'A') || (!rowIsA && m.result.winner === 'B') ? 'win' : 'loss'
+  }
+  return (
+    <div className="bracket-grid-wrap">
+      <table className="bracket-grid">
+        <thead>
+          <tr>
+            <th />
+            {standings.map((_, i) => <th key={i}>{i + 1}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {standings.map((row, i) => {
+            const roster = teamRoster(row.label, allMatches)
+            return (
+              <tr key={row.label}>
+                <td className="bracket-row-head">
+                  <span className="bracket-num">{i + 1}</span>
+                  {roster && <Sprite species={roster[0].species} size={22} />}
+                  <span className={row.isPlayer ? 'pos' : ''}>{roster ? roster.map((m) => m.name).join(' & ') : row.label}</span>
+                </td>
+                {standings.map((col, j) => {
+                  if (i === j) return <td key={j} className="bracket-cell self" />
+                  const res = resultFor(row.label, col.label)
+                  return (
+                    <td key={j} className={`bracket-cell ${res ?? ''}`}>
+                      {res === 'win' ? 'O' : res === 'loss' ? '✕' : res === 'draw' ? '–' : ''}
+                    </td>
+                  )
+                })}
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function RanchView({ game, setGame, onBattleScreen }: {
   game: GameState; setGame: Dispatch<SetStateAction<GameState>>; onBattleScreen: (v: boolean) => void
 }) {
@@ -755,6 +917,12 @@ function RanchView({ game, setGame, onBattleScreen }: {
   const [selectedTournamentId, setSelectedTournamentId] = useState<string | null>(null)
   const [battleOver, setBattleOver] = useState(false)
   const [matchIdx, setMatchIdx] = useState(0)
+  // Bracket hub sub-phase: pre-cup lore -> bracket standings (Fight from
+  // here) -> the match itself -> back to bracket -> post-cup announcement.
+  const [battleSub, setBattleSub] = useState<'preamble' | 'bracket' | 'fight' | 'announce'>('preamble')
+  // Which of the player's upcoming matches have been paid-scouted, and at
+  // what tier — keyed by matchIdx, reset each new tournament event.
+  const [scouted, setScouted] = useState<Record<number, 'basic' | 'full'>>({})
   const [selectedMonsterId, setSelectedMonsterId] = useState(() => game.stable.find((c) => !c.retired)?.id ?? game.stable[0]?.id ?? '')
   const [abilityEditorFor, setAbilityEditorFor] = useState<string | null>(null)
   const [showHistoryFor, setShowHistoryFor] = useState<string | null>(null)
@@ -780,68 +948,143 @@ function RanchView({ game, setGame, onBattleScreen }: {
     )
   }
 
-  // Tournament battle screen: a round-robin EVENT resolved this week. Step
-  // through the player's own matches one at a time (rival-vs-rival matches
-  // aren't replayed — text-only, they exist for the standings table), then
-  // show final placement + reward.
+  // Tournament battle screen: a round-robin EVENT resolved this week, walked
+  // through as a Monster-Rancher-style bracket hub (user spec 2026-07-22) —
+  // pre-cup lore -> bracket standings (pay to scout the next opponent, then
+  // Fight) -> the match itself -> back to the bracket -> repeat -> a post-cup
+  // announcement. Rival-vs-rival matches aren't replayed, only listed.
   if (phase === 'battle' && game.lastBattle) {
     const lb = game.lastBattle
+    const tourney = tournamentCalendarFor(game.seed, yearOfWeek(game.week)).find((t) => t.id === lb.tournamentId)
+    const lore = tourney ? cupLore(tourney) : null
     const playerMatches = lb.matches.filter((m) => m.involvesPlayer)
-    const otherMatches = lb.matches.filter((m) => !m.involvesPlayer)
     const currentMatch: EventMatch | undefined = playerMatches[matchIdx]
     const allMatchesShown = matchIdx >= playerMatches.length
+    // The event is pre-simulated in one shot, but the bracket must not just
+    // dump every result at once (user spec 2026-07-22) — only matches "at or
+    // before" the player's last-completed match count as revealed. Starts
+    // empty (matchIdx 0 -> nothing revealed yet).
+    const revealedThroughIdx = matchIdx > 0 ? lb.matches.indexOf(playerMatches[matchIdx - 1]) : -1
+    const revealedMatches = lb.matches.slice(0, revealedThroughIdx + 1)
+    const otherMatches = revealedMatches.filter((m) => !m.involvesPlayer)
+    const header = (
+      <div className="ranchtop">
+        <span>🏟 {lb.tournamentName}</span>
+        <span>📅 {dateLabel(game.week)}</span>
+        <span>🪙 {game.gold}g</span>
+      </div>
+    )
 
-    return (
-      <>
-        <div className="ranchtop">
-          <span>🏟 {lb.tournamentName}</span>
-          <span>📅 {dateLabel(game.week)}</span>
-          <span>🪙 {game.gold}g</span>
-        </div>
-        {!allMatchesShown && currentMatch ? (
-          <>
-            <p className="sub">Match {matchIdx + 1} of {playerMatches.length}: {currentMatch.aLabel} vs {currentMatch.bLabel}</p>
-            <ArenaBattle key={matchIdx} teamA={currentMatch.teamA} teamB={currentMatch.teamB} result={currentMatch.result} onDone={() => setBattleOver(true)} />
-            {battleOver && (
-              <div className="carerow" style={{ justifyContent: 'center' }}>
-                <button className="enter" onClick={() => { setBattleOver(false); setMatchIdx((i) => i + 1) }}>
-                  {matchIdx + 1 < playerMatches.length ? 'Next Match →' : 'See Standings →'}
-                </button>
-              </div>
-            )}
-          </>
-        ) : (
-          <>
-            <p className="sub">{lb.tournamentName} — {lb.league} league, {lb.fieldSize} teams, round robin.</p>
-            {otherMatches.length > 0 && (
-              <div className="card" style={{ marginBottom: 10 }}>
-                <div className="section-title">Other results</div>
-                {otherMatches.map((m, i) => (
-                  <div key={i} className="dim" style={{ fontSize: 12, padding: '2px 0' }}>
-                    {m.aLabel} vs {m.bLabel} — {m.result.winner === 'draw' ? 'draw' : `${m.result.winner === 'A' ? m.aLabel : m.bLabel} wins`}
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="card">
-              <div className="section-title">Standings</div>
-              {lb.standings.map((s) => (
-                <div key={s.label} className="tour-history-row" style={{ fontWeight: s.isPlayer ? 700 : 400 }}>
-                  <span className={s.isPlayer ? 'pos' : ''}>{placementLabel(s.placement)} · {s.label}</span>
-                  <span className="dim">{s.wins}W–{s.draws}D–{s.losses}L</span>
+    if (battleSub === 'preamble') {
+      return (
+        <>
+          {header}
+          <div className="card">
+            <div className="section-title">{lb.tournamentName} — {lb.league} League</div>
+            <p className="sub">{lore?.intro ?? `${lb.tournamentName} is under way.`}</p>
+            <p className="dim">Prize on the line: up to {tourney?.rewards.gold ?? lb.goldReward}g for 1st place, {lb.fieldSize} teams competing round robin.</p>
+            <div className="carerow" style={{ justifyContent: 'center' }}>
+              <button className="enter" onClick={() => setBattleSub('bracket')}>Enter the Cup →</button>
+            </div>
+          </div>
+        </>
+      )
+    }
+
+    if (battleSub === 'bracket') {
+      const opponentIsA = currentMatch ? currentMatch.bLabel === 'Your Team' : false
+      const opponentTeam = currentMatch ? (opponentIsA ? currentMatch.teamA : currentMatch.teamB) : null
+      const opponentLabel = currentMatch ? (opponentIsA ? currentMatch.aLabel : currentMatch.bLabel) : null
+      const tier = scouted[matchIdx]
+      const buyScout = (t: 'basic' | 'full') => {
+        const fee = scoutFee(lb.league, t)
+        if (game.gold < fee) return
+        setGame((g) => ({ ...g, gold: g.gold - fee }))
+        setScouted((s) => ({ ...s, [matchIdx]: t }))
+      }
+      return (
+        <>
+          {header}
+          <p className="sub">{lb.tournamentName} — {lb.league} league, {lb.fieldSize} teams, round robin.</p>
+          <div className="card">
+            <div className="section-title">Bracket</div>
+            <BracketGrid standings={lb.standings} allMatches={lb.matches} revealed={revealedMatches} />
+          </div>
+          {otherMatches.length > 0 && (
+            <div className="card" style={{ marginBottom: 10 }}>
+              <div className="section-title">Other results</div>
+              {otherMatches.map((m, i) => (
+                <div key={i} className="dim" style={{ fontSize: 12, padding: '2px 0' }}>
+                  {teamName(m.aLabel, lb.matches)} vs {teamName(m.bLabel, lb.matches)} — {m.result.winner === 'draw' ? 'draw' : `${teamName(m.result.winner === 'A' ? m.aLabel : m.bLabel, lb.matches)} wins`}
                 </div>
               ))}
             </div>
-            <div className="battle-summary">
-              {lb.goldReward > 0
-                ? `🏆 Finished ${placementLabel(lb.playerPlacement)} of ${lb.fieldSize}! +${lb.goldReward}g${lb.expNote ? ` · training bonus: ${lb.expNote}` : ''}`
-                : `Finished ${placementLabel(lb.playerPlacement)} of ${lb.fieldSize} — no reward this time. Train harder and try again.`}
+          )}
+          {!allMatchesShown && currentMatch && opponentTeam ? (
+            <div className="card">
+              <div className="section-title">Next up: {opponentLabel ? teamName(opponentLabel, lb.matches) : ''}</div>
+              <div className="scout-report">
+                {opponentTeam.map((m, i) => <ScoutReport key={i} m={m} tier={tier} />)}
+              </div>
+              {tier !== 'full' && (
+                <div className="carerow" style={{ marginTop: 8 }}>
+                  {!tier && (
+                    <button className="ghost" disabled={game.gold < scoutFee(lb.league, 'basic')} onClick={() => buyScout('basic')}>
+                      🔍 Scout class &amp; loadout — {scoutFee(lb.league, 'basic')}g
+                    </button>
+                  )}
+                  <button className="ghost" disabled={game.gold < scoutFee(lb.league, 'full')} onClick={() => buyScout('full')}>
+                    🔍 Full scouting report — {scoutFee(lb.league, 'full')}g
+                  </button>
+                </div>
+              )}
+              <div className="carerow" style={{ justifyContent: 'center', marginTop: 8 }}>
+                <button className="enter" onClick={() => setBattleSub('fight')}>Fight →</button>
+              </div>
             </div>
+          ) : (
             <div className="carerow" style={{ justifyContent: 'center' }}>
-              <button className="enter" onClick={() => setPhase('feeding')}>Continue →</button>
+              <button className="enter" onClick={() => setBattleSub('announce')}>See Results →</button>
             </div>
-          </>
-        )}
+          )}
+        </>
+      )
+    }
+
+    if (battleSub === 'fight' && currentMatch) {
+      return (
+        <>
+          {header}
+          <p className="sub">Match {matchIdx + 1} of {playerMatches.length}: {teamName(currentMatch.aLabel, lb.matches)} vs {teamName(currentMatch.bLabel, lb.matches)}</p>
+          <ArenaBattle key={matchIdx} teamA={currentMatch.teamA} teamB={currentMatch.teamB} result={currentMatch.result} onDone={() => setBattleOver(true)} />
+          {battleOver && (
+            <div className="carerow" style={{ justifyContent: 'center' }}>
+              <button className="enter" onClick={() => { setBattleOver(false); setMatchIdx((i) => i + 1); setBattleSub('bracket') }}>
+                ← Back to Bracket
+              </button>
+            </div>
+          )}
+        </>
+      )
+    }
+
+    // battleSub === 'announce'
+    return (
+      <>
+        {header}
+        <div className="card">
+          <div className="section-title">🏆 {lb.tournamentName} — Final Results</div>
+          <BracketGrid standings={lb.standings} allMatches={lb.matches} revealed={lb.matches} />
+          {lore?.outroFlavour && <p className="sub">{lore.outroFlavour}</p>}
+          <div className="battle-summary">
+            {lb.goldReward > 0
+              ? `You finished ${placementLabel(lb.playerPlacement)} of ${lb.fieldSize}! +${lb.goldReward}g${lb.expNote ? ` · training bonus: ${lb.expNote}` : ''}`
+              : `You finished ${placementLabel(lb.playerPlacement)} of ${lb.fieldSize} — no reward this time. Train harder and try again.`}
+          </div>
+        </div>
+        <div className="carerow" style={{ justifyContent: 'center' }}>
+          <button className="enter" onClick={() => setPhase('feeding')}>Continue →</button>
+        </div>
       </>
     )
   }
@@ -893,7 +1136,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
               <span>{st.stage} · age {st.ageYears}y / {currentCareer.species.lifespan}y · {LEAGUES[currentCareer.licenseIndex].name}</span>
             </div>
             <div className="feedhead">
-              <Sprite species={currentCareer.species} size={72} />
+              <Sprite species={currentCareer.species} size={72} stage={st.stage} />
               <div>
                 <div className="name">{currentCareer.name}</div>
                 <div className="meta">Food preferences: <b className="up">♥ {foodName(currentCareer.favouriteFood)}</b> · <b className="down">✖ {foodName(currentCareer.hatedFood)}</b></div>
@@ -908,7 +1151,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
             ) : (
               <>
                 <div className="section-title">Food — buy 1 food this week{game.bulkFood ? ' · 🛒 −20%' : ''}</div>
-                <div className="foods">
+                <div className={'foods' + (currentPlan.food ? '' : ' foods-missing')}>
                   {FOODS.map((f) => {
                     const price = Math.max(1, Math.round(game.foodMarket[f.id] * discount))
                     const d = feedDelta(f.id, currentCareer.favouriteFood, currentCareer.hatedFood)
@@ -927,7 +1170,12 @@ function RanchView({ game, setGame, onBattleScreen }: {
               </>
             )}
             <div className="carerow" style={{ marginTop: '1rem' }}>
-              <button className="enter" onClick={advanceFeeding}>
+              <button
+                className="enter"
+                disabled={!currentCareer.retired && !currentPlan.food}
+                title={!currentCareer.retired && !currentPlan.food ? 'Pick a food for this monster first' : undefined}
+                onClick={advanceFeeding}
+              >
                 {decisionIdx < game.stable.length - 1 ? 'Next Monster →' : 'Continue to Stable →'}
               </button>
             </div>
@@ -972,6 +1220,8 @@ function RanchView({ game, setGame, onBattleScreen }: {
     setDecisionIdx(0)
     setBattleOver(false)
     setMatchIdx(0)
+    setBattleSub('preamble')
+    setScouted({})
     setSelectedMonsterId(next.stable.find((c) => !c.retired)?.id ?? next.stable[0]?.id ?? '')
     setPhase(next.lastBattle ? 'battle' : 'feeding')
   }
@@ -1002,7 +1252,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
               return (
                 <div key={c.id} className={'stablecard' + (c.id === selectedCareer.id ? ' selected' : '') + (c.retired ? ' retired' : '')}
                   onClick={() => { setSelectedMonsterId(c.id); setAbilityEditorFor(null); setShowHistoryFor(null); setRenamingId(null) }}>
-                  <Sprite species={c.species} size={40} />
+                  <Sprite species={c.species} size={40} stage={stageInfo(c.ageWeeks, c.species.lifespan).stage} />
                   <span className="bn">{c.name}</span>
                   <div className="dim" style={{ fontSize: 10.5 }}>{c.species.name}</div>
                   {c.retired ? <span className="stablechip warn">🏁 retired</span>
@@ -1018,7 +1268,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
           {/* Detail panel */}
           <div className="detailgrid">
             <div className="card detail-portrait">
-              <Sprite species={selectedCareer.species} size={96} />
+              <Sprite species={selectedCareer.species} size={96} stage={stageInfo(selectedCareer.ageWeeks, selectedCareer.species.lifespan).stage} />
               <div className="detail-namerow">
                 {renamingId === selectedCareer.id ? (
                   <input autoFocus defaultValue={selectedCareer.name} className="detail-nameinput" maxLength={24}
@@ -1065,8 +1315,8 @@ function RanchView({ game, setGame, onBattleScreen }: {
 
             <div className="card detail-stats">
               {STATS.map((s) => {
-                const tag = selProf.primary === s ? 'PRIMARY +20%' : selProf.secondary === s ? 'SECONDARY +10%' : selProf.weakness === s ? 'WEAKNESS −20%' : ''
-                const tagClass = selProf.primary === s ? 'pos' : selProf.weakness === s ? 'neg' : 'dim'
+                const tag = selProf.major === s ? 'MAJOR +20%' : selProf.minor === s ? 'MINOR +10%' : selProf.flaw === s ? 'FLAW −20%' : ''
+                const tagClass = selProf.major === s ? 'pos' : selProf.flaw === s ? 'neg' : 'dim'
                 return (
                   <div className="detailstat" key={s}>
                     <span style={{ color: STAT_COLOR[s], fontWeight: 700 }}>{s}</span>
@@ -1099,6 +1349,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
               m={selM}
               name={selectedCareer.name}
               onSetLoadout={(ids) => setGame((g) => setLoadout(g, selectedCareer.id, ids))}
+              onSetInnate={(index) => setGame((g) => setActiveInnate(g, selectedCareer.id, index))}
               onClose={() => setAbilityEditorFor(null)}
             />
           ) : selectedCareer.retired ? (
@@ -1321,18 +1572,29 @@ function RanchView({ game, setGame, onBattleScreen }: {
 
         {/* Action rail */}
         <div className="rail">
-          <button className="railbtn primary" onClick={doAdvanceWeek}>⏭<br />Advance<br />Week</button>
           {(() => {
-            // Pre-flight: what Advance Week is about to resolve.
+            // Every active monster needs a food chosen before the week can
+            // advance (user spec 2026-07-22: "monsters always require food").
             const active = game.stable.filter((c) => !c.retired)
+            const unfed = active.filter((c) => !weekPlan[c.id]?.food)
             const trainN = active.filter((c) => weekPlan[c.id] && weekPlan[c.id].activity !== 'rest' && weekPlan[c.id].activity !== 'excursion').length
             const excN = active.filter((c) => weekPlan[c.id]?.activity === 'excursion').length
             const restN = active.length - trainN - excN
             return (
-              <div className="rail-note" title="what Advance Week will resolve">
-                💪{trainN} 😴{restN}{excN > 0 ? ` 🧭${excN}` : ''}
-                {pendingEventName && <div className="up">🏟 entered</div>}
-              </div>
+              <>
+                <button
+                  className="railbtn primary"
+                  disabled={unfed.length > 0}
+                  title={unfed.length > 0 ? `${unfed.length} monster${unfed.length > 1 ? 's need' : ' needs'} food chosen first: ${unfed.map((c) => c.name).join(', ')}` : undefined}
+                  onClick={doAdvanceWeek}
+                >⏭<br />Advance<br />Week</button>
+                <div className="rail-note" title="what Advance Week will resolve">
+                  {unfed.length > 0
+                    ? <div className="down">🍽 {unfed.length} unfed — pick food first</div>
+                    : <>💪{trainN} 😴{restN}{excN > 0 ? ` 🧭${excN}` : ''}</>}
+                  {pendingEventName && <div className="up">🏟 entered</div>}
+                </div>
+              </>
             )
           })()}
           <button className="railbtn" onClick={() => setGame((g) => goto(g, 'town'))}>🏛<br />Back to<br />Town</button>
@@ -1358,6 +1620,17 @@ function loadSavedGame(): GameState | null {
     for (const c of g.stable) {
       if (typeof c.hp !== 'number') c.hp = maxHp(c.stats)
       if (typeof c.mp !== 'number') c.mp = maxMana(c.stats)
+      // migrate pre-innate-choice saves: both innates used to be always-on
+      if (typeof c.activeInnate !== 'number') c.activeInnate = 0
+      // Saves serialize the whole Species object, so ability descs/renames go
+      // stale the moment species.ts changes — re-link to the live table by id.
+      // (A species whose id itself was renamed keeps its stored snapshot.)
+      const live = SPECIES.find((s) => s.id === c.species?.id)
+      if (live) c.species = live
+    }
+    if (Array.isArray(g.frozen)) for (const f of g.frozen) {
+      const live = SPECIES.find((s) => s.id === f.species?.id)
+      if (live) f.species = live
     }
     // migrate pre-team-tournament saves: PendingTournament went from a single
     // `monsterId` to `monsterIds: string[]` — an old save carrying a live

@@ -9,7 +9,7 @@
 // when this was strictly 1v1. `simulateBattle` (still exported) is a thin
 // team-of-1 wrapper over `simulateTeamBattle`, so every existing 1v1 call site
 // (Sandbox) keeps working unchanged.
-import { Channel, Element, Monster, Move, RNG, StatusKind, chance, elementMultiplier, happinessMultiplier, hashString, mulberry32, randInt } from './core'
+import { Ability, Channel, Element, Monster, Move, RNG, StatusKind, chance, elementMultiplier, happinessMultiplier, hashString, mulberry32, randInt } from './core'
 import {
   attackStat, critChance, debuffBonus, debuffReduction, dodgeChance, echoChance, hpRegen,
   manaCost, manaRegen, maxHp, maxMana, mitigationPierce, staminaDamageMult,
@@ -31,82 +31,232 @@ export type BattleEvent =
   | { kind: 'stance'; side: BattleSide; slot: number; avoid: number }
   | { kind: 'utility'; side: BattleSide; slot: number; targetSide: BattleSide; targetSlot: number; move: string; heal: number; hostile: boolean }
   | { kind: 'status'; side: BattleSide; slot: number; status: StatusKind } // side/slot = the afflicted
-  | { kind: 'dot'; side: BattleSide; slot: number; status: 'burn' | 'poison'; amount: number }
-  | { kind: 'skip'; side: BattleSide; slot: number; reason: 'stun' | 'fear' }
-  | { kind: 'ultimate'; side: BattleSide; slot: number; name: string }
+  | { kind: 'dot'; side: BattleSide; slot: number; status: 'burn' | 'poison' | 'bleed' | 'doom'; amount: number }
+  | { kind: 'skip'; side: BattleSide; slot: number; reason: 'stun' | 'fear' | 'sleep' }
   | { kind: 'snap'; states: { side: BattleSide; slot: number; hp: number; mana: number; ward: number }[] }
   | { kind: 'end'; winner: 'A' | 'B' | 'draw' }
 
-// Passive effects granted by innate abilities (§8.3). Curated table by ability
-// name; unlisted innates stay flavour-only for now. A species' two innates stack.
+// Passive effects granted by innate abilities (§8.3, reworked 2026-07-25:
+// every innate must be a genuine passive that maps to a real mechanical
+// number — no flavour-only entries left). Curated table by ability name.
+// Only ONE of a species' two innates is active at a time (Monster.activeInnate)
+// — balance rule from that: a self-only field must carry a HIGHER magnitude
+// than its aura twin (auras include the owner, so at equal numbers the aura
+// strictly dominates — see Quickstep 6 vs Cheer 4 for the pattern).
 interface InnateEffect {
   flatDR?: number // flat damage reduction on every hit taken
   dodge?: number // bonus dodge %
   acc?: number // bonus accuracy %
   regen?: number // bonus mana regen per turn
+  hpRegen?: number // bonus HP regen per turn (self)
   dmgMult?: number // multiplier on all damage dealt
   firstHitMult?: number // multiplier on this monster's first damaging hit
   lifesteal?: number // fraction of damage dealt returned as HP
+  lowHpDmgMult?: number // extra damage multiplier while below 30% HP
+  highHpDmgMult?: number // extra damage multiplier while above 70% HP
+  crit?: number // bonus critical-hit % (stacks with DEX-derived critChance)
+  pierce?: number // fraction of target mitigation ignored (stacks with STR pierce + skill pierce)
+  echo?: number // bonus % chance a skill casts twice (stacks with INT-derived echoChance)
+  elemDmgMult?: number // multiplier on damage from ELEMENTAL moves only
+  executeMult?: number // damage multiplier vs targets below 30% HP
+  startWard?: number // begins every battle with an absorb shield of this many HP
+  manaSteal?: number // fraction of damage dealt drained from the target's mana into own
+  buffExtend?: number // % chance each of its cast buffs lasts +1 round (rolled on apply)
+  debuffExtend?: number // % chance each of its inflicted debuffs lasts +1 round (rolled on apply)
+  debuffResist?: number // % shaved off incoming debuff magnitudes (stacks with CHA-derived)
+  statusOnHit?: { kind: StatusKind; chance: number; duration: number } | null // may inflict a status on every damaging hit
+
+  // Team-wide auras (user spec 2026-07-25): apply to every LIVING ally each
+  // round, including the owner — vanish the round after the owner falls.
+  // Stack additively with each other and with the recipient's own self-only
+  // fields above (aura dmgMult multiplies in).
+  auraFlatDR?: number
+  auraDodge?: number
+  auraRegen?: number
+  auraHpRegen?: number
+  auraDmgMult?: number
+
+  // Enemy-facing debuff auras: apply to every LIVING enemy each round, same
+  // living/vanish-on-death rule as team auras above, just the opposing side.
+  enemyAccDebuff?: number
+  enemyDodgeDebuff?: number
+  enemyRegenDebuff?: number
+  enemyDmgDebuff?: number
 }
 
-const INNATE_EFFECTS: Record<string, InnateEffect> = {
-  // damage reduction
-  'Thick Hide': { flatDR: 3 }, Ironclad: { flatDR: 3 }, 'Ancient Carapace': { flatDR: 3 },
-  Immovable: { flatDR: 2 }, 'Spiral Shell': { flatDR: 2 }, 'Coral Guard': { flatDR: 2 },
-  Ward: { flatDR: 2 }, Unstoppable: { flatDR: 3 }, Unison: { flatDR: 2 }, 'Aegis Bond': { flatDR: 2 },
-  // evasion
-  Evasion: { dodge: 8 }, Quickstep: { dodge: 6 }, Aerial: { dodge: 6 }, 'Phase Shift': { dodge: 8 },
-  'Dodge Storm': { dodge: 6 }, 'Cloak of Shadow': { dodge: 8 }, 'Ink Cloud': { dodge: 5 },
-  Cheer: { dodge: 4 }, Southpaw: { dodge: 4 }, 'Psychic Aura': { dodge: 5 }, 'Ancient Knowing': { dodge: 5 },
-  'Temporal Distortion': { dodge: 4 }, Foresight: { dodge: 6 },
-  // accuracy
-  'Keen Eye': { acc: 8 }, 'Cosmic Precision': { acc: 10 },
-  // mana engines
-  Wellspring: { regen: 3 }, 'Silent Wisdom': { regen: 3 }, 'Tidal Wisdom': { regen: 3 },
-  'Glacial Wisdom': { regen: 3 }, 'Arcane Mastery': { regen: 4 }, 'Mana Theft': { regen: 2 },
-  'Soothing Words': { regen: 2 }, 'Life Bloom': { regen: 2 },
-  // damage boosts
-  Maul: { dmgMult: 1.08 }, Overload: { dmgMult: 1.08 }, 'Rising Fury': { dmgMult: 1.05 }, Pride: { dmgMult: 1.05 },
-  'Rallying Roar': { dmgMult: 1.05 }, Flurry: { dmgMult: 1.05 }, 'Arcane Bolt': { dmgMult: 1.05 },
-  'Song of Valor': { dmgMult: 1.05 }, Whirlwind: { dmgMult: 1.05 }, 'Tentacle Barrage': { dmgMult: 1.05 },
-  'Live Wire': { dmgMult: 1.05 }, Spellblade: { dmgMult: 1.06 }, 'Flame Aura': { dmgMult: 1.05 },
-  'Draconic Pride': { dmgMult: 1.06 }, Blizzard: { dmgMult: 1.05 }, 'Void Pulse': { dmgMult: 1.06 },
-  'Rift Magic': { dmgMult: 1.06 }, 'Whip Strike': { dmgMult: 1.05 }, 'Stellar Shot': { dmgMult: 1.06 },
-  'Spell Echo': { dmgMult: 1.1 }, Rend: { dmgMult: 1.05 },
-  // openers
-  'Chest Beat': { firstHitMult: 1.5 }, 'Dive Bomb': { firstHitMult: 1.5 }, 'Glide Strike': { firstHitMult: 1.3 },
-  Haymaker: { firstHitMult: 1.3 }, 'Silent Strike': { firstHitMult: 1.5 }, 'Prehistoric Roar': { firstHitMult: 1.3 },
-  // sustain
-  Devour: { lifesteal: 0.3 }, 'Age Reversal': { lifesteal: 0.15 },
-  // Insectoid
-  'Chitin Plate': { flatDR: 3 }, Burrow: { dodge: 4 }, Ambush: { firstHitMult: 1.5 },
-  'Serrated Claws': { dmgMult: 1.05 }, 'Web Trap': { dodge: 5 }, 'Venom Fang': { dmgMult: 1.05 },
-  'Hive Command': { dmgMult: 1.05 }, 'Royal Jelly': { regen: 2 }, 'Skim Dart': { firstHitMult: 1.3 },
-  'Compound Eyes': { acc: 8 },
-  // Reptilian
-  'Death Roll': { dmgMult: 1.08 }, 'Armored Scales': { flatDR: 3 }, 'Sun Basking': { regen: 2 },
-  'Crest Display': { dmgMult: 1.05 }, 'Cold Blood': { flatDR: 2 }, 'Hypnotic Gaze': { acc: 8 },
-  'Wall Runner': { dodge: 6 }, 'Tail Drop': { dodge: 4 }, 'Shell Ward': { flatDR: 3 },
-  'Inner Calm': { regen: 3 },
+export const INNATE_EFFECTS: Record<string, InnateEffect> = {
+  // --- Thematic redistribution (user spec 2026-07-25): crit → DEX majors then
+  // Reptilians; pierce → STR majors then Mammals; mana regen → WIS then Avians;
+  // elemental/echo → INT then Aquatics; auras → CHA majors then Marsupials;
+  // flat-DR trimmed on the tournament-dominant CON tanks. ---
+
+  // damage reduction (self) — every entry its own defensive texture (2026-07-25:
+  // no two innates share a profile; clusters got distinct numbers/riders)
+  'Thick Hide': { flatDR: 3 }, // the plain thickest hide in the game
+  'Weathered Hide': { flatDR: 2, debuffResist: 10 }, // old scars — little gets under its skin
+  'Spiral Shell': { flatDR: 2, dodge: 2 }, // the spiral deflects glancing blows
+  'Statue Stance': { highHpDmgMult: 1.1 },
+  // CON-tank trim (2026-07-25 balance sweep: these species dominated at every level)
+  Ironclad: { flatDR: 2 }, // the textbook plate
+  Unstoppable: { flatDR: 1, debuffResist: 15 }, // cannot be slowed or weakened
+  'Chitin Plate': { flatDR: 1, startWard: 12 }, // the dam-keystone shell is already braced
+  'Armored Scales': { flatDR: 1, hpRegen: 1 }, // crocodile wounds knit famously fast
+  'Shell Ward': { startWard: 18 }, // the shell is raised before the bell
+  // Aegis Bond outbids its aura twin Unison (auraFlatDR 2) — self-only must pay more (the bond also mends).
+  'Aegis Bond': { flatDR: 2, hpRegen: 2 },
+  // evasion (self) — pure-dodge ladder 4..10, no two alike; composites carry riders
+  Quickstep: { dodge: 6 }, Aerial: { dodge: 7 }, 'Phase Shift': { dodge: 9 }, 'Wing Current': { dodge: 10 },
+  'Dodge Storm': { dodge: 6, crit: 3 }, // storm-dancer: slip the blow, answer it
+  'Cloak of Shadow': { dodge: 8 }, 'Ancient Knowing': { dodge: 5 },
+  Burrow: { dodge: 4 }, 'Wall Runner': { dodge: 6, acc: 2 }, // impossible angles cut both ways
+  // "Hard to reach" (self dodge) AND "foes arrive slowed" (enemy dodge debuff) — both halves of the description, one entry.
+  'Web Trap': { dodge: 5, enemyDodgeDebuff: 3 },
+  // accuracy (self) — 7/8/10/12 ladder
+  'Keen Eye': { acc: 8 }, 'Cosmic Precision': { acc: 10 }, 'Compound Eyes': { acc: 11 }, 'Hypnotic Gaze': { acc: 7 },
+  // mana regen (self) — WIS majors and Avians; 2/3/4/5 ladder
+  'Silent Wisdom': { regen: 4 }, 'Glacial Wisdom': { regen: 2, flatDR: 1 }, 'Arcane Mastery': { regen: 5 },
+  'Inner Calm': { regen: 2 },
+  'Abyssal Glow': { regen: 3 }, // its glow is its own wellspring — Lanterix, WIS major
+  // HP regen (self) — Sun Basking was miscoded as mana regen; "recovers strength between blows" is HP.
+  'Sun Basking': { hpRegen: 3 },
+  // damage boosts (self, flat %) — thinned to a 1.05..1.08 ladder, one holder each
+  'Rising Fury': { dmgMult: 1.05 }, 'Draconic Pride': { dmgMult: 1.06 }, Overload: { dmgMult: 1.07 },
+  // Pride outbids its aura twin Rallying Roar (auraDmgMult 1.05).
+  Pride: { dmgMult: 1.08 },
+  // former exclusive "+X% damage" clones, re-textured (2026-07-25):
+  'Flame Aura': { statusOnHit: { kind: 'burn', chance: 8, duration: 2 } }, // the aura itself scorches
+  Blizzard: { statusOnHit: { kind: 'stun', chance: 6, duration: 1 } }, // frozen stiff
+  'Whip Strike': { pierce: 0.1 }, // the whip wraps around shields
+  'Void Pulse': { lifesteal: 0.1 }, // the void consumes
+  'Rift Magic': { echo: 6 }, // a cast slips through the rift twice
+  'Stellar Shot': { crit: 9 }, // starlight finds the mark
+  // critical hits — DEX majors (Grivvel/Tazzik/Mantaris) + Reptilian (Geckari); 6..10 ladder
+  Rend: { crit: 8 }, Whirlwind: { crit: 7 }, 'Current Rider': { crit: 6, acc: 2 }, 'Tail Drop': { crit: 10 },
+  // armour piercing — STR majors (Mantevoke/Bruxaroo) + Mammal (Ursath); serrated cuts deepest
+  'Serrated Claws': { pierce: 0.18 }, Southpaw: { pierce: 0.12 }, Maul: { pierce: 0.15 },
+  // elemental mastery / double-cast — INT majors + Aquatics; echo 6/8/10/12 ladder
+  'Arcane Bolt': { elemDmgMult: 1.1 }, Spellblade: { elemDmgMult: 1.12 },
+  Wellspring: { echo: 10 }, 'Tentacle Barrage': { echo: 8 }, // eight arms — some casts come twice
+  'Spell Echo': { echo: 12 }, // finally does what its name says
+  // openers — bonus multiplier on this monster's first landed hit (self);
+  // 1.2..1.7 ladder, the mantis's legendary strike at the top
+  'Chest Beat': { firstHitMult: 1.5 }, 'Dive Bomb': { firstHitMult: 1.6 }, 'Glide Strike': { firstHitMult: 1.3 },
+  Haymaker: { firstHitMult: 1.35 }, 'Silent Strike': { firstHitMult: 1.4, crit: 5 }, 'Prehistoric Roar': { firstHitMult: 1.2 },
+  'Ambush Strike': { firstHitMult: 1.4, acc: 4 }, // the patient strike does not miss
+  Ambush: { firstHitMult: 1.7 }, 'Skim Dart': { firstHitMult: 1.25 },
+  // sustain — lifesteal / mana steal (self)
+  Devour: { lifesteal: 0.3 }, 'Age Reversal': { lifesteal: 0.15 }, 'Mana Theft': { manaSteal: 0.2 },
+  // conditional damage windows
+  Frenzy: { lowHpDmgMult: 1.25 }, // desperation — below 30% HP
+  'Death Roll': { executeMult: 1.25 }, // finishes weakened prey — below 30% target HP
+  // status-on-hit — venom in every bite, a dazzling crest flash
+  'Venom Fang': { statusOnHit: { kind: 'poison', chance: 12, duration: 3 } },
+  'Crest Display': { statusOnHit: { kind: 'blind', chance: 10, duration: 2 } },
+  // buff/debuff duration extension — the song plays again; the queen's decree lingers
+  Encore: { buffExtend: 25 }, 'Hive Command': { debuffExtend: 30 },
+  // debuff resistance — the ox is the most unshakeable; the serpent close behind
+  Immovable: { debuffResist: 25 }, 'Cold Blood': { debuffResist: 20 },
+  // opening shield — the shell is already up when the bell rings
+  Ward: { startWard: 25 },
+
+  // Tidal Wisdom: SELF sustain now (was an aura — Carcharun is a STR-major
+  // aquatic, off the CHA/Marsupial aura theme; the old shark keeps its own counsel).
+  'Tidal Wisdom': { regen: 2, hpRegen: 2 },
+
+  // --- Team-wide auras: apply to every LIVING ally each round, including the
+  // owner. Reserved (user spec 2026-07-25) for CHA-major species (Maneleo,
+  // Larkessa, Vespera) and Marsupials (Quokkade, Koalio) — plus the exclusive
+  // species, which sit outside the training-theme system entirely. ---
+  'Rallying Roar': { auraDmgMult: 1.05 },
+  Cheer: { auraDodge: 4 }, Unison: { auraFlatDR: 2 },
+  'Song of Valor': { auraDmgMult: 1.04 },
+  'Psychic Aura': { auraDodge: 3, auraRegen: 1 }, // the mind shields and feeds the mind
+  Foresight: { auraDodge: 5 },
+  'Soothing Words': { auraHpRegen: 3 }, // the pool's strongest pure team-heal — the crooner's whole identity
+  'Life Bloom': { auraHpRegen: 2, auraRegen: 1 }, // the bloom nourishes body and spirit
+  'Royal Jelly': { auraHpRegen: 2 }, // the queen feeds the hive
+
+  // --- Enemy-facing debuff auras: apply to every LIVING enemy each round.
+  // Ink Cloud was miscoded as a SELF buff when its own description says it
+  // weakens the enemy — fixed here. ---
+  'Ink Cloud': { enemyAccDebuff: 5 },
+  Hex: { enemyAccDebuff: 4, enemyRegenDebuff: 1 },
+  // Dodge-debuffs are dead weight vs low-DEX foes (dodge has no floor at 0 and
+  // hit chance past 100 is wasted), so Drowsy Aura moved to accuracy — drowsy
+  // foes swing wide — and Root Grasp splits its value across both (balance
+  // sweep 2026-07-25: these two were the pool's worst performers).
+  'Drowsy Aura': { enemyAccDebuff: 3 },
+  'Root Grasp': { enemyDodgeDebuff: 3, enemyAccDebuff: 2 }, Entropy: { enemyDmgDebuff: 0.05 },
+  'Temporal Distortion': { enemyDodgeDebuff: 4, auraRegen: 1 },
+
+  // Truth's Word: reworked into a genuine passive (see truthsWordCleanse), plus
+  // a small always-on ward of conviction — the cleanse alone is worthless
+  // against teams that carry no debuff moves.
+  "Truth's Word": { flatDR: 1 },
 }
 
-function innateEffects(m: Monster): InnateEffect {
-  const out: Required<InnateEffect> = { flatDR: 0, dodge: 0, acc: 0, regen: 0, dmgMult: 1, firstHitMult: 1, lifesteal: 0 }
-  for (const ab of m.species.innate) {
-    const e = INNATE_EFFECTS[ab.name]
-    if (!e) continue
-    out.flatDR += e.flatDR ?? 0
-    out.dodge += e.dodge ?? 0
-    out.acc += e.acc ?? 0
-    out.regen += e.regen ?? 0
-    out.dmgMult *= e.dmgMult ?? 1
-    out.firstHitMult = Math.max(out.firstHitMult, e.firstHitMult ?? 1)
-    out.lifesteal += e.lifesteal ?? 0
+// A species' two innates are ALTERNATIVES, not a stacked pair (user spec
+// 2026-07-25) — only the one at Monster.activeInnate is ever in effect, same
+// as only one loadout of moves is ever equipped. Falls back to slot 0 if
+// activeInnate is out of range (e.g. the 2nd choice's unlock stat was since
+// trained down, mirroring careerMonster's loadout-shrink safety).
+const currentInnate = (m: Monster): Ability | undefined =>
+  m.species.innate[m.activeInnate] ?? m.species.innate[0]
+
+// This monster's own ACTIVE innate as one struct — everything it PROVIDES
+// (self-only fields, plus what it grants as an aura/enemy-debuff), before any
+// team-context is applied. This is what Combatant.selfInnate holds, static
+// for the whole fight; Combatant.innate (below) is the EFFECTIVE per-round
+// value after folding in living allies' auras and living enemies' debuffs.
+function innateEffects(m: Monster): Required<InnateEffect> {
+  const out: Required<InnateEffect> = {
+    flatDR: 0, dodge: 0, acc: 0, regen: 0, hpRegen: 0, dmgMult: 1, firstHitMult: 1, lifesteal: 0,
+    lowHpDmgMult: 1, highHpDmgMult: 1, crit: 0, pierce: 0, echo: 0, elemDmgMult: 1, executeMult: 1,
+    startWard: 0, manaSteal: 0, buffExtend: 0, debuffExtend: 0, debuffResist: 0, statusOnHit: null,
+    auraFlatDR: 0, auraDodge: 0, auraRegen: 0, auraHpRegen: 0, auraDmgMult: 1,
+    enemyAccDebuff: 0, enemyDodgeDebuff: 0, enemyRegenDebuff: 0, enemyDmgDebuff: 0,
   }
+  const ab = currentInnate(m)
+  const e = ab && INNATE_EFFECTS[ab.name]
+  if (!e) return out
+  out.flatDR += e.flatDR ?? 0
+  out.dodge += e.dodge ?? 0
+  out.acc += e.acc ?? 0
+  out.regen += e.regen ?? 0
+  out.hpRegen += e.hpRegen ?? 0
+  out.dmgMult *= e.dmgMult ?? 1
+  out.firstHitMult = Math.max(out.firstHitMult, e.firstHitMult ?? 1)
+  out.lifesteal += e.lifesteal ?? 0
+  out.lowHpDmgMult *= e.lowHpDmgMult ?? 1
+  out.highHpDmgMult *= e.highHpDmgMult ?? 1
+  out.crit += e.crit ?? 0
+  out.pierce += e.pierce ?? 0
+  out.echo += e.echo ?? 0
+  out.elemDmgMult *= e.elemDmgMult ?? 1
+  out.executeMult *= e.executeMult ?? 1
+  out.startWard += e.startWard ?? 0
+  out.manaSteal += e.manaSteal ?? 0
+  out.buffExtend += e.buffExtend ?? 0
+  out.debuffExtend += e.debuffExtend ?? 0
+  out.debuffResist += e.debuffResist ?? 0
+  out.statusOnHit = e.statusOnHit ?? null
+  out.auraFlatDR += e.auraFlatDR ?? 0
+  out.auraDodge += e.auraDodge ?? 0
+  out.auraRegen += e.auraRegen ?? 0
+  out.auraHpRegen += e.auraHpRegen ?? 0
+  out.auraDmgMult *= e.auraDmgMult ?? 1
+  out.enemyAccDebuff += e.enemyAccDebuff ?? 0
+  out.enemyDodgeDebuff += e.enemyDodgeDebuff ?? 0
+  out.enemyRegenDebuff += e.enemyRegenDebuff ?? 0
+  out.enemyDmgDebuff += e.enemyDmgDebuff ?? 0
   return out
 }
 
-const activePassives = (m: Monster) => m.species.innate.filter((ab) => INNATE_EFFECTS[ab.name]).map((ab) => ab.name)
+const activePassives = (m: Monster) => {
+  const ab = currentInnate(m)
+  return ab && INNATE_EFFECTS[ab.name] ? [ab.name] : []
+}
+const hasInnate = (m: Monster, name: string) => currentInnate(m)?.name === name
 
 // A single timed buff/debuff currently active on a combatant, counted down once
 // per ROUND (not per action) and removed on expiry — nothing lasts "for the
@@ -116,6 +266,7 @@ interface ActiveMod {
   moveId: string
   turnsLeft: number
   atkBuff?: number; defBuff?: number; dodgeBuff?: number; accBuff?: number; regenBuff?: number
+  thorns?: number; hpRegenBuff?: number // framework 2026-07-25: flat reflect per hit taken; flat HP/turn
   atkDebuff?: number; defDebuff?: number; accDebuff?: number
 }
 
@@ -139,12 +290,15 @@ interface Combatant {
   dodgeMod: number // additive % dodge
   accMod: number // additive % accuracy
   regenMod: number // additive mana regen
+  thornsFlat: number // flat damage reflected onto attackers per hit taken (thorns buffs)
+  hpRegenMod: number // additive HP regen per turn (hpRegenBuff buffs)
   happiness: number // 0..10, scales damage dealt (§2.4)
   staminaMult: number // fatigue damage multiplier, fixed at fight start (staminaDamageMult)
-  innate: Required<InnateEffect>
+  selfInnate: Required<InnateEffect> // this monster's own two innates, static for the fight
+  innate: Required<InnateEffect> // EFFECTIVE totals: selfInnate + living allies' auras + living enemies' debuffs received — recomputed every round via recomputeInnateAuras()
   hasLandedHit: boolean // first-hit bonuses spend after the first damaging hit
-  ultimateUsed: boolean
   wasKOd: boolean // true once hp has ever hit <=0 — drives the per-individual injury system
+  actedThisRound: boolean // reset false at the top of every round, set true when this combatant reaches its turn — drives firstStrikeMult (a target that hasn't acted yet this round hasn't "reacted" to the incoming hit)
   // Taunted: single-target hostile actions are FORCED onto the taunter while
   // this lasts (ticked down per round alongside mods; cleared if the taunter
   // falls). This is what makes Tanks work despite acting last in the
@@ -155,7 +309,7 @@ interface Combatant {
 // Rebuild the 5 cached modifier totals from the active mods list. Call after any
 // mods mutation (apply, expiry).
 function recomputeMods(c: Combatant): void {
-  let atkMod = 1, defFlat = 0, dodgeMod = 0, accMod = 0, regenMod = 0
+  let atkMod = 1, defFlat = 0, dodgeMod = 0, accMod = 0, regenMod = 0, thornsFlat = 0, hpRegenMod = 0
   for (const m of c.mods) {
     if (m.atkBuff) atkMod *= 1 + m.atkBuff
     if (m.atkDebuff) atkMod *= 1 - m.atkDebuff
@@ -165,8 +319,11 @@ function recomputeMods(c: Combatant): void {
     if (m.accBuff) accMod += m.accBuff
     if (m.accDebuff) accMod -= m.accDebuff
     if (m.regenBuff) regenMod += m.regenBuff
+    if (m.thorns) thornsFlat += m.thorns
+    if (m.hpRegenBuff) hpRegenMod += m.hpRegenBuff
   }
   c.atkMod = atkMod; c.defFlat = defFlat; c.dodgeMod = dodgeMod; c.accMod = accMod; c.regenMod = regenMod
+  c.thornsFlat = thornsFlat; c.hpRegenMod = hpRegenMod
 }
 
 // Tick every active mod down by one ROUND (called once per round, not per turn);
@@ -176,6 +333,26 @@ function tickMods(c: Combatant): void {
   c.mods = c.mods.filter((m) => m.turnsLeft > 0)
   if (c.tauntedBy && --c.tauntedBy.turnsLeft <= 0) c.tauntedBy = null
   recomputeMods(c)
+}
+
+// Truth's Word (user spec 2026-07-25): reworked from an "at will" active
+// dispel — which isn't a passive — into a genuine passive that fires on its
+// own: every 3rd round, a bearer automatically shrugs off one random debuff
+// currently on itself. Special-cased by name (like tauntForce) rather than a
+// generic InnateEffect field, since it's the only ability that removes a mod
+// outright instead of adjusting a number.
+function truthsWordCleanse(ctx: BattleContext, round: number, log: string[], ev: BattleEvent[]): void {
+  if (round % 3 !== 0) return
+  for (const c of ctx.all) {
+    if (c.hp <= 0 || !hasInnate(c.m, "Truth's Word")) continue
+    const debuffs = c.mods.filter((m) => m.atkDebuff || m.defDebuff || m.accDebuff)
+    if (!debuffs.length) continue
+    const gone = debuffs[0]
+    c.mods = c.mods.filter((m) => m !== gone)
+    recomputeMods(c)
+    log.push(`  ✨ ${c.m.name}'s Truth's Word shrugs off a debuff.`)
+    ev.push({ kind: 'utility', side: c.side, slot: c.slot, targetSide: c.side, targetSlot: c.slot, move: "Truth's Word", heal: 0, hostile: false })
+  }
 }
 
 export interface BattleResult {
@@ -190,6 +367,7 @@ export interface BattleResult {
 }
 
 function makeCombatant(m: Monster, happiness: number, side: BattleSide, slot: number): Combatant {
+  const self = innateEffects(m)
   return {
     m,
     side,
@@ -202,7 +380,7 @@ function makeCombatant(m: Monster, happiness: number, side: BattleSide, slot: nu
     cooldowns: {},
     statuses: [],
     guard: 0,
-    ward: 0,
+    ward: self.startWard, // e.g. Ward (Nautilux) — opens every battle behind a shell shield
     blockAvoid: 0,
     mods: [],
     atkMod: 1,
@@ -210,12 +388,15 @@ function makeCombatant(m: Monster, happiness: number, side: BattleSide, slot: nu
     dodgeMod: 0,
     accMod: 0,
     regenMod: 0,
+    thornsFlat: 0,
+    hpRegenMod: 0,
     happiness,
     staminaMult: staminaDamageMult(m.stamina ?? 100),
-    innate: innateEffects(m) as Required<InnateEffect>,
+    selfInnate: self,
+    innate: self, // placeholder until recomputeInnateAuras() runs before round 1
     hasLandedHit: false,
-    ultimateUsed: false,
     wasKOd: false,
+    actedThisRound: false,
     tauntedBy: null,
   }
 }
@@ -226,6 +407,38 @@ interface BattleContext { all: Combatant[] }
 const livingTeamOf = (ctx: BattleContext, side: BattleSide) => ctx.all.filter((c) => c.side === side && c.hp > 0)
 const enemiesOf = (ctx: BattleContext, c: Combatant) => livingTeamOf(ctx, c.side === 'A' ? 'B' : 'A')
 const alliesOf = (ctx: BattleContext, c: Combatant) => livingTeamOf(ctx, c.side).filter((x) => x !== c)
+
+// Recompute every combatant's EFFECTIVE innate totals (Combatant.innate) from
+// scratch: own selfInnate + every LIVING ally's aura fields (including its
+// own, since a team aura benefits its owner too) + every LIVING enemy's
+// enemy-debuff fields received. Called once before round 1 and once per round
+// thereafter (same cadence as tickMods) — a fallen ally's aura or a fallen
+// enemy's debuff drops off starting the round after they die, not instantly
+// mid-round, matching how tauntedBy/mods already tick once per round.
+function recomputeInnateAuras(ctx: BattleContext): void {
+  for (const c of ctx.all) {
+    if (c.hp <= 0) continue
+    const self = c.selfInnate
+    let flatDR = self.flatDR, dodge = self.dodge, regen = self.regen, hpRegen = self.hpRegen, dmgMult = self.dmgMult
+    for (const ally of [c, ...alliesOf(ctx, c)]) {
+      const a = ally.selfInnate
+      flatDR += a.auraFlatDR; dodge += a.auraDodge; regen += a.auraRegen; hpRegen += a.auraHpRegen
+      dmgMult *= a.auraDmgMult
+    }
+    let acc = self.acc
+    for (const foe of enemiesOf(ctx, c)) {
+      const e = foe.selfInnate
+      acc -= e.enemyAccDebuff
+      dodge -= e.enemyDodgeDebuff
+      regen -= e.enemyRegenDebuff
+      dmgMult *= 1 - e.enemyDmgDebuff
+    }
+    c.innate = {
+      ...self, flatDR, dodge, acc, regen, hpRegen, dmgMult,
+    }
+  }
+}
+
 // Lowest-HP%-first — rewards finishing blows / prioritizes the neediest ally.
 // Array.sort is spec-stable, so ties preserve roster (slot) order.
 const pickEnemyTarget = (foes: Combatant[]) => foes.slice().sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0]
@@ -235,7 +448,7 @@ const pickAllyTarget = (allies: Combatant[]) => allies.slice().sort((a, b) => a.
 const isTimedBuff = (mv: Move) => {
   const e = mv.effects
   return !!e && (e.atkBuff !== undefined || e.defBuff !== undefined || e.dodgeBuff !== undefined
-    || e.accBuff !== undefined || e.regenBuff !== undefined)
+    || e.accBuff !== undefined || e.regenBuff !== undefined || e.thorns !== undefined || e.hpRegenBuff !== undefined)
 }
 const isDebuffMove = (mv: Move) => {
   const e = mv.effects
@@ -244,11 +457,47 @@ const isDebuffMove = (mv: Move) => {
 
 const hasStatus = (c: Combatant, k: StatusKind) => c.statuses.some((s) => s.kind === k)
 
+// Haste is the one BENEFICIAL status — cleanses scrub ailments, never gifts.
+const BENEFICIAL_STATUSES = new Set<StatusKind>(['haste'])
+const cleanseStatuses = (c: Combatant) => { c.statuses = c.statuses.filter((s) => BENEFICIAL_STATUSES.has(s.kind)) }
+
+// Doom: nothing happens while the countdown runs, then a heavy burst when it
+// ends — the counterplay is cleansing it in time.
+const DOOM_DMG_FRACTION = 0.25 // of the victim's own max HP
+// Healblock ("grievous wounds"): heals, lifesteal, and HP regen multiplied by
+// this while the status holds.
+const HEALBLOCK_MULT = 0.4
+
+// A damaged sleeper wakes — the ONE way sleep differs from stun.
+function wakeIfSleeping(c: Combatant, log: string[]): void {
+  if (!hasStatus(c, 'sleep')) return
+  c.statuses = c.statuses.filter((s) => s.kind !== 'sleep')
+  log.push(`    ${c.m.name} is jolted awake!`)
+}
+
+// Statuses stack (bleed, capped) or refresh (everything else) — never duplicate.
+// Bleed is the ONE stacking status: up to 3 concurrent stacks, each ticking its
+// own damage; re-applying any other status just refreshes its duration.
+const BLEED_MAX_STACKS = 3
+function applyStatus(c: Combatant, kind: StatusKind, duration: number): boolean {
+  if (kind === 'bleed') {
+    if (c.statuses.filter((s) => s.kind === 'bleed').length >= BLEED_MAX_STACKS) return false
+    c.statuses.push({ kind, turns: duration })
+    return true
+  }
+  const existing = c.statuses.find((s) => s.kind === kind)
+  if (existing) { existing.turns = Math.max(existing.turns, duration); return false }
+  c.statuses.push({ kind, turns: duration })
+  return true
+}
+
 function tickStatuses(c: Combatant, log: string[], ev: BattleEvent[]): void {
+  let tookHpDamage = false
   for (const st of c.statuses) {
     if (st.kind === 'burn') {
       const dmg = Math.max(1, Math.round(c.maxHp * 0.05))
       c.hp -= dmg
+      tookHpDamage = true
       log.push(`  ${c.m.name} suffers ${dmg} burn damage.`)
       ev.push({ kind: 'dot', side: c.side, slot: c.slot, status: 'burn', amount: dmg })
     } else if (st.kind === 'poison') {
@@ -256,16 +505,35 @@ function tickStatuses(c: Combatant, log: string[], ev: BattleEvent[]): void {
       c.mana = Math.max(0, c.mana - dmg)
       log.push(`  ${c.m.name} loses ${dmg} mana to poison.`)
       ev.push({ kind: 'dot', side: c.side, slot: c.slot, status: 'poison', amount: dmg })
+    } else if (st.kind === 'bleed') {
+      // flat per stack — a lighter, stackable cousin of burn's %-of-maxHp tick
+      const dmg = Math.max(1, Math.round(c.maxHp * 0.02))
+      c.hp -= dmg
+      tookHpDamage = true
+      log.push(`  ${c.m.name} bleeds for ${dmg}.`)
+      ev.push({ kind: 'dot', side: c.side, slot: c.slot, status: 'bleed', amount: dmg })
+    } else if (st.kind === 'doom' && st.turns === 1) {
+      // the countdown ends THIS tick — the doom strikes (true damage, no mitigation;
+      // the counterplay was cleansing it in time)
+      const dmg = Math.max(1, Math.round(c.maxHp * DOOM_DMG_FRACTION))
+      c.hp -= dmg
+      tookHpDamage = true
+      log.push(`  💀 The doom strikes ${c.m.name} for ${dmg}!`)
+      ev.push({ kind: 'dot', side: c.side, slot: c.slot, status: 'doom', amount: dmg })
     }
     st.turns--
   }
   c.statuses = c.statuses.filter((s) => s.turns > 0)
+  if (tookHpDamage) wakeIfSleeping(c, log)
 }
+
+// Vulnerable status: flat +20% damage taken from every source while marked.
+const VULNERABLE_MULT = 1.2
 
 // --- Universal free actions (battle-choice design) ---
 // Every skill costs MP; when none is affordable the monster must Attack or Block.
 const ATTACK_POWER = 12
-const FREE_MOVE_IDS = new Set(['attack', 'ultimate'])
+const FREE_MOVE_IDS = new Set(['attack'])
 const moveCost = (mv: Move) => (FREE_MOVE_IDS.has(mv.id) ? 0 : manaCost(mv))
 
 // Basic attack through the monster's best offensive channel (a wizard's "attack"
@@ -286,11 +554,18 @@ const blockValue = (c: Combatant) => Math.min(55, Math.round(30 + c.m.stats.WIS 
 type Action = { kind: 'skill'; move: Move } | { kind: 'attack' } | { kind: 'block' }
 
 // Expected output of a damage skill, for comparing against the free Attack:
-// multi-hit totals count, and execute range boosts value against weakened foes.
+// multi-hit totals count, execute range boosts value against weakened foes,
+// and — the combo-AI hook (2026-07-25) — setup→payoff moves surge in value
+// when the foe is CARRYING the status they exploit, so the policy tree
+// naturally cashes combos without a bespoke branch. maxHpDmg tools likewise
+// rank by what they'd actually add against THIS foe.
 function effPower(mv: Move, foe: Combatant): number {
-  const avgHits = mv.effects?.hits ? (mv.effects.hits[0] + mv.effects.hits[1]) / 2 : 1
+  const e = mv.effects
+  const avgHits = e?.hits ? (e.hits[0] + e.hits[1]) / 2 : 1
   let p = mv.power * avgHits
-  if (mv.effects?.execute && foe.hp / foe.maxHp <= mv.effects.execute) p *= 1.5
+  if (e?.execute && foe.hp / foe.maxHp <= e.execute) p *= 1.5
+  if (e?.bonusVsStatus && hasStatus(foe, e.bonusVsStatus.kind)) p *= e.bonusVsStatus.mult
+  if (e?.maxHpDmg) p += foe.maxHp * e.maxHpDmg
   return p
 }
 
@@ -330,6 +605,13 @@ const CLASS_PERSONALITY: Record<string, Partial<ClassPersonality>> = {
 // resolved separately once the move is actually cast (see resolveTargets).
 function chooseAction(self: Combatant, foe: Combatant, rng: RNG): Action {
   const p = { ...DEFAULT_PERSONALITY, ...CLASS_PERSONALITY[self.m.className] }
+  // Silenced: skills are sealed — Attack, or Block if something heavy is coming.
+  if (hasStatus(self, 'silence')) {
+    const silencedThreats = foe.m.loadout.filter((mv) => (foe.cooldowns[mv.id] ?? 0) <= 1 && moveCost(mv) <= foe.mana)
+    const incoming = Math.max(ATTACK_POWER, ...silencedThreats.filter((mv) => mv.type === 'damage').map((mv) => effPower(mv, self)))
+    if (self.hp / self.maxHp < p.healAt && incoming >= 20 && chance(rng, p.blockWhenHurt)) return { kind: 'block' }
+    return { kind: 'attack' }
+  }
   const ready = self.m.loadout.filter((mv) => (self.cooldowns[mv.id] ?? 0) <= 0 && moveCost(mv) <= self.mana)
   const heals = ready.filter((mv) => mv.type !== 'damage' && mv.power > 0)
   const dmgs = ready.filter((mv) => mv.type === 'damage').sort((a, b) => effPower(b, foe) - effPower(a, foe))
@@ -383,20 +665,10 @@ function chooseAction(self: Combatant, foe: Combatant, rng: RNG): Action {
 // equally likely. HIDDEN stat (user spec 2026-07-21) — never surfaced in any
 // UI, only felt through occasional erratic play from wild/rival monsters.
 function wildAction(self: Combatant, rng: RNG): Action {
-  const ready = self.m.loadout.filter((mv) => (self.cooldowns[mv.id] ?? 0) <= 0 && moveCost(mv) <= self.mana)
+  const ready = hasStatus(self, 'silence') ? [] // silence seals skills for wild monsters too
+    : self.m.loadout.filter((mv) => (self.cooldowns[mv.id] ?? 0) <= 0 && moveCost(mv) <= self.mana)
   const options: Action[] = [{ kind: 'attack' }, { kind: 'block' }, ...ready.map((mv): Action => ({ kind: 'skill', move: mv }))]
   return options[Math.floor(rng() * options.length)]
-}
-
-// The species ultimate (§8.3): once per battle, unleashed when pushed below 40%
-// HP. A heavy strike through the monster's best offensive channel.
-function ultimateMove(m: Monster): Move {
-  const channels: Move['channel'][] = ['melee', 'ranged', 'magic', 'voice']
-  const best = channels.reduce((a, b) => (attackStat(m.stats, a) >= attackStat(m.stats, b) ? a : b))
-  return {
-    id: 'ultimate', name: m.species.ultimate.name, stat: 'STR', learnLevel: 0, type: 'damage',
-    channel: best, target: 'enemy', cooldown: 99, accuracy: 100, power: 70, desc: m.species.ultimate.desc,
-  }
 }
 
 // Upsert a timed mod onto `mods` by move id — refreshes duration on recast
@@ -411,12 +683,16 @@ function upsertMod(c: Combatant, moveId: string, duration: number, fields: Omit<
 // Land a debuff's timed effects on the target (round-limited). tauntForce is
 // LIVE (2026-07-21): the target's single-target hostile actions are forced
 // onto the attacker for the move's duration.
-function applyDebuffs(attacker: Combatant, target: Combatant, move: Move, log: string[]): void {
+function applyDebuffs(attacker: Combatant, target: Combatant, move: Move, rng: RNG, log: string[]): void {
   const e = move.effects
   if (!e) return
-  const duration = e.duration ?? 3
-  // 50 CHA = 1% shaved off incoming debuff magnitudes (charisma deflects scorn)
-  const dr = 1 - debuffReduction(target.m.stats)
+  // innate debuffExtend (e.g. Hive Command): rolled once on apply — the curse lingers a round longer
+  let duration = e.duration ?? 3
+  const extended = attacker.innate.debuffExtend > 0 && chance(rng, attacker.innate.debuffExtend)
+  if (extended) duration += 1
+  // 50 CHA = 1% shaved off incoming debuff magnitudes (charisma deflects
+  // scorn); innate debuffResist (e.g. Cold Blood) stacks on top.
+  const dr = Math.max(0, 1 - debuffReduction(target.m.stats) - target.innate.debuffResist / 100)
   const fields: Omit<ActiveMod, 'moveId' | 'turnsLeft'> = {}
   const notes: string[] = []
   if (e.atkDebuff) { fields.atkDebuff = e.atkDebuff * dr; notes.push(`−${Math.round(e.atkDebuff * dr * 100)}% damage`) }
@@ -425,7 +701,8 @@ function applyDebuffs(attacker: Combatant, target: Combatant, move: Move, log: s
   if (notes.length) {
     upsertMod(target, move.id, duration, fields)
     const resistNote = dr < 1 ? ` (${Math.round((1 - dr) * 100)}% resisted)` : ''
-    log.push(`    ${target.m.name} is weakened for ${duration} rounds: ${notes.join(', ')}${resistNote}.`)
+    const lingerNote = extended ? ' — it lingers!' : ''
+    log.push(`    ${target.m.name} is weakened for ${duration} rounds: ${notes.join(', ')}${resistNote}${lingerNote}.`)
   }
   if (e.tauntForce && target.side !== attacker.side) {
     target.tauntedBy = { side: attacker.side, slot: attacker.slot, turnsLeft: duration }
@@ -435,22 +712,26 @@ function applyDebuffs(attacker: Combatant, target: Combatant, move: Move, log: s
 
 // Apply a move's beneficial effects to one recipient: guard, ward, cleanse,
 // timed buffs. Called per-target for 'team'/'ally' fan-out, so a party buff
-// genuinely buffs every living ally, not just the caster.
-function applyBeneficialEffects(target: Combatant, move: Move, log: string[]): void {
+// genuinely buffs every living ally, not just the caster. `caster` carries the
+// innate buffExtend roll (e.g. Encore) — the CASTER's gift, whoever receives it.
+function applyBeneficialEffects(caster: Combatant, target: Combatant, move: Move, rng: RNG, log: string[]): void {
   const e = move.effects
   if (!e) return
   const notes: string[] = []
   if (e.guard) { target.guard += e.guard + Math.round(target.m.stats.CON * 0.1); notes.push(`guard ${target.guard}`) }
   if (e.ward) { target.ward += e.ward; notes.push(`${target.ward} HP shield`) }
-  if (e.cleanse && target.statuses.length) { target.statuses = []; notes.push('ailments cleansed') }
+  if (e.cleanse && target.statuses.some((s) => !BENEFICIAL_STATUSES.has(s.kind))) { cleanseStatuses(target); notes.push('ailments cleansed') }
   if (isTimedBuff(move)) {
-    const duration = e.duration ?? 3
+    let duration = e.duration ?? 3
+    if (caster.innate.buffExtend > 0 && chance(rng, caster.innate.buffExtend)) { duration += 1; notes.push('encore!') }
     const fields: Omit<ActiveMod, 'moveId' | 'turnsLeft'> = {}
     if (e.atkBuff) { fields.atkBuff = e.atkBuff; notes.push(`+${Math.round(e.atkBuff * 100)}% damage`) }
     if (e.defBuff) { fields.defBuff = e.defBuff; notes.push(`+${e.defBuff} mitigation`) }
     if (e.dodgeBuff) { fields.dodgeBuff = e.dodgeBuff; notes.push(`+${e.dodgeBuff}% dodge`) }
     if (e.accBuff) { fields.accBuff = e.accBuff; notes.push(`+${e.accBuff}% accuracy`) }
     if (e.regenBuff) { fields.regenBuff = e.regenBuff; notes.push(`+${e.regenBuff} regen`) }
+    if (e.thorns) { fields.thorns = e.thorns; notes.push(`thorns ${e.thorns}`) }
+    if (e.hpRegenBuff) { fields.hpRegenBuff = e.hpRegenBuff; notes.push(`+${e.hpRegenBuff} HP/turn`) }
     upsertMod(target, move.id, duration, fields)
     notes.push(`${duration} rounds`)
   }
@@ -473,10 +754,15 @@ function tauntTargetOf(attacker: Combatant, ctx: BattleContext): Combatant | nul
 // moves — an 'allEnemies' volley under confusion still goes out (scoped this
 // way deliberately; a "confusion cancels the whole volley" reading wasn't
 // specified and isn't a strict subset of the old single-target behavior).
-// Precedence for 'enemy' moves: confusion (self) > taunt (forced) > lowest-HP%.
+// Precedence for 'enemy' moves: confusion (self) > charm (own ally) > taunt
+// (forced) > lowest-HP%. Charm (2026-07-25) is confusion's team-battle
+// sibling — same single-target-only scoping as confusion (an 'allEnemies'
+// volley isn't redirected by either), inert in a solo-team fight (falls
+// through to normal targeting when there's no ally to strike).
 function resolveTargets(attacker: Combatant, ctx: BattleContext, move: Move, rng: RNG, log: string[]): Combatant[] {
   const confused = hasStatus(attacker, 'confusion') && chance(rng, 20)
   if (confused) log.push(`  ${attacker.m.name} is confused and turns on itself!`)
+  const charmed = !confused && hasStatus(attacker, 'charm') && alliesOf(ctx, attacker).length > 0
 
   switch (move.target) {
     case 'self':
@@ -494,6 +780,10 @@ function resolveTargets(attacker: Combatant, ctx: BattleContext, move: Move, rng
     case 'enemy':
     default: {
       if (confused) return [attacker]
+      if (charmed) {
+        log.push(`  ${attacker.m.name} is charmed and turns on its own team!`)
+        return [pickAllyTarget(alliesOf(ctx, attacker))]
+      }
       const forced = tauntTargetOf(attacker, ctx)
       if (forced) return [forced]
       const foes = enemiesOf(ctx, attacker)
@@ -504,18 +794,29 @@ function resolveTargets(attacker: Combatant, ctx: BattleContext, move: Move, rng
 
 // Non-damage, non-hostile move landing on one recipient (self, an ally, or a
 // team-mate in a 'team' fan-out).
-function resolveUtilityOnTarget(attacker: Combatant, target: Combatant, move: Move, log: string[], ev: BattleEvent[]): void {
+function resolveUtilityOnTarget(attacker: Combatant, target: Combatant, move: Move, rng: RNG, log: string[], ev: BattleEvent[]): void {
   let heal = 0
   if (move.power > 0) {
-    heal = Math.round(move.power * 1.2)
+    heal = Math.round(move.power * 1.2 * (hasStatus(target, 'healblock') ? HEALBLOCK_MULT : 1))
     target.hp = Math.min(target.maxHp, target.hp + heal)
     log.push(target === attacker
-      ? `  ${attacker.m.name} uses ${move.name}, healing ${heal} HP.`
-      : `  ${attacker.m.name} uses ${move.name} on ${target.m.name}, healing ${heal} HP.`)
+      ? `  ${attacker.m.name} uses ${move.name}, healing ${heal} HP${hasStatus(target, 'healblock') ? ' (healblocked)' : ''}.`
+      : `  ${attacker.m.name} uses ${move.name} on ${target.m.name}, healing ${heal} HP${hasStatus(target, 'healblock') ? ' (healblocked)' : ''}.`)
   } else {
     log.push(target === attacker ? `  ${attacker.m.name} uses ${move.name}.` : `  ${attacker.m.name} uses ${move.name} on ${target.m.name}.`)
   }
-  applyBeneficialEffects(target, move, log)
+  applyBeneficialEffects(attacker, target, move, rng, log)
+  // A beneficial move can carry a status too — currently only used for the
+  // one beneficial status, haste (e.g. a self-cast "Haste Self"-style move).
+  // No CHA debuffBonus roll here (that's a hostile-proc bonus, not relevant
+  // to granting your own team a buff).
+  if (move.status && chance(rng, move.status.chance)) {
+    applyStatus(target, move.status.kind, move.status.duration)
+    log.push(BENEFICIAL_STATUSES.has(move.status.kind)
+      ? `    ${target.m.name} gains ${move.status.kind}!`
+      : `    ${target.m.name} is afflicted with ${move.status.kind}!`)
+    ev.push({ kind: 'status', side: target.side, slot: target.slot, status: move.status.kind })
+  }
   ev.push({ kind: 'utility', side: attacker.side, slot: attacker.slot, targetSide: target.side, targetSlot: target.slot, move: move.name, heal, hostile: false })
 }
 
@@ -534,14 +835,14 @@ function resolveHostileUtilityOnTarget(attacker: Combatant, target: Combatant, m
   }
   log.push(`  ${attacker.m.name} uses ${move.name} on ${target.m.name}.`)
   ev.push({ kind: 'utility', side: attacker.side, slot: attacker.slot, targetSide: target.side, targetSlot: target.slot, move: move.name, heal: 0, hostile: true })
-  applyDebuffs(attacker, target, move, log)
+  applyDebuffs(attacker, target, move, rng, log)
   if (e?.manaBurn) {
     const burned = Math.min(target.mana, e.manaBurn)
     target.mana -= burned
     if (burned > 0) log.push(`    ${target.m.name} loses ${burned} MP.`)
   }
   if (move.status && chance(rng, move.status.chance + debuffBonus(attacker.m.stats))) {
-    target.statuses.push({ kind: move.status.kind, turns: move.status.duration })
+    applyStatus(target, move.status.kind, move.status.duration)
     log.push(`    ${target.m.name} is afflicted with ${move.status.kind}!`)
     ev.push({ kind: 'status', side: target.side, slot: target.slot, status: move.status.kind })
   }
@@ -574,37 +875,63 @@ function resolveDamageOnTarget(attacker: Combatant, target: Combatant, move: Mov
   dmg *= happinessMultiplier(attacker.happiness) // happy monsters hit harder (§2.4)
   dmg *= attacker.staminaMult // fatigue: tired monsters hit softer, all channels
   dmg *= attacker.innate.dmgMult * attacker.atkMod
+  // conditional damage windows: desperation below 30% HP, composure above 70%
+  if (attacker.hp / attacker.maxHp < 0.3) dmg *= attacker.innate.lowHpDmgMult
+  if (attacker.hp / attacker.maxHp > 0.7) dmg *= attacker.innate.highHpDmgMult
   if (openerEligible) {
     dmg *= attacker.innate.firstHitMult
     log.push(`  ${attacker.m.name}'s opening strike hits with full force!`)
   }
-  // critical hit: 50 DEX = 1% chance to deal double damage
+  // critical hit: 50 DEX = 1% chance to deal double damage (+ innate crit)
   let crit = false
-  if (chance(rng, critChance(attacker.m.stats))) {
+  if (chance(rng, critChance(attacker.m.stats) + attacker.innate.crit)) {
     dmg *= 2
     crit = true
   }
-  // execute: heavy bonus against weakened targets
+  // execute: heavy bonus against weakened targets (skill effect and/or innate)
   let execNote = ''
   if (e?.execute && target.hp / target.maxHp <= e.execute) {
     dmg *= 1.5
     execNote = ' — executes!'
   }
+  if (attacker.innate.executeMult > 1 && target.hp / target.maxHp < 0.3) {
+    dmg *= attacker.innate.executeMult
+    if (!execNote) execNote = ' — executes!'
+  }
+  // vulnerable status: the target takes more from EVERY source while marked
+  if (hasStatus(target, 'vulnerable')) dmg *= VULNERABLE_MULT
+  // first-strike tools: bonus damage if the target hasn't acted yet this round
+  // (attacker got there first) — a speed-differential reward, not a status;
+  // rolls against the LIVE initiative order, so haste/knockback shifts matter.
+  if (e?.firstStrikeMult && !target.actedThisRound) dmg *= e.firstStrikeMult
+  // giant-killer tools: bonus damage scaled off the TARGET's max HP
+  if (e?.maxHpDmg) dmg += target.maxHp * e.maxHpDmg
+  // setup→payoff combos: extra damage vs a target carrying the right status,
+  // optionally consuming it (all stacks) when cashed
+  if (e?.bonusVsStatus && hasStatus(target, e.bonusVsStatus.kind)) {
+    dmg *= e.bonusVsStatus.mult
+    if (e.bonusVsStatus.consume) {
+      target.statuses = target.statuses.filter((s) => s.kind !== e.bonusVsStatus!.kind)
+      log.push(`    ${attacker.m.name} exploits ${target.m.name}'s ${e.bonusVsStatus.kind}!`)
+    }
+  }
   // elemental affinity: resisted or super-effective vs the target's body type (§8.5)
   let effNote = ''
   if (move.element) {
     const em = elementMultiplier(target.m.species.body, move.element)
-    dmg *= em
+    dmg *= em * attacker.innate.elemDmgMult // innate elemental mastery only ever amplifies elemental moves
     if (em > 1) effNote = ' — super effective!'
     else if (em < 1) effNote = ' — resisted'
   }
   // physical channels mitigated by target CON + guard; magic/voice/support by WIS
   // (§11); buffs/shreds shift it; pierce ignores a fraction of the total.
+  // CON coefficient trimmed 0.06 → 0.05 (2026-07-25) — part of the anti-tank-
+  // dominance package alongside the giant-killer maxHpDmg tools.
   let mitigation = ((move.channel === 'melee' || move.channel === 'ranged')
-    ? target.m.stats.CON * 0.06 + target.guard
+    ? target.m.stats.CON * 0.05 + target.guard
     : target.m.stats.WIS * 0.05) + target.innate.flatDR + target.defFlat
-  // skill pierce + STR's own armour-breaking (100 STR = 1% of mitigation ignored)
-  mitigation = Math.max(0, mitigation) * (1 - Math.min(1, (e?.pierce ?? 0) + mitigationPierce(attacker.m.stats)))
+  // skill pierce + innate pierce + STR's own armour-breaking (100 STR = 1% of mitigation ignored)
+  mitigation = Math.max(0, mitigation) * (1 - Math.min(1, (e?.pierce ?? 0) + attacker.innate.pierce + mitigationPierce(attacker.m.stats)))
   dmg = Math.max(1, Math.round(dmg - mitigation))
 
   // ward shields soak damage before health
@@ -619,22 +946,38 @@ function resolveDamageOnTarget(attacker: Combatant, target: Combatant, move: Mov
   target.hp -= dmg
   target.guard = 0
   attacker.hasLandedHit = true
+  if (dmg > 0) wakeIfSleeping(target, log)
 
   const hitNote = hits > 1 ? ` (${hits} hits)` : ''
   const notes: string[] = []
-  // lifesteal: innate and skill effects stack
+  // lifesteal: innate and skill effects stack; healblock on the ATTACKER dulls
+  // its own drain (grievous wounds don't knit shut just because you spilled blood)
   let stolen = 0
   const steal = attacker.innate.lifesteal + (e?.lifesteal ?? 0)
   if (steal > 0 && dmg > 0) {
-    stolen = Math.max(1, Math.round(dmg * steal))
+    stolen = Math.max(1, Math.round(dmg * steal * (hasStatus(attacker, 'healblock') ? HEALBLOCK_MULT : 1)))
     attacker.hp = Math.min(attacker.maxHp, attacker.hp + stolen)
     notes.push(`drains ${stolen} HP`)
+  }
+  // mana steal: drains the target's mana into the attacker's own pool
+  if (attacker.innate.manaSteal > 0 && dmg > 0) {
+    const sip = Math.min(Math.round(target.mana), Math.max(1, Math.round(dmg * attacker.innate.manaSteal)))
+    if (sip > 0) {
+      target.mana -= sip
+      attacker.mana = Math.min(attacker.maxMana, attacker.mana + sip)
+      notes.push(`steals ${sip} MP`)
+    }
   }
   let burned = 0
   if (e?.manaBurn) {
     burned = Math.min(target.mana, e.manaBurn)
     target.mana -= burned
     if (burned > 0) notes.push(`burns ${burned} MP`)
+  }
+  // thorns: the wearer punishes every hit landed on it with flat reflect damage
+  if (target.thornsFlat > 0 && dmg > 0) {
+    attacker.hp -= target.thornsFlat
+    notes.push(`${target.thornsFlat} thorns`)
   }
   let recoil = 0
   if (e?.recoil) {
@@ -653,14 +996,23 @@ function resolveDamageOnTarget(attacker: Combatant, target: Combatant, move: Mov
   })
 
   // rider effect: armour shred / attack-down on damage moves (per-target)
-  applyDebuffs(attacker, target, move, log)
+  applyDebuffs(attacker, target, move, rng, log)
 
   // Apply status (50 CHA = +1% proc chance — the pool-wide 50% cap applies to
   // base move design only; CHA may push the effective chance past it)
   if (move.status && chance(rng, move.status.chance + debuffBonus(attacker.m.stats))) {
-    target.statuses.push({ kind: move.status.kind, turns: move.status.duration })
+    applyStatus(target, move.status.kind, move.status.duration)
     log.push(`    ${target.m.name} is afflicted with ${move.status.kind}!`)
     ev.push({ kind: 'status', side: target.side, slot: target.slot, status: move.status.kind })
+  }
+  // Innate status-on-hit (e.g. Venom Fang, Crest Display): a small chance to
+  // afflict on EVERY damaging hit, whatever the move — rolled independently of
+  // any move-carried status, no CHA bonus (it's venom, not persuasion).
+  const soh = attacker.innate.statusOnHit
+  if (soh && target.hp > 0 && !hasStatus(target, soh.kind) && chance(rng, soh.chance)) {
+    applyStatus(target, soh.kind, soh.duration)
+    log.push(`    ${target.m.name} is afflicted with ${soh.kind}!`)
+    ev.push({ kind: 'status', side: target.side, slot: target.slot, status: soh.kind })
   }
 }
 
@@ -676,7 +1028,7 @@ function resolveMove(attacker: Combatant, ctx: BattleContext, move: Move, rng: R
 
   if (move.type !== 'damage') {
     const hostile = move.target === 'enemy' || move.target === 'allEnemies'
-    if (!hostile) { for (const t of targets) resolveUtilityOnTarget(attacker, t, move, log, ev); return }
+    if (!hostile) { for (const t of targets) resolveUtilityOnTarget(attacker, t, move, rng, log, ev); return }
     for (const t of targets) resolveHostileUtilityOnTarget(attacker, t, move, rng, log, ev)
     return
   }
@@ -687,30 +1039,28 @@ function resolveMove(attacker: Combatant, ctx: BattleContext, move: Move, rng: R
   // self-guard follow-up on a damage move stays targeted at the attacker
   // specifically (a "hit and raise a shield" rider), once per cast — not once
   // per fanned target.
-  if (e?.guard) applyBeneficialEffects(attacker, move, log)
+  if (e?.guard) applyBeneficialEffects(attacker, attacker, move, rng, log)
 }
 
 function takeTurn(attacker: Combatant, ctx: BattleContext, rng: RNG, log: string[], ev: BattleEvent[]): void {
+  // Reaching this call IS "acting this round" for firstStrikeMult purposes —
+  // set unconditionally, before any stun/fear/sleep short-circuit, since even
+  // a skipped turn means this combatant's initiative slot has passed.
+  attacker.actedThisRound = true
   // A Block stance lasts until the blocker's next action — it ends now.
   attacker.blockAvoid = 0
   // regen mana (innate mana engines + regen buffs add to it) and HP (25 CON = 1/turn)
   attacker.mana = Math.min(attacker.maxMana, attacker.mana + manaRegen(attacker.m.stats) + attacker.innate.regen + attacker.regenMod)
-  attacker.hp = Math.min(attacker.maxHp, attacker.hp + hpRegen(attacker.m.stats))
+  const hpRegenMult = hasStatus(attacker, 'healblock') ? HEALBLOCK_MULT : 1
+  attacker.hp = Math.min(attacker.maxHp, attacker.hp + (hpRegen(attacker.m.stats) + attacker.innate.hpRegen + attacker.hpRegenMod) * hpRegenMult)
 
   if (hasStatus(attacker, 'stun')) { log.push(`  ${attacker.m.name} is stunned and cannot act.`); ev.push({ kind: 'skip', side: attacker.side, slot: attacker.slot, reason: 'stun' }); return }
   if (hasStatus(attacker, 'fear')) { log.push(`  ${attacker.m.name} flees in fear and loses its action.`); ev.push({ kind: 'skip', side: attacker.side, slot: attacker.slot, reason: 'fear' }); return }
+  if (hasStatus(attacker, 'sleep')) { log.push(`  ${attacker.m.name} is fast asleep.`); ev.push({ kind: 'skip', side: attacker.side, slot: attacker.slot, reason: 'sleep' }); return }
 
   const enemies = enemiesOf(ctx, attacker)
   if (!enemies.length) return // this monster's own team already won mid-round — nothing to act against
 
-  // Ultimate: unlocked at 600+ in a stat, fires once when pushed below 40% HP
-  if (attacker.m.ultimateUnlocked && !attacker.ultimateUsed && attacker.hp <= attacker.maxHp * 0.4) {
-    attacker.ultimateUsed = true
-    log.push(`  ★ ${attacker.m.name} unleashes its ultimate!`)
-    ev.push({ kind: 'ultimate', side: attacker.side, slot: attacker.slot, name: attacker.m.species.ultimate.name })
-    resolveMove(attacker, ctx, ultimateMove(attacker.m), rng, log, ev)
-    return
-  }
 
   // The per-turn choice: skill (costs MP) vs free Attack vs free Block. Wild
   // (low-tameness) monsters occasionally ignore the smart policy — undefined
@@ -731,8 +1081,8 @@ function takeTurn(attacker: Combatant, ctx: BattleContext, rng: RNG, log: string
     return
   }
   resolveMove(attacker, ctx, action.kind === 'attack' ? basicAttack(attacker.m) : action.move, rng, log, ev)
-  // 100 INT = 1% chance a skill casts twice (free — no extra MP, same cooldown)
-  if (action.kind === 'skill' && attacker.hp > 0 && enemiesOf(ctx, attacker).length > 0 && chance(rng, echoChance(attacker.m.stats))) {
+  // 100 INT = 1% chance a skill casts twice (free — no extra MP, same cooldown); innate echo stacks
+  if (action.kind === 'skill' && attacker.hp > 0 && enemiesOf(ctx, attacker).length > 0 && chance(rng, echoChance(attacker.m.stats) + attacker.innate.echo)) {
     log.push(`  ✨ ${attacker.m.name}'s ${action.move.name} echoes — it casts again!`)
     resolveMove(attacker, ctx, action.move, rng, log, ev, true)
   }
@@ -749,6 +1099,14 @@ const sumHpFrac = (team: Combatant[]) => team.reduce((s, c) => s + Math.max(0, c
 // each individual's CON. Ties fall back to DEX descending (quicker reflexes
 // settle a tie), then side A before B, then roster slot.
 function turnOrderCompare(x: Combatant, y: Combatant): number {
+  // Haste/knockback (2026-07-25): the two ends of turn-order manipulation —
+  // hasted acts FIRST regardless of CON, knocked-back acts LAST — bucketed
+  // ahead of the normal CON-ascending sort. A combatant with both (rare) nets
+  // to neutral, back to the normal CON sort. Order is recomputed every round,
+  // so mid-fight haste/knockback swings matter immediately.
+  const bucket = (c: Combatant) => (hasStatus(c, 'haste') ? -1 : 0) + (hasStatus(c, 'knockback') ? 1 : 0)
+  const bx = bucket(x), by = bucket(y)
+  if (bx !== by) return bx - by
   if (y.m.stats.CON !== x.m.stats.CON) return x.m.stats.CON - y.m.stats.CON
   if (y.m.stats.DEX !== x.m.stats.DEX) return y.m.stats.DEX - x.m.stats.DEX
   if (x.side !== y.side) return x.side === 'A' ? -1 : 1
@@ -761,6 +1119,7 @@ export function simulateTeamBattle(teamA: Monster[], teamB: Monster[], happA: nu
   const A = teamA.map((m, i) => makeCombatant(m, happA[i] ?? 0, 'A', i))
   const B = teamB.map((m, i) => makeCombatant(m, happB[i] ?? 0, 'B', i))
   const ctx: BattleContext = { all: [...A, ...B] }
+  recomputeInnateAuras(ctx)
   const log: string[] = []
   const ev: BattleEvent[] = []
   const snap = () => ev.push({
@@ -784,12 +1143,16 @@ export function simulateTeamBattle(teamA: Monster[], teamB: Monster[], happA: nu
 
   let round = 1
   const MAX_ROUNDS = 60
+  const CHIP_START_ROUND = 35
   while (teamAlive(A) && teamAlive(B) && round <= MAX_ROUNDS) {
     log.push(`— Round ${round} —`)
     ev.push({ kind: 'round', n: round })
     // decrement cooldowns and tick down active buffs/debuffs at the start of the round
     for (const c of ctx.all) for (const id in c.cooldowns) if (c.cooldowns[id] > 0) c.cooldowns[id]--
     for (const c of ctx.all) tickMods(c)
+    for (const c of ctx.all) c.actedThisRound = false
+    recomputeInnateAuras(ctx) // a fallen ally's aura / fallen enemy's debuff drops off from here
+    truthsWordCleanse(ctx, round, log, ev)
 
     const order = ctx.all.filter((c) => c.hp > 0).sort(turnOrderCompare)
     for (const c of order) {
@@ -800,6 +1163,18 @@ export function simulateTeamBattle(teamA: Monster[], teamB: Monster[], happA: nu
     }
 
     for (const c of ctx.all) tickStatuses(c, log, ev)
+
+    // Sudden-death clock (user spec 2026-07-22): some early-game matchups
+    // grind for a long time with neither side able to close it out. From
+    // round 35, EVERY living combatant takes flat TRUE damage (bypasses
+    // ward/mitigation, so a defensive comp can't out-tank the clock) that
+    // doubles each round, guaranteeing a winner within a handful more rounds.
+    if (round >= CHIP_START_ROUND && teamAlive(A) && teamAlive(B)) {
+      const chip = Math.pow(2, round - CHIP_START_ROUND)
+      for (const c of ctx.all) if (c.hp > 0) c.hp = Math.max(0, c.hp - chip)
+      log.push(`   ⏱️  Sudden death (Rd ${round}): everyone takes ${chip} damage.`)
+    }
+
     snap()
     log.push(`   A: ${A.map((c) => `${c.m.name} ${Math.max(0, c.hp)}`).join(' · ')}  |  B: ${B.map((c) => `${c.m.name} ${Math.max(0, c.hp)}`).join(' · ')}`)
     round++

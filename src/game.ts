@@ -1,8 +1,8 @@
 // Weekly calendar / career loop (M2, §2). A single monster you raise week by week:
 // weekly actions (train drill / rest / feed / excursion), stamina, gold, aging.
 import {
-  FOODS, Food, LEAGUES, MAX_HAPPINESS, Monster, Move, RNG, STATS, Sex, Species, Stats, Stat, TrainingProfile,
-  ULTIMATE_LEVEL, classForStats, feedDelta, hashString, mulberry32, randInt,
+  BODY_MINOR, FOODS, Food, INNATE_SECONDARY_LEVEL, LEAGUES, MAX_HAPPINESS, Monster, Move, RNG, STATS, Sex, Species, Stats, Stat, TrainingProfile,
+  classForStats, feedDelta, hashString, mulberry32,
 } from './core'
 import { ALL_DRILLS } from './drills'
 import { chooseLoadout, generateMonster, learnedMoves, maxHp, maxMana } from './monster'
@@ -67,6 +67,7 @@ export interface Career {
   retired: boolean
   fedThisWeek: boolean // only one food may be bought per week per monster
   loadout: string[] // persisted equipped-move ids (≤3); empty = auto-pick (chooseLoadout)
+  activeInnate: number // 0 or 1 — which of the species' two innates is active; changed like a loadout swap
   tournamentHistory: TournamentResult[]
   log: string[]
 }
@@ -94,22 +95,60 @@ export function staminaMalus(stamina: number): number {
   return 0.5 // -50%
 }
 
-// Training aptitude for a species: explicit override if set, else derived from its
-// base spread (best stat trains fastest, worst slowest) — so aptitude always
-// matches the species' natural identity.
+// Training aptitude for a species (user spec 2026-07-23): the 6 base body
+// types are migrated to the new authored system — `minor` comes from
+// BODY_MINOR (same stat for every species of that body), `major`/`flaw` are
+// individually authored per species (Species.trainingProfile). Species
+// without an authored profile (the exclusive body types, not yet migrated)
+// fall back to the legacy derivation from their base stat spread, reshaped
+// into the same {minor, major, flaw} shape (secondary -> minor, primary ->
+// major, weakness -> flaw) so every other function only needs one shape.
 export function trainingProfileFor(species: Species): TrainingProfile {
-  if (species.trainingProfile) return species.trainingProfile
+  if (species.trainingProfile) {
+    return { minor: BODY_MINOR[species.body], ...species.trainingProfile } as TrainingProfile
+  }
   const ordered = [...STATS].sort((a, b) => species.base[b] - species.base[a])
-  return { primary: ordered[0], secondary: ordered[1], weakness: ordered[STATS.length - 1] }
+  return { major: ordered[0], minor: ordered[1], flaw: ordered[STATS.length - 1] }
 }
 
-// Stat training bonus: primary +20%, secondary +10%, weakness -20%
+// Stat training bonus: major +20%, minor +10%, flaw -20%
 export function statTrainingBonus(species: Species, stat: Stat): number {
   const prof = trainingProfileFor(species)
-  if (stat === prof.primary) return 1.2
-  if (stat === prof.secondary) return 1.1
-  if (stat === prof.weakness) return 0.8
+  if (stat === prof.major) return 1.2
+  if (stat === prof.minor) return 1.1
+  if (stat === prof.flaw) return 0.8
   return 1
+}
+
+// Intensive drills' paired malus hits harder when it lands on the species'
+// training FLAW (user spec 2026-07-22, term renamed 2026-07-23): flaw stats
+// already train 20% slower, so losing one to a malus should sting more too,
+// not just gain less. Major/minor/neutral maluses are unaffected.
+export function statMalusMultiplier(species: Species, stat: Stat): number {
+  return stat === trainingProfileFor(species).flaw ? 1.5 : 1
+}
+
+// League gold reward ceiling — must track town.ts's CIRCUIT_REWARDS /
+// PRESTIGE_EVENTS gold-at-1st-place per league. Excursions cap at ~1/3 of
+// that (user spec 2026-07-22: "ensure the highest reward for an excursion is
+// capped at roughly 1/3rd of whatever first place is at its highest... we
+// don't want this to be hugely profitable") so downtime income never rivals
+// real tournament competition.
+const LEAGUE_TOP_GOLD: Record<string, number> = {
+  Wood: 100, Copper: 150, Tin: 200, Bronze: 250, Iron: 300,
+  Silver: 350, Gold: 400, Platinum: 450, Masters: 500, 'Tamer Elite': 600,
+}
+const EXCURSION_CAP_FRACTION = 1 / 3
+
+// Excursion purse: scales by the monster's current league, skewed toward the
+// bottom of its range (squared roll — "more likely to give the bottom end",
+// a placeholder for a future excursion minigame per user spec 2026-07-22).
+// Single rng() draw, same call-order contract as previewWeekEffects.
+export function excursionGold(rng: RNG, licenseIndex: number): number {
+  const league = LEAGUES[licenseIndex]?.name ?? 'Wood'
+  const cap = Math.max(10, Math.round((LEAGUE_TOP_GOLD[league] ?? LEAGUE_TOP_GOLD.Wood) * EXCURSION_CAP_FRACTION))
+  const floor = Math.max(5, Math.round(cap * 0.15))
+  return floor + Math.round(rng() * rng() * (cap - floor))
 }
 
 export interface WeekPreview {
@@ -162,7 +201,7 @@ export function previewWeekEffects(c: Career, activity: string, food: Food | '')
     for (const [stat, delta] of Object.entries(drill.gains) as [Stat, number][]) {
       const applied = delta > 0
         ? Math.round(rollDrillGain(rng, delta, trainHappiness) * eff * statTrainingBonus(c.species, stat))
-        : delta
+        : Math.round(delta * statMalusMultiplier(c.species, stat))
       const nv = Math.max(1, Math.min(cap, c.stats[stat] + applied))
       const real = nv - c.stats[stat]
       if (real !== 0) statDeltas[stat] = real
@@ -181,7 +220,7 @@ export function previewWeekEffects(c: Career, activity: string, food: Food | '')
     mpDelta = Math.min(maxMana(c.stats), c.mp + mpAmt) - c.mp
   } else if (activity === 'excursion') {
     staminaDelta = Math.max(0, c.stamina - EXCURSION_COST) - c.stamina
-    goldDelta = randInt(rng, 30, 80)
+    goldDelta = excursionGold(rng, c.licenseIndex)
   }
   return { happinessDelta, statDeltas, staminaDelta, goldDelta, hpDelta, mpDelta }
 }
@@ -218,6 +257,7 @@ export function newCareer(seed: string, opts: NewCareerOpts = {}): Career {
     retired: false,
     fedThisWeek: false,
     loadout: [],
+    activeInnate: 0,
     tournamentHistory: [],
     log: [`${m.name} the ${m.species.name} (${m.sex === 'M' ? '♂' : '♀'}) joins your stable — a Wood-league hopeful.`],
   }
@@ -250,6 +290,8 @@ export function careerMonster(c: Career): Monster {
     .map((id) => learned.find((mv) => mv.id === id))
     .filter((mv): mv is Move => !!mv)
   const loadout = persisted.length > 0 ? persisted : chooseLoadout(learned, c.stats)
+  const maxStat = Math.max(...STATS.map((s) => c.stats[s]))
+  const innateUnlocked = maxStat >= INNATE_SECONDARY_LEVEL
   return {
     seed: c.id,
     name: c.name,
@@ -260,7 +302,10 @@ export function careerMonster(c: Career): Monster {
     league: LEAGUES[c.licenseIndex].name,
     learned,
     loadout,
-    ultimateUnlocked: Math.max(...STATS.map((s) => c.stats[s])) >= ULTIMATE_LEVEL,
+    innateUnlocked,
+    // 2nd choice reverts to the 1st if its unlock stat was since trained down
+    // (an intensive-drill malus, say) — same shrink-safety as the loadout.
+    activeInnate: innateUnlocked ? c.activeInnate : 0,
     favouriteFood: c.favouriteFood,
     hatedFood: c.hatedFood,
     stamina: c.stamina,
@@ -342,7 +387,7 @@ export function applyWeek(c: Career, action: WeeklyAction, gold: number, rental 
       // life stage, stamina, and species aptitude; drill maluses apply flat
       const applied = delta > 0
         ? Math.round(rollDrillGain(rng, delta, n.happiness) * eff * statTrainingBonus(c.species, stat))
-        : delta
+        : Math.round(delta * statMalusMultiplier(c.species, stat))
       const nv = Math.max(1, Math.min(cap, n.stats[stat] + applied))
       const real = nv - n.stats[stat]
       n.stats[stat] = nv
@@ -365,7 +410,7 @@ export function applyWeek(c: Career, action: WeeklyAction, gold: number, rental 
     n.log.push(`Wk ${wk}: rested. Stamina ${n.stamina}/${MAX_STAMINA} · HP ${n.hp}/${maxHp(n.stats)} · MP ${n.mp}/${maxMana(n.stats)}.`)
   } else {
     n.stamina = Math.max(0, n.stamina - EXCURSION_COST)
-    const purse = randInt(rng, 30, 80)
+    const purse = excursionGold(rng, n.licenseIndex)
     g += purse
     n.log.push(`Wk ${wk}: excursion — returned with ${purse}g.`)
   }

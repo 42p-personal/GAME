@@ -70,9 +70,14 @@ button:hover { filter: brightness(1.08); }
 .happyrow .dim { color: var(--muted); font-size: 12px; }
 .happybar { height: 8px; background: var(--panel2); border-radius: 6px; overflow: hidden; margin-bottom: 8px; }
 .happybar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--con), var(--dex)); border-radius: 6px; transition: width .2s; }
-.foods { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.foods { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 6px; border-radius: 10px; border: 1px solid transparent; transition: border-color .2s, box-shadow .2s; }
 .food { background: var(--panel2); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 12.5px; font-weight: 600; }
 .food:disabled { opacity: .4; cursor: not-allowed; }
+/* A food hasn't been picked yet — highlight the whole picker so it's obvious
+   what's blocking Next Monster / Continue to Stable, rather than silently
+   bouncing the player back here (user spec 2026-07-24). */
+.foods-missing { border-color: var(--str); box-shadow: 0 0 0 1px var(--str) inset; animation: foodsPulse 1.6s ease-in-out infinite; }
+@keyframes foodsPulse { 50% { border-color: color-mix(in srgb, var(--str) 50%, var(--line)); } }
 .hint { font-size: 11.5px; color: var(--muted); margin: 6px 0 2px; }
 
 .bestiary { margin-top: 28px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 4px 16px; }
@@ -87,6 +92,7 @@ button:hover { filter: brightness(1.08); }
 .bestrow > summary::-webkit-details-marker { display: none; }
 .bestrow .bn { font-weight: 700; }
 .bestrow .dim { color: var(--muted); font-size: 12px; }
+.bestrow > summary .bsmall { flex-basis: 100%; margin-left: 44px; font-weight: 700; }
 .bio { font-size: 13px; line-height: 1.55; color: var(--ink); margin: 4px 0 6px 44px; }
 .bsmall { margin: 0 0 8px 44px; font-size: 11.5px; }
 @media (max-width: 720px) { .bestbody { grid-template-columns: 1fr; } }
@@ -250,6 +256,12 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 .abilitypool { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; max-height: 300px; overflow-y: auto; }
 .abilitypool .move { cursor: pointer; }
 .abilitypool .move.dim-eq { opacity: .4; cursor: default; }
+.innatepick { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; cursor: pointer; }
+.innatepick .mn { font-weight: 700; }
+.innatepick .md { color: var(--muted); font-size: 12px; }
+.innatepick.active { border-color: var(--accent); }
+.innatepick.active .md { color: var(--accent); }
+.innatepick.locked { opacity: .45; cursor: not-allowed; }
 @media (max-width: 820px) {
   .stablescreen { grid-template-columns: 1fr; padding-bottom: 64px; }
   /* Sticky bottom action bar on small screens — Advance Week shouldn't need a
@@ -328,3 +340,27 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 .battle-summary { text-align: center; font-size: 16px; font-weight: 700; margin: 10px 0; }
 
 @media (max-width: 720px) { .townmap { grid-template-columns: 1fr; } }
+
+/* Round-robin results grid (Monster Rancher reference, user spec 2026-07-22):
+   rows/columns are the field, each off-diagonal cell is the row team's result
+   against the column team. Wide by nature (fieldSize+1 columns) — scrolls
+   inside its own wrapper rather than the page. */
+.bracket-grid-wrap { overflow-x: auto; margin-top: 4px; }
+.bracket-grid { border-collapse: collapse; font-size: 13px; }
+.bracket-grid th { color: var(--muted); font-weight: 700; padding: 4px 6px; text-align: center; min-width: 30px; }
+.bracket-grid td { border: 1px solid var(--line); text-align: center; }
+.bracket-row-head { display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; white-space: nowrap; border: none !important; text-align: left; }
+.bracket-num { background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; min-width: 18px; padding: 1px 4px; font-weight: 700; font-size: 11px; color: var(--muted); text-align: center; }
+.bracket-cell { width: 34px; height: 30px; font-weight: 800; font-size: 15px; }
+.bracket-cell.self { background: repeating-linear-gradient(135deg, var(--line), var(--line) 1px, transparent 1px, transparent 7px); }
+.bracket-cell.win { color: var(--dex); background: color-mix(in srgb, var(--dex) 14%, transparent); }
+.bracket-cell.loss { color: var(--str); background: color-mix(in srgb, var(--str) 14%, transparent); }
+.bracket-cell.draw { color: var(--muted); }
+
+/* Scouting report (user spec 2026-07-22): same profile shape as MonsterCard
+   whether or not a tier's been paid for — unpaid fields render "??"/a locked
+   bar instead of being omitted, so buying a tier never reflows the card. */
+.scout-report { display: flex; flex-direction: column; gap: 10px; }
+.scout-report .scoutcard + .scoutcard { padding-top: 10px; border-top: 1px solid var(--line); }
+.scoutcard .badge.locked { color: var(--muted); font-style: italic; }
+.scoutcard .stat .bar.locked { display: flex; align-items: center; justify-content: flex-start; padding-left: 6px; color: var(--muted); font-weight: 700; font-size: 11px; }

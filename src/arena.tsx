@@ -13,12 +13,15 @@ import { Sprite } from './Sprite'
 
 const ELEMENT_COLOR: Record<Element, string> = { fire: '#ff7043', water: '#4fc3f7', earth: '#a1887f', air: '#b0bec5' }
 const CHANNEL_COLOR: Record<Channel, string> = { melee: '#eee', ranged: '#ffd54f', magic: '#ba68c8', voice: '#f48fb1', support: '#80cbc4' }
-const STATUS_ICON: Record<StatusKind, string> = { blind: '🕶️', poison: '☠️', burn: '🔥', fear: '😱', confusion: '💫', stun: '💤', knockback: '💨' }
+const STATUS_ICON: Record<StatusKind, string> = {
+  blind: '🕶️', poison: '☠️', burn: '🔥', fear: '😱', confusion: '💫', stun: '💤', knockback: '💨',
+  bleed: '🩸', silence: '🤐', vulnerable: '🎯', sleep: '😴', doom: '💀', healblock: '🚫', haste: '⚡', charm: '💞',
+}
 
 interface FloatFx { id: number; side: BattleSide; slot: number; text: string; cls: string }
 interface BarState { hp: number; mana: number; ward: number }
 type Bars = Record<string, BarState> // keyed by `${side}${slot}`
-interface Fx { id: number; side: BattleSide; slot: number; type: 'lunge' | 'proj' | 'stance' | 'ult'; color?: string }
+interface Fx { id: number; side: BattleSide; slot: number; type: 'lunge' | 'proj' | 'stance'; color?: string }
 
 const barKey = (side: BattleSide, slot: number) => `${side}${slot}`
 
@@ -64,9 +67,13 @@ export function ArenaBattle({ teamA, teamB, result, onDone }: { teamA: Monster[]
       case 'stance': return `${nameOf(e.side, e.slot)} braces to block (+${e.avoid}% avoid).`
       case 'utility': return `${nameOf(e.side, e.slot)} uses ${e.move}${e.hostile || e.targetSlot !== e.slot || e.targetSide !== e.side ? ` on ${nameOf(e.targetSide, e.targetSlot)}` : ''}.`
       case 'status': return `${nameOf(e.side, e.slot)} is afflicted with ${e.status}!`
-      case 'dot': return e.status === 'burn' ? `${nameOf(e.side, e.slot)} suffers ${e.amount} burn damage.` : `${nameOf(e.side, e.slot)} loses ${e.amount} MP to poison.`
-      case 'skip': return e.reason === 'stun' ? `${nameOf(e.side, e.slot)} is stunned!` : `${nameOf(e.side, e.slot)} flees in fear!`
-      case 'ultimate': return `★ ${nameOf(e.side, e.slot)} unleashes ${e.name}!`
+      case 'dot': return e.status === 'burn' ? `${nameOf(e.side, e.slot)} suffers ${e.amount} burn damage.`
+        : e.status === 'bleed' ? `${nameOf(e.side, e.slot)} bleeds for ${e.amount}.`
+        : e.status === 'doom' ? `💀 The doom strikes ${nameOf(e.side, e.slot)} for ${e.amount}!`
+        : `${nameOf(e.side, e.slot)} loses ${e.amount} MP to poison.`
+      case 'skip': return e.reason === 'stun' ? `${nameOf(e.side, e.slot)} is stunned!`
+        : e.reason === 'sleep' ? `${nameOf(e.side, e.slot)} is fast asleep!`
+        : `${nameOf(e.side, e.slot)} flees in fear!`
       case 'end': return e.winner === 'draw' ? '🏳️ Double knockout — a draw!' : `🏆 ${result.winnerName} wins!`
     }
   }
@@ -134,14 +141,14 @@ export function ArenaBattle({ teamA, teamB, result, onDone }: { teamA: Monster[]
         addFloat(e.side, e.slot, `${STATUS_ICON[e.status]} ${e.status}`, 'info')
         return 520
       case 'dot':
-        addFloat(e.side, e.slot, e.status === 'burn' ? `-${e.amount} 🔥` : `-${e.amount} MP ☠️`, e.status === 'burn' ? 'burn' : 'mana')
+        addFloat(e.side, e.slot,
+          e.status === 'burn' ? `-${e.amount} 🔥` : e.status === 'bleed' ? `-${e.amount} 🩸`
+            : e.status === 'doom' ? `-${e.amount} 💀` : `-${e.amount} MP ☠️`,
+          e.status === 'poison' ? 'mana' : 'burn')
         return 340
       case 'skip':
-        addFloat(e.side, e.slot, e.reason === 'stun' ? '💤 stunned' : '😱 flees', 'info')
+        addFloat(e.side, e.slot, e.reason === 'stun' ? '💤 stunned' : e.reason === 'sleep' ? '😴 asleep' : '😱 flees', 'info')
         return 550
-      case 'ultimate':
-        setFx({ id: ++counter.current, side: e.side, slot: e.slot, type: 'ult' })
-        return 900
       case 'end':
         setFx(null) // don't leave a frozen projectile/lunge on screen
         return 400
@@ -226,7 +233,7 @@ export function ArenaBattle({ teamA, teamB, result, onDone }: { teamA: Monster[]
           </div>
         </div>
 
-        <div className={'arena-floor' + (fx?.type === 'ult' ? ' ult-flash' : '')}>
+        <div className={'arena-floor'}>
           <div className={fighterCls('A') + ko('A')}>
             <Sprite species={a.species} size={84} />
             <div className="floats">{floatsFor('A', 0)}</div>
@@ -286,7 +293,7 @@ export function ArenaBattle({ teamA, teamB, result, onDone }: { teamA: Monster[]
         <div className="arena-round">{done ? (result.winner === 'draw' ? '🏳️ Draw' : `🏆 ${result.winnerName}`) : round > 0 ? `Round ${round}` : '⚔️'}</div>
       </div>
 
-      <div className={'arena-floor team-floor' + (fx?.type === 'ult' ? ' ult-flash' : '')}>
+      <div className={'arena-floor team-floor'}>
         <div className="roster roster-a">{teamA.map((_, i) => renderTile('A', i))}</div>
         <div className="roster-vs">vs</div>
         <div className="roster roster-b">{teamB.map((_, i) => renderTile('B', i))}</div>

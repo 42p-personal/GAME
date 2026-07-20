@@ -1,7 +1,7 @@
 // Seed -> monster generator (§10.1 genome idea, simplified) plus derived values.
 import {
-  FOODS, LEAGUES, Monster, Move, RNG, STATS, Stat, Stats, classForStats, hashString,
-  leagueForStat, mulberry32, pick, randInt, ULTIMATE_LEVEL,
+  CLASSES, FOODS, INNATE_SECONDARY_LEVEL, LEAGUES, Monster, Move, RNG, STATS, Stat, Stats, classForStats, hashString,
+  leagueForStat, mulberry32, pick, randInt,
 } from './core'
 import { ALL_MOVES } from './moves'
 import { SPECIES } from './species'
@@ -89,11 +89,22 @@ const expectedOutput = (m: Move) => m.power * (m.effects?.hits ? (m.effects.hits
 
 type MovePick = (mv: Move) => boolean
 const isHeal: MovePick = (mv) => mv.type !== 'damage' && mv.power > 0
-const isWardOrGuard: MovePick = (mv) => !!(mv.effects?.ward || mv.effects?.guard) && mv.type !== 'damage'
+// Widened 2026-07-25: was ward/guard-only, which made every defBuff-only move
+// (Iron Skin/Barbed Carapace, Stone Wall) invisible even to Tank's own utility
+// slot — found via the 3v3-6v6 auto-pick sweep (both were in the "never used"
+// list despite being armor-flavored Tank moves).
+const isWardOrGuard: MovePick = (mv) => !!(mv.effects?.ward || mv.effects?.guard || mv.effects?.defBuff || mv.effects?.thorns) && mv.type !== 'damage'
 const isTaunt: MovePick = (mv) => !!mv.effects?.tauntForce
 const isTeamBuff: MovePick = (mv) => mv.type !== 'damage' && mv.target === 'team'
 const isEnemyDebuff: MovePick = (mv) => mv.type !== 'damage' && (mv.target === 'enemy' || mv.target === 'allEnemies')
 const isCleanseOrRegen: MovePick = (mv) => !!(mv.effects?.cleanse || mv.effects?.regenBuff) && mv.type !== 'damage'
+// A pure self-stat buff (atk/dodge/acc/regen on self) — matches none of the
+// predicates above, so it was invisible to EVERY class, not just the 5 with a
+// utility list (found via the same sweep: War Cry, Berserk, Sidestep, Focus
+// Aim, Blur, Insight, Providence, Ascendance all had zero uses across 80
+// battles). New universal fallback slot below, not a class-specific one.
+const isSelfBuff: MovePick = (mv) => mv.type !== 'damage' && mv.target === 'self'
+  && !!(mv.effects?.atkBuff || mv.effects?.dodgeBuff || mv.effects?.accBuff || mv.effects?.regenBuff)
 
 // Utility slots a support class fills before topping up with damage, in order.
 const CLASS_UTILITY_SLOTS: Record<string, MovePick[]> = {
@@ -105,28 +116,127 @@ const CLASS_UTILITY_SLOTS: Record<string, MovePick[]> = {
 }
 
 export function chooseLoadout(learned: Move[], stats?: Stats): Move[] {
-  const dmgScore = (m: Move) => stats
-    ? expectedOutput(m) * Math.pow(Math.max(1, attackStat(stats, m.channel)) / 40, 0.8)
-    : expectedOutput(m)
+  // A learned move that's one half of a designed setup->payoff pair (the
+  // OTHER half also learned) — either a bonusVsStatus combo (Bloodletter/
+  // Rending Blow, Field of Doom/Mind Crush, Cinderburst/Ember, Siren's Call/
+  // Screech), or CON's non-status taunt+thorns combo (Bulwark's Challenge/
+  // Barbed Carapace — force the enemy team onto the wearer, punish every
+  // hit). 2026-07-25 fix: without this, a debuff-type setter (Field of Doom/
+  // Marked for the Pack) was invisible outside Orator/Bard, and even
+  // damage-type payoffs (Bloodletter) routinely lost the "single best move
+  // per stat" ranking to the monster's own capstone, so combo halves almost
+  // never coexisted in a 3-move loadout.
+  const isComboPiece: MovePick = (mv) => {
+    if (mv.effects?.bonusVsStatus) return learned.some((s) => s !== mv && s.status?.kind === mv.effects!.bonusVsStatus!.kind)
+    if (mv.status) return learned.some((p) => p !== mv && p.effects?.bonusVsStatus?.kind === mv.status!.kind)
+    // Scoped to the MASS taunt specifically (target allEnemies) — the plain
+    // single-target Taunt (level 90, unchanged) is learnable at CON>=90, an
+    // extremely low bar almost every monster clears, so an unscoped check
+    // here made this "combo" fire for nearly every monster regardless of
+    // class, crowding out everything else (caught by re-running the sweep:
+    // thorns/taunt usage spiked to ~19-20/20 battles, total move diversity
+    // collapsed from ~55 to ~35 moves used).
+    if (mv.effects?.tauntForce && mv.target === 'allEnemies') return learned.some((t) => t !== mv && !!t.effects?.thorns)
+    if (mv.effects?.thorns) return learned.some((t) => t !== mv && !!t.effects?.tauntForce && t.target === 'allEnemies')
+    return false
+  }
+  // NOT every status-carrying move is part of a designed pair (e.g. the
+  // vulnerable-setters and Cacophony's charm are standalone team-fight
+  // tools, not bonusVsStatus combos) — give those a smaller, unconditional
+  // nudge so they can still compete against a stat's single strongest
+  // pure-damage move instead of being crowded out every time.
+  const carriesStatus = (m: Move) => !!m.status
+  const dmgScore = (m: Move) => {
+    const base = stats
+      ? expectedOutput(m) * Math.pow(Math.max(1, attackStat(stats, m.channel)) / 40, 0.8)
+      : expectedOutput(m)
+    // proportional nudges, so neither can make a genuinely weak low-level
+    // move outrank a much stronger high-level one
+    if (isComboPiece(m)) return base * 1.5
+    if (carriesStatus(m)) return base * 1.15
+    return base
+  }
   const damage = learned.filter((m) => m.type === 'damage').sort((a, b) => dmgScore(b) - dmgScore(a))
   const support = learned.filter((m) => m.type !== 'damage').sort((a, b) => b.learnLevel - a.learnLevel)
   const out: Move[] = []
 
-  // Support classes reserve slots for their signature utility first.
   if (stats) {
+    // Combo pairs claim slots FIRST (2026-07-25 fix, 2nd pass): appending the
+    // combo/self-buff fallback to the END of a class's own utility list (the
+    // first version of this fix) never actually ran for Tank/Spellshield/
+    // Sage/Orator/Bard, since their OWN 2 reserved slots already hit the
+    // `out.length >= 2` cap before the appended checks were ever reached —
+    // confirmed by direct chooseLoadout inspection (a Sage with BOTH Field of
+    // Doom and Mind Crush learned still got Tranquility+Ward Against Ruin,
+    // Field of Doom never considered). A genuine learned combo now beats
+    // generic class utility outright — a deliberate 2-slot commitment, same
+    // spirit as "a combo costs 2 of your 3 loadout slots."
+    //
+    // 2026-07-25 fix, 3rd pass: a monster eligible for MULTIPLE combos at
+    // once (common near max stats, since CON gets broadly boosted by
+    // training + its safety floor) used to just get whichever pair's pieces
+    // happened to scan first — confirmed directly: a STR-primary Titanrex
+    // and a CHA-primary Vespera, both also CON-heavy enough to qualify for
+    // Bulwark's Challenge+Barbed Carapace, got that combo instead of their
+    // own STR-bleed/CHA-fear combo. Now every eligible pair is collected and
+    // SCORED — by the monster's current value in each piece's own gating
+    // stat, with a bonus when that stat is this monster's class primary/
+    // secondary (from CLASSES) — and the highest-scoring pair wins, so a
+    // Warrior's own STR combo beats an incidental CON one even if both
+    // technically qualify.
+    interface ComboPair { pieces: [Move, Move]; score: number }
+    const cls = CLASSES.find((c) => c.name === classForStats(stats))
+    const statFit = (m: Move) => (stats[m.stat] ?? 0) + (cls?.primary === m.stat ? 300 : cls?.secondary === m.stat ? 150 : 0)
+    const pairs: ComboPair[] = []
+    const addPair = (a: Move, b: Move) => {
+      if (pairs.some((p) => p.pieces.includes(a) && p.pieces.includes(b))) return // no dupes
+      pairs.push({ pieces: [a, b], score: statFit(a) + statFit(b) })
+    }
+    for (const mv of learned) {
+      if (mv.effects?.bonusVsStatus) {
+        const setup = learned.find((s) => s !== mv && s.status?.kind === mv.effects!.bonusVsStatus!.kind)
+        if (setup) addPair(setup, mv)
+      }
+    }
+    const massTaunt = learned.find((m) => m.effects?.tauntForce && m.target === 'allEnemies')
+    const thornsMove = learned.find((m) => m.effects?.thorns)
+    if (massTaunt && thornsMove) addPair(massTaunt, thornsMove)
+
+    if (pairs.length) {
+      pairs.sort((a, b) => b.score - a.score)
+      for (const mv of pairs[0].pieces) {
+        if (out.length >= 2) break
+        out.push(mv)
+      }
+    }
+    // Class-signature utility next (existing behavior — Tanks still prefer
+    // their taunt/ward, Sages their heals, etc) for whatever slots remain.
     const slots = CLASS_UTILITY_SLOTS[classForStats(stats)] ?? []
     for (const want of slots) {
       if (out.length >= 2) break // always keep at least one damage slot
       const pick = support.find((mv) => want(mv) && !out.includes(mv))
       if (pick) out.push(pick)
     }
+    // Self-buff fallback, available to EVERY class (previously invisible to
+    // all of them — War Cry, Berserk, Blur, Insight, Providence... had zero
+    // uses across 80 battles), if a utility slot is still unclaimed.
+    if (out.length < 2) {
+      const pick = support.find((mv) => isSelfBuff(mv) && !out.includes(mv))
+      if (pick) out.push(pick)
+    }
   }
 
   // Fill remaining slots with the best damage this monster's stats can drive,
-  // varied across stats where possible.
+  // varied across stats where possible. `!out.includes(m)` guard added
+  // 2026-07-25: previously safe to omit since `out` only ever held
+  // non-damage moves at this point (support/damage are disjoint arrays) —
+  // no longer true now that a combo payoff (often type 'damage') can land in
+  // `out` via the priority pass above, which caused Mind Crush et al. to get
+  // pushed a 2nd time here, duplicating a loadout slot.
   const seenStats = new Set<Stat>()
   for (const m of damage) {
     if (out.length >= 3) break
+    if (out.includes(m)) continue
     if (!seenStats.has(m.stat) || out.length < 2) { out.push(m); seenStats.add(m.stat) }
   }
   for (const m of [...damage, ...support]) {
@@ -170,7 +280,8 @@ export function generateMonster(seed: string, opts: GenOptions = {}): Monster {
     league: leagueForStat(maxStat),
     learned,
     loadout,
-    ultimateUnlocked: maxStat >= ULTIMATE_LEVEL,
+    innateUnlocked: maxStat >= INNATE_SECONDARY_LEVEL,
+    activeInnate: 0,
     favouriteFood,
     hatedFood,
     tameness: rollTameness(maxStat, rng),

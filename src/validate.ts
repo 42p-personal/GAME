@@ -40,10 +40,10 @@ export function validateDesign(): void {
     if (sp.base[sorted[0]] === sp.base[sorted[1]]) {
       problems.push(`${sp.name}: top two stats tie (${sorted[0]}/${sorted[1]}) — class derivation is order-dependent.`)
     }
-    // Training weakness should never be one of its two class-defining stats.
+    // Training flaw should never be one of its two class-defining stats.
     const prof = trainingProfileFor(sp)
-    if (prof.weakness === sorted[0] || prof.weakness === sorted[1]) {
-      problems.push(`${sp.name}: training weakness ${prof.weakness} is one of its class stats.`)
+    if (prof.flaw === sorted[0] || prof.flaw === sorted[1]) {
+      problems.push(`${sp.name}: training flaw ${prof.flaw} is one of its class stats.`)
     }
   }
 

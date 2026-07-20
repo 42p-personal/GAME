@@ -16,15 +16,34 @@ export type Stats = Record<Stat, number>
 export type BodyType = 'Mammal' | 'Avian' | 'Marsupial' | 'Aquatic' | 'Insectoid' | 'Reptilian' | 'Draconic' | 'Abyssal' | 'Mythical'
 export type Sex = 'M' | 'F'
 
-// Training aptitude: primary +20% exp, secondary +10%, weakness -20%.
-// Derived per species from its base stat spread (top / 2nd / lowest) unless a
-// species sets an explicit `trainingProfile` override — see game.ts:trainingProfileFor.
-export interface TrainingProfile { primary: Stat; secondary: Stat; weakness: Stat }
+// Training aptitude (user spec 2026-07-23): `minor` is body-type-derived
+// (BODY_MINOR below, same stat for every species of that body) — a light
+// touch, not real differentiation. `major`/`flaw` are individually authored
+// per species (Species.trainingProfile) — this is what actually makes two
+// monsters of the same body type train differently. Species without an
+// authored `major`/`flaw` (the exclusive body types — Draconic/Abyssal/
+// Mythical, not yet migrated) fall back to the legacy derivation (top/2nd/
+// lowest base stat) inside game.ts:trainingProfileFor.
+export interface TrainingProfile { minor: Stat; major?: Stat; flaw?: Stat }
+
+// What a species DATA ENTRY authors — just major/flaw, never minor (that's
+// always derived from the species' body type, not hand-picked). Resolved
+// into a full TrainingProfile (with minor filled in) by trainingProfileFor.
+export interface AuthoredAptitude { major?: Stat; flaw?: Stat }
+
+// Body type's single minor training bonus (+10%, same for every species of
+// that body — see TrainingProfile above). Only the 6 base body types are
+// migrated to the new authored-aptitude system so far; the 3 exclusive body
+// types intentionally have no entry here and fall back to the legacy system.
+export const BODY_MINOR: Partial<Record<BodyType, Stat>> = {
+  Mammal: 'STR', Avian: 'WIS', Marsupial: 'CHA', Aquatic: 'INT', Insectoid: 'CON', Reptilian: 'DEX',
+}
 
 export type Channel = 'melee' | 'ranged' | 'magic' | 'voice' | 'support'
 export type MoveType = 'damage' | 'buff' | 'debuff' | 'status' | 'control'
 export type Target = 'enemy' | 'allEnemies' | 'self' | 'ally' | 'team'
-export type StatusKind = 'blind' | 'poison' | 'burn' | 'fear' | 'confusion' | 'stun' | 'knockback'
+export type StatusKind = 'blind' | 'poison' | 'burn' | 'fear' | 'confusion' | 'stun' | 'knockback' | 'bleed' | 'silence' | 'vulnerable'
+  | 'sleep' | 'doom' | 'healblock' | 'haste' | 'charm'
 
 export type Element = 'fire' | 'water' | 'earth' | 'air'
 export const ELEMENTS: Element[] = ['fire', 'water', 'earth', 'air']
@@ -46,7 +65,14 @@ export interface MoveEffects {
   guard?: number // flat damage reduction until the user's next action
   ward?: number // absorb shield (HP pool) that soaks damage before health — CON-exclusive
   cleanse?: boolean // remove negative statuses (self, or the whole team if target is 'team')
-  tauntForce?: boolean // forces the target to attack the taunter next turn (inert in 1v1; matters once team battles land)
+  tauntForce?: boolean // forces the target's single-target hostile actions onto the caster for `duration` rounds; cast via target 'allEnemies' it taunts the WHOLE enemy team onto one monster
+  // --- Synergy/framework effects (2026-07-25 framework pass — engine support
+  // built first, moves adopt them in a later pass) ---
+  maxHpDmg?: number // 0..1 — bonus damage equal to this fraction of the TARGET's max HP ("giant-killer" tools)
+  bonusVsStatus?: { kind: StatusKind; mult: number; consume?: boolean } // setup→payoff combos: extra damage vs a target carrying `kind`; consume removes the status when cashed
+  thorns?: number // timed buff: attackers take this much flat damage per hit landed on the wearer (lasts `duration` rounds)
+  hpRegenBuff?: number // timed buff: +flat HP regen per turn (lasts `duration` rounds)
+  firstStrikeMult?: number // damage multiplier if the TARGET hasn't yet acted this round (attacker moved first in the initiative order) — rewards investing in speed (DEX/haste/knockback) rather than being a status
   // Timed modifiers — ALL of the below last `duration` rounds, then expire and are
   // removed entirely (no more "for the fight" effects). Re-casting the same move
   // refreshes its remaining duration rather than stacking a second copy.
@@ -88,9 +114,11 @@ export interface Species {
   base: Stats
   lifespan: number // retiree age in years
   innate: Ability[]
-  ultimate: Ability
   flavour: string
-  trainingProfile?: TrainingProfile // optional override; defaults to top/2nd/lowest base stat
+  // Authored major/flaw for the new per-species aptitude system (2026-07-23).
+  // DEFINED (even as `{}` for a "vanilla, minor-only" species) => opts into
+  // the new system; UNDEFINED => legacy top/2nd/lowest-base-stat derivation.
+  trainingProfile?: AuthoredAptitude
 }
 
 export interface Monster {
@@ -103,7 +131,8 @@ export interface Monster {
   league: string
   learned: Move[]
   loadout: Move[]
-  ultimateUnlocked: boolean
+  innateUnlocked: boolean // 2nd innate choice available (highest stat >= INNATE_SECONDARY_LEVEL)
+  activeInnate: number // 0 or 1 — index into species.innate; only one is ever active
   favouriteFood: Food
   hatedFood: Food
   stamina?: number // 0-100 at fight time; absent = fresh (rivals, sandbox) — see staminaDamageMult
@@ -219,12 +248,27 @@ export const STATUS_INFO: Record<StatusKind, string> = {
   fear: 'Briefly flees; loses its action.',
   confusion: 'Next ability may hit itself (20%).',
   stun: 'Cannot act briefly.',
-  knockback: 'Shoved back; next action delayed.',
+  knockback: 'Shoved back; acts last while it lasts.',
+  bleed: 'Ongoing physical HP damage; stacks up to 3.',
+  silence: 'Cannot use skills — only Attack and Block.',
+  vulnerable: 'Takes 20% more damage.',
+  sleep: 'Cannot act; wakes when damaged.',
+  doom: 'When the countdown ends, takes a heavy burst of damage. Cleansable.',
+  healblock: 'Healing, lifesteal and HP regen are 60% less effective.',
+  haste: 'Acts first in the round while it lasts. (Beneficial — not removed by cleanses.)',
+  charm: 'Single-target hostile actions strike its own allies.',
 }
 
 // --- Learn ladder (§7.2) ---
 export const LEARN_LADDER = [40, 90, 160, 240, 330, 430, 540, 650, 780, 920]
-export const ULTIMATE_LEVEL = 600
+
+// A species' 2nd innate is no better than the 1st — it's an ALTERNATIVE, not
+// an upgrade (user spec 2026-07-25). The 1st is available from the start; the
+// 2nd unlocks once the monster's highest stat reaches this level. Only ONE
+// innate is ever active at a time — swapped via the same slot-click UI as
+// loadout moves. (Species ultimates were REMOVED entirely 2026-07-25 — their
+// descriptions promised effects the engine never delivered.)
+export const INNATE_SECONDARY_LEVEL = 300
 
 // --- Seeded RNG: mulberry32 + string hash ---
 export function hashString(str: string): number {

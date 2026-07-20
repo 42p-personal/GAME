@@ -1,10 +1,10 @@
 // Shared game state + the Town hub economy (§13). One gold wallet and one stable
 // span all areas; the Ranch (src/game.ts) raises the active monster week by week.
 import {
-  ClassRole, Food, LEAGUES, Monster, Sex, Species, Stat, STATS, Stats, classForStats, hashString,
+  ClassRole, Food, INNATE_SECONDARY_LEVEL, LEAGUES, Monster, Sex, Species, Stat, STATS, Stats, classForStats, hashString,
   mulberry32, roleOfClass,
 } from './core'
-import { generateMonster, maxHp } from './monster'
+import { generateMonster, maxHp, maxMana } from './monster'
 import { BattleResult, simulateTeamBattle } from './battle'
 import {
   Career, START_GOLD, WEEKS_PER_MONTH, WEEKS_PER_YEAR, WeeklyAction, ageOneWeek, applyWeek, buyFood,
@@ -60,6 +60,56 @@ const PRESTIGE_EVENTS: Omit<Tournament, 'id'>[] = [
   { name: "The Grandmasters' Summit", month: 9, week: 2, league: 'Masters', rewards: { gold: 500, exp: 250 } },
   { name: 'The Apex Invitational', month: 10, week: 2, league: 'Tamer Elite', rewards: { gold: 600, exp: 300 } },
 ]
+
+// Cup lore (user spec 2026-07-22): a pre-cup preamble (prize money + a line of
+// setting/lore tied to the cup's name) and a post-cup closing flavour line.
+// Hybrid sourcing — hand-authored for the fixed annual prestige events (seen
+// once a year, worth the writing), templated from a per-league flavour table
+// for the circuit cups (Wood-Iron regenerate a new name every game-year, seen
+// far more often, not worth authoring individually).
+export interface CupLore { intro: string; outroFlavour: string }
+
+const PRESTIGE_LORE: Record<string, CupLore> = {
+  'The Silver Crescent': {
+    intro: 'An invitational older than the town itself, held under a banner of hammered silver shaped like a waning moon. Legend says the first Crescent was fought to settle a dispute between two tamers who refused to just talk it out.',
+    outroFlavour: 'The crescent banner is lowered for another year, its silver a little more tarnished, its legend a little longer.',
+  },
+  'The Gilded Crown': {
+    intro: "The season's marquee event — every League office in the region sends a scout, and the winner's monster gets its likeness cast onto next year's entry medallion.",
+    outroFlavour: 'Gold dust settles over the arena floor as the crown is presented — already, whispers of next year\'s favourites begin.',
+  },
+  'The Radiant Throne': {
+    intro: 'A single ornate throne sits at the centre of the arena, empty until the final bout — only the realm\'s best ever get to stand beside it, let alone claim it.',
+    outroFlavour: 'The throne is claimed for another year. The rest of the field files out past it, already plotting their return.',
+  },
+  "The Grandmasters' Summit": {
+    intro: "Where every League's reigning champions finally meet on equal ground — no punching down, no easy brackets, just the best against the best.",
+    outroFlavour: 'The Summit disperses, its champions scattering back to their home leagues to defend what they nearly lost here.',
+  },
+  'The Apex Invitational': {
+    intro: 'There is nothing above this. The Apex answers only one question: of everyone who has ever climbed this far, who climbs highest.',
+    outroFlavour: 'The Apex falls silent. For one team, there is nowhere left to climb — for everyone else, the climb starts again.',
+  },
+}
+
+const CIRCUIT_LORE_FLAVOUR: Record<string, { setting: string; closer: string }> = {
+  Wood: { setting: 'a muddy paddock behind the tannery, more scrap than sport', closer: 'The paddock empties out, mud-caked and already half-forgotten — until next quarter.' },
+  Copper: { setting: 'the market square, pots and pans still rattling loose from last year\'s brawl', closer: 'Stallholders sweep up the mess and reopen for business by morning.' },
+  Tin: { setting: 'a proper ring at last — canvas ropes, and a crowd that actually paid to get in', closer: 'The ropes come down for storage, already a little worse for wear.' },
+  Bronze: { setting: "a real arena, cast in the town's own bronze bell-metal", closer: 'The bell-metal seats empty slowly, the bronze still warm from the crowd.' },
+  Iron: { setting: "the forge-district's own championship, judged by smiths who don't impress easily", closer: 'The forge fires bank low for the night — the smiths, for once, look impressed.' },
+}
+
+// A tournament's pre-cup preamble + post-cup closing flavour.
+export function cupLore(t: Tournament): CupLore {
+  const authored = PRESTIGE_LORE[t.name]
+  if (authored) return authored
+  const f = CIRCUIT_LORE_FLAVOUR[t.league] ?? CIRCUIT_LORE_FLAVOUR.Wood
+  return {
+    intro: `${t.name} — ${f.setting}. On the line: ${t.rewards.gold}g and bragging rights across the ${t.league} circuit.`,
+    outroFlavour: f.closer,
+  }
+}
 
 // Team size per league (user spec 2026-07-21): Wood/Copper stay 1v1; Tin steps
 // to 2v2, Bronze to 3v3, Silver to 4v4, Platinum to 5v5, Masters to 6v6 —
@@ -192,6 +242,7 @@ export interface EventStanding {
 // The most recent tournament EVENT, kept for the battle screen. A full
 // round-robin among every participant (the player's team + every rival team).
 export interface LastBattle {
+  tournamentId: string
   tournamentName: string
   league: string
   teamSize: number
@@ -461,6 +512,18 @@ export function setLoadout(g: GameState, id: string, moveIds: string[]): GameSta
   return { ...g, stable: g.stable.map((x) => (x.id === id ? { ...x, loadout: valid } : x)) }
 }
 
+// Innate choice is swapped the same way loadout moves are (user spec
+// 2026-07-25): free any time except mid tournament-entry; the 2nd choice can
+// only be selected once actually unlocked (INNATE_SECONDARY_LEVEL in a stat).
+export function setActiveInnate(g: GameState, id: string, index: number): GameState {
+  if (g.pendingTournament?.monsterIds.includes(id)) return g
+  const c = g.stable.find((x) => x.id === id)
+  if (!c) return g
+  if (index !== 0 && index !== 1) return g
+  if (index === 1 && Math.max(...STATS.map((s) => c.stats[s])) < INNATE_SECONDARY_LEVEL) return g
+  return { ...g, stable: g.stable.map((x) => (x.id === id ? { ...x, activeInnate: index } : x)) }
+}
+
 // --- Tournaments (§3): sign up in the review phase, battle resolves on the weekly tick ---
 // A monster may enter its own league's events (full rewards) or any league BELOW
 // it (reduced rewards via rewardMultiplier) — never above its license.
@@ -541,6 +604,28 @@ function generateRivalTeam(seedBase: string, teamSize: number, targetTotal: numb
   return compositionTemplate(teamSize).map((role, i) => generateRivalMonster(seedBase + ':m' + i, targetTotal, allowExclusive, role))
 }
 
+// Every rival team a tournament will field, purely a function of (seed, week,
+// tournament id) — deterministic and side-effect-free, so it can be called
+// ahead of resolution (scouting reports, the bracket preview screen) and
+// reproduce byte-identical teams to what resolveTournament actually fights.
+export function generateRivalTeamsForTournament(g: GameState, t: Tournament): Monster[][] {
+  const teamSize = teamSizeForLeague(t.league)
+  const rivalCount = rivalTeamCountForLeague(t.league)
+  const allowExclusive = leagueIndexOf(t.league) >= leagueIndexOf('Silver')
+  const leagueBudget = LEAGUES[leagueIndexOf(t.league)].cap * 3.5
+  return Array.from({ length: rivalCount }, (_, r) => {
+    const bandRng = mulberry32(hashString(g.seed + ':' + g.week + ':' + t.id + ':band:r' + r))
+    const teamBudget = leagueBudget * (RIVAL_BAND_MIN + bandRng() * (RIVAL_BAND_MAX - RIVAL_BAND_MIN))
+    return generateRivalTeam(g.seed + ':' + g.week + ':' + t.id + ':r' + r, teamSize, teamBudget, allowExclusive)
+  })
+}
+
+// Scouting fee (user spec 2026-07-22): pay to see an upcoming rival team
+// before the fight — cheap reveals class + loadout, pricier also reveals raw
+// stats. Both scale with league, same shape as entryFee.
+export const scoutFee = (league: string, tier: 'basic' | 'full'): number =>
+  (leagueIndexOf(league) + 1) * (tier === 'basic' ? 5 : 15)
+
 // Standard circle-method round-robin schedule: every participant plays exactly
 // once per scheduling round, so injuries accrue at the SAME rate for everyone
 // (the old player-plays-all-matches-first ordering systematically fed the
@@ -567,14 +652,16 @@ export function roundRobinSchedule(n: number): [number, number][] {
 // Resolve a signed-up tournament using the post-week stable. Mutates `stable`
 // in place (called from advanceWeek on its freshly-built array). A full
 // round-robin: the player's team + `rivalTeamCountForLeague` generated rival
-// teams, every pair fights exactly once (circle-method schedule — one match
-// per participant per scheduling round, so injuries accrue evenly). EVERY
-// participant carries damage between its matches — rivals included, so the
-// player is never a damaged team feeding fresh opponents. Rival strength is a
-// FIXED league standard (60-100% of the league budget, rolled per team from
-// the event seed) — independent of the player's own power. Reward scales by
-// final placement; each player team member's injury outcome is tracked
-// individually (ever KO'd this event → home at 1 HP/1 MP).
+// teams, every pair fights exactly once (circle-method schedule). EVERY
+// participant fights EVERY match at full HP/MP (user spec 2026-07-22: "we
+// want a monster to heal to full health inbetween each fight, they do not
+// carry injuries throughout the tournament") — no mid-event carry-forward.
+// Rival strength is a FIXED league standard (60-100% of the league budget,
+// rolled per team from the event seed) — independent of the player's own
+// power. Reward scales by final placement. Injury is assessed ONCE, when the
+// team returns home: a flat random 0-50% of max HP/MP regardless of how the
+// event went — "only injured when they return to the ranch... must rest
+// before they train again."
 function resolveTournament(g: GameState, stable: Career[], gold: number): { gold: number; lastBattle: LastBattle | null } {
   const pending = g.pendingTournament
   if (!pending) return { gold, lastBattle: null }
@@ -583,36 +670,29 @@ function resolveTournament(g: GameState, stable: Career[], gold: number): { gold
   if (!t || idxs.some((i) => i < 0 || stable[i].retired)) return { gold, lastBattle: null }
 
   const teamSize = teamSizeForLeague(t.league)
-  const rivalCount = rivalTeamCountForLeague(t.league)
   const playerCareers = idxs.map((i) => stable[i])
-  const wasKOdEver: boolean[] = playerCareers.map(() => false)
-  let lastPlayerFinals: { hp: number; mana: number }[] = []
 
-  const allowExclusive = leagueIndexOf(t.league) >= leagueIndexOf('Silver')
-  const leagueBudget = LEAGUES[leagueIndexOf(t.league)].cap * 3.5
-
-  // Each rival team rolls its spot in the league's strength band from the
-  // event seed — a field has genuinely weaker and stronger entrants, but the
-  // cup itself is always cup-strength.
-  const rivalTeams: Monster[][] = Array.from({ length: rivalCount }, (_, r) => {
-    const bandRng = mulberry32(hashString(g.seed + ':' + g.week + ':' + t.id + ':band:r' + r))
-    const teamBudget = leagueBudget * (RIVAL_BAND_MIN + bandRng() * (RIVAL_BAND_MAX - RIVAL_BAND_MIN))
-    return generateRivalTeam(g.seed + ':' + g.week + ':' + t.id + ':r' + r, teamSize, teamBudget, allowExclusive)
+  // Tournament matches always start fresh, full HP/MP — home condition
+  // (injuries, fatigue via stamina) only matters between tournaments, not
+  // mid-event.
+  const playerTeam: Monster[] = playerCareers.map((c) => {
+    const m = careerMonster(c)
+    return { ...m, hp: maxHp(m.stats), mp: maxMana(m.stats) }
   })
+  const rivalTeams = generateRivalTeamsForTournament(g, t)
 
   interface Participant { label: string; isPlayer: boolean; team: Monster[]; happiness: number[] }
   const participants: Participant[] = [
-    { label: 'Your Team', isPlayer: true, team: playerCareers.map(careerMonster), happiness: playerCareers.map((c) => c.happiness) },
+    { label: 'Your Team', isPlayer: true, team: playerTeam, happiness: playerCareers.map((c) => c.happiness) },
     ...rivalTeams.map((team, r) => ({ label: `Rival Team ${r + 1}`, isPlayer: false, team, happiness: team.map(() => 5) })),
   ]
-  lastPlayerFinals = participants[0].team.map((m) => ({ hp: m.hp ?? 0, mana: m.mp ?? 0 }))
 
   const standings = participants.map((p) => ({ label: p.label, isPlayer: p.isPlayer, wins: 0, draws: 0, losses: 0, hpFracSum: 0 }))
   const matches: EventMatch[] = []
 
   for (const [i, j] of roundRobinSchedule(participants.length)) {
     const pa = participants[i], pb = participants[j]
-    const teamA = pa.team, teamB = pb.team // as-entered state, stored for the replay
+    const teamA = pa.team, teamB = pb.team // fixed full-strength roster, same every match
     const result = simulateTeamBattle(teamA, teamB, pa.happiness, pb.happiness)
     matches.push({ aLabel: pa.label, bLabel: pb.label, teamA, teamB, result, involvesPlayer: pa.isPlayer || pb.isPlayer })
 
@@ -623,19 +703,6 @@ function resolveTournament(g: GameState, stable: Career[], gold: number): { gold
     if (result.winner === 'A') { standings[i].wins++; standings[j].losses++ }
     else if (result.winner === 'B') { standings[j].wins++; standings[i].losses++ }
     else { standings[i].draws++; standings[j].draws++ }
-
-    // EVERY participant carries its end-of-match HP/MP into its next match
-    // (fresh arrays — the pushed match keeps the as-entered state for replay).
-    const finalsA = result.finals.filter((f) => f.side === 'A')
-    const finalsB = result.finals.filter((f) => f.side === 'B')
-    pa.team = teamA.map((m, k) => ({ ...m, hp: finalsA[k].hp, mp: finalsA[k].mana }))
-    pb.team = teamB.map((m, k) => ({ ...m, hp: finalsB[k].hp, mp: finalsB[k].mana }))
-
-    if (pa.isPlayer || pb.isPlayer) {
-      const playerFinals = pa.isPlayer ? finalsA : finalsB
-      lastPlayerFinals = playerFinals.map((f) => ({ hp: f.hp, mana: f.mana }))
-      playerFinals.forEach((f) => { if (f.wasKOd) wasKOdEver[f.slot] = true })
-    }
   }
 
   const sorted = [...standings].sort((a, b) => b.wins - a.wins || b.hpFracSum - a.hpFracSum)
@@ -653,30 +720,33 @@ function resolveTournament(g: GameState, stable: Career[], gold: number): { gold
   const goldPrize = Math.round(t.rewards.gold * mult)
 
   let expNote = ''
-  const updatedCareers = playerCareers.map((c, k) => {
+  const updatedCareers = playerCareers.map((c) => {
     const nc: Career = { ...c, stats: { ...c.stats }, log: [...c.log], tournamentHistory: [...c.tournamentHistory] }
     if (mult > 0) {
       const prof = trainingProfileFor(c.species)
       const pts = Math.max(1, Math.round((t.rewards.exp * mult) / 10))
-      const p1 = Math.ceil(pts * 0.6)
-      const p2 = pts - p1
       const cap = LEAGUES[c.licenseIndex].cap
-      nc.stats[prof.primary] = Math.min(cap, nc.stats[prof.primary] + p1)
-      nc.stats[prof.secondary] = Math.min(cap, nc.stats[prof.secondary] + p2)
-      expNote = p2 > 0 ? `${prof.primary} +${p1} · ${prof.secondary} +${p2}` : `${prof.primary} +${p1}`
+      if (prof.major) {
+        // 60/40 split between the individually-authored major and the
+        // body-derived minor — a "vanilla" species (no authored major) puts
+        // the full reward into its minor instead (see the else branch).
+        const p1 = Math.ceil(pts * 0.6)
+        const p2 = pts - p1
+        nc.stats[prof.major] = Math.min(cap, nc.stats[prof.major] + p1)
+        nc.stats[prof.minor] = Math.min(cap, nc.stats[prof.minor] + p2)
+        expNote = p2 > 0 ? `${prof.major} +${p1} · ${prof.minor} +${p2}` : `${prof.major} +${p1}`
+      } else {
+        nc.stats[prof.minor] = Math.min(cap, nc.stats[prof.minor] + pts)
+        expNote = `${prof.minor} +${pts}`
+      }
     }
-    // Injuries persist per individual (user spec 2026-07-19, extended for
-    // teams 2026-07-21): a monster that was ever KO'd this event comes home
-    // at 1 HP/1 MP regardless of the team's final placement; otherwise it
-    // carries forward whatever HP/MP its last match of the event left it at.
-    if (wasKOdEver[k]) {
-      nc.hp = 1
-      nc.mp = 1
-      nc.log.push(`  ↳ ${c.name} comes home badly injured — rest is needed before fighting again.`)
-    } else {
-      nc.hp = Math.max(1, lastPlayerFinals[k].hp)
-      nc.mp = lastPlayerFinals[k].mana
-    }
+    // Injury is a flat post-event roll (user spec 2026-07-22), independent of
+    // placement or how any individual match went: every monster comes home at
+    // a random 0-50% of max HP/MP, needing rest before training again.
+    const injRng = mulberry32(hashString(g.seed + ':' + g.week + ':' + t.id + ':injury:' + c.id))
+    nc.hp = Math.max(1, Math.round(maxHp(nc.stats) * injRng() * 0.5))
+    nc.mp = Math.round(maxMana(nc.stats) * injRng() * 0.5)
+    nc.log.push(`  ↳ ${c.name} comes home from the tournament needing rest.`)
     nc.log.push(`🏟 ${t.name}: finished ${placementLabel(playerPlacement)} of ${fieldSize}` + (goldPrize > 0 ? ` — +${goldPrize}g` : ' — no reward'))
     nc.tournamentHistory.push({ name: t.name, league: t.league, week: g.week, placement: playerPlacement, fieldSize })
     return nc
@@ -686,7 +756,7 @@ function resolveTournament(g: GameState, stable: Career[], gold: number): { gold
   return {
     gold: gold + goldPrize,
     lastBattle: {
-      tournamentName: t.name, league: t.league, teamSize, matches, standings: withPlacement,
+      tournamentId: t.id, tournamentName: t.name, league: t.league, teamSize, matches, standings: withPlacement,
       playerPlacement, fieldSize, goldReward: goldPrize, expNote,
     },
   }
