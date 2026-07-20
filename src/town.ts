@@ -256,6 +256,9 @@ export interface LastBattle {
 
 export interface GameState {
   seed: string
+  trainerName: string
+  tutorialEnabled: boolean
+  tutorialDismissed: boolean // player closed the welcome-tips banner
   gold: number
   week: number // the global calendar — one clock for market, tournaments, and stable
   stable: Career[]
@@ -309,9 +312,12 @@ export const BULK_FOOD_COST = 200 // one-off Ranch Shop upgrade
 export const FUSION_PENALTY = 0.9 // average of parents − 10% (§10.2)
 export const START_BARN = 2
 
-export function newGame(seed = 'start'): GameState {
+export function newGame(seed = 'start', opts?: { trainerName?: string; tutorialEnabled?: boolean }): GameState {
   return {
     seed,
+    trainerName: opts?.trainerName?.trim() || 'Tamer',
+    tutorialEnabled: opts?.tutorialEnabled ?? true,
+    tutorialDismissed: false,
     gold: START_GOLD,
     week: 0,
     stable: [],

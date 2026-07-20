@@ -433,6 +433,9 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
 
   return (
     <>
+      {game.tutorialEnabled && !game.tutorialDismissed && (
+        <TutorialBanner onDismiss={() => setGame((g) => ({ ...g, tutorialDismissed: true }))} />
+      )}
       <p className="sub">Town — your hub. Buy monsters at the Market, bank &amp; combine genomes at the Lab, upgrade at the Ranch Shop, then head to the Ranch to raise your active monster.</p>
 
       <div className="townbar">
@@ -1605,14 +1608,14 @@ function RanchView({ game, setGame, onBattleScreen }: {
   )
 }
 
-// --- Persistence: the whole GameState is plain JSON, saved on every change ---
-const SAVE_KEY = 'monster-tamer-save-v2' // v2: Career gained loadout/tournamentHistory (1b/1c)
+// --- Persistence: 3 independent save slots, each the whole GameState as plain JSON ---
+const SAVE_SLOTS = 3
+const LEGACY_SAVE_KEY = 'monster-tamer-save-v2' // pre-slot single save (v2: loadout/tournamentHistory)
+const slotKey = (slot: number) => `monster-tamer-save-slot-${slot}`
 const randomSeed = () => Math.random().toString(36).slice(2, 8)
 
-function loadSavedGame(): GameState | null {
+function sanitizeAndMigrate(raw: string): GameState | null {
   try {
-    const raw = localStorage.getItem(SAVE_KEY)
-    if (!raw) return null
     const g = JSON.parse(raw)
     // sanity-check the save shape (older/foreign saves start fresh)
     if (typeof g?.week !== 'number' || !Array.isArray(g?.stable) || typeof g?.foodMarket !== 'object') return null
@@ -1646,20 +1649,236 @@ function loadSavedGame(): GameState | null {
         if (typeof h.placement !== 'number') { h.placement = h.placement === 'champion' ? 1 : 2; h.fieldSize = h.fieldSize ?? 2 }
       }
     }
+    // migrate pre-title-screen saves: no trainer name/tutorial flag existed
+    if (typeof g.trainerName !== 'string' || !g.trainerName) g.trainerName = 'Tamer'
+    if (typeof g.tutorialEnabled !== 'boolean') g.tutorialEnabled = false // already playing — skip tips by default
+    if (typeof g.tutorialDismissed !== 'boolean') g.tutorialDismissed = true
     return g as GameState
   } catch {
     return null
   }
 }
 
+function loadSlot(slot: number): GameState | null {
+  const raw = localStorage.getItem(slotKey(slot))
+  return raw ? sanitizeAndMigrate(raw) : null
+}
+
+function saveSlot(slot: number, game: GameState) {
+  try { localStorage.setItem(slotKey(slot), JSON.stringify(game)) } catch { /* storage full/unavailable — play on */ }
+}
+
+// One-time migration: a save from before multi-slot support moves into slot 1
+// so a returning player doesn't lose progress when this feature ships.
+function migrateLegacySave() {
+  try {
+    if (localStorage.getItem(slotKey(1))) return
+    const raw = localStorage.getItem(LEGACY_SAVE_KEY)
+    if (!raw) return
+    const g = sanitizeAndMigrate(raw)
+    if (g) localStorage.setItem(slotKey(1), JSON.stringify(g))
+  } catch { /* ignore */ }
+}
+
+function slotSummary(g: GameState) {
+  const highestLeagueIdx = Math.max(0, ...g.stable.map((c) => c.licenseIndex), ...g.frozen.map((f) => f.licenseIndex))
+  return {
+    trainerName: g.trainerName || 'Tamer',
+    date: dateLabel(g.week),
+    gold: g.gold,
+    monsterCount: g.stable.length,
+    league: LEAGUES[highestLeagueIdx]?.name ?? LEAGUES[0].name,
+  }
+}
+
+// ============================ Title screen & save flow ============================
+function TitleScreen({ onNewGame, onContinue }: { onNewGame: () => void; onContinue: () => void }) {
+  return (
+    <div className="titlescreen">
+      <div className="titlecard">
+        <h1 className="titlelogo">Monster Tamer</h1>
+        <p className="titletag">Raise it. Train it. Enter the circuit.</p>
+        <div className="titlebtns">
+          <button className="titlebtn primary" onClick={onNewGame}>✨ New Game</button>
+          <button className="titlebtn" onClick={onContinue}>▶ Continue</button>
+        </div>
+        <p className="titlever">v{APP_VERSION} · early alpha</p>
+      </div>
+    </div>
+  )
+}
+
+function SlotPicker({ mode, onBack, onPickEmpty, onPickOccupied }: {
+  mode: 'new' | 'continue'
+  onBack: () => void
+  onPickEmpty: (slot: number) => void
+  onPickOccupied: (slot: number) => void
+}) {
+  const slots = useMemo(() => Array.from({ length: SAVE_SLOTS }, (_, i) => i + 1).map((slot) => ({ slot, game: loadSlot(slot) })), [])
+  return (
+    <div className="titlescreen">
+      <div className="titlecard slotcard">
+        <h2>{mode === 'new' ? 'New Game — choose a slot' : 'Continue — choose a slot'}</h2>
+        <div className="slotlist">
+          {slots.map(({ slot, game }) => {
+            const empty = !game
+            const summary = game ? slotSummary(game) : null
+            const disabled = mode === 'continue' && empty
+            return (
+              <button
+                key={slot}
+                className={'slotrow' + (empty ? ' empty' : '')}
+                disabled={disabled}
+                onClick={() => (empty ? onPickEmpty(slot) : onPickOccupied(slot))}
+              >
+                <span className="slotnum">Slot {slot}</span>
+                {empty
+                  ? <span className="slotmeta dim">— empty —{mode === 'new' ? ' (start here)' : ''}</span>
+                  : (
+                    <span className="slotmeta">
+                      <b>{summary!.trainerName}</b> · {summary!.league} league · {summary!.date} · 🪙{summary!.gold}g · {summary!.monsterCount} monster{summary!.monsterCount === 1 ? '' : 's'}
+                      {mode === 'new' && <span className="slotoverwrite"> · overwrite?</span>}
+                    </span>
+                  )}
+              </button>
+            )
+          })}
+        </div>
+        <button className="titlebtn back" onClick={onBack}>← Back</button>
+      </div>
+    </div>
+  )
+}
+
+function NewGameSetup({ onBack, onStart }: { onBack: () => void; onStart: (trainerName: string, tutorialEnabled: boolean) => void }) {
+  const [name, setName] = useState('')
+  const [tutorial, setTutorial] = useState(true)
+  const trimmed = name.trim()
+  return (
+    <div className="titlescreen">
+      <div className="titlecard">
+        <h2>Name your Tamer</h2>
+        <input
+          className="nameinput"
+          value={name}
+          maxLength={20}
+          placeholder="Trainer name"
+          onChange={(e) => setName(e.target.value)}
+          autoFocus
+        />
+        <label className="tutorialtoggle">
+          <input type="checkbox" checked={tutorial} onChange={(e) => setTutorial(e.target.checked)} />
+          Show tutorial tips
+        </label>
+        <div className="titlebtns">
+          <button className="titlebtn back" onClick={onBack}>← Back</button>
+          <button className="titlebtn primary" disabled={!trimmed} onClick={() => onStart(trimmed, tutorial)}>Start Adventure →</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AlphaDisclaimer({ onContinue }: { onContinue: () => void }) {
+  return (
+    <div className="titlescreen">
+      <div className="titlecard disclaimer">
+        <h2>🚧 Early Alpha</h2>
+        <p>
+          Monster Tamer is very early in development. Expect rough edges, balance swings, and
+          missing pieces as the game keeps growing.
+        </p>
+        <p>
+          In particular: <b>breeding (fusion)</b> and much of the <b>Lab</b> are placeholders for
+          now and don't do much yet — they're planned features, not finished ones.
+        </p>
+        <button className="titlebtn primary" onClick={onContinue}>Got it, let's go!</button>
+      </div>
+    </div>
+  )
+}
+
+function TutorialBanner({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <div className="tutorial-banner">
+      <div>
+        <b>👋 Welcome tips</b>
+        <ul>
+          <li>Each week: feed your monster, then pick a training drill, rest, or an excursion — then Advance Week.</li>
+          <li>Sign up for tournaments in Town once your monster is ready — matching or lower leagues are safest.</li>
+          <li>Breeding and the Lab's deeper features are still under construction — freeze/thaw works, but treat them as early previews.</li>
+        </ul>
+      </div>
+      <button className="tutorial-dismiss" onClick={onDismiss}>✕</button>
+    </div>
+  )
+}
+
+type Screen = 'title' | 'slots' | 'setup' | 'disclaimer' | 'playing'
+
 export function App() {
+  const [screen, setScreen] = useState<Screen>('title')
+  const [slotMode, setSlotMode] = useState<'new' | 'continue'>('continue')
+  const [pendingSlot, setPendingSlot] = useState<number | null>(null)
+  const [activeSlot, setActiveSlot] = useState<number | null>(null)
   const [view, setView] = useState<'game' | 'sandbox'>('game')
-  const [game, setGame] = useState<GameState>(() => loadSavedGame() ?? newGame(randomSeed()))
+  const [game, setGame] = useState<GameState | null>(null)
   const [battleScreen, setBattleScreen] = useState(false) // hide the Bestiary footer mid-battle
 
+  useEffect(() => { migrateLegacySave() }, [])
+
   useEffect(() => {
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify(game)) } catch { /* storage full/unavailable — play on */ }
-  }, [game])
+    if (activeSlot != null && game) saveSlot(activeSlot, game)
+  }, [game, activeSlot])
+
+  const enterSlot = (slot: number) => {
+    const g = loadSlot(slot)
+    if (!g) return
+    setActiveSlot(slot)
+    setGame(g)
+    setView('game')
+    setScreen('playing')
+  }
+
+  const startNewGame = (trainerName: string, tutorialEnabled: boolean) => {
+    if (pendingSlot == null) return
+    const g = newGame(randomSeed(), { trainerName, tutorialEnabled })
+    saveSlot(pendingSlot, g)
+    setActiveSlot(pendingSlot)
+    setGame(g)
+    setView('game')
+    setScreen('disclaimer')
+  }
+
+  const titleScreen = (
+    <TitleScreen
+      onNewGame={() => { setSlotMode('new'); setScreen('slots') }}
+      onContinue={() => { setSlotMode('continue'); setScreen('slots') }}
+    />
+  )
+
+  if (screen === 'title') return titleScreen
+
+  if (screen === 'slots') {
+    return (
+      <SlotPicker
+        mode={slotMode}
+        onBack={() => setScreen('title')}
+        onPickEmpty={(slot) => { setPendingSlot(slot); setScreen('setup') }}
+        onPickOccupied={(slot) => {
+          if (slotMode === 'continue') enterSlot(slot)
+          else if (window.confirm('This will overwrite the existing save in this slot. Continue?')) {
+            setPendingSlot(slot)
+            setScreen('setup')
+          }
+        }}
+      />
+    )
+  }
+
+  if (screen === 'setup') return <NewGameSetup onBack={() => setScreen('slots')} onStart={startNewGame} />
+  if (screen === 'disclaimer') return <AlphaDisclaimer onContinue={() => setScreen('playing')} />
+  if (!game) return titleScreen // structurally unreachable — 'playing' only sets once game is loaded
 
   return (
     <div className="app">
@@ -1667,14 +1886,12 @@ export function App() {
       <div className="tabs">
         <button className={'tab' + (view === 'game' ? ' on' : '')} onClick={() => setView('game')}>🎮 Game</button>
         <button className={'tab' + (view === 'sandbox' ? ' on' : '')} onClick={() => setView('sandbox')}>⚔️ Sandbox</button>
-        <button className="tab" onClick={() => {
-          if (window.confirm('Start a new game? Current progress will be lost.')) setGame(newGame(randomSeed()))
-        }}>✨ New Game</button>
+        <button className="tab" onClick={() => setScreen('title')}>🏠 Main Menu</button>
       </div>
       {view === 'game'
         ? (game.area === 'town'
-          ? <TownView game={game} setGame={setGame} />
-          : <RanchView game={game} setGame={setGame} onBattleScreen={setBattleScreen} />)
+          ? <TownView game={game} setGame={setGame as Dispatch<SetStateAction<GameState>>} />
+          : <RanchView game={game} setGame={setGame as Dispatch<SetStateAction<GameState>>} onBattleScreen={setBattleScreen} />)
         : <SandboxView />}
       {!(view === 'game' && battleScreen) && (
         <Bestiary specialLicense={game.specialLicense} eliteLicense={game.eliteLicense} />

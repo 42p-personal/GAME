@@ -9,9 +9,14 @@ pushed — Cloudflare Pages auto-deploys `main`, so this is live (the user expli
 pushed). That covers the entire 2026-07-22 playtest-feedback pass through the 2026-07-25
 chooseLoadout auto-pick fix — see each item's own entry below for what shipped.
 
-**Item -28 (per-move arena VFX) is UNCOMMITTED on `preview`** (working tree has changes to
-`src/arena.tsx` and `src/styles.css` only) — built and browser-verified this same session, just
-not yet committed since the user hasn't asked for another deploy pass.
+**Item -28 (per-move arena VFX) is COMMITTED and DEPLOYED** (`02618f3`, same
+preview→main→push pipeline as above).
+
+**Item -29 (title screen + 3-slot saves, this session) is UNCOMMITTED on `preview`** (working
+tree has changes to `src/App.tsx`, `src/town.ts`, `src/styles.css`) — built and browser-verified
+end-to-end this session (title → new-game slot picker → name/tutorial setup → alpha disclaimer →
+tutorial banner → main menu → continue slot picker → resume, all live-clicked, zero console
+errors), just not yet committed since the user hasn't asked for another deploy pass.
 
 **Sprites are on pause, not abandoned — but the capability picture changed this session.**
 The user rejected the flat-color procedural pixel grids twice (see item -21 and the follow-up
@@ -46,8 +51,75 @@ CON/turn-order changes are the tuning knobs to revisit.
 
 ### What changed this session, newest first
 
+-29. **Title screen + 3-slot save system (2026-07-25), browser-verified end-to-end,
+    uncommitted.** User asked for a proper entry screen: "New Game"/"Continue" shown every time
+    the site loads, New Game picks 1 of 3 save slots then asks for a trainer name and a tutorial
+    toggle, an alpha disclaimer shows once a new game starts (calling out that breeding/the Lab
+    are placeholders), and Continue picks from the same 3 slots.
+    - **`GameState` gained `trainerName: string`, `tutorialEnabled: boolean`,
+      `tutorialDismissed: boolean`** (`town.ts`); `newGame(seed, opts?: {trainerName, tutorialEnabled})`
+      takes them as an options bag (both optional, defaulting to `'Tamer'`/`true`) so every other
+      existing call site (Sandbox has none — it doesn't call `newGame` at all) stays untouched.
+    - **Save storage moved from one `localStorage` key to 3 independent slot keys**
+      (`App.tsx:slotKey(n) = 'monster-tamer-save-slot-' + n`, `loadSlot`/`saveSlot`). The old
+      single-save migration logic (species re-linking, hp/mp/activeInnate/weekPlans/lastWeek/
+      tournamentHistory-placement defaults, pendingTournament shape fixes) was extracted verbatim
+      into `sanitizeAndMigrate(raw)`, reused by both slot loading and a **one-time legacy-save
+      migration** (`migrateLegacySave()`, runs once on mount): if slot 1 is empty and the old
+      pre-slot key (`monster-tamer-save-v2`) still has data, it's copied into slot 1 so a
+      returning player doesn't lose progress when this feature ships. Migrated/legacy saves
+      default `tutorialEnabled` to `false` (already-playing saves skip tips) since there's no way
+      to retroactively ask; brand-new saves respect whatever the setup screen's checkbox was set
+      to.
+    - **`App()` is now a small screen state machine** (`Screen = 'title'|'slots'|'setup'|
+      'disclaimer'|'playing'`), replacing the old auto-load-into-gameplay-on-mount behavior.
+      `game` itself is `GameState | null` until a slot is loaded or created — the 4 pre-game
+      screens (`TitleScreen`, `SlotPicker`, `NewGameSetup`, `AlphaDisclaimer`) render before any
+      `GameState` exists, only the final `'playing'` branch needs one (guarded, structurally
+      unreachable otherwise since `'playing'` is only ever set right after `setGame`). **Bug
+      caught in the first browser pass**: an early draft guarded the whole component on
+      `if (screen === 'title' || !game) return titleScreen`, which meant `!game` (true for every
+      screen before a save is loaded/created) silently forced the title screen back up no matter
+      what `screen` said — clicking Continue or New Game appeared to do nothing. Fixed by moving
+      the null-game fallback to ONLY the final `'playing'` branch.
+    - **`SlotPicker`** lists all 3 slots (`slotSummary(g)`: trainer name, `dateLabel(week)`,
+      gold, monster count, highest league reached via `licenseIndex`); empty slots show
+      "— empty —" and are the only clickable option in `'new'` mode (plus "(start here)"), the
+      only DISABLED option in `'continue'` mode; occupied slots show the summary and, in `'new'`
+      mode, an "· overwrite?" hint — clicking one asks `window.confirm` before wiping it.
+    - **`NewGameSetup`**: trainer-name text input (required — Start Adventure disabled until
+      non-blank after trim) + a "Show tutorial tips" checkbox (defaults checked). On submit,
+      creates the `GameState` via `newGame`, saves it to the picked slot immediately, and moves to
+      the disclaimer screen (Continue skips the disclaimer entirely — it's a new-game-only beat).
+    - **`AlphaDisclaimer`**: static one-time screen per user's exact wording — early-alpha framing
+      plus an explicit callout that "breeding (fusion)" and "much of the Lab... don't do much
+      yet." Worded as "don't do much yet" rather than "do nothing" since Lab freeze/thaw is
+      actually functional (confirmed by reading `town.ts`'s Lab section and `App.tsx`'s Lab UI) —
+      fusion itself really is just a shallow stub (average-of-parents −10%, per the roadmap's own
+      standing description), so the disclaimer stays honest to actual behavior while still hitting
+      the user's intended point that neither feature is a finished experience yet.
+    - **`TutorialBanner`**: a dismissible card at the top of `TownView`, shown when
+      `game.tutorialEnabled && !game.tutorialDismissed`; dismissing sets `tutorialDismissed: true`
+      on the live `GameState` (persists through the normal per-slot autosave, confirmed to survive
+      a full page reload — doesn't reappear once closed). Gives the tutorial toggle a real,
+      if modest, effect rather than a no-op flag: 3 short bullets on the weekly loop, tournament
+      sign-up, and (echoing the disclaimer) that breeding/Lab depth is still under construction.
+    - **Top tab bar's destructive inline "✨ New Game" button (instant `newGame()` + confirm,
+      no slot awareness) replaced with "🏠 Main Menu"** — a non-destructive `setScreen('title')`
+      that returns to the title screen without touching the active slot's save; the proper
+      New Game flow now only exists through the title screen's slot picker.
+    - Verified: `tsc --noEmit`/production build/`validateDesign()` all clean; full live
+      click-through in the browser preview — title → New Game → slot picker (correctly showed
+      migrated Slot 1 data + 2 empty slots + "(start here)"/"overwrite?" hints) → name entry
+      (Start Adventure correctly disabled until text entered) → tutorial checkbox → disclaimer →
+      Town screen with the Welcome-tips banner visible → dismissed the banner → hard page
+      reload → title screen shown again (confirms it gates every visit, not just first load) →
+      Continue → slot picker showed BOTH slots' distinct trainer names/data → resumed Slot 2 →
+      confirmed the tips banner stayed dismissed after reload; zero console errors across the
+      entire flow.
+
 -28. **Per-move arena VFX — "claw raking, a thunderbolt, etc" (2026-07-25), browser-verified,
-    uncommitted.** User asked for more distinctive battle-arena effects after the sprite-art
+    committed and deployed (`02618f3`).** User asked for more distinctive battle-arena effects after the sprite-art
     thread hit a wall (no working image-gen route — see the sprite handover note above). Every
     move now renders a visual keyed off its actual `channel`/`element` instead of a generic dot:
     `arena.tsx:fxFor(channel, element)` maps to one of 9 kinds, ELEMENT taking priority over

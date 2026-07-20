@@ -412,3 +412,38 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 .scout-report .scoutcard + .scoutcard { padding-top: 10px; border-top: 1px solid var(--line); }
 .scoutcard .badge.locked { color: var(--muted); font-style: italic; }
 .scoutcard .stat .bar.locked { display: flex; align-items: center; justify-content: flex-start; padding-left: 6px; color: var(--muted); font-weight: 700; font-size: 11px; }
+
+/* Title screen + save-slot flow (2026-07-25): the gate every visit lands on
+   before any GameState exists — its own centered layout, not the .app shell. */
+.titlescreen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.titlecard { width: 100%; max-width: 460px; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 32px 28px; text-align: center; }
+.titlelogo { font-size: 34px; margin: 0 0 4px; letter-spacing: .5px; }
+.titletag { color: var(--muted); margin: 0 0 26px; font-size: 14px; }
+.titlebtns { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+.titlebtn { width: 100%; padding: 13px 16px; font-size: 15px; background: var(--panel2); color: var(--ink); border: 1px solid var(--line); }
+.titlebtn.primary { background: var(--accent); color: #0c1a13; border-color: var(--accent); }
+.titlebtn.back { background: transparent; color: var(--muted); border: 1px solid var(--line); margin-top: 18px; }
+.titlebtn:disabled { opacity: .45; cursor: not-allowed; }
+.titlever { color: var(--muted); font-size: 11px; margin: 22px 0 0; }
+
+.slotcard { max-width: 560px; text-align: left; }
+.slotcard h2 { text-align: center; margin: 0 0 20px; font-size: 19px; }
+.slotlist { display: flex; flex-direction: column; gap: 10px; }
+.slotrow { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 3px; background: var(--panel2); border: 1px solid var(--line); color: var(--ink); padding: 12px 14px; border-radius: 10px; }
+.slotrow:disabled { opacity: .4; cursor: not-allowed; }
+.slotrow.empty { border-style: dashed; }
+.slotnum { font-weight: 800; font-size: 13px; color: var(--accent); }
+.slotmeta { font-size: 13px; color: var(--muted); }
+.slotmeta b { color: var(--ink); }
+.slotoverwrite { color: var(--accent2); }
+
+.nameinput { width: 100%; background: var(--panel2); border: 1px solid var(--line); color: var(--ink); border-radius: 8px; padding: 11px 12px; font-size: 15px; margin: 6px 0 16px; }
+.tutorialtoggle { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 14px; color: var(--muted); margin-bottom: 6px; }
+
+.disclaimer p { text-align: left; color: var(--ink); font-size: 14px; line-height: 1.5; }
+.disclaimer h2 { margin-bottom: 16px; }
+
+.tutorial-banner { display: flex; gap: 14px; align-items: flex-start; justify-content: space-between; background: var(--panel2); border: 1px solid var(--accent); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; }
+.tutorial-banner ul { margin: 6px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.tutorial-banner li { margin-bottom: 3px; }
+.tutorial-dismiss { background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 2px 9px; font-weight: 700; flex-shrink: 0; }
