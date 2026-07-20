@@ -21,9 +21,81 @@ const STATUS_ICON: Record<StatusKind, string> = {
 interface FloatFx { id: number; side: BattleSide; slot: number; text: string; cls: string }
 interface BarState { hp: number; mana: number; ward: number }
 type Bars = Record<string, BarState> // keyed by `${side}${slot}`
-interface Fx { id: number; side: BattleSide; slot: number; type: 'lunge' | 'proj' | 'stance'; color?: string }
+
+// Per-move visual identity (user spec 2026-07-25: "a claw raking the enemy, a
+// thunderbolt, etc" — every move should look like what it is, not a generic
+// dot). `kind` picks the shape/animation; `struct` picks how it gets there:
+// 'lunge' — the attacker bumps into melee range, effect lands on the target;
+// 'proj' — something travels from attacker to target (arrow/fireball/etc);
+// 'burst' — appears directly at the target with no travel (spike erupting
+// from the ground, a lightning strike, a soundwave, a psychic pulse).
+// Element always wins over channel when a move has one (INT's elemental
+// kit, plus the handful of STR/DEX moves with an element), since the
+// element is the more specific, more recognizable identity.
+type FxKind = 'claw' | 'arrow' | 'fireball' | 'waterbolt' | 'earthspike' | 'lightning' | 'sonic' | 'psychic' | 'arcane'
+type FxStruct = 'lunge' | 'proj' | 'burst' | 'stance'
+interface Fx {
+  id: number; side: BattleSide; slot: number; struct: FxStruct; kind?: FxKind; color?: string
+  targetSide?: BattleSide; targetSlot?: number; crit?: boolean
+}
+
+function fxFor(channel: Channel, element?: Element): { struct: FxStruct; kind: FxKind; color: string } {
+  if (element === 'fire') return { struct: 'proj', kind: 'fireball', color: ELEMENT_COLOR.fire }
+  if (element === 'water') return { struct: 'proj', kind: 'waterbolt', color: ELEMENT_COLOR.water }
+  if (element === 'earth') return { struct: 'burst', kind: 'earthspike', color: ELEMENT_COLOR.earth }
+  if (element === 'air') return { struct: 'burst', kind: 'lightning', color: '#fff59d' }
+  if (channel === 'melee') return { struct: 'lunge', kind: 'claw', color: CHANNEL_COLOR.melee }
+  if (channel === 'ranged') return { struct: 'proj', kind: 'arrow', color: CHANNEL_COLOR.ranged }
+  if (channel === 'voice') return { struct: 'burst', kind: 'sonic', color: CHANNEL_COLOR.voice }
+  if (channel === 'support') return { struct: 'burst', kind: 'psychic', color: CHANNEL_COLOR.support }
+  return { struct: 'proj', kind: 'arcane', color: CHANNEL_COLOR.magic } // INT's non-elemental kit (Void Lance, Mana Leech, Arcane Overload)
+}
 
 const barKey = (side: BattleSide, slot: number) => `${side}${slot}`
+// Fixed 1v1 stage coordinates: the target position an effect travels to /
+// erupts at, given which side is attacking (mirrors projA/projB's endpoints).
+const targetX1v1 = (attackerSide: BattleSide) => (attackerSide === 'A' ? { left: '78%' } : { left: '22%' })
+
+// Renders one move's visual identity in the 1v1 arena — 'proj' travels
+// attacker->target (styled by kind); 'lunge' (claw) lands its slash marks
+// directly on the target as the attacker bumps in; 'burst' kinds appear at
+// the target with no travel time at all (a spike erupting from the ground
+// reads wrong if it "flies" there).
+function MoveFx({ fx }: { fx: Fx }) {
+  if (fx.struct === 'proj') {
+    return <i key={fx.id} className={`proj proj-${fx.kind} ${fx.side === 'A' ? 'projA' : 'projB'}`} style={{ background: fx.color, color: fx.color }} />
+  }
+  const pos = targetX1v1(fx.side)
+  if (fx.struct === 'lunge' && fx.kind === 'claw') {
+    return (
+      <div key={fx.id} className="claw-fx" style={pos}>
+        <svg viewBox="0 0 64 64">
+          <path className="claw-slash claw-1" d="M10 16 L42 48" />
+          <path className="claw-slash claw-2" d="M18 8 L50 40" />
+          <path className="claw-slash claw-3" d="M26 2 L58 34" />
+        </svg>
+      </div>
+    )
+  }
+  if (fx.struct === 'burst') {
+    if (fx.kind === 'earthspike') return <div key={fx.id} className="burst-fx" style={pos}><div className="earthspike-fx" /></div>
+    if (fx.kind === 'lightning') return (
+      <div key={fx.id} className="lightning-fx" style={pos}>
+        <svg viewBox="0 0 20 200" className="lightning-bolt" preserveAspectRatio="none">
+          <polyline points="10,0 4,80 12,90 2,170 10,200 6,140 14,130 8,50 16,40" fill="none" stroke="#fff59d" strokeWidth="3" />
+        </svg>
+      </div>
+    )
+    if (fx.kind === 'sonic') return (
+      <div key={fx.id} className="sonic-anchor" style={pos}>
+        <div className="sonic-fx sonic-ring1" />
+        <div className="sonic-fx sonic-ring2" />
+      </div>
+    )
+    if (fx.kind === 'psychic') return <div key={fx.id} className="psychic-fx" style={pos} />
+  }
+  return null
+}
 
 export function ArenaBattle({ teamA, teamB, result, onDone }: { teamA: Monster[]; teamB: Monster[]; result: BattleResult; onDone?: () => void }) {
   const is1v1 = teamA.length === 1 && teamB.length === 1
@@ -113,8 +185,8 @@ export function ArenaBattle({ teamA, teamB, result, onDone }: { teamA: Monster[]
         return 30
       case 'hit': {
         const id = ++counter.current
-        const color = e.element ? ELEMENT_COLOR[e.element] : CHANNEL_COLOR[e.channel]
-        setFx({ id, side: e.side, slot: e.slot, type: e.channel === 'melee' ? 'lunge' : 'proj', color })
+        const { struct, kind, color } = fxFor(e.channel, e.element)
+        setFx({ id, side: e.side, slot: e.slot, struct, kind, color, targetSide: e.targetSide, targetSlot: e.targetSlot, crit: e.crit })
         addFloat(e.targetSide, e.targetSlot, `-${e.dmg}`, 'dmg')
         if (e.warded > 0) addFloat(e.targetSide, e.targetSlot, `🛡 ${e.warded}`, 'info')
         if (e.lifesteal > 0) addFloat(e.side, e.slot, `+${e.lifesteal}`, 'heal')
@@ -125,12 +197,13 @@ export function ArenaBattle({ teamA, teamB, result, onDone }: { teamA: Monster[]
       }
       case 'miss': {
         const id = ++counter.current
-        setFx({ id, side: e.side, slot: e.slot, type: e.channel === 'melee' ? 'lunge' : 'proj', color: CHANNEL_COLOR[e.channel] })
+        const { struct, kind, color } = fxFor(e.channel)
+        setFx({ id, side: e.side, slot: e.slot, struct, kind, color, targetSide: e.targetSide, targetSlot: e.targetSlot })
         addFloat(e.targetSide, e.targetSlot, e.blocked ? '🛡 blocked!' : 'miss', 'info')
         return 650
       }
       case 'stance':
-        setFx({ id: ++counter.current, side: e.side, slot: e.slot, type: 'stance' })
+        setFx({ id: ++counter.current, side: e.side, slot: e.slot, struct: 'stance' })
         addFloat(e.side, e.slot, '🛡', 'info')
         return 550
       case 'utility':
@@ -208,8 +281,8 @@ export function ArenaBattle({ teamA, teamB, result, onDone }: { teamA: Monster[]
     const fighterCls = (side: BattleSide) => {
       let cls = 'combatant ' + (side === 'A' ? 'left' : 'right')
       if (fx && fx.side === side && fx.slot === 0) {
-        if (fx.type === 'lunge') cls += side === 'A' ? ' lungeA' : ' lungeB'
-        if (fx.type === 'stance') cls += ' stancePulse'
+        if (fx.struct === 'lunge') cls += side === 'A' ? ' lungeA' : ' lungeB'
+        if (fx.struct === 'stance') cls += ' stancePulse'
       }
       return cls
     }
@@ -233,14 +306,12 @@ export function ArenaBattle({ teamA, teamB, result, onDone }: { teamA: Monster[]
           </div>
         </div>
 
-        <div className={'arena-floor'}>
+        <div className={'arena-floor' + (fx?.crit ? ' shake' : '')}>
           <div className={fighterCls('A') + ko('A')}>
             <Sprite species={a.species} size={84} />
             <div className="floats">{floatsFor('A', 0)}</div>
           </div>
-          {fx?.type === 'proj' && (
-            <i key={fx.id} className={'proj ' + (fx.side === 'A' ? 'projA' : 'projB')} style={{ background: fx.color, color: fx.color }} />
-          )}
+          {fx && <MoveFx fx={fx} />}
           <div className={fighterCls('B') + ko('B')}>
             <span className="mirror"><Sprite species={b.species} size={84} /></span>
             <div className="floats">{floatsFor('B', 0)}</div>
@@ -272,11 +343,16 @@ export function ArenaBattle({ teamA, teamB, result, onDone }: { teamA: Monster[]
     const mpMax = maxMana(m.stats)
     const koed = bar.hp <= 0
     const acting = fx && fx.side === side && fx.slot === slot
+    const impacted = fx && fx.targetSide === side && fx.targetSlot === slot
     let cls = 'roster-tile'
     if (koed) cls += ' ko'
-    if (acting) cls += ` acting acting-${fx!.type}`
+    if (acting) cls += ` acting acting-${fx!.kind ?? fx!.struct}`
+    if (impacted) cls += ` impact impact-${fx!.kind ?? fx!.struct}`
+    // a move's colour rides along as a CSS custom property so acting/impact
+    // don't need a hand-written rule per kind just to pick up the right tint
+    const fxStyle = (acting || impacted) && fx?.color ? ({ '--fx-color': fx.color } as Record<string, string>) : undefined
     return (
-      <div className={cls} key={slot} title={m.name}>
+      <div className={cls} key={slot} title={m.name} style={fxStyle}>
         <Sprite species={m.species} size={40} />
         <div className="rt-name">{m.name}</div>
         <div className="rt-bar hp"><i style={{ width: `${Math.max(0, (bar.hp / hpMax) * 100)}%` }} /></div>

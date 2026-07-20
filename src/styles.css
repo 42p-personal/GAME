@@ -307,13 +307,59 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 @keyframes lungeB { 35% { transform: translateX(-52px); } 100% { transform: none; } }
 .stancePulse { animation: stancePulse .55s ease; }
 @keyframes stancePulse { 40% { filter: drop-shadow(0 0 12px #80cbc4); transform: scale(.95); } }
+.arena-floor.shake { animation: arenaShake .35s; }
+@keyframes arenaShake { 10%, 90% { transform: translateX(-2px); } 20%, 80% { transform: translateX(3px); }
+  30%, 50%, 70% { transform: translateX(-5px); } 40%, 60% { transform: translateX(5px); } }
+
+/* Per-move visual identity (§ battle FX, user spec 2026-07-25: "a claw
+   raking the enemy, a thunderbolt, etc" — every move looks like what it is).
+   'proj' kinds travel attacker->target on the existing projA/projB path;
+   'lunge'/claw and every 'burst' kind land directly at the target — see
+   arena.tsx:MoveFx / targetX1v1 for the positioning logic. */
 .proj { position: absolute; top: 50%; width: 14px; height: 14px; border-radius: 50%; z-index: 2; box-shadow: 0 0 12px 3px currentColor; }
 .projA { left: 17%; animation: projA .45s linear forwards; }
 .projB { right: 17%; animation: projB .45s linear forwards; }
 @keyframes projA { to { left: 78%; } }
 @keyframes projB { to { right: 78%; } }
-.ult-flash { animation: ultFlash .85s ease; }
-@keyframes ultFlash { 25% { filter: brightness(2.1) saturate(1.5); } }
+.proj-arrow { width: 22px; height: 5px; border-radius: 2px 6px 6px 2px; }
+.proj-arrow.projB { transform: scaleX(-1); }
+.proj-fireball { border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff3b0, currentColor 65%, #b71c1c); animation-name: projA, fireFlicker; animation-duration: .45s, .18s; animation-iteration-count: 1, infinite; }
+.proj-fireball.projB { animation-name: projB, fireFlicker; }
+@keyframes fireFlicker { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.18); } }
+.proj-waterbolt { border-radius: 40% 60% 60% 40%; background: radial-gradient(circle at 35% 35%, #e1f5fe, currentColor 70%); }
+.proj-arcane { border-radius: 30%; background: radial-gradient(circle at 40% 40%, #f3e5f5, currentColor 70%); animation-name: projA, arcaneSpin; animation-duration: .45s, .45s; animation-timing-function: linear, linear; }
+.proj-arcane.projB { animation-name: projB, arcaneSpin; }
+@keyframes arcaneSpin { to { transform: rotate(360deg); } }
+
+/* Claw rake — appears over the TARGET on a melee hit, timed with the lunge */
+.claw-fx { position: absolute; top: 50%; width: 74px; height: 74px; margin-top: -37px; margin-left: -37px; z-index: 4; pointer-events: none; }
+.claw-fx svg { width: 100%; height: 100%; overflow: visible; }
+.claw-slash { fill: none; stroke: #f5f5f5; stroke-width: 5; stroke-linecap: round; stroke-dasharray: 46; stroke-dashoffset: 46; filter: drop-shadow(0 0 3px #ef5350); animation: clawSlash .4s ease-out forwards; }
+.claw-2 { animation-delay: .05s; }
+.claw-3 { animation-delay: .1s; }
+@keyframes clawSlash { 0% { stroke-dashoffset: 46; opacity: 0; } 20% { opacity: 1; } 70% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 0; opacity: 0; } }
+
+/* Earth spike — erupts from the ground under the target, no travel */
+.burst-fx { position: absolute; bottom: 26px; width: 24px; margin-left: -12px; z-index: 4; pointer-events: none; }
+.earthspike-fx { height: 50px; background: linear-gradient(180deg, #c8a27a, #7a5233); clip-path: polygon(50% 0%, 100% 100%, 0% 100%); transform-origin: bottom center; animation: spikeRise .5s cubic-bezier(.22, 1.7, .4, 1) forwards; }
+@keyframes spikeRise { 0% { transform: scaleY(0); opacity: 0; } 35% { opacity: 1; } 55% { transform: scaleY(1.12); } 75% { transform: scaleY(1); } 100% { opacity: 0; } }
+
+/* Lightning — a jagged bolt striking straight down onto the target */
+.lightning-fx { position: absolute; top: -30px; bottom: -20px; width: 22px; margin-left: -11px; z-index: 5; pointer-events: none; }
+.lightning-bolt { width: 100%; height: 100%; filter: drop-shadow(0 0 6px #fff59d) drop-shadow(0 0 16px #ffee58); animation: boltFlash .35s steps(1) forwards; }
+@keyframes boltFlash { 0%, 100% { opacity: 0; } 8%, 24%, 42% { opacity: 1; } 16%, 33% { opacity: .25; } }
+
+/* Sonic — voice channel, concentric rings expanding at the target */
+.sonic-anchor { position: absolute; top: 50%; left: 0; }
+.sonic-fx { position: absolute; top: 0; left: 0; width: 10px; height: 10px; margin: -5px; border: 2px solid #f48fb1; border-radius: 50%; pointer-events: none; z-index: 4; }
+.sonic-ring1 { animation: sonicRing .6s ease-out forwards; }
+.sonic-ring2 { animation: sonicRing .6s ease-out .12s forwards; }
+@keyframes sonicRing { 0% { width: 10px; height: 10px; margin: -5px; opacity: .9; } 100% { width: 76px; height: 76px; margin: -38px; opacity: 0; } }
+
+/* Psychic — support/WIS hostile moves, a swirling pulse at the target */
+.psychic-fx { position: absolute; top: 50%; width: 50px; height: 50px; margin-top: -25px; margin-left: -25px; z-index: 4; pointer-events: none;
+  border-radius: 50%; background: radial-gradient(circle, rgba(128, 203, 196, .65), transparent 70%); animation: psychicPulse .55s ease forwards; }
+@keyframes psychicPulse { 0% { transform: scale(.3) rotate(0deg); opacity: 0; } 40% { opacity: 1; } 100% { transform: scale(1.35) rotate(160deg); opacity: 0; } }
 .arena-controls { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-top: 1px solid var(--line); background: var(--panel2); }
 .arena-caption { color: var(--muted, #9aa3b5); font-size: 12px; margin-left: auto; text-align: right; min-height: 1em; }
 .arena-log { max-height: 170px; overflow-y: auto; padding: 8px 12px; border-top: 1px solid var(--line); font-size: 11.5px; line-height: 1.55; color: var(--ink); }
@@ -328,7 +374,9 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 .roster-vs { font-weight: 800; color: var(--muted); font-size: 13px; }
 .roster-tile { position: relative; width: 74px; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 4px; text-align: center; transition: opacity .3s, filter .3s; }
 .roster-tile.ko { opacity: .4; filter: grayscale(1); }
-.roster-tile.acting { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); animation: tilePulse .5s ease; }
+.roster-tile.acting { border-color: var(--fx-color, var(--accent)); box-shadow: 0 0 0 1px var(--fx-color, var(--accent)); animation: tilePulse .5s ease; }
+.roster-tile.impact { animation: tileImpact .45s ease; }
+@keyframes tileImpact { 30% { box-shadow: 0 0 0 2px var(--fx-color, var(--accent)), 0 0 14px 2px var(--fx-color, var(--accent)); } }
 .roster-tile .rt-name { font-size: 9.5px; font-weight: 700; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .roster-tile .rt-bar { height: 5px; border-radius: 3px; background: #0b0d14; border: 1px solid var(--line); margin-top: 3px; overflow: hidden; }
 .roster-tile .rt-bar i { display: block; height: 100%; transition: width .35s ease; }

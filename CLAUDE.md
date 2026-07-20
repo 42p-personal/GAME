@@ -2,29 +2,35 @@
 
 ## Handover state (2026-07-25)
 
-**Everything below through item -27 is UNCOMMITTED on `preview`** (working tree has changes to
-`src/App.tsx`, `src/battle.ts`, `src/core.ts`, `src/game.ts`, `src/monster.ts`, `src/species.ts`,
-`src/town.ts`, `src/bestiary.ts`, `src/styles.css`, `src/validate.ts`, `src/Sprite.tsx`,
-`docs/BESTIARY.md`, plus new files `src/mammalSprites.ts` and `public/sprite-preview.html`) — the
-2026-07-22 playtest-feedback pass, its bracket/scouting follow-ups, the 2026-07-23/24 per-species
-training aptitude overhaul, the Mammal per-species sprite pass, the 2026-07-25 innate-ability
-rework, the 2026-07-25 innate CHOICE system, its balance-fix follow-up, the thematic innate
-redistribution, the cluster differentiation pass, the ultimates-removal + synergy-framework pass,
-the 5-more-statuses pass, the 22-move synergy revamp, the 3v3-6v6 sweep, and the chooseLoadout
-fix (items -6 through -27), sim/build-verified
-throughout (see item -18 for the innate rework's verification specifics; item -17 has a note on
-one sprite check that couldn't be screenshotted at the time), but not yet committed/merged/
-deployed at the user's own pace. Everything from item -5 down (v0.21) is COMMITTED and shipped —
-committed on `preview`, merged to `main`, and pushed (Cloudflare Pages auto-deploys `main`).
+**Items -6 through -27 are COMMITTED and DEPLOYED**: committed to `preview`, merged to `main`,
+pushed — Cloudflare Pages auto-deploys `main`, so this is live (the user explicitly requested
+"commit all changes to live" and the full pipeline ran: build/typecheck/validateDesign clean,
+`preview`/`main` were in sync at the same commit beforehand, fast-forward merge, both branches
+pushed). That covers the entire 2026-07-22 playtest-feedback pass through the 2026-07-25
+chooseLoadout auto-pick fix — see each item's own entry below for what shipped.
 
-**Sprites are on pause, not abandoned**: the user rejected the flat-color procedural pixel grids
-(twice — see item -17 and the follow-up feedback) in favour of a much richer hand-illustrated
-style (reference: an AI-generated evolution-line sheet with real shading/dithering). I don't have
-an image-generation tool in this environment, so I can't produce that style myself. Next step,
-whenever picked back up: the user supplies real image files (or a way to generate them) and
-`Sprite.tsx` gets switched from computed canvas grids to loading actual image assets. `src/
+**Item -28 (per-move arena VFX) is UNCOMMITTED on `preview`** (working tree has changes to
+`src/arena.tsx` and `src/styles.css` only) — built and browser-verified this same session, just
+not yet committed since the user hasn't asked for another deploy pass.
+
+**Sprites are on pause, not abandoned — but the capability picture changed this session.**
+The user rejected the flat-color procedural pixel grids twice (see item -21 and the follow-up
+feedback) in favour of a much richer hand-illustrated style. I now DO have a working image-
+generation pipeline (`codex`'s built-in `imagegen`, plus its fallback direct-API script at
+`$CODEX_HOME/skills/.system/imagegen/scripts/image_gen.py` — the one that actually works, since
+the built-in tool's `codex exec --sandbox read-only` has no network access) — auth, network, and
+the `openai` Python SDK are all confirmed working end-to-end. The ONLY remaining blocker is the
+user's OpenAI platform account itself: `billing_hard_limit_reached`. Next step, whenever picked
+back up: user checks/raises the limit at platform.openai.com/settings/organization/limits (or
+adds credit if it's genuinely a zero balance, not just a cap), confirms, and generation can start
+immediately — no further plumbing needed. If codex/`OPENAI_API_KEY` setup needs repeating in a
+fresh environment: `npm install -g @openai/codex` (binary) + `codex login` (already done, saved
+in `~/.codex`) + a `python3` shim if only `python` exists on PATH + `python -m pip install openai`
++ read `OPENAI_API_KEY` from the Windows User-level registry env var into the shell before calling
+`image_gen.py` directly (bypassing `codex exec`'s sandboxed network entirely). `src/
 mammalSprites.ts` and `public/sprite-preview.html` (a dev-only, localhost-served page for
-visually checking sprite output — not part of the shipped game) are left in place for that.
+visually checking sprite output — not part of the shipped game) are left in place for whenever
+real art lands.
 
 **Resolved**: the `Pinguox`/`Sylvaglide` flaw-vs-class-stat validator warning from the prior
 session is gone — user's call (2026-07-24) was to drop the flaw entirely for both rather than
@@ -39,6 +45,45 @@ individually. If battle balance feels off in play, that pass plus the later dama
 CON/turn-order changes are the tuning knobs to revisit.
 
 ### What changed this session, newest first
+
+-28. **Per-move arena VFX — "claw raking, a thunderbolt, etc" (2026-07-25), browser-verified,
+    uncommitted.** User asked for more distinctive battle-arena effects after the sprite-art
+    thread hit a wall (no working image-gen route — see the sprite handover note above). Every
+    move now renders a visual keyed off its actual `channel`/`element` instead of a generic dot:
+    `arena.tsx:fxFor(channel, element)` maps to one of 9 kinds, ELEMENT taking priority over
+    channel since it's the more specific identity (INT's elemental kit + the handful of STR/DEX
+    moves that carry one) — fire→fireball, water→waterbolt, earth→earthspike, air→**lightning**
+    (a jagged bolt striking the target, user's literal example); channel fallback for non-
+    elemental moves — melee→**claw** (3 slash marks landing on the target, the other literal
+    example), ranged→arrow, voice→sonic (expanding rings), support→psychic (swirling pulse),
+    magic-with-no-element→arcane (Void Lance/Mana Leech/Arcane Overload).
+    - **Three structural delivery types**, not just a re-skinned dot: `proj` (arrow/fireball/
+      waterbolt/arcane) travels attacker→target on the existing projA/projB path, now with a
+      kind-specific shape/color/particle instead of a plain circle; `lunge` (claw) keeps the
+      attacker's existing bump-in but the slash marks land ON THE TARGET, positioned via new
+      `targetX1v1()`; `burst` (earthspike/lightning/sonic/psychic) appears directly at the target
+      with NO travel time — a ground spike or lightning bolt reads wrong if it visibly flies there.
+    - Crit hits now shake the whole arena floor (`Fx.crit` threaded through from the `hit` event,
+      `.arena-floor.shake`) — was previously just a floating "💥 CRIT" text with no impact weight.
+    - **Team-mode (>1 per side) gets a lighter, consistent treatment**: rather than duplicating 9
+      kind-specific shapes at roster-tile scale, the acting AND target tiles get a colour-tinted
+      glow/pulse via a single `--fx-color` CSS custom property carrying the same colour the 1v1
+      view uses — kind-aware without a second full effects system, consistent with team mode's
+      existing "compact, log-driven" design philosophy.
+    - **Scope boundary, deliberate**: only `hit`/`miss` (damage-dealing moves) got new visuals —
+      utility events (buffs/debuffs/heals) keep their existing float-text treatment. The user's
+      request was specifically about damage abilities ("claw raking the enemy, a thunderbolt");
+      extending this to buffs would need a channel/element lookup by move name (utility events
+      don't carry channel) and was left out as a real scope boundary, not an oversight.
+    - Verified: tsc/build clean; a live Sandbox battle with moves forced via the Ability Selector
+      (Power Strike for melee/claw, Spark for INT/air/lightning) confirmed both of the user's
+      named examples render with correct markup (`claw-fx` showing all 3 slash `<path>` elements,
+      `lightning-fx` showing a valid jagged `<polyline>`) — plus arrow, sonic, and arcane all
+      confirmed firing with zero console errors across multiple full battles; a standalone 2v2
+      sim confirmed team-mode battles still produce the same `channel`/`element` event shape
+      `fxFor` depends on, so the same routing logic covers team fights too.
+    - Dead CSS cleanup: removed `.ult-flash`/`@keyframes ultFlash`, orphaned since item -23
+      removed the whole ultimate-trigger system and nothing referenced it anymore.
 
 -27. **`chooseLoadout` auto-pick rework (2026-07-25), sim-verified across 4 iterations, uncommitted
     — the fix for the 3v3-6v6 sweep's findings.** Follow-up to item -26 below: user asked how to
