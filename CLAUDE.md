@@ -32,8 +32,12 @@ transparency fix + old-sprite-set removal. A user-provided fresh Cloudflare API 
 (`cfut_...`) was what made diagnosing and fixing this possible — `wrangler`'s previous token was
 invalid, blocking any direct visibility into build status.
 
-**Item -38 (real sprite art for the 15 exclusive-body species) is UNCOMMITTED** — build/typecheck/
-test/browser-verified, awaiting explicit commit instruction. See its own entry below.
+**Item -38 (real sprite art for the 15 exclusive-body species) is COMMITTED and DEPLOYED**
+(`b83017d`, same preview→main→push pipeline — user said "commit and push"). Cloudflare's
+git-triggered builds for `b83017d` failed on BOTH branches with the standing EBADPLATFORM bug
+(see below — exactly as predicted), so production was deployed via the documented manual
+`npm run deploy` workaround (4th successful use) and verified live: the production domain serves
+the new bundle hash and the new sprite PNGs at their exact committed byte sizes.
 
 **STANDING ISSUE, not yet permanently fixed: Cloudflare's git-triggered auto-deploy is
 unreliable and manual `npm run deploy` is currently the only dependable path to production.**
@@ -87,7 +91,8 @@ CON/turn-order changes are the tuning knobs to revisit.
 ### What changed this session, newest first
 
 -38. **Real sprite art for the 15 exclusive-body species (2026-07-25), build/typecheck/test/
-    browser-verified, uncommitted.** Direct follow-on to item -37's "Stormlerath looks wrong"
+    browser-verified, committed and deployed (`b83017d`, manual deploy — git-triggered builds
+    failed with the standing EBADPLATFORM bug).** Direct follow-on to item -37's "Stormlerath looks wrong"
     observation — the Draconic/Abyssal/Mythical species were the last 15 of 45 still on the
     old fallback pixel-grid silhouette after item -34 covered the 30 base species. User: "can we
     generate the remaining images in that case?" Same `gpt-image-2` → `rembg` → hole-cleanup →
