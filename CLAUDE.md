@@ -20,11 +20,21 @@ retune; playtest bug fixes; playtest suggestions; real per-species sprite art ge
 integration) are COMMITTED and DEPLOYED** (`39be5cf`, same preview→main→push pipeline — the user
 explicitly said "push it live" for this batch after reviewing the commit).
 
-**Items -35 and -36 (tournament calendar rebalance; arena redesign with league backgrounds +
-bigger sprites, this session) are UNCOMMITTED** — both implemented and fully verified (tsc/
-build/tests/browser) but no explicit commit/push instruction given yet; working tree currently
-holds `src/town.ts`, `src/game.ts`, `src/validate.ts`, `src/battle.ts`, `src/arena.tsx`,
-`src/App.tsx`, `src/styles.css`, new `src/leagueArt.ts`, new `public/backgrounds/*.jpg` (10 files).
+**Items -35 through -37 are COMMITTED and DEPLOYED** (`39272a2` + a follow-up transparency/
+cleanup fix, same preview→main→push pipeline — user said "commit and push to live" then "commit
+everything to git"). Covers: tournament calendar rebalance, arena redesign with league
+backgrounds + bigger sprites + live status HUD, a `package-lock.json` drift fix that had been
+**silently breaking every Cloudflare Pages build since the vitest devDependency was added**
+(confirmed via Cloudflare's own build logs — commits `39be5cf` and `79e662f` both failed at the
+`npm ci` step on both `main` and `preview`; the live site had been serving a build from `57309a6`
+this whole time despite multiple successful-looking `git push`es), and item -37's arena-sprite
+transparency fix + old-sprite-set removal. A user-provided fresh Cloudflare API token
+(`cfut_...`) was what made diagnosing and fixing this possible — `wrangler`'s previous token was
+invalid, blocking any direct visibility into build status. **One residual oddity, not blocking**:
+the `preview` deploy for `39272a2` failed with an unrelated `EBADPLATFORM` npm error on an
+optional esbuild package, while the `main` deploy for the exact same commit/lockfile succeeded
+seconds earlier — looks like a one-off Cloudflare build-container flake rather than a real
+problem, since `tamergame.42p.uk` (production, tracking `main`) is confirmed live and correct.
 
 **Real sprite art now ships for all 30 base species — item -34, the big one this session.**
 The `docs/sprites/` painterly set mentioned in earlier handovers (baked-in pedestal artifact,
@@ -57,8 +67,38 @@ CON/turn-order changes are the tuning knobs to revisit.
 
 ### What changed this session, newest first
 
+-37. **Arena sprite transparency + old-sprite-set removal (2026-07-25), build/typecheck/test/
+    browser-verified, committed.** User flagged a live screenshot: sprites in the 1v1 arena sat
+    inside a visible solid dark rounded card (`Sprite.tsx`'s own `background:#0c0e15` + border),
+    which looked fine against the old flat-panel UI but clashed once painted league backgrounds
+    landed behind it — the sprite needed to float directly over the scene, not sit in a boxed
+    tile on top of it. Also flagged the same screenshot's oddly blocky orange fallback creature
+    as "not looking correct" — confirmed via species.ts that this is "Stormlerath," a Draconic
+    (exclusive-body) species with no real art yet, correctly falling back to the pre-existing
+    generic pixel-grid silhouette; just more visually jarring now that the rest of the roster has
+    real art (expected, not a bug — Draconic/Abyssal/Mythical real art is still explicitly on the
+    roadmap per item -34).
+    - **`Sprite.tsx` gained an optional `bare?: boolean` prop**: when true, skips the dark
+      background/border entirely (both the `<img>` and SVG-fallback paths), used ONLY by
+      `arena.tsx`'s three sprite call sites (1v1 both fighters, team roster tiles). Every other
+      call site (Market cards, Bestiary, feeding screen, stable strip, Sandbox picker) is
+      untouched and still renders its own boxed-card look — confirmed live via computed-style
+      checks (`backgroundColor`/`borderStyle`) on both an arena combatant (transparent, no
+      border) and a non-arena sprite card (still `rgb(12,14,21)` + solid border) in the same
+      session.
+    - **`docs/sprites/` (the abandoned painterly set, superseded since item -34, previously
+      committed alongside unrelated tooling config in the "commit everything" pass) deleted
+      outright** per explicit user request ("we only want to use the new ones we have generated
+      today") — confirmed nothing in `src/` ever referenced it (it was always reference-only,
+      never wired into the game).
+    - Verified: `tsc`/build/tests clean; live browser pass confirmed both a real-art `<img>`
+      combatant (`mantevoke.png`, `strixil.png`) and an SVG-fallback combatant render with
+      `background-color: rgba(0,0,0,0)` and `border-style: none` in the arena, while a
+      species-picker card elsewhere on the same page still shows the original solid dark card;
+      zero console errors throughout.
+
 -36. **Arena redesign: league backgrounds + bigger sprites + live status HUD (2026-07-25),
-    build/typecheck/test/browser-verified, uncommitted.** User: "we need to change the 'battle
+    build/typecheck/test/browser-verified, committed.** User: "we need to change the 'battle
     screen' with the new sprites it will not be big enough. We need league related backgrounds
     for the cups and resize the battle screen so we can fit in the bigger sprites and more
     information" — a direct follow-on to item -34's real art landing at a size the old compact
@@ -120,7 +160,7 @@ CON/turn-order changes are the tuning knobs to revisit.
       `TEAM_SIZE_BY_LEAGUE`).
 
 -35. **Tournament calendar rebalance — cup-count parity + halved top leagues (2026-07-25),
-    test/build/browser-verified, uncommitted.** User asked to list every cup by league, then
+    test/build/browser-verified, committed.** User asked to list every cup by league, then
     corrected the spec before I could act on the listing: "all leagues must have a similar number
     of cups until masters. Masters + Tamer elite will have half the number of cups. this does not
     include the rank up trial." Previously Wood-Iron drew ~5.6 cups/year each from a rotating

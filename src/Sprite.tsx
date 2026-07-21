@@ -18,16 +18,22 @@ type Stage = 'Baby' | 'Teen' | 'Fully Grown' | 'Elder' | 'Retiree'
 
 const AGING_FILTER = 'grayscale(0.55) brightness(0.75) saturate(0.6)'
 
-export function Sprite({ species, size = 96, stage }: { species: Species; size?: number; stage?: Stage }) {
+export function Sprite({ species, size = 96, stage, bare }: { species: Species; size?: number; stage?: Stage; bare?: boolean }) {
   const genericPal = useMemo(() => palette(hashString(species.id) % 360), [species.id])
   const art = SPECIES_ART[species.id]
   const isElder = stage === 'Elder' || stage === 'Retiree'
 
-  const wrapperStyle: CSSProperties = {
-    width: size, height: size,
-    background: '#0c0e15', borderRadius: 8, border: '1px solid var(--line)',
-    filter: isElder ? AGING_FILTER : undefined,
-  }
+  // `bare` (2026-07-25, arena use): skip the dark card background/border —
+  // the arena now has its own painted league backdrop behind every sprite,
+  // and the old solid boxed-card look (built for a shared dark UI panel)
+  // clashed with it instead of letting the sprite float over the scene.
+  const wrapperStyle: CSSProperties = bare
+    ? { width: size, height: size, filter: isElder ? AGING_FILTER : undefined }
+    : {
+      width: size, height: size,
+      background: '#0c0e15', borderRadius: 8, border: '1px solid var(--line)',
+      filter: isElder ? AGING_FILTER : undefined,
+    }
 
   if (art) {
     return (

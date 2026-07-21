@@ -378,12 +378,12 @@ export function ArenaBattle({ teamA, teamB, result, league, onDone }: { teamA: M
         <div className={'arena-floor' + (fx?.crit ? ' shake' : '')} style={{ backgroundImage: `url(${bgImage})` }}>
           <div className="arena-floor-scrim" />
           <div className={fighterCls('A') + ko('A')}>
-            <Sprite species={a.species} size={176} />
+            <Sprite species={a.species} size={176} bare />
             <div className="floats">{floatsFor('A', 0)}</div>
           </div>
           {fx && <MoveFx fx={fx} />}
           <div className={fighterCls('B') + ko('B')}>
-            <span className="mirror"><Sprite species={b.species} size={176} /></span>
+            <span className="mirror"><Sprite species={b.species} size={176} bare /></span>
             <div className="floats">{floatsFor('B', 0)}</div>
           </div>
         </div>
@@ -423,7 +423,7 @@ export function ArenaBattle({ teamA, teamB, result, league, onDone }: { teamA: M
     const fxStyle = (acting || impacted) && fx?.color ? ({ '--fx-color': fx.color } as Record<string, string>) : undefined
     return (
       <div className={cls} key={slot} title={m.name} style={fxStyle}>
-        <Sprite species={m.species} size={60} />
+        <Sprite species={m.species} size={60} bare />
         <div className="rt-name">{m.name}</div>
         <div className="rt-class dim">{m.className}</div>
         <div className="rt-bar hp"><i style={{ width: `${Math.max(0, (bar.hp / hpMax) * 100)}%` }} /></div>
