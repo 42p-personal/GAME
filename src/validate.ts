@@ -9,7 +9,7 @@ import { BODY_ELEMENT, BodyType, CLASSES, LEAGUES, STATS, STATUS_INFO, StatusKin
 import { SPECIES } from './species'
 import { ALL_MOVES } from './moves'
 import { LEAGUE_TOP_GOLD, trainingProfileFor } from './game'
-import { CIRCUIT_REWARDS, PRESTIGE_EVENTS, RANK_UP_MONTHS, RANK_UP_WEEK, TEAM_SIZE_BY_LEAGUE, tournamentCalendarFor } from './town'
+import { activeQuartersFor, CIRCUIT_REWARDS, PRESTIGE_EVENTS, RANK_UP_MONTHS, RANK_UP_WEEK, TEAM_SIZE_BY_LEAGUE, tournamentCalendarFor } from './town'
 import { INNATE_EFFECTS } from './battle'
 
 export function designProblems(): string[] {
@@ -70,9 +70,14 @@ export function designProblems(): string[] {
   }
 
   // Tournament calendar generator: probe several seed-years and assert the
-  // economy invariant — every circuit league (below Silver) has at least one
-  // event per quarter (max two), valid leagues/months, unique ids and names.
-  const circuit = ['Wood', 'Copper', 'Tin', 'Bronze', 'Iron']
+  // economy invariant — valid leagues/months, unique ids and names, and the
+  // 2026-07-25 "similar cup count per league, half for Masters/Tamer Elite"
+  // spec: every league Wood-Platinum has 1-2 cups in EVERY quarter; Masters
+  // and Tamer Elite have 1-2 cups only in their 2 active quarters and ZERO in
+  // the other 2 (that's what makes them run at half density, not just a lower
+  // average).
+  const fullDensity = ['Wood', 'Copper', 'Tin', 'Bronze', 'Iron', 'Silver', 'Gold', 'Platinum']
+  const halfDensity = ['Masters', 'Tamer Elite']
   for (const seed of ['probe-a', 'probe-b', 'probe-c']) {
     for (let year = 0; year < 4; year++) {
       const cal = tournamentCalendarFor(seed, year)
@@ -89,11 +94,23 @@ export function designProblems(): string[] {
         if (RANK_UP_MONTHS.includes(t.month) && t.week === RANK_UP_WEEK)
           problems.push(`CALENDAR(${seed}/y${year}): ${t.name} collides with the rank-up trials (month ${t.month}, week ${t.week}).`)
       }
-      for (const league of circuit) {
+      for (const league of fullDensity) {
         for (let q = 0; q < 4; q++) {
           const inQuarter = cal.filter((t) => t.league === league && t.month > q * 3 && t.month <= q * 3 + 3).length
           if (inQuarter < 1) problems.push(`CALENDAR(${seed}/y${year}): ${league} has no event in Q${q + 1}.`)
           if (inQuarter > 2) problems.push(`CALENDAR(${seed}/y${year}): ${league} has ${inQuarter} events in Q${q + 1} (max 2).`)
+        }
+      }
+      for (const league of halfDensity) {
+        const active = activeQuartersFor(league)
+        for (let q = 0; q < 4; q++) {
+          const inQuarter = cal.filter((t) => t.league === league && t.month > q * 3 && t.month <= q * 3 + 3).length
+          if (active.includes(q)) {
+            if (inQuarter < 1) problems.push(`CALENDAR(${seed}/y${year}): ${league} has no event in Q${q + 1} (active quarter).`)
+            if (inQuarter > 2) problems.push(`CALENDAR(${seed}/y${year}): ${league} has ${inQuarter} events in Q${q + 1} (max 2).`)
+          } else if (inQuarter !== 0) {
+            problems.push(`CALENDAR(${seed}/y${year}): ${league} has ${inQuarter} events in Q${q + 1}, expected 0 (inactive quarter — half-density league).`)
+          }
         }
       }
     }

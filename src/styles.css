@@ -287,9 +287,21 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 .abar.mp i { background: linear-gradient(90deg, #1e88e5, #42a5f5); }
 .abar span { position: absolute; inset: 0; font-size: 9px; display: flex; align-items: center; justify-content: center; color: #fff; text-shadow: 0 1px 2px #000c; font-weight: 700; }
 .award { font-size: 11px; color: #80cbc4; margin-top: 3px; font-weight: 700; }
+.ahud-row { display: flex; align-items: center; gap: 8px; margin-top: 3px; flex-wrap: wrap; }
+.ahud-row.right { justify-content: flex-end; }
+.status-row { display: flex; gap: 3px; }
+.status-chip { font-size: 14px; filter: drop-shadow(0 1px 2px #000c); }
 .arena-round { min-width: 120px; text-align: center; font-weight: 800; font-size: 15px; }
-.arena-floor { position: relative; height: 200px; display: flex; align-items: center; justify-content: space-between; padding: 0 11%;
-  background: radial-gradient(ellipse at 50% 130%, #4a3826 0%, #2e2519 55%, #191510 100%); }
+/* League-themed backdrop (2026-07-25): a painted arena backdrop per league
+   (see leagueArt.ts), set inline via style={backgroundImage}. The radial
+   fallback gradient stays as background-color for the instant before the
+   image decodes, and .arena-floor-scrim darkens the lower two-thirds so HUD
+   text/bars/floats stay readable over a busy painted background regardless
+   of that specific league art's own brightness. */
+.arena-floor { position: relative; height: 340px; display: flex; align-items: center; justify-content: space-between; padding: 0 9%;
+  background-color: #2e2519; background-size: cover; background-position: center 35%; background-repeat: no-repeat; overflow: hidden; }
+.arena-floor-scrim { position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(10, 12, 18, .1) 0%, rgba(10, 12, 18, .35) 55%, rgba(10, 12, 18, .78) 100%); }
 .combatant { position: relative; z-index: 1; }
 .combatant.ko { filter: grayscale(1) brightness(.5); transform: rotate(90deg); transition: all .6s ease; }
 .combatant .floats { position: absolute; left: 50%; top: -6px; width: 0; z-index: 3; }
@@ -369,20 +381,26 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 /* Team battles (>1 per side): compact roster rows instead of the 1v1 lunge/
    projectile choreography — stays legible up to 6v6. */
 .team-mode .arena-hud { justify-content: center; }
-.team-floor { height: auto; min-height: 160px; padding: 14px 16px; display: flex; align-items: center; justify-content: center; gap: 18px; flex-wrap: wrap; }
-.roster { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 340px; }
-.roster-vs { font-weight: 800; color: var(--muted); font-size: 13px; }
-.roster-tile { position: relative; width: 74px; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 4px; text-align: center; transition: opacity .3s, filter .3s; }
+/* .team-floor always co-occurs with .arena-floor on the same element (see
+   arena.tsx) — background-image/size/position/overflow already come from
+   that rule; this just overrides the 1v1 sizing/layout for team mode. */
+.team-floor { height: auto; min-height: 220px; padding: 18px 20px; display: flex; align-items: center; justify-content: center; gap: 22px; flex-wrap: wrap; }
+.roster { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-width: 460px; position: relative; z-index: 1; }
+.roster-vs { font-weight: 800; color: var(--muted); font-size: 14px; position: relative; z-index: 1; text-shadow: 0 1px 3px #000c; }
+.roster-tile { position: relative; width: 96px; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 7px 5px; text-align: center; transition: opacity .3s, filter .3s; }
 .roster-tile.ko { opacity: .4; filter: grayscale(1); }
 .roster-tile.acting { border-color: var(--fx-color, var(--accent)); box-shadow: 0 0 0 1px var(--fx-color, var(--accent)); animation: tilePulse .5s ease; }
 .roster-tile.impact { animation: tileImpact .45s ease; }
 @keyframes tileImpact { 30% { box-shadow: 0 0 0 2px var(--fx-color, var(--accent)), 0 0 14px 2px var(--fx-color, var(--accent)); } }
-.roster-tile .rt-name { font-size: 9.5px; font-weight: 700; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.roster-tile .rt-name { font-size: 10.5px; font-weight: 700; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.roster-tile .rt-class { font-size: 9px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .roster-tile .rt-bar { height: 5px; border-radius: 3px; background: #0b0d14; border: 1px solid var(--line); margin-top: 3px; overflow: hidden; }
 .roster-tile .rt-bar i { display: block; height: 100%; transition: width .35s ease; }
 .roster-tile .rt-bar.hp i { background: linear-gradient(90deg, #43a047, #7cb342); }
 .roster-tile .rt-bar.mp i { background: linear-gradient(90deg, #1e88e5, #42a5f5); }
 .roster-tile .rt-ward { font-size: 9px; color: #80cbc4; font-weight: 700; margin-top: 2px; }
+.roster-tile .status-row { justify-content: center; margin-top: 2px; }
+.roster-tile .status-chip { font-size: 11px; }
 .roster-tile .floats { position: absolute; left: 50%; top: -4px; width: 0; z-index: 3; }
 @keyframes tilePulse { 40% { transform: scale(1.08); } }
 .battle-summary { text-align: center; font-size: 16px; font-weight: 700; margin: 10px 0; }

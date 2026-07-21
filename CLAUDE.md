@@ -17,11 +17,14 @@ preview→main→push pipeline).
 
 **Items -30 through -34 (review-fixes pass + vitest suite; 6v6-is-Tamer-Elite-only + ladder
 retune; playtest bug fixes; playtest suggestions; real per-species sprite art generation +
-integration, this session) are COMMITTED locally (`preview` merged to `main`) but NOT pushed to
-`origin` yet** — the user asked to "integrate and commit all," which this session's commit covers,
-but push/deploy is being left as an explicit separate confirmation rather than assumed, since it
-wasn't asked for in those words this time (contrast the earlier "commit all changes to live"
-phrasing for items -6 through -27, which explicitly meant push).
+integration) are COMMITTED and DEPLOYED** (`39be5cf`, same preview→main→push pipeline — the user
+explicitly said "push it live" for this batch after reviewing the commit).
+
+**Items -35 and -36 (tournament calendar rebalance; arena redesign with league backgrounds +
+bigger sprites, this session) are UNCOMMITTED** — both implemented and fully verified (tsc/
+build/tests/browser) but no explicit commit/push instruction given yet; working tree currently
+holds `src/town.ts`, `src/game.ts`, `src/validate.ts`, `src/battle.ts`, `src/arena.tsx`,
+`src/App.tsx`, `src/styles.css`, new `src/leagueArt.ts`, new `public/backgrounds/*.jpg` (10 files).
 
 **Real sprite art now ships for all 30 base species — item -34, the big one this session.**
 The `docs/sprites/` painterly set mentioned in earlier handovers (baked-in pedestal artifact,
@@ -42,8 +45,9 @@ explicitly deferred per the user's own call, alongside breeding/fusion depth, no
 **Resolved**: the `Pinguox`/`Sylvaglide` flaw-vs-class-stat validator warning from the prior
 session is gone — user's call (2026-07-24) was to drop the flaw entirely for both rather than
 pick a different stat or relax the validator. `validateDesign()` now reports fully clean
-(`45 species, 11 classes, 90 moves, ~32 tournaments/yr — all consistent ✓`), confirmed via a
-standalone run.
+(`45 species, 11 classes, 90 moves, ~48 tournaments/yr — all consistent ✓` — the `~32` figure
+quoted here in earlier handovers is stale; it moved to `~48` with item -35's calendar rebalance),
+confirmed via a standalone run.
 
 One caveat carried forward: the item marked **UNTESTED** below (the 2026-07-20 formula tuning
 pass) was only compile-checked at the user's direction ("do not do any more testing") and then
@@ -52,6 +56,113 @@ individually. If battle balance feels off in play, that pass plus the later dama
 CON/turn-order changes are the tuning knobs to revisit.
 
 ### What changed this session, newest first
+
+-36. **Arena redesign: league backgrounds + bigger sprites + live status HUD (2026-07-25),
+    build/typecheck/test/browser-verified, uncommitted.** User: "we need to change the 'battle
+    screen' with the new sprites it will not be big enough. We need league related backgrounds
+    for the cups and resize the battle screen so we can fit in the bigger sprites and more
+    information" — a direct follow-on to item -34's real art landing at a size the old compact
+    1v1/roster layout was never designed to show off.
+    - **10 new league arena backgrounds** (`public/backgrounds/<slug>.jpg`, ~1400px wide,
+      130-230KB each JPEG), one per league, generated via the same `gpt-image-2` pipeline as the
+      sprites but in a deliberately different painterly concept-art style (not pixel art — a
+      painted backdrop behind crisp foreground pixel-art sprites is a well-established, readable
+      combo, and it let the background stay atmospheric/soft without competing with the sprites
+      for detail). Each one is a direct visual realization of that league's EXISTING
+      `cupLore`/`CIRCUIT_LORE_FLAVOUR` setting text already written in `town.ts` weeks earlier —
+      Wood's muddy tannery paddock, Copper's market square with scattered copper pots, Tin's
+      roped ring with a paying crowd, Bronze's real bronze-bell-metal coliseum, Iron's
+      forge-district with distant molten glow, Silver's giant hammered-silver crescent-moon
+      banner (a literal match for "The Silver Crescent"), Gold's radiant gold-dust-filled hall,
+      Platinum's crystalline throne room (the throne from "The Radiant Throne," visible but
+      empty), Masters' coliseum hung with every league's own banner colour side by side ("where
+      every league's champions meet as equals"), and Tamer Elite's mountain-peak-above-the-clouds
+      celestial gateway ("there is nothing above this"). One generation (Iron) silently failed to
+      extract on the first attempt — no error surfaced beyond a missing output file — caught by
+      checking the file existed before viewing it, fixed with a plain retry.
+    - **`src/leagueArt.ts`** (new): `LEAGUE_BACKGROUND` maps each of the 10 league names to its
+      JPEG; `backgroundFor(league?)` falls back to Wood's (the plainest of the ten) for
+      league-less battles — Sandbox has no tournament context, so it always shows Wood's backdrop,
+      confirmed live rather than left to assumption.
+    - **`battle.ts`'s `snap` event now carries each combatant's live status list**
+      (`states[].statuses: StatusKind[]`, sourced straight from `Combatant.statuses` at the same
+      once-per-round cadence HP/mana/ward already snapshot at) — the actual data behind the
+      "more information" half of the request. Previously the only status feedback was a
+      transient float that faded in ~1s; there was no way to show "what's actively affecting this
+      monster right now" because the event stream never said so. Purely additive to the event
+      shape, so the golden battle tests (which assert counts/finals, never individual event
+      contents) needed no changes — reconfirmed by rerunning the suite.
+    - **`arena.tsx`**: new `StatusIcons` component renders a persistent icon row from that live
+      snap data (vs. the old transient-only floats) in both the 1v1 fighter-HUD and every team
+      roster tile. 1v1 sprite size doubled 84→176px on a taller floor (200→340px); team roster
+      tiles grew 74→96px wide with sprites 40→60px, plus a small class-name line under each name
+      (`.rt-class`) — all genuine extra information, not just bigger art. 1v1 fighter-HUD also now
+      shows the species name alongside the trainer-given name and class (`a.species.name`).
+      `ArenaBattle` gained an optional `league?: string` prop threaded to `backgroundFor()`,
+      applied via inline `style={{backgroundImage}}` on `.arena-floor` (shared by both the 1v1 and
+      team-mode layouts); a new `.arena-floor-scrim` gradient overlay (transparent at the top,
+      ~78% dark at the bottom) keeps HUD text/bars/floats readable over the busy painted
+      backgrounds regardless of that specific league's own brightness, without needing per-image
+      contrast tuning.
+    - **`App.tsx`**: the tournament battle screen's `<ArenaBattle>` call now passes `league={lb.league}`
+      (the tournament's own league, already on `LastBattle`); the Sandbox call site passes none,
+      correctly triggering the Wood fallback.
+    - Verified: `tsc`/production build clean (10 backgrounds confirmed copied into
+      `dist/backgrounds/`), all 12 vitest tests still green, a live browser pass confirmed —
+      the arena floor's computed `background-image` resolves to the right file for a league-less
+      Sandbox fight (Wood fallback), real-art sprites render at the new 176px (1v1) and 60px
+      (team-tile) sizes with `naturalWidth` intact, the SVG fallback for exclusive-body species
+      (tested with a Mythical/Abyssal 1v1 matchup) still renders correctly at the new sizing, a
+      2v2 team battle showed 4 roster tiles with real 60px art and the shared team-floor
+      background, and `backgroundFor()` was directly exercised for all 10 league names via a
+      dynamic module import in the live page, confirming every league resolves to its own
+      distinct file with the exact league-name strings used elsewhere in the codebase (`LEAGUES`/
+      `TEAM_SIZE_BY_LEAGUE`).
+
+-35. **Tournament calendar rebalance — cup-count parity + halved top leagues (2026-07-25),
+    test/build/browser-verified, uncommitted.** User asked to list every cup by league, then
+    corrected the spec before I could act on the listing: "all leagues must have a similar number
+    of cups until masters. Masters + Tamer elite will have half the number of cups. this does not
+    include the rank up trial." Previously Wood-Iron drew ~5.6 cups/year each from a rotating
+    pool while Silver/Gold/Platinum/Masters/Tamer Elite got exactly ONE fixed marquee event/year
+    each — a huge mismatch the new spec explicitly calls out.
+    - **Silver, Gold, and Platinum now run the exact same pool-generator mechanic as Wood-Iron**
+      (1 guaranteed cup per quarter + ~40% chance of a 2nd) — extended, not reinvented. Needed a
+      `PRESTIGE_POOL_REWARDS` table (continues CIRCUIT_REWARDS' existing +50g/+25exp-per-league
+      ladder: Silver 350/175 → Tamer Elite 550/275) and a new `PRESTIGE_POOL_NAMES` table (8 cup
+      names per league, silver/gold/platinum/grandmaster/apex-themed, distinct strings from the
+      marquee names so nothing can ever collide in the same year).
+    - **Masters and Tamer Elite run at exactly HALF density**, not just a lower random average:
+      `ACTIVE_QUARTERS_BY_LEAGUE` (town.ts) marks only 2 of their 4 quarters as "live" (Masters:
+      Q1+Q3, Tamer Elite: Q2+Q4 — each league's own marquee quarter is one of its 2 active ones),
+      the other 2 quarters get zero cups, period. Empirically verified via a throwaway probe
+      script (5 seeds × 8 years): Wood-Platinum all average 5.3-5.7 cups/year (min 4, max 7-8,
+      genuinely comparable); Masters/Tamer Elite average 2.75-2.80 — almost exactly half.
+    - **Each league's fixed marquee event now occupies its OWN quarter's guaranteed slot** rather
+      than being an extra event stacked on top — otherwise Silver-TamerElite would end up with
+      MORE total cups than Wood-Iron (their circuit-equivalent count *plus* the marquee), which
+      would violate "similar number." The marquee's exact month is also excluded from that
+      quarter's pool-draw month choices, since both id formats are `${league}-y${year}-m${month}`
+      and a same-month collision would produce a literal duplicate id.
+    - **Marquee rewards bumped** (Silver Crescent 350→500g, Gilded Crown 400→550g, Radiant Throne
+      450→600g, Grandmasters' Summit 500→650g, Apex Invitational 600→700g) — needed so the
+      marquee still feels like the special once-a-year event now that a same-league POOL cup
+      exists paying a merely-good reward; without the bump they'd have paid identically to a
+      regular Silver/Gold/etc. cup, hollowing out the "marquee" framing. `game.ts:LEAGUE_TOP_GOLD`
+      (which the validator cross-checks against the marquee reward, since it caps excursion
+      income at ~1/3 of a league's best payout) updated to match.
+    - **`validate.ts`'s calendar check split in two**: `fullDensity` (Wood through Platinum) still
+      asserts 1-2 cups every quarter; a new `halfDensity` (Masters, Tamer Elite) check asserts 1-2
+      cups in their 2 active quarters and EXACTLY 0 in the other 2 — the design rule is enforced,
+      not just eyeballed. Reused `town.ts`'s own `activeQuartersFor()` rather than hand-duplicating
+      which quarters are active, so the two can't drift apart.
+    - Verified: `tsc`/production build clean, all 12 vitest tests green (`design.test.ts`'s
+      `designProblems() === []` now exercises both new calendar checks), a live browser pass
+      confirmed the calendar UI renders the new cups with zero code changes needed there (it was
+      already fully data-driven off `tournamentCalendarFor`) — clicked into "The Silver Crescent"
+      directly and confirmed "Silver league · Week 2 · 4v4 · Rewards: 500g", the correct bumped
+      value, wired end-to-end. `validateDesign()`'s console summary moved from `~32` to
+      `~48 tournaments/yr` as a direct result of the extra Silver/Gold/Platinum pool cups.
 
 -34. **Real per-species sprite art: generation + integration (2026-07-25), build/typecheck/test/
     browser-verified, committed.** The single largest content pass this session — replaces every
@@ -1684,8 +1795,14 @@ rework above.
 
 ### Tournaments (`town.ts`)
 - Seeded calendar generator (`tournamentCalendarFor(seed, year)`), drawn fresh each game year:
-  every circuit league (Wood→Iron) guaranteed ≥1 event per quarter, ~40% get a second, unpredictable
-  months/weeks. Silver+ are fixed annual prestige events. `validate.ts` probes 12 seed-years.
+  every league Wood through Platinum is guaranteed ≥1 cup per quarter (all 4), ~40% get a second,
+  unpredictable months/weeks — Masters and Tamer Elite deliberately run at HALF that density (only
+  2 of their 4 quarters are active, `activeQuartersFor()`; 2026-07-25 spec: "all leagues must have
+  a similar number of cups until masters, masters + tamer elite have half"). Silver through Tamer
+  Elite additionally each get ONE fixed annual marquee "prestige" event (hand-authored lore, bigger
+  reward via `PRESTIGE_EVENTS`) — it occupies its own quarter's guaranteed slot rather than adding
+  an extra cup on top, so total yearly cup counts stay comparable across every league.
+  `validate.ts` probes 12 seed-years and asserts both the full- and half-density quarter rules.
 - Monster may enter its own league or any league below (never above); `rewardMultiplier` scales
   gold+exp down the further below their league they punch (100%/50%/20%), now keyed off the
   TEAM's minimum licenseIndex
@@ -1762,7 +1879,8 @@ Base: Mammal, Avian, Marsupial, Aquatic, Insectoid, Reptilian. Exclusive: Dracon
 | `src/species.ts` | 45 species (30 base + 15 exclusive) + computed BODY_AVERAGES |
 | `src/moves.ts` | The 90-move pool, 15/stat — see `docs/ABILITIES.md` for the rendered reference |
 | `src/battle.ts` | Auto-battle sim: mana, innates, ultimates, round-based mods, BattleEvent stream |
-| `src/arena.tsx` | Animated arena replay (plays BattleEvent[] as live beats) |
+| `src/arena.tsx` | Animated arena replay (plays BattleEvent[] as live beats); league backgrounds + live status HUD |
+| `src/leagueArt.ts` | League name → arena background JPEG lookup (`public/backgrounds/`) |
 | `src/Sprite.tsx` | Species portrait component: real art (`speciesArt.ts`) for the 30 base species, 16×16 pixel-grid fallback for the 15 exclusives |
 | `src/speciesArt.ts` | Species id → `/sprites/<id>.png` lookup for the 30 base species' real art |
 | `public/sprites/` | The real generated sprite PNGs (320×320 RGBA), one per base species, adult-only |

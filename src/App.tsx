@@ -1100,7 +1100,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
         <>
           {header}
           <p className="sub">Match {matchIdx + 1} of {playerMatches.length}: {teamName(currentMatch.aLabel, lb.matches)} vs {teamName(currentMatch.bLabel, lb.matches)}</p>
-          <ArenaBattle key={matchIdx} teamA={currentMatch.teamA} teamB={currentMatch.teamB} result={currentMatch.result} onDone={() => setBattleOver(true)} />
+          <ArenaBattle key={matchIdx} teamA={currentMatch.teamA} teamB={currentMatch.teamB} result={currentMatch.result} league={lb.league} onDone={() => setBattleOver(true)} />
           {battleOver && (
             <div className="carerow" style={{ justifyContent: 'center' }}>
               <button className="enter" onClick={() => { setBattleOver(false); setMatchIdx((i) => i + 1); setBattleSub('bracket') }}>

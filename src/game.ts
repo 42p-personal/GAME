@@ -136,7 +136,7 @@ export function statMalusMultiplier(species: Species, stat: Stat): number {
 // real tournament competition.
 export const LEAGUE_TOP_GOLD: Record<string, number> = {
   Wood: 100, Copper: 150, Tin: 200, Bronze: 250, Iron: 300,
-  Silver: 350, Gold: 400, Platinum: 450, Masters: 500, 'Tamer Elite': 600,
+  Silver: 500, Gold: 550, Platinum: 600, Masters: 650, 'Tamer Elite': 700,
 }
 const EXCURSION_CAP_FRACTION = 1 / 3
 

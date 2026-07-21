@@ -28,18 +28,39 @@ export interface Tournament {
   rewards: { gold: number; exp: number }
 }
 
-// Calendar (§3): the below-Silver circuit is drawn fresh each game year from the
-// seed — every league is GUARANTEED at least one event per quarter, sometimes
-// two, in unpredictable months (never a fixed monthly slot). Repeating these is
-// the game's financial backbone; scarcity makes the calendar worth planning
-// around. Silver+ are fixed one-per-year prestige events. A monster may also
-// enter BELOW its league at reduced rewards (§rewardMultiplier).
+// Calendar (§3): drawn fresh each game year from the seed. Every league from
+// Wood through Platinum is GUARANTEED at least one cup per quarter, sometimes
+// two, in unpredictable months (never a fixed monthly slot) — repeating these
+// is the game's financial backbone, and scarcity makes the calendar worth
+// planning around. Masters and Tamer Elite deliberately run at HALF that
+// density (user spec 2026-07-25: "all leagues must have a similar number of
+// cups until masters. Masters + Tamer elite will have half the number of
+// cups") — see ACTIVE_QUARTERS_BY_LEAGUE below. Silver through Tamer Elite
+// additionally each get ONE fixed annual marquee "prestige" event (hand-
+// authored lore, bigger reward) layered into their own calendar — it occupies
+// one league-year slot rather than adding an extra one on top, so total cup
+// counts stay comparable across leagues instead of stacking a bonus event
+// onto whichever leagues happen to have one. A monster may also enter BELOW
+// its league at reduced rewards (§rewardMultiplier).
 export const CIRCUIT_REWARDS: Record<string, { gold: number; exp: number }> = {
   Wood: { gold: 100, exp: 50 },
   Copper: { gold: 150, exp: 75 },
   Tin: { gold: 200, exp: 100 },
   Bronze: { gold: 250, exp: 125 },
   Iron: { gold: 300, exp: 150 },
+}
+
+// The "regular" (non-marquee) cup reward for the 5 leagues that ALSO run one
+// fixed annual marquee event — continues CIRCUIT_REWARDS' exact +50g/+25exp
+// per league step, so a Silver pool cup feels like a natural continuation of
+// the circuit ladder rather than a discontinuity. The marquee's own reward
+// (PRESTIGE_EVENTS below) is deliberately bigger, so it still feels special.
+export const PRESTIGE_POOL_REWARDS: Record<string, { gold: number; exp: number }> = {
+  Silver: { gold: 350, exp: 175 },
+  Gold: { gold: 400, exp: 200 },
+  Platinum: { gold: 450, exp: 225 },
+  Masters: { gold: 500, exp: 250 },
+  'Tamer Elite': { gold: 550, exp: 275 },
 }
 
 // Event names (user spec 2026-07-20): never named after a month, unique within
@@ -53,12 +74,29 @@ const CIRCUIT_EVENT_NAMES: Record<string, string[]> = {
   Iron: ['The Anvil Championship', 'Hammerfall Cup', 'The Forge Trials', 'Ironclad Open', "The Smelter's Stand", 'Blackfurnace Bout', 'The Iron Gauntlet', 'Quenchfire Classic'],
 }
 
+// Pool-cup name lists for the 5 marquee-bearing leagues (2026-07-25) — same
+// role as CIRCUIT_EVENT_NAMES, just for the "regular" cups that fill out the
+// rest of these leagues' calendar alongside their one fixed marquee event.
+// Distinct strings from the marquee names (Silver Crescent, Gilded Crown,
+// etc.) so nothing ever collides in the same year.
+const PRESTIGE_POOL_NAMES: Record<string, string[]> = {
+  Silver: ['The Quicksilver Open', 'Sterling Cup', 'The Moonlit Melee', 'Argent Trials', 'The Hallmark Bout', 'Frostplate Championship', 'The Mercury Clash', 'The Silver Standard'],
+  Gold: ['The Sovereign Cup', 'Bullion Brawl', 'The Sunforge Championship', 'Treasury Trials', 'The Gold Standard Open', 'Aurum Ascendant', 'The Ducat Clash', 'The Midas Reckoning'],
+  Platinum: ['The Platinum Vanguard', 'Diamond Point Open', 'The Adamant Trials', 'Starforge Championship', 'The Prism Cup', 'Luminous Classic', 'The Zenith Brawl', 'Crystalline Clash'],
+  Masters: ["The Sovereign's Gauntlet", "Champion's Reckoning", 'The Undefeated Cup', 'Legacy Trials', "The Ascendant's Bout", 'Crownless Championship', 'The Elder Circuit', 'Masterwork Melee'],
+  'Tamer Elite': ['The Zenith Accord', 'Pinnacle Proving', 'The Ultimatum Cup', 'Peerless Championship', 'The Reckoning', 'Ascendancy Trials', 'The Final Word', 'The Undisputed'],
+}
+
+// Marquee rewards bumped 2026-07-25 (were 350/400/450/500/600) to stay
+// clearly bigger than PRESTIGE_POOL_REWARDS for the same league — otherwise
+// a Silver pool cup and the Silver Crescent would pay identically, and the
+// "marquee" framing (hand-authored lore, once-a-year) would feel hollow.
 export const PRESTIGE_EVENTS: Omit<Tournament, 'id'>[] = [
-  { name: 'The Silver Crescent', month: 6, week: 2, league: 'Silver', rewards: { gold: 350, exp: 175 } },
-  { name: 'The Gilded Crown', month: 7, week: 2, league: 'Gold', rewards: { gold: 400, exp: 200 } },
-  { name: 'The Radiant Throne', month: 8, week: 2, league: 'Platinum', rewards: { gold: 450, exp: 225 } },
-  { name: "The Grandmasters' Summit", month: 9, week: 2, league: 'Masters', rewards: { gold: 500, exp: 250 } },
-  { name: 'The Apex Invitational', month: 10, week: 2, league: 'Tamer Elite', rewards: { gold: 600, exp: 300 } },
+  { name: 'The Silver Crescent', month: 6, week: 2, league: 'Silver', rewards: { gold: 500, exp: 250 } },
+  { name: 'The Gilded Crown', month: 7, week: 2, league: 'Gold', rewards: { gold: 550, exp: 275 } },
+  { name: 'The Radiant Throne', month: 8, week: 2, league: 'Platinum', rewards: { gold: 600, exp: 300 } },
+  { name: "The Grandmasters' Summit", month: 9, week: 2, league: 'Masters', rewards: { gold: 650, exp: 325 } },
+  { name: 'The Apex Invitational', month: 10, week: 2, league: 'Tamer Elite', rewards: { gold: 700, exp: 350 } },
 ]
 
 // Cup lore (user spec 2026-07-22): a pre-cup preamble (prize money + a line of
@@ -143,33 +181,61 @@ export const placementLabel = (placement: number): string => {
 
 export const yearOfWeek = (week: number) => Math.floor(week / WEEKS_PER_YEAR)
 
-// Draw the year's tournament calendar. Deterministic per (seed, year): each
-// circuit league gets 1 event per quarter, ~40% of quarters get a second one,
-// each landing on a specific (unpredictable) week within its month.
+// Every league's regular ("pool") cup reward + name list in one place, so the
+// generator below doesn't need to know Wood-Iron and Silver-TamerElite are
+// sourced from two historically-separate tables.
+const POOL_REWARDS: Record<string, { gold: number; exp: number }> = { ...CIRCUIT_REWARDS, ...PRESTIGE_POOL_REWARDS }
+const POOL_NAMES: Record<string, string[]> = { ...CIRCUIT_EVENT_NAMES, ...PRESTIGE_POOL_NAMES }
+
+// Which of the 4 quarters actually run the "guaranteed cup" draw at all
+// (user spec 2026-07-25 — Masters/Tamer Elite run at HALF the density of
+// every league below them). Omitted leagues default to all 4 (full density).
+// Each halved league's own marquee quarter is deliberately one of its 2
+// active quarters, so the marquee doesn't land in an otherwise-dead quarter.
+const ACTIVE_QUARTERS_BY_LEAGUE: Record<string, number[]> = {
+  Masters: [0, 2], // Q1 + Q3 — Q3 holds the Grandmasters' Summit (month 9)
+  'Tamer Elite': [1, 3], // Q2 + Q4 — Q4 holds the Apex Invitational (month 10)
+}
+export const activeQuartersFor = (league: string): number[] => ACTIVE_QUARTERS_BY_LEAGUE[league] ?? [0, 1, 2, 3]
+
+// Draw the year's tournament calendar. Deterministic per (seed, year): every
+// league Wood through Platinum gets 1 cup per active quarter (all 4 of them),
+// ~40% chance of a second — Masters/Tamer Elite only have 2 active quarters,
+// giving them roughly half as many cups a year as everyone below them. The 5
+// marquee-bearing leagues (Silver+) slot their one fixed annual event into
+// its own quarter as THAT quarter's guaranteed cup (not an addition on top),
+// so total yearly cup counts stay comparable across every league.
 export function tournamentCalendarFor(seed: string, year: number): Tournament[] {
   const out: Tournament[] = []
-  for (const league of Object.keys(CIRCUIT_REWARDS)) {
+  const marqueeByLeague = new Map(PRESTIGE_EVENTS.map((p) => [p.league, p]))
+  for (const league of Object.keys(POOL_REWARDS)) {
     const rng = mulberry32(hashString(seed + ':calendar:' + year + ':' + league))
-    const names = [...CIRCUIT_EVENT_NAMES[league]]
+    const names = [...POOL_NAMES[league]]
     const takeName = () => names.length ? names.splice(Math.floor(rng() * names.length), 1)[0] : `${league} Open`
-    for (let q = 0; q < 4; q++) {
-      const months = [q * 3 + 1, q * 3 + 2, q * 3 + 3]
-      const count = rng() < 0.4 ? 2 : 1
-      for (let i = 0; i < count; i++) {
+    const marquee = marqueeByLeague.get(league)
+    const marqueeQuarter = marquee ? Math.floor((marquee.month - 1) / 3) : -1
+    if (marquee) out.push({ ...marquee, id: `${league.toLowerCase().replace(' ', '-')}-y${year}-m${marquee.month}` })
+    for (const q of activeQuartersFor(league)) {
+      const months = [q * 3 + 1, q * 3 + 2, q * 3 + 3].filter((m) => m !== marquee?.month)
+      // The marquee IS this quarter's guaranteed cup — only roll the ~40%
+      // bonus slot here, not a second guaranteed one (else Silver etc. would
+      // out-pace Wood-Iron instead of matching them).
+      const guaranteed = q === marqueeQuarter ? 0 : 1
+      const count = guaranteed + (rng() < 0.4 ? 1 : 0)
+      for (let i = 0; i < count && months.length; i++) {
         const month = months.splice(Math.floor(rng() * months.length), 1)[0]
         // Trial months (4/8/12) reserve Week 4 for the rank-up trials — circuit
         // events there land Weeks 1-3 only, so no event count is ever lost.
         const weekChoices = RANK_UP_MONTHS.includes(month) ? WEEKS_PER_MONTH - 1 : WEEKS_PER_MONTH
         const week = 1 + Math.floor(rng() * weekChoices)
         out.push({
-          id: `${league.toLowerCase()}-y${year}-m${month}`,
+          id: `${league.toLowerCase().replace(' ', '-')}-y${year}-m${month}`,
           name: takeName(), month, week, league,
-          rewards: CIRCUIT_REWARDS[league],
+          rewards: POOL_REWARDS[league],
         })
       }
     }
   }
-  for (const p of PRESTIGE_EVENTS) out.push({ ...p, id: `${p.league.toLowerCase().replace(' ', '-')}-y${year}-m${p.month}` })
   return out.sort((a, b) => a.month - b.month || a.week - b.week || leagueIndexOf(a.league) - leagueIndexOf(b.league))
 }
 

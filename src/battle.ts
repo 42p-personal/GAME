@@ -33,7 +33,7 @@ export type BattleEvent =
   | { kind: 'status'; side: BattleSide; slot: number; status: StatusKind } // side/slot = the afflicted
   | { kind: 'dot'; side: BattleSide; slot: number; status: 'burn' | 'poison' | 'bleed' | 'doom'; amount: number }
   | { kind: 'skip'; side: BattleSide; slot: number; reason: 'stun' | 'fear' | 'sleep' }
-  | { kind: 'snap'; states: { side: BattleSide; slot: number; hp: number; mana: number; ward: number }[] }
+  | { kind: 'snap'; states: { side: BattleSide; slot: number; hp: number; mana: number; ward: number; statuses: StatusKind[] }[] }
   | { kind: 'end'; winner: 'A' | 'B' | 'draw' }
 
 // Passive effects granted by innate abilities (§8.3, reworked 2026-07-25:
@@ -1151,7 +1151,10 @@ export function simulateTeamBattle(teamA: Monster[], teamB: Monster[], happA: nu
   const ev: BattleEvent[] = []
   const snap = () => ev.push({
     kind: 'snap',
-    states: ctx.all.map((c) => ({ side: c.side, slot: c.slot, hp: Math.max(0, c.hp), mana: Math.round(Math.max(0, c.mana)), ward: c.ward })),
+    states: ctx.all.map((c) => ({
+      side: c.side, slot: c.slot, hp: Math.max(0, c.hp), mana: Math.round(Math.max(0, c.mana)), ward: c.ward,
+      statuses: c.statuses.map((s) => s.kind),
+    })),
   })
 
   if (teamA.length === 1 && teamB.length === 1) {

@@ -10,6 +10,7 @@ import { BattleEvent, BattleResult, BattleSide } from './battle'
 import { Channel, Element, Monster, StatusKind } from './core'
 import { maxHp, maxMana } from './monster'
 import { Sprite } from './Sprite'
+import { backgroundFor } from './leagueArt'
 
 const ELEMENT_COLOR: Record<Element, string> = { fire: '#ff7043', water: '#4fc3f7', earth: '#a1887f', air: '#b0bec5' }
 const CHANNEL_COLOR: Record<Channel, string> = { melee: '#eee', ranged: '#ffd54f', magic: '#ba68c8', voice: '#f48fb1', support: '#80cbc4' }
@@ -18,8 +19,20 @@ const STATUS_ICON: Record<StatusKind, string> = {
   bleed: '🩸', silence: '🤐', vulnerable: '🎯', sleep: '😴', doom: '💀', healblock: '🚫', haste: '⚡', charm: '💞',
 }
 
+// Live status-effect row (2026-07-25 "more information" addition) — reads the
+// per-round `snap` event's own status list, so this reflects what's actually
+// active right now rather than guessing from transient floats.
+function StatusIcons({ statuses }: { statuses: StatusKind[] }) {
+  if (!statuses.length) return null
+  return (
+    <div className="status-row">
+      {statuses.map((s, i) => <span key={i} className="status-chip" title={s}>{STATUS_ICON[s]}</span>)}
+    </div>
+  )
+}
+
 interface FloatFx { id: number; side: BattleSide; slot: number; text: string; cls: string }
-interface BarState { hp: number; mana: number; ward: number }
+interface BarState { hp: number; mana: number; ward: number; statuses: StatusKind[] }
 type Bars = Record<string, BarState> // keyed by `${side}${slot}`
 
 // Per-move visual identity (user spec 2026-07-25: "a claw raking the enemy, a
@@ -97,16 +110,17 @@ function MoveFx({ fx }: { fx: Fx }) {
   return null
 }
 
-export function ArenaBattle({ teamA, teamB, result, onDone }: { teamA: Monster[]; teamB: Monster[]; result: BattleResult; onDone?: () => void }) {
+export function ArenaBattle({ teamA, teamB, result, league, onDone }: { teamA: Monster[]; teamB: Monster[]; result: BattleResult; league?: string; onDone?: () => void }) {
   const is1v1 = teamA.length === 1 && teamB.length === 1
   const events = result.events
+  const bgImage = useMemo(() => backgroundFor(league), [league])
 
   const [idx, setIdx] = useState(0)
   const [speed, setSpeed] = useState(1)
   const [bars, setBars] = useState<Bars>(() => {
     const out: Bars = {}
-    teamA.forEach((m, i) => { out[barKey('A', i)] = { hp: Math.min(m.hp ?? maxHp(m.stats), maxHp(m.stats)), mana: Math.min(m.mp ?? maxMana(m.stats), maxMana(m.stats)), ward: 0 } })
-    teamB.forEach((m, i) => { out[barKey('B', i)] = { hp: Math.min(m.hp ?? maxHp(m.stats), maxHp(m.stats)), mana: Math.min(m.mp ?? maxMana(m.stats), maxMana(m.stats)), ward: 0 } })
+    teamA.forEach((m, i) => { out[barKey('A', i)] = { hp: Math.min(m.hp ?? maxHp(m.stats), maxHp(m.stats)), mana: Math.min(m.mp ?? maxMana(m.stats), maxMana(m.stats)), ward: 0, statuses: [] } })
+    teamB.forEach((m, i) => { out[barKey('B', i)] = { hp: Math.min(m.hp ?? maxHp(m.stats), maxHp(m.stats)), mana: Math.min(m.mp ?? maxMana(m.stats), maxMana(m.stats)), ward: 0, statuses: [] } })
     return out
   })
   const [round, setRound] = useState(0)
@@ -179,7 +193,7 @@ export function ArenaBattle({ teamA, teamB, result, onDone }: { teamA: Monster[]
       case 'snap':
         setBars((prev) => {
           const next = { ...prev }
-          for (const s of e.states) next[barKey(s.side, s.slot)] = { hp: s.hp, mana: s.mana, ward: s.ward }
+          for (const s of e.states) next[barKey(s.side, s.slot)] = { hp: s.hp, mana: s.mana, ward: s.ward, statuses: s.statuses }
           return next
         })
         return 30
@@ -233,7 +247,7 @@ export function ArenaBattle({ teamA, teamB, result, onDone }: { teamA: Monster[]
     if (lastSnap) {
       setBars((prev) => {
         const next = { ...prev }
-        for (const s of lastSnap.states) next[barKey(s.side, s.slot)] = { hp: s.hp, mana: s.mana, ward: s.ward }
+        for (const s of lastSnap.states) next[barKey(s.side, s.slot)] = { hp: s.hp, mana: s.mana, ward: s.ward, statuses: s.statuses }
         return next
       })
     }
@@ -341,28 +355,35 @@ export function ArenaBattle({ teamA, teamB, result, onDone }: { teamA: Monster[]
       <div className="battle-arena">
         <div className="arena-hud">
           <div className="arena-fighter-hud">
-            <div className="ahn">{a.name} <span className="dim">· {a.className}</span></div>
+            <div className="ahn">{a.name} <span className="dim">· {a.species.name} · {a.className}</span></div>
             <div className="abar hp"><i style={{ width: `${(aBar.hp / aMax.hp) * 100}%` }} /><span>{aBar.hp}/{aMax.hp}</span></div>
             <div className="abar mp"><i style={{ width: `${aMax.mana > 0 ? (aBar.mana / aMax.mana) * 100 : 0}%` }} /><span>{aBar.mana} MP</span></div>
-            {aBar.ward > 0 && <div className="award">🛡 shield {aBar.ward}</div>}
+            <div className="ahud-row">
+              {aBar.ward > 0 && <div className="award">🛡 shield {aBar.ward}</div>}
+              <StatusIcons statuses={aBar.statuses} />
+            </div>
           </div>
           <div className="arena-round">{done ? (result.winner === 'draw' ? '🏳️ Draw' : `🏆 ${result.winnerName}`) : round > 0 ? `Round ${round}` : '⚔️'}</div>
           <div className="arena-fighter-hud right">
-            <div className="ahn">{b.name} <span className="dim">· {b.className}</span></div>
+            <div className="ahn">{b.name} <span className="dim">· {b.species.name} · {b.className}</span></div>
             <div className="abar hp"><i style={{ width: `${(bBar.hp / bMax.hp) * 100}%` }} /><span>{bBar.hp}/{bMax.hp}</span></div>
             <div className="abar mp"><i style={{ width: `${bMax.mana > 0 ? (bBar.mana / bMax.mana) * 100 : 0}%` }} /><span>{bBar.mana} MP</span></div>
-            {bBar.ward > 0 && <div className="award">🛡 shield {bBar.ward}</div>}
+            <div className="ahud-row right">
+              {bBar.ward > 0 && <div className="award">🛡 shield {bBar.ward}</div>}
+              <StatusIcons statuses={bBar.statuses} />
+            </div>
           </div>
         </div>
 
-        <div className={'arena-floor' + (fx?.crit ? ' shake' : '')}>
+        <div className={'arena-floor' + (fx?.crit ? ' shake' : '')} style={{ backgroundImage: `url(${bgImage})` }}>
+          <div className="arena-floor-scrim" />
           <div className={fighterCls('A') + ko('A')}>
-            <Sprite species={a.species} size={84} />
+            <Sprite species={a.species} size={176} />
             <div className="floats">{floatsFor('A', 0)}</div>
           </div>
           {fx && <MoveFx fx={fx} />}
           <div className={fighterCls('B') + ko('B')}>
-            <span className="mirror"><Sprite species={b.species} size={84} /></span>
+            <span className="mirror"><Sprite species={b.species} size={176} /></span>
             <div className="floats">{floatsFor('B', 0)}</div>
           </div>
         </div>
@@ -402,11 +423,13 @@ export function ArenaBattle({ teamA, teamB, result, onDone }: { teamA: Monster[]
     const fxStyle = (acting || impacted) && fx?.color ? ({ '--fx-color': fx.color } as Record<string, string>) : undefined
     return (
       <div className={cls} key={slot} title={m.name} style={fxStyle}>
-        <Sprite species={m.species} size={40} />
+        <Sprite species={m.species} size={60} />
         <div className="rt-name">{m.name}</div>
+        <div className="rt-class dim">{m.className}</div>
         <div className="rt-bar hp"><i style={{ width: `${Math.max(0, (bar.hp / hpMax) * 100)}%` }} /></div>
         <div className="rt-bar mp"><i style={{ width: `${mpMax > 0 ? Math.max(0, (bar.mana / mpMax) * 100) : 0}%` }} /></div>
         {bar.ward > 0 && <div className="rt-ward">🛡{bar.ward}</div>}
+        <StatusIcons statuses={bar.statuses} />
         <div className="floats">{floatsFor(side, slot)}</div>
       </div>
     )
@@ -418,7 +441,8 @@ export function ArenaBattle({ teamA, teamB, result, onDone }: { teamA: Monster[]
         <div className="arena-round">{done ? (result.winner === 'draw' ? '🏳️ Draw' : `🏆 ${result.winnerName}`) : round > 0 ? `Round ${round}` : '⚔️'}</div>
       </div>
 
-      <div className={'arena-floor team-floor'}>
+      <div className={'arena-floor team-floor'} style={{ backgroundImage: `url(${bgImage})` }}>
+        <div className="arena-floor-scrim" />
         <div className="roster roster-a">{teamA.map((_, i) => renderTile('A', i))}</div>
         <div className="roster-vs">vs</div>
         <div className="roster roster-b">{teamB.map((_, i) => renderTile('B', i))}</div>
