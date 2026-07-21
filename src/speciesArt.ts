@@ -6,9 +6,12 @@
 // applying the existing aging CSS filter over it, same as Sprite.tsx already
 // did for the old hand-drawn grids. Files live in `public/sprites/<id>.png`,
 // 320x320 RGBA, trimmed to content + a small even margin.
-// The 15 exclusive-body species (Draconic/Abyssal/Mythical) have NO entry
-// here yet — they still fall back to the generic body-type pixel grid in
-// sprites.ts. Not an oversight; real art for them is a follow-up pass.
+// The 15 exclusive-body species (Draconic/Abyssal/Mythical) got their own
+// real-art pass on 2026-07-25 too, following this exact recipe — every base
+// and exclusive species now renders real art; the sprites.ts pixel-grid path
+// is retained only as Sprite.tsx's structural fallback (still required by
+// the SPRITES[body] lookup for type-safety) and is no longer reached by any
+// species in practice.
 export const SPECIES_ART: Partial<Record<string, string>> = {
   kongrath: '/sprites/kongrath.png',
   aegisox: '/sprites/aegisox.png',
@@ -40,4 +43,19 @@ export const SPECIES_ART: Partial<Record<string, string>> = {
   serpwyn: '/sprites/serpwyn.png',
   geckari: '/sprites/geckari.png',
   tortavos: '/sprites/tortavos.png',
+  pyraxon: '/sprites/pyraxon.png',
+  frostwyren: '/sprites/frostwyren.png',
+  stormlerath: '/sprites/stormlerath.png',
+  verdantdrake: '/sprites/verdantdrake.png',
+  voidmaw: '/sprites/voidmaw.png',
+  tenebrae: '/sprites/tenebrae.png',
+  abyssomancer: '/sprites/abyssomancer.png',
+  lurkerss: '/sprites/lurkerss.png',
+  'chrono-leviathan': '/sprites/chrono-leviathan.png',
+  cephalumbra: '/sprites/cephalumbra.png',
+  titanrex: '/sprites/titanrex.png',
+  stellarion: '/sprites/stellarion.png',
+  wisdomkeeper: '/sprites/wisdomkeeper.png',
+  'archmage-aleph': '/sprites/archmage-aleph.png',
+  harmonybringer: '/sprites/harmonybringer.png',
 }

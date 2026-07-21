@@ -1,11 +1,12 @@
-// Species portrait. The 30 base species (2026-07-25) render their real
+// Species portrait. All 45 species (2026-07-25) render their real
 // hand-generated art (see speciesArt.ts) — the same adult image at every
 // life stage, since per-stage generation produced worse results (see
-// CLAUDE.md). Species without real art yet (the 15 exclusive-body species)
-// fall back to the original hand-authored body-type pixel-grid silhouette,
-// tinted by a per-species hue. 'Elder'/'Retiree' render visually aged
-// (desaturated, dimmed) rather than needing separate art, since a monster's
-// proportions don't change further at that point — only its condition does.
+// CLAUDE.md). The body-type pixel-grid silhouette below is a structural
+// fallback only (kept for type-safety and in case a future species ships
+// without art yet) — no species reaches it in practice today.
+// 'Elder'/'Retiree' render visually aged (desaturated, dimmed) rather than
+// needing separate art, since a monster's proportions don't change further
+// at that point — only its condition does.
 import { useMemo, type CSSProperties } from 'react'
 import { Species, hashString } from './core'
 import { SPRITES, palette } from './sprites'

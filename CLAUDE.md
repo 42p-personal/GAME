@@ -32,6 +32,9 @@ transparency fix + old-sprite-set removal. A user-provided fresh Cloudflare API 
 (`cfut_...`) was what made diagnosing and fixing this possible — `wrangler`'s previous token was
 invalid, blocking any direct visibility into build status.
 
+**Item -38 (real sprite art for the 15 exclusive-body species) is UNCOMMITTED** — build/typecheck/
+test/browser-verified, awaiting explicit commit instruction. See its own entry below.
+
 **STANDING ISSUE, not yet permanently fixed: Cloudflare's git-triggered auto-deploy is
 unreliable and manual `npm run deploy` is currently the only dependable path to production.**
 After the lockfile fix, `39272a2`'s `main` build succeeded but its `preview` build failed with
@@ -82,6 +85,56 @@ individually. If battle balance feels off in play, that pass plus the later dama
 CON/turn-order changes are the tuning knobs to revisit.
 
 ### What changed this session, newest first
+
+-38. **Real sprite art for the 15 exclusive-body species (2026-07-25), build/typecheck/test/
+    browser-verified, uncommitted.** Direct follow-on to item -37's "Stormlerath looks wrong"
+    observation — the Draconic/Abyssal/Mythical species were the last 15 of 45 still on the
+    old fallback pixel-grid silhouette after item -34 covered the 30 base species. User: "can we
+    generate the remaining images in that case?" Same `gpt-image-2` → `rembg` → hole-cleanup →
+    `sharp` trim/pad/resize pipeline as item -34, with the item -34 pose-uniqueness lesson applied
+    from the START this time (each of the 15 was written with a distinct dynamic pose up front —
+    no redo pass was needed) — Pyraxon (fire-breath roar), Frostwyren (calm ice-cast), Stormlerath
+    (lightning lunge), Verdantdrake (rooted vine-warding stance), Voidmaw (cosmic rift-summon),
+    Tenebrae (ambush ink-cloud crouch), Abyssomancer (floating eldritch cast), Lurkerss (coiled
+    contemplative pose), Chrono-Leviathan (massive barnacle-crusted stance with orbiting time-
+    glyphs), Cephalumbra (phase-strike with solid-navy speed afterimages), Titanrex (ground-stomp
+    roar), Stellarion (mid-shot celestial archer), Wisdomkeeper (serene floating oracle),
+    Archmage-Aleph (dual-handed spellcast with a rune circle), Harmonybringer (conducting
+    performance with flat-colored musical motifs).
+    - **New failure modes hit and fixed, beyond item -34's known list**: (1) running two
+      `gen.sh` calls in the background in parallel caused the shared skill's output-extraction to
+      return the SAME (wrong) image for both — confirmed via matching md5 checksums between
+      Frostwyren's and Stormlerath's first-attempt outputs — fixed by serializing every
+      generation from that point on (one `gen.sh` call at a time, waited to completion); (2)
+      Cephalumbra's first attempt used pale near-white "ghostly translucent" afterimages, which
+      is exactly the color range the background-removal pipeline treats as removable — regenerated
+      with the same speed-blur concept but solid flat navy-blue afterimages instead; (3)
+      Archmage-Aleph's first attempt had a soft glow/haze effect around its rune circle that
+      confused `rembg`'s segmentation badly enough to leave a huge fully-opaque white disc filling
+      most of the canvas (not a small cleanable remnant — regenerated with explicit "no glow, no
+      bloom, no haze, crisp thin line-art only" language, which fixed it); (4) Frostwyren and
+      Wisdomkeeper are both deliberately pale ice-white/ivory-robed designs, so the usual
+      whitish-pixel hole-cleanup script (safe for every other species) was confirmed via a green-
+      background composite check to eat large chunks of their own bodies — both were shipped on
+      the plain `rembg` output with the cleanup pass skipped entirely, same as a species-specific
+      exception, verified clean by direct visual check first.
+    - **`src/speciesArt.ts`** gained all 15 new `SPECIES_ART` entries (ids match `species.ts`
+      exactly, including the hyphenated `chrono-leviathan` and `archmage-aleph`); its header
+      comment updated from "30 base species... 15 exclusive have NO entry yet" to reflect that
+      all 45 now have real art. **`src/Sprite.tsx`**'s header comment updated to match — the
+      `SPRITES[body]` pixel-grid path is now a structural fallback only (kept for type-safety),
+      not reached by any species in practice.
+    - Verified: `tsc --noEmit`/production build/`npm test` (12/12) all clean; `public/sprites/`
+      and `dist/sprites/` both confirmed to hold all 45 files; a live dev-server pass confirmed
+      all 15 new sprite URLs load at the expected 320×320 via a direct `Image()` probe, the
+      `SPECIES_ART` module resolves all 45 keys with zero missing, and the live Bestiary's actual
+      rendered `<img>` tags (not just a standalone fetch check) show two of the new exclusive
+      species (Harmonybringer, Tenebrae) loading correctly with `naturalWidth` intact — zero
+      broken images, zero SVG-fallback elements present, zero console errors. The Browser pane's
+      screenshot/computer tools had transient hangs during this pass (coinciding with Vite HMR
+      reconnect noise in the console, unrelated to the code change) — verification leaned on
+      JS-evaluated DOM/network checks instead, same fallback pattern used in item -17 when the
+      screenshot tool was previously unavailable.
 
 -37. **Arena sprite transparency + old-sprite-set removal (2026-07-25), build/typecheck/test/
     browser-verified, committed.** User flagged a live screenshot: sprites in the 1v1 arena sat
@@ -1915,11 +1968,11 @@ Base: Mammal, Avian, Marsupial, Aquatic, Insectoid, Reptilian. Exclusive: Dracon
   lifespans (4–6y) are currently fixed at generation.
 - **First-time tutorial** — no onboarding exists; a new player has zero in-game guidance.
 - **Rare tournament item drops** — champion-only rewards, TBD. No item/inventory system exists at all yet.
-- **Unique per-species sprites — DONE for the 30 base species** (2026-07-25, item -34): real
-  generated art in `public/sprites/`, wired via `src/speciesArt.ts`. Still on the fallback 16×16
-  shared-silhouette grid (`src/sprites.ts`): the 15 exclusive-body species (Draconic/Abyssal/
-  Mythical) — explicitly deferred, not forgotten. `docs/BESTIARY.md`'s Appearance lines remain
-  useful reference for whenever those get their own pass.
+- ~~Unique per-species sprites~~ **DONE for all 45 species** (2026-07-25, items -34 and -38): real
+  generated art in `public/sprites/`, wired via `src/speciesArt.ts` — the 30 base species landed
+  in item -34, the 15 exclusive-body species (Draconic/Abyssal/Mythical) followed in item -38.
+  `src/sprites.ts`'s 16×16 shared-silhouette grid is now a structural fallback only, not reached
+  by any species in practice.
 
 ---
 
@@ -1937,13 +1990,13 @@ Base: Mammal, Avian, Marsupial, Aquatic, Insectoid, Reptilian. Exclusive: Dracon
 | `src/battle.ts` | Auto-battle sim: mana, innates, ultimates, round-based mods, BattleEvent stream |
 | `src/arena.tsx` | Animated arena replay (plays BattleEvent[] as live beats); league backgrounds + live status HUD |
 | `src/leagueArt.ts` | League name → arena background JPEG lookup (`public/backgrounds/`) |
-| `src/Sprite.tsx` | Species portrait component: real art (`speciesArt.ts`) for the 30 base species, 16×16 pixel-grid fallback for the 15 exclusives |
-| `src/speciesArt.ts` | Species id → `/sprites/<id>.png` lookup for the 30 base species' real art |
-| `public/sprites/` | The real generated sprite PNGs (320×320 RGBA), one per base species, adult-only |
+| `src/Sprite.tsx` | Species portrait component: real art (`speciesArt.ts`) for all 45 species; 16×16 pixel-grid is a structural fallback only, not reached in practice |
+| `src/speciesArt.ts` | Species id → `/sprites/<id>.png` lookup, all 45 species |
+| `public/sprites/` | The real generated sprite PNGs (320×320 RGBA), one per species (all 45), adult-only |
 | `src/bestiary.ts` | In-game condensed species bios (BIOS record) |
 | `src/validate.ts` | Design consistency checks (species/class/element/calendar/moves/statuses/innate-table/reward-sync) — `designProblems()` feeds both the dev console and the test suite |
 | `src/*.test.ts` | Vitest suite (`npm test`): design consistency, loadout invariants, status stack/refresh rules, golden battle regressions |
-| `src/sprites.ts` | 16×16 pixel art per body type — now only reached by the 15 exclusive-body species |
+| `src/sprites.ts` | 16×16 pixel art per body type — structural fallback only since item -38, not reached by any species in practice |
 | `docs/BESTIARY.md` | Full lore doc: all 30 base species, appearance + backstory, 6 body-type themes |
 | `docs/ABILITIES.md` | Full 90-move reference table + per-stat design philosophy |
 | `docs/GAME_DESIGN.md` | Original design doc — increasingly stale in places (predates several
