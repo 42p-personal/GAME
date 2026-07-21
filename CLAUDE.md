@@ -30,11 +30,27 @@ backgrounds + bigger sprites + live status HUD, a `package-lock.json` drift fix 
 this whole time despite multiple successful-looking `git push`es), and item -37's arena-sprite
 transparency fix + old-sprite-set removal. A user-provided fresh Cloudflare API token
 (`cfut_...`) was what made diagnosing and fixing this possible — `wrangler`'s previous token was
-invalid, blocking any direct visibility into build status. **One residual oddity, not blocking**:
-the `preview` deploy for `39272a2` failed with an unrelated `EBADPLATFORM` npm error on an
-optional esbuild package, while the `main` deploy for the exact same commit/lockfile succeeded
-seconds earlier — looks like a one-off Cloudflare build-container flake rather than a real
-problem, since `tamergame.42p.uk` (production, tracking `main`) is confirmed live and correct.
+invalid, blocking any direct visibility into build status.
+
+**STANDING ISSUE, not yet permanently fixed: Cloudflare's git-triggered auto-deploy is
+unreliable and manual `npm run deploy` is currently the only dependable path to production.**
+After the lockfile fix, `39272a2`'s `main` build succeeded but its `preview` build failed with
+`npm error code EBADPLATFORM — Unsupported platform for @esbuild/aix-ppc64@0.28.1` (a nested nested
+optional nested dependency under BOTH `vitest` and `wrangler`'s own `node_modules`) — first read
+as a one-off Cloudflare build-container flake. It was NOT: the very next commit (`f636e0f`,
+lockfile untouched) failed this exact same way on BOTH `main` AND `preview`. Root cause is almost
+certainly an npm@10.9.2-specific bug (Cloudflare's build image is pinned to
+`npm@10.9.2`/`nodejs@22.16.0`) in how it platform-validates deeply-nested duplicate optional
+dependencies — `npm ci` never fails locally (npm@11.13.0), and the lockfile itself is confirmed
+correct (`npm ci` verified clean standalone, twice). **Deliberately NOT attempted yet**: forcing
+a single esbuild version repo-wide via package.json `overrides` (the real permanent fix, since it
+would eliminate the duplicate nested trees entirely) — skipped for now because it needs its own
+dedicated test pass to confirm vite/vitest's internal tooling tolerates a forced version, and
+Cloudflare's actual production site needed to be correctly live immediately rather than risk an
+unvalidated dependency change. **Until this is properly fixed**: after every push, check
+`npx wrangler pages deployment list --project-name game` (needs a valid `CLOUDFLARE_API_TOKEN`)
+for `Failure` on the new commit, and if so, run `npm run deploy` directly — confirmed reliable
+three times this session, bypasses the git integration and its npm bug entirely.
 
 **Real sprite art now ships for all 30 base species — item -34, the big one this session.**
 The `docs/sprites/` painterly set mentioned in earlier handovers (baked-in pedestal artifact,
