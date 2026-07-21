@@ -12,30 +12,32 @@ chooseLoadout auto-pick fix — see each item's own entry below for what shipped
 **Item -28 (per-move arena VFX) is COMMITTED and DEPLOYED** (`02618f3`, same
 preview→main→push pipeline as above).
 
-**Item -29 (title screen + 3-slot saves, this session) is UNCOMMITTED on `preview`** (working
-tree has changes to `src/App.tsx`, `src/town.ts`, `src/styles.css`) — built and browser-verified
-end-to-end this session (title → new-game slot picker → name/tutorial setup → alpha disclaimer →
-tutorial banner → main menu → continue slot picker → resume, all live-clicked, zero console
-errors), just not yet committed since the user hasn't asked for another deploy pass.
+**Item -29 (title screen + 3-slot saves) is COMMITTED and DEPLOYED** (`57309a6`, same
+preview→main→push pipeline).
 
-**Sprites are on pause, not abandoned — but the capability picture changed this session.**
-The user rejected the flat-color procedural pixel grids twice (see item -21 and the follow-up
-feedback) in favour of a much richer hand-illustrated style. I now DO have a working image-
-generation pipeline (`codex`'s built-in `imagegen`, plus its fallback direct-API script at
-`$CODEX_HOME/skills/.system/imagegen/scripts/image_gen.py` — the one that actually works, since
-the built-in tool's `codex exec --sandbox read-only` has no network access) — auth, network, and
-the `openai` Python SDK are all confirmed working end-to-end. The ONLY remaining blocker is the
-user's OpenAI platform account itself: `billing_hard_limit_reached`. Next step, whenever picked
-back up: user checks/raises the limit at platform.openai.com/settings/organization/limits (or
-adds credit if it's genuinely a zero balance, not just a cap), confirms, and generation can start
-immediately — no further plumbing needed. If codex/`OPENAI_API_KEY` setup needs repeating in a
-fresh environment: `npm install -g @openai/codex` (binary) + `codex login` (already done, saved
-in `~/.codex`) + a `python3` shim if only `python` exists on PATH + `python -m pip install openai`
-+ read `OPENAI_API_KEY` from the Windows User-level registry env var into the shell before calling
-`image_gen.py` directly (bypassing `codex exec`'s sandboxed network entirely). `src/
-mammalSprites.ts` and `public/sprite-preview.html` (a dev-only, localhost-served page for
-visually checking sprite output — not part of the shipped game) are left in place for whenever
-real art lands.
+**Items -30 through -34 (review-fixes pass + vitest suite; 6v6-is-Tamer-Elite-only + ladder
+retune; playtest bug fixes; playtest suggestions; real per-species sprite art generation +
+integration, this session) are COMMITTED locally (`preview` merged to `main`) but NOT pushed to
+`origin` yet** — the user asked to "integrate and commit all," which this session's commit covers,
+but push/deploy is being left as an explicit separate confirmation rather than assumed, since it
+wasn't asked for in those words this time (contrast the earlier "commit all changes to live"
+phrasing for items -6 through -27, which explicitly meant push).
+
+**Real sprite art now ships for all 30 base species — item -34, the big one this session.**
+The `docs/sprites/` painterly set mentioned in earlier handovers (baked-in pedestal artifact,
+unfixable post-hoc) was abandoned in favor of a fresh pixel-art style generated via the
+`gpt-image-2` skill (Codex CLI's `imagegen` tool through the user's ChatGPT plan). Full recipe,
+problems hit, and fixes are in item -34's own entry below; short version: adult-only (no
+child/teen/elder — a scope call made mid-session, see that item), one real generation defect fixed
+(Iguanor's phantom limb), 8 poses redone for uniqueness after the user caught several species
+sharing the same "standing hero" silhouette, and a real bug fixed in the shared
+`extract_image.py` skill script (silently returned a `--ref` input image instead of the actual
+new output when the ref's base64 blob was larger — now reads the tool's own `saved_path` instead
+of guessing from blob size). `src/mammalSprites.ts` (the old hand-drawn 3-stage pixel grids) and
+`public/sprite-preview.html` (its dev-only preview page) are both DELETED, fully superseded —
+confirmed nothing else referenced either before removing. The 15 exclusive-body species
+(Draconic/Abyssal/Mythical) still render the old generic body-type pixel grid (`sprites.ts`) —
+explicitly deferred per the user's own call, alongside breeding/fusion depth, not an oversight.
 
 **Resolved**: the `Pinguox`/`Sylvaglide` flaw-vs-class-stat validator warning from the prior
 session is gone — user's call (2026-07-24) was to drop the flaw entirely for both rather than
@@ -50,6 +52,262 @@ individually. If battle balance feels off in play, that pass plus the later dama
 CON/turn-order changes are the tuning knobs to revisit.
 
 ### What changed this session, newest first
+
+-34. **Real per-species sprite art: generation + integration (2026-07-25), build/typecheck/test/
+    browser-verified, committed.** The single largest content pass this session — replaces every
+    base species' pixel-grid silhouette with actual hand-generated art.
+    - **Style pivot**: the `docs/sprites/` painterly set (mentioned in prior handovers) had a
+      pedestal/base artifact baked into ~115/120 images, confirmed unfixable by any post-hoc
+      method tried (color thresholding, shape-gating, real ML segmentation via rembg/u2net all
+      either destroyed real content or preserved the pedestal as legitimate composition). User
+      pivoted to a fresh pixel-art style instead, referencing a pasted raven image.
+    - **Pipeline built this session**: `gpt-image-2` skill's Codex CLI `imagegen` → mandatory
+      `rembg` (Python, u2net model) background removal, since the generator never emits a real
+      alpha channel regardless of prompt wording (caught a real mistake mid-session: I'd been
+      judging transparency from the Read tool's rendered preview and misread background noise as
+      a genuine checkerboard — confirmed via `pngjs` that 100% of earlier output had ZERO real
+      alpha) → a custom "cut enclosed near-white regions transparent" pass for soft rembg-matting
+      leftovers in gaps between limbs/tentacles (with an explicit protect-zone list so genuine
+      bright glow-effect art, e.g. Maelurk's held magic orb, doesn't get eaten by the same pass)
+      → a green-fringe/background-fluke check (the generator occasionally emits a solid green
+      background instead of white, a fluke that just needs a retry).
+    - **Adult-only scope call**: earlier in the session a full child/teen/adult/elder "evolution"
+      approach was attempted (with chained image-to-image references across stages for design
+      consistency), but chaining pulled adult proportions toward the same youthful look as the
+      baby/teen references it was anchored to, and cost ~4× the generation/fix effort per
+      species. User's call: adult-only. Every life stage now shows the SAME image — this
+      actually matches the existing architecture better than the 4-stage plan did, since
+      `Sprite.tsx` already rendered Elder/Retiree as "the adult art, CSS-aged" rather than a
+      unique 4th asset; this just extends that same convention to cover Baby/Teen too.
+    - **All 30 base species generated** (Mammal/Avian/Marsupial/Aquatic/Insectoid/Reptilian ×
+      5 each), each prompted with its own species flavour/class/gear identity, referencing 1-2
+      PREVIOUS species' finished art purely for pixel-art technique/rendering consistency (line
+      weight, shading style, palette depth) — never for pose or identity, which is what let each
+      species land a genuinely distinct silhouette instead of the sameness that plagued the
+      earlier chained-stage approach.
+    - **8 poses redone after user review caught a real problem**: "recreate all of the mammal
+      sprites, Pinguox, Tortavos and Crocmaw as they all have the same pose... we want unique
+      poses per sprite." All 5 Mammals + Pinguox + Tortavos + Crocmaw had defaulted to a similar
+      "standing, calm, three-quarter" silhouette. Redone with genuinely distinct dynamic action
+      poses: Kongrath (mid chest-beat roar), Aegisox (mid-charge, horns-down), Maneleo (both arms
+      spread mid-roar, cape whipping), Grivvel (horizontal mid-pounce), Ursath (overhead
+      ground-slam crouch), Pinguox (wide braced throwing stance), Tortavos (low shell-forward
+      ward-cast brace), Crocmaw (near-horizontal ambush lunge, jaws open). Each explicitly
+      instructed as "NOT a plain symmetrical standing pose" to force divergence from the default.
+    - **One real generation defect caught and fixed**: Iguanor's first generation baked in a
+      phantom white claw/hand shape overlapping the torso — confirmed present in the raw
+      pre-rembg output itself (not a post-processing bug), so this was a bad generation, not a
+      fixable artifact; regenerated with explicit "exactly two arms and two legs, no extra limbs"
+      anatomy language and it came out clean.
+    - **A real bug found and fixed in the shared `gpt-image-2` skill script**
+      (`extract_image.py`, at `C:\Users\P\.claude\skills\gpt-image-2\scripts\`, not part of this
+      repo but worth recording since it silently corrupted results): its "grab the largest
+      base64 image blob in the session log" extraction heuristic could return a `--ref` INPUT
+      image instead of the actual new output, whenever the reference happened to encode to a
+      larger blob than the real result — confirmed as the cause of a Balaenix generation that
+      silently came back as a duplicate of the Strixil reference image. Fixed by reading the
+      `saved_path` the imagegen tool already writes to disk (in each `image_generation_end`
+      session event) instead of guessing from blob size; the old blob-size heuristic is kept
+      only as a fallback for the rare case `saved_path` is missing.
+    - **Integration** (`src/Sprite.tsx` rewritten, `src/speciesArt.ts` new): species with an
+      entry in `SPECIES_ART` (the 30 base species) render an `<img>` of their real art at every
+      stage; the Elder/Retiree aging CSS filter (`grayscale/brightness/saturate`) applies
+      exactly as it did before. Species with NO entry (the 15 exclusive-body species) fall
+      through to the ORIGINAL generic body-type pixel-grid rendering, byte-for-byte the same
+      code path as before this change — confirmed via `tsc` (the fallback still must satisfy
+      `SPRITES[species.body]` for all 9 `BodyType` values) and via the live Bestiary (Draconic
+      group present and gated behind its Special License, as expected — the fallback path
+      wasn't exercisable further without buying that license in the test save, so it's verified
+      by code-identity + type-safety rather than a live screenshot of a Draconic row).
+      `src/mammalSprites.ts` (the superseded hand-drawn 3-stage grids) and
+      `public/sprite-preview.html` (its now-pointless dev preview page) are both deleted —
+      confirmed via grep that nothing else in the repo referenced either.
+    - **Asset pipeline**: each final ~1254px generated image trimmed to its real alpha content
+      bbox (via `sharp`), padded to a square with a small even margin, downscaled to 320×320 RGBA
+      — comfortable retina headroom over the largest on-screen render size (96px CSS px) without
+      shipping full-resolution originals. Lives at `public/sprites/<species-id>.png`, ~90-185KB
+      each, ~3.9MB total for all 30. (Note: a sharp quirk hit during export — chaining `.resize()`
+      directly after `.composite()` on a freshly `create`d canvas throws "Image to composite must
+      have same dimensions or smaller"; fixed by splitting into two separate sharp pipelines,
+      composite-then-buffer, then resize-the-buffer.)
+    - Verified: `tsc --noEmit` clean, production build clean (30 sprites confirmed copied into
+      `dist/sprites/`), all 12 vitest tests green, a live browser pass (Bestiary + Sandbox) with
+      zero console errors and zero broken `<img>` loads across every one of the 30 real-art
+      species (`naturalWidth` confirmed non-zero on every sampled image).
+    - **Deliberately NOT done this pass, on the user's own instruction**: the 15 exclusive-body
+      species (Draconic/Abyssal/Mythical) stay on the pixel-grid fallback — real art for them is
+      explicitly still on the roadmap, alongside breeding/fusion depth, both left for "a later
+      date."
+
+-33. **Playtest suggestions implemented (2026-07-25), sim/test/browser-verified, committed.**
+    User: "implement all of your suggestions" — everything from the playtest report except the
+    consumables/items system (a full design pass of its own, still roadmap). Eight features:
+    - **Participation exp** (`town.ts:resolveTournament`): 4th+ now earns a small stat trickle —
+      `PARTICIPATION_EXP_FRACTION` (0.15) × leagueMult of the event exp, no gold — instead of
+      nothing. Sim: a 4-of-4 sweep now logs `exp: INT +1`. Podium values untouched.
+    - **Preamble expectation-setting** (battle preamble screen): when the player's per-monster
+      average stat total is below the league budget × `RIVAL_BAND_MIN`, a coach's line warns the
+      field will be rough and frames it as growth, not failure.
+    - **Excursion +1 happiness** (`game.ts:applyWeek`): an outing lifts spirits regardless of the
+      purse, fixing the "+6g for −25 stamina trap" feel while honoring the standing "not hugely
+      profitable" gold spec. Mirrored exactly in previewWeekEffects. (Known pre-existing edge:
+      happiness previews don't cap-clamp at 10/10 — unreachable in practice via the food gate.)
+    - **Licensed-leader guest rule** (`town.ts:eligibleForTournament`/`teamHasLicensedLeader`/
+      `signUp`): in TEAM events, members may be ONE league below the event as a licensed
+      leader's guests — at least one member must hold the event's license. Fixes the Copper-2v2
+      × trials-3×/yr gate (one graduate can carry a Wood teammate). 1v1 collapses to the old
+      rule. Punch-down rewards still key off min license, so guests never reduce payouts. UI:
+      TeamPicker pool includes guests, Sign Up disables without a leader ("Needs a X-licensed
+      leader"), 🎫 guest note when mixed. Sim: all-guest refused, mixed accepted, pool correct.
+    - **Pre-signup field scouting** (sign-up panel, `<details>` "🔍 Scout the field"): rival
+      teams are week-seeded and deterministic (`generateRivalTeamsForTournament`), so the REAL
+      field is scoutable BEFORE committing a roster — when loadout edits are still free and the
+      element-aware AI makes the intel actionable. Same two tiers/fees as bracket scouting;
+      local component state (re-paying at the bracket = match-day re-intel, noted trade-off).
+      Browser-verified: 5g charged, class revealed, stats stay locked at basic tier.
+    - **Post-battle summary** (`arena.tsx`): once the replay finishes, a per-monster table
+      (dealt/taken/healed/crits/KO) aggregated from the event stream — poison excluded from
+      "taken" (it drains MP). Renders above the transcript in both 1v1 and team layouts
+      (shared `logAndTranscript`). Browser-verified with cross-checked mirror numbers.
+    - **Contextual tutorial tips** (`TipBanner`, `GameState.tipsSeen: string[]`, migrated):
+      one-shot dismissible tips at the moment systems first matter — 'signup' (sign-up panel,
+      open week), 'injury' (feeding screen when the current monster is hurt, points at Rest +
+      Infirmary), 'rankup' (stable screen on trial weeks). Only while tutorialEnabled;
+      dismissal persists per-save. Browser-verified show → dismiss → persisted.
+    - **⛑ Infirmary** (Town card, `town.ts:infirmaryFee`/`healAtInfirmary`): pay to fully
+      restore a monster's HP/MP NOW instead of resting a week — fee scales with missing
+      fraction × (licenseIndex+1) × 12, min 5g; stamina deliberately NOT restored (only Rest
+      cures fatigue). The first recurring mid-game gold sink. Browser-verified: 16g heal,
+      exact gold math, healed monster drops off the list.
+    - **Save-slot management** (SlotPicker): per-slot 🗑 delete (confirmed), ⬇ export
+      (downloads the raw JSON), ⬆ import into an empty slot (paste; runs sanitizeAndMigrate,
+      rejects invalid). Slot rows restructured from a single button to main-button + action
+      column. Browser-verified buttons render per-state.
+    - Verified: tsc/build clean, all 12 tests green (goldens untouched — battle.ts unchanged),
+      zero console errors across slot picker → town → infirmary heal → feeding tip → sandbox
+      battle summary → calendar → field scouting, all live-clicked.
+
+-32. **Playtest bug fixes (2026-07-25), sim/test/browser-verified, committed.** From a full
+    live playtest of the new-player arc (fresh save → 2 monsters → 4 weeks of feeding/training →
+    Wood tournament → injured return; zero console errors; the fatigue warning → −10% → losing
+    the opener chain confirmed working as designed). User said "fix all" to the three concrete
+    bugs found:
+    - **Market card loadout label was hardcoded** ("EQUIPPED 3 OF 2 LEARNED" on a monster with
+      2 moves) — `App.tsx:126` now renders `m.loadout.length`.
+    - **Weekly digest misattributed tournament effects to training**: it diffed pre-week vs
+      final state, so "Study: INT +6, HP −62, MP −30" read like the drill cost 62 HP when that
+      was the tournament injury. `advanceWeek` now snapshots post-activity/pre-tournament state
+      (`afterActivities`): the activity line shows only the activity's own effects, the
+      tournament line gained the exp note (`· exp: CON +2` — previously invisible in the
+      digest), and each entered monster gets its own "↳ comes home at X/Y HP · X/Y MP — rest to
+      recover" line. Sim-verified all three lines render with correct attribution.
+    - **Training growth now heals with it**: raising max HP/MP (CON/WIS/INT gains) raises
+      current by the same amount — a monster that trained CON for a month used to read 168/220
+      HP and trip the 🩹 injury markers without ever fighting. Stat DROPS (intensive maluses)
+      still clamp current down. Mirrored EXACTLY in `previewWeekEffects` (same
+      grow-then-clamp formula both sides) so plan previews stay exact — sim-verified preview
+      delta === actual delta for full, injured, and malus-shrink cases. Note this also means
+      INT training grants a little MP via the maxMana blend, correctly attributed to the
+      activity line.
+    - Playtest observations NOT actioned (design calls awaiting user direction): first-cup
+      stomp feel (participation exp or preamble framing), Wood excursion's trap-like payout,
+      Copper-2v2 × trial-calendar gating (both members need the license, trials 3×/yr), and
+      scouting having no actionable response mid-event (loadout edits are blocked mid-entry —
+      unlocking edits between matches would pair well with the now element-aware AI).
+
+-31. **6v6 is Tamer Elite ONLY + ladder retune (2026-07-25), test/browser-verified,
+    committed.** User: "amend the maximum fight to a 6v6, this will be tamer league only,"
+    then a follow-up retune: "change copper to be 2v2. change iron to be 4v4, change gold to be
+    5v5." Final `TEAM_SIZE_BY_LEAGUE`: Wood 1 · Copper 2 · Tin 2 · Bronze 3 · Iron 4 ·
+    Silver 4 · Gold 5 · Platinum 5 · Masters 5 (was 6) · Tamer Elite 6 — only Wood is a solo
+    duel now, and the full-roster 6v6 is the top league's exclusive spectacle. Note the
+    undersized side of the save guard below: the three step-UPS mean an in-flight pre-change
+    sign-up (Copper 1, Iron 3, Gold 4 members) fights short-handed for that one event — the
+    engine handles NvM rosters fine and the next sign-up validates at the new size. Every consumer (TeamPicker slots, calendar "NvN" labels, sign-up
+    validation, rival-team generation, tournament resolution) reads `teamSizeForLeague`
+    dynamically, so the table edit propagates everywhere with no other call-site changes. Two
+    guards added: `resolveTournament` benches surplus members if an in-flight PRE-change save
+    carries a bigger signed-up team than the league now fields (signUp validates all new
+    entries), and `validate.ts` now asserts team sizes are monotonically non-decreasing up the
+    ladder AND that 6v6 exists only at Tamer Elite — the design rule is enforced, not just
+    documented. `SANDBOX_MAX_TEAM` stays 6 (still matches the tournament ceiling). Verified:
+    tsc clean, all 12 tests green (design.test.ts now exercises the new validator), live-app
+    module probe confirms Masters=5/Tamer Elite=6 served by the dev build with zero console
+    errors.
+
+-30. **Code-review fixes + permanent vitest suite (2026-07-25), sim/test/build/browser-verified,
+    committed.** User asked for a full review of code/mechanics/abilities, then "implement all
+    fixes." Scope was the review's ranked shortlist; the bigger flagged items (App.tsx split,
+    species base-stat win-rate normalization, fear-status differentiation, late-game gold sink)
+    were deliberately NOT bundled in — they're design efforts, not fixes.
+    - **Guard now lasts until the guardian's next action** (`battle.ts:takeTurn` resets it
+      alongside blockAvoid; the old `target.guard = 0` after ONE landed hit is gone). The old
+      behavior contradicted `core.ts`'s own doc comment and gutted tanks in team fights —
+      guard evaporated on the first of up to 6 taunted-in hits.
+    - **Found while fixing that: Bulwark's Challenge's `guard: 20` rider was DEAD CODE** — the
+      move is type 'debuff', and `resolveMove`'s hostile-utility branch `return`ed before the
+      post-loop `if (e?.guard)` rider, which only the damage branch ever reached. Item -25's
+      note claiming the guard call was "unconditional" was wrong (corrected there). The hostile
+      branch now applies the caster's self-guard rider too — the flagship mass-taunt+brace combo
+      actually braces for the first time. Sim-confirmed: "(guard N)" notes now appear on
+      Bulwark's Challenge casts.
+    - **The battle AI is element-aware** (`effPower` multiplies by
+      `elementMultiplier(foe.body, mv.element)`): the damage calc always applied resist/weak,
+      but move RANKING never consulted it — a caster would throw a resisted element with a
+      super-effective option in the same loadout. Sim proof: forced [Cinderburst(fire,28) +
+      Frost Shard(water,18)] vs Draconic (resist fire/weak water) → Frost Shard now cast 163
+      vs Cinderburst 80 (was raw-power-ordered before; residual fire casts are correct
+      cooldown-window fills). This also makes scouting → loadout-swap a real strategic loop.
+      `effPower` also now values `firstStrikeMult` (checked against the foe's live
+      `actedThisRound`) — Thunderclap was systematically undervalued by the AI.
+    - **Emergency heals pick the strongest heal, not loadout order** (`heals` sorted by power
+      desc — a monster carrying Purge AND Vital Surge could previously "emergency heal" for 10
+      with 46 ready), **and prefer a heal that can reach SELF** ('ally'-target heals go to the
+      neediest teammate, no rescue for the dying caster; still the fallback if that's all
+      that's equipped).
+    - **Knockback and confusion finally have sources** — both were orphaned StatusKinds (live
+      engine code + STATUS_INFO text + arena icons, ZERO moves/innates able to inflict them;
+      Ward Against Ruin's desc even advertised cleansing confusion). All three additions are
+      level 120+ (the frozen 40/90 rule holds): Body Slam (CON 160) knockback 40%/2r,
+      Rain of Arrows (DEX 650, air AoE) knockback 20%/2r (AoE-status cap rule), Sonic Boom
+      (CHA 380) confusion 35%/2r. Durations are 2 for the same reason as Screech's fear fix —
+      a 1-round status ticks away before the next round's initiative sort / actions ever see
+      it. Sim-verified all three fire in natural play (90/13/66 procs in 20-battle forced runs;
+      21 confusion self-hit redirects observed; 17 knockback + 4 confusion in a natural
+      auto-loadout 3v3 sweep). Knockback also composes with Thunderclap's firstStrikeMult
+      cross-stat (knocked-back foes act last → first-strike windows open).
+    - **`maxMana = WIS + floor(INT/2)`** (was WIS alone — the long-flagged INT-caster
+      starvation: a Spellsword's class stats are INT/CON, so its chain-caster identity died on
+      a tiny MP pool). WIS keeps regen exclusively. Examples: Spellsword WIS90/INT600 90→390 MP,
+      Wizard WIS300/INT600 300→600, Warrior WIS60/INT40 60→80 (physical builds barely move).
+      Poison (15% of maxMana/tick) got proportionally stronger vs casters — acceptable, it's
+      the anti-caster tool.
+    - **3 new validators in `validate.ts`** (refactored to `designProblems(): string[]` +
+      console wrapper so tests can assert on it): every StatusKind must have ≥1 in-game source
+      (would have caught the confusion/knockback orphans years earlier); INNATE_EFFECTS ↔
+      species innates cross-checked BOTH directions (every innate has an entry, every entry
+      matches a species — the drift class that bit during the species reimagines);
+      `game.ts:LEAGUE_TOP_GOLD` asserted equal to town.ts's CIRCUIT_REWARDS/PRESTIGE_EVENTS
+      gold per league (was a hand-synced comment). CIRCUIT_REWARDS/PRESTIGE_EVENTS/
+      LEAGUE_TOP_GOLD are now exported for this.
+    - **Permanent vitest suite** (`npm test`, vitest ^4 devDependency, 4 files / 12 tests, all
+      passing): `design.test.ts` (designProblems() === []), `loadout.test.ts` (no duplicate
+      moves — iteration-2's real shipped bug — ≤3 slots, only learned moves, ≥1 damage move,
+      across 60 seeds × 6 train levels), `status.test.ts` (bleed stacks to exactly 3, others
+      refresh-to-max never duplicate, applyStatus return semantics; `applyStatus`/
+      `BLEED_MAX_STACKS` now exported), `battle.test.ts` (4 golden battles pinning
+      winner/event-count/log-length/exact finals for seeded 1v1-low/1v1-high/2v2-mid/3v3-high
+      — the last a full-wipe sudden-death draw — plus determinism byte-equality and
+      every-battle-terminates checks). **Goldens were captured AFTER all of this item's engine
+      changes** — any intentional engine change will move them; recapture deliberately (run the
+      same seeds, paste new values), an unintentional diff is a regression.
+    - **`docs/ABILITIES.md` tables regenerated from live move data** — found stale well beyond
+      this pass's 3 move edits (still listed pre-item-25 names: Twin Shot, Riposte, Hunter's
+      Mark, old proc chances, old 1× MP costs). A script now rendered all 6 per-stat tables
+      from ALL_MOVES + manaCost (desc==data, same principle as the species innate descs);
+      prose sections untouched.
+    - Verified: tsc/build clean, all 12 tests green, validateDesign clean in the live browser
+      (the new checks run on every dev boot), zero console errors on reload.
 
 -29. **Title screen + 3-slot save system (2026-07-25), browser-verified end-to-end,
     uncommitted.** User asked for a proper entry screen: "New Game"/"Continue" shown every time
@@ -276,8 +534,10 @@ CON/turn-order changes are the tuning knobs to revisit.
       Steady Vigil (was Regenerate/200) adds hpRegenBuff 5/3r to the heal — CON's two previously-
       unused frameworks finally used, closing the balance-review gap. **Bulwark's Challenge** (was
       Last Stand/650) retargeted self→allEnemies: mass-taunts the WHOLE enemy team for 2 rounds
-      while still self-guarding 20 (the guard-application check fires regardless of move target,
-      confirmed by reading `resolveMove`'s unconditional post-loop guard call) — combos directly
+      while still self-guarding 20 (**CORRECTION, found in item -30**: that guard rider was
+      actually dead code at the time — the post-loop guard call sat in the DAMAGE branch only,
+      and this 'debuff'-type move returned from the hostile-utility branch before reaching it;
+      fixed in item -30, where the hostile branch gained its own rider call) — combos directly
       with Barbed Carapace: force every enemy onto this tank, punish every hit with thorns. This
       is CON's own intra-stat combo (mass-taunt sets up, thorns pays off) and the pass's flagship
       team-fight tool, deliberately scaling with roster size. Colossus Crash (was Juggernaut/850)
@@ -1396,9 +1656,12 @@ rework above.
 
 ### Battle sim (`src/battle.ts`)
 - Every skill costs MP (`monster.ts:manaCost`, now 2× the base formula); free universal Attack +
-  Block; per-turn choice policy in `chooseAction`
-- `maxMana = WIS` directly (no offset) — a monster with very low WIS has very little MP and leans
-  on Attack; `maxHp = 50 + CON×2.5`
+  Block; per-turn choice policy in `chooseAction` — element-aware since 2026-07-25 (`effPower`
+  folds in the resist/weak multiplier vs the foe's body, plus firstStrikeMult when live)
+- `maxMana = WIS + floor(INT/2)` (2026-07-25 — WIS alone starved INT-primary casters); WIS is
+  still the sole regen stat; `maxHp = 50 + CON×2.5`
+- Guard (flat DR) lasts until the guardian's NEXT ACTION and mitigates every hit in between
+  (2026-07-25 — was consumed by a single landed hit, which broke tanks in team fights)
 - 90-skill pool (`src/moves.ts`, 15/stat, full reference in `docs/ABILITIES.md`) with mechanical
   effects (`core.ts:MoveEffects`): pierce, multi-hit, execute, recoil (capped 15%), lifesteal, mana
   burn, guard, ward shields (CON-exclusive), ROUND-LIMITED buffs/debuffs via `Combatant.mods`
@@ -1413,7 +1676,9 @@ rework above.
   silence (Attack/Block only), vulnerable (+20% taken), knockback (acts LAST — live turn-order
   manipulation), sleep (wakes on damage), doom (delayed burst, cleansable), healblock (heals/
   lifesteal/regen ×0.4), haste (acts FIRST — the one BENEFICIAL status, cleanses don't strip it),
-  charm (hostile hits strike own team). Framework move-effects awaiting adoption: maxHpDmg,
+  charm (hostile hits strike own team). Every status has ≥1 in-game source (enforced by
+  validate.ts since 2026-07-25 — knockback's are Body Slam/Rain of Arrows, confusion's is
+  Sonic Boom). Framework move-effects awaiting adoption: maxHpDmg,
   bonusVsStatus (combo setup→payoff, AI-aware via effPower), thorns, hpRegenBuff; tauntForce via
   'allEnemies' = mass taunt
 
@@ -1428,8 +1693,9 @@ rework above.
   close, punching down means stomping genuine league-locals
 - One entry per event per month (`GameState.enteredThisMonth`, resets monthly)
 - **Full round-robin team battles (2026-07-21)** — team size scales by league
-  (`TEAM_SIZE_BY_LEAGUE`: Wood/Copper 1v1 → Tin 2v2 → Bronze/Iron 3v3 → Silver/Gold 4v4 →
-  Platinum 5v5 → Masters/Tamer Elite 6v6); each event fields the player's team + 3-5 generated
+  (`TEAM_SIZE_BY_LEAGUE`: Wood 1v1 → Copper/Tin 2v2 → Bronze 3v3 → Iron/Silver 4v4 →
+  Gold/Platinum/Masters 5v5 → **Tamer Elite 6v6, exclusively** — user specs 2026-07-25, enforced
+  by a validate.ts check); each event fields the player's team + 3-5 generated
   rival teams (`RIVAL_TEAM_COUNT_BY_LEAGUE`) in a full round robin (every pair fights once,
   including rival-vs-rival, for genuine standings); reward scales by final placement
   (`placementRewardFraction`: 100%/65%/40%/0%). See the top of "What changed this session" for
@@ -1476,9 +1742,11 @@ Base: Mammal, Avian, Marsupial, Aquatic, Insectoid, Reptilian. Exclusive: Dracon
   lifespans (4–6y) are currently fixed at generation.
 - **First-time tutorial** — no onboarding exists; a new player has zero in-game guidance.
 - **Rare tournament item drops** — champion-only rewards, TBD. No item/inventory system exists at all yet.
-- **Unique per-species sprites** — every species in a body type currently shares one 16×16
-  silhouette (`src/sprites.ts`), tinted by a per-species hue. `docs/BESTIARY.md`'s Appearance lines
-  are written as concrete sprite-artist reference for whenever this gets built.
+- **Unique per-species sprites — DONE for the 30 base species** (2026-07-25, item -34): real
+  generated art in `public/sprites/`, wired via `src/speciesArt.ts`. Still on the fallback 16×16
+  shared-silhouette grid (`src/sprites.ts`): the 15 exclusive-body species (Draconic/Abyssal/
+  Mythical) — explicitly deferred, not forgotten. `docs/BESTIARY.md`'s Appearance lines remain
+  useful reference for whenever those get their own pass.
 
 ---
 
@@ -1495,10 +1763,13 @@ Base: Mammal, Avian, Marsupial, Aquatic, Insectoid, Reptilian. Exclusive: Dracon
 | `src/moves.ts` | The 90-move pool, 15/stat — see `docs/ABILITIES.md` for the rendered reference |
 | `src/battle.ts` | Auto-battle sim: mana, innates, ultimates, round-based mods, BattleEvent stream |
 | `src/arena.tsx` | Animated arena replay (plays BattleEvent[] as live beats) |
-| `src/Sprite.tsx` | Shared pixel-sprite component |
+| `src/Sprite.tsx` | Species portrait component: real art (`speciesArt.ts`) for the 30 base species, 16×16 pixel-grid fallback for the 15 exclusives |
+| `src/speciesArt.ts` | Species id → `/sprites/<id>.png` lookup for the 30 base species' real art |
+| `public/sprites/` | The real generated sprite PNGs (320×320 RGBA), one per base species, adult-only |
 | `src/bestiary.ts` | In-game condensed species bios (BIOS record) |
-| `src/validate.ts` | Dev-only design consistency checks (species/class/element/calendar/moves) |
-| `src/sprites.ts` | 16×16 pixel art per body type (shared across species in that type) |
+| `src/validate.ts` | Design consistency checks (species/class/element/calendar/moves/statuses/innate-table/reward-sync) — `designProblems()` feeds both the dev console and the test suite |
+| `src/*.test.ts` | Vitest suite (`npm test`): design consistency, loadout invariants, status stack/refresh rules, golden battle regressions |
+| `src/sprites.ts` | 16×16 pixel art per body type — now only reached by the 15 exclusive-body species |
 | `docs/BESTIARY.md` | Full lore doc: all 30 base species, appearance + backstory, 6 body-type themes |
 | `docs/ABILITIES.md` | Full 90-move reference table + per-stat design philosophy |
 | `docs/GAME_DESIGN.md` | Original design doc — increasingly stale in places (predates several
@@ -1511,9 +1782,12 @@ Cloudflare Pages has git integration on `main` — every push auto-builds & depl
 work. v0.21 (the entire 2026-07-20 session) shipped through this flow.
 
 ## Testing Checklist (smoke test after resuming)
+- [ ] `npm test` — the vitest suite (design consistency, loadout invariants, status rules,
+      golden battles) is all green; goldens moving means the ENGINE changed, recapture on purpose
 - [ ] `npm run dev`, console shows `[design-validation] ... all consistent ✓` with no warnings
 - [ ] Sandbox: run a battle, confirm no console errors, buffs/debuffs show round counts and expire
-- [ ] Sandbox: a low-WIS monster (WIS < ~50) should barely afford any skill — mostly Attack/Block
+- [ ] Sandbox: a low-WIS, low-INT monster should barely afford any skill — mostly Attack/Block
+      (maxMana = WIS + INT/2 since 2026-07-25)
 - [ ] Sandbox: a high-WIS "caster" build should be able to chain low-cooldown INT/CHA moves
 - [ ] Bestiary: species show flavour text, not a class tag; expand a couple of entries and confirm
       bios read as themed (e.g. Kongrath's gorilla backstory, not the old ram one)

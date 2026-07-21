@@ -444,6 +444,29 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 .disclaimer h2 { margin-bottom: 16px; }
 
 .tutorial-banner { display: flex; gap: 14px; align-items: flex-start; justify-content: space-between; background: var(--panel2); border: 1px solid var(--accent); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; }
+
+/* Contextual one-shot tips (2026-07-25): smaller sibling of the welcome banner. */
+.tipbanner { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; background: color-mix(in srgb, var(--accent) 8%, var(--panel2)); border: 1px dashed var(--accent); border-radius: 8px; padding: 8px 12px; margin: 8px 0; font-size: 13px; line-height: 1.45; }
+
+/* Pre-signup field scouting (2026-07-25): collapsible, sits inside the entry panel. */
+.scout-field { margin: 8px 0; }
+.scout-field > summary { cursor: pointer; color: var(--accent); font-weight: 700; font-size: 13px; padding: 4px 0; }
+.scout-field .scout-report { margin: 10px 0 14px; padding-left: 10px; border-left: 2px solid var(--line); }
+
+/* Post-battle summary table (2026-07-25). */
+.battle-summary { margin-top: 10px; }
+.battle-summary table { border-collapse: collapse; font-size: 13px; width: 100%; }
+.battle-summary th { text-align: left; color: var(--muted); font-weight: 700; padding: 3px 10px 3px 0; border-bottom: 1px solid var(--line); }
+.battle-summary td { padding: 3px 10px 3px 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 50%, transparent); font-variant-numeric: tabular-nums; }
+
+/* Slot rows became a div (main button + action buttons) for delete/export/import. */
+.slotrow { display: flex; align-items: stretch; gap: 6px; background: var(--panel2); border: 1px solid var(--line); padding: 0; border-radius: 10px; overflow: hidden; }
+.slotrow.empty { border-style: dashed; }
+.slotmain { flex: 1; text-align: left; display: flex; flex-direction: column; gap: 3px; background: transparent; border: 0; color: var(--ink); padding: 12px 14px; border-radius: 0; }
+.slotmain:disabled { opacity: .4; cursor: not-allowed; }
+.slotactions { display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 6px; }
+.slotaction { background: var(--panel); color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; font-size: 13px; }
+.slotaction.danger:hover { color: var(--str); border-color: var(--str); }
 .tutorial-banner ul { margin: 6px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; line-height: 1.5; }
 .tutorial-banner li { margin-bottom: 3px; }
 .tutorial-dismiss { background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 2px 9px; font-weight: 700; flex-shrink: 0; }

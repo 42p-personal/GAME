@@ -134,7 +134,7 @@ export function statMalusMultiplier(species: Species, stat: Stat): number {
 // capped at roughly 1/3rd of whatever first place is at its highest... we
 // don't want this to be hugely profitable") so downtime income never rivals
 // real tournament competition.
-const LEAGUE_TOP_GOLD: Record<string, number> = {
+export const LEAGUE_TOP_GOLD: Record<string, number> = {
   Wood: 100, Copper: 150, Tin: 200, Bronze: 250, Iron: 300,
   Silver: 350, Gold: 400, Platinum: 450, Masters: 500, 'Tamer Elite': 600,
 }
@@ -182,7 +182,7 @@ function rollDrillGain(rng: RNG, base: number, happiness: number): number {
 // roll shown IS the roll that will land) so the Ranch screen can show the
 // happiness swing and exact stat gains/maluses before the player commits.
 export function previewWeekEffects(c: Career, activity: string, food: Food | ''): WeekPreview {
-  const happinessDelta = food ? feedDelta(food, c.favouriteFood, c.hatedFood) : -1
+  let happinessDelta = food ? feedDelta(food, c.favouriteFood, c.hatedFood) : -1
   const statDeltas: Partial<Record<Stat, number>> = {}
   let staminaDelta = 0
   let goldDelta = 0
@@ -208,6 +208,13 @@ export function previewWeekEffects(c: Career, activity: string, food: Food | '')
     }
     const stamCost = drill.kind === 'basic' ? BASIC_DRILL_STAMINA : INTENSIVE_DRILL_STAMINA
     staminaDelta = Math.max(0, c.stamina - stamCost) - c.stamina
+    // Mirror applyWeek's growth top-up exactly (2026-07-25): raised max HP/MP
+    // raises current by the same amount; a malus that SHRINKS max clamps
+    // current down — same formula both sides, so the preview stays exact.
+    const newStats = { ...c.stats }
+    for (const [stat, d] of Object.entries(statDeltas) as [Stat, number][]) newStats[stat] += d
+    hpDelta = Math.max(1, Math.min(c.hp + Math.max(0, maxHp(newStats) - maxHp(c.stats)), maxHp(newStats))) - c.hp
+    mpDelta = Math.max(0, Math.min(c.mp + Math.max(0, maxMana(newStats) - maxMana(c.stats)), maxMana(newStats))) - c.mp
   } else if (activity === 'rest') {
     // same rng call ORDER as applyWeek's rest branch: stamina, then heal, then mana
     const restMin = Math.round(0.3 * MAX_STAMINA)
@@ -221,6 +228,10 @@ export function previewWeekEffects(c: Career, activity: string, food: Food | '')
   } else if (activity === 'excursion') {
     staminaDelta = Math.max(0, c.stamina - EXCURSION_COST) - c.stamina
     goldDelta = excursionGold(rng, c.licenseIndex)
+    // mirror applyWeek's +1 happiness exactly, including the cap (feeding
+    // resolves first, so the bonus applies on top of the post-feed value)
+    const afterFood = Math.max(0, Math.min(MAX_HAPPINESS, c.happiness + happinessDelta))
+    happinessDelta += Math.min(MAX_HAPPINESS, afterFood + 1) - afterFood
   }
   return { happinessDelta, statDeltas, staminaDelta, goldDelta, hpDelta, mpDelta }
 }
@@ -412,7 +423,13 @@ export function applyWeek(c: Career, action: WeeklyAction, gold: number, rental 
     n.stamina = Math.max(0, n.stamina - EXCURSION_COST)
     const purse = excursionGold(rng, n.licenseIndex)
     g += purse
-    n.log.push(`Wk ${wk}: excursion — returned with ${purse}g.`)
+    // An outing is fun regardless of the haul (2026-07-25 playtest fix): the
+    // bottom-skewed purse made low-league excursions read as a pure trap
+    // (+6g for −25 stamina). +1 happiness makes it a deliberate morale tool —
+    // the gold stays deliberately modest per the standing "not hugely
+    // profitable" spec.
+    n.happiness = Math.min(MAX_HAPPINESS, n.happiness + 1)
+    n.log.push(`Wk ${wk}: excursion — returned with ${purse}g, spirits high (happiness ${n.happiness}/10).`)
   }
 
   // hunger: a monster that wasn't fed this week loses a little happiness
@@ -429,7 +446,14 @@ export function applyWeek(c: Career, action: WeeklyAction, gold: number, rental 
   n.week += 1
   n.ageWeeks += 1
   n.fedThisWeek = false
-  // training can shift CON/WIS, so current HP/MP never exceed the new maxima
+  // Growth heals with it (2026-07-25 playtest fix): when training raises max
+  // HP/MP (CON/WIS/INT gains), current rises by the same amount — a monster
+  // that just got TOUGHER shouldn't come out of training looking injured
+  // (168/220 HP without ever fighting). Stat DROPS still clamp current down.
+  const hpMaxGrow = maxHp(n.stats) - maxHp(c.stats)
+  const mpMaxGrow = maxMana(n.stats) - maxMana(c.stats)
+  if (hpMaxGrow > 0) n.hp += hpMaxGrow
+  if (mpMaxGrow > 0) n.mp += mpMaxGrow
   n.hp = Math.max(1, Math.min(n.hp, maxHp(n.stats)))
   n.mp = Math.max(0, Math.min(n.mp, maxMana(n.stats)))
 

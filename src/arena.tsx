@@ -5,7 +5,7 @@
 // use a compact roster-row presentation instead — full per-monster traversal
 // animation doesn't stay legible at 6v6 — leaning on the scrolling turn-by-turn
 // log for the detailed narration either way.
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { BattleEvent, BattleResult, BattleSide } from './battle'
 import { Channel, Element, Monster, StatusKind } from './core'
 import { maxHp, maxMana } from './monster'
@@ -249,8 +249,35 @@ export function ArenaBattle({ teamA, teamB, result, onDone }: { teamA: Monster[]
   const floatsFor = (side: BattleSide, slot: number) =>
     floats.filter((f) => f.side === side && f.slot === slot).map((f) => <span key={f.id} className={'float ' + f.cls}>{f.text}</span>)
 
-  // Shared tail: the live turn log, plus (once the replay finishes) the raw
-  // sim transcript — richer than the captions (buff durations, resist notes).
+  // Post-battle summary (2026-07-25 playtest addition): a compact per-monster
+  // "why did it go that way" — damage dealt/taken, healing given, crits, KO —
+  // aggregated straight from the event stream once the replay finishes.
+  const summaryRows = useMemo(() => {
+    interface Row { side: BattleSide; slot: number; name: string; dealt: number; taken: number; healed: number; crits: number; koed: boolean }
+    const rows = new Map<string, Row>()
+    const ensure = (side: BattleSide, slot: number): Row => {
+      const k = side + slot
+      if (!rows.has(k)) rows.set(k, { side, slot, name: (side === 'A' ? teamA : teamB)[slot]?.name ?? '?', dealt: 0, taken: 0, healed: 0, crits: 0, koed: false })
+      return rows.get(k)!
+    }
+    for (const e of result.events) {
+      if (e.kind === 'hit') {
+        ensure(e.side, e.slot).dealt += e.dmg
+        ensure(e.targetSide, e.targetSlot).taken += e.dmg
+        if (e.crit) ensure(e.side, e.slot).crits++
+      } else if (e.kind === 'dot' && e.status !== 'poison') { // poison drains MP, not HP
+        ensure(e.side, e.slot).taken += e.amount
+      } else if (e.kind === 'utility' && e.heal > 0) {
+        ensure(e.side, e.slot).healed += e.heal
+      }
+    }
+    for (const f of result.finals) if (f.wasKOd) ensure(f.side, f.slot).koed = true
+    return [...rows.values()].sort((x, y) => (x.side === y.side ? x.slot - y.slot : x.side === 'A' ? -1 : 1))
+  }, [result, teamA, teamB])
+
+  // Shared tail: the live turn log, plus (once the replay finishes) the battle
+  // summary and the raw sim transcript — richer than the captions (buff
+  // durations, resist notes).
   const logAndTranscript = (
     <>
       <div className="arena-log" ref={logRef}>
@@ -258,6 +285,28 @@ export function ArenaBattle({ teamA, teamB, result, onDone }: { teamA: Monster[]
           <div key={i} className={l.startsWith('— Round') ? 'rnd' : l.startsWith('🏆') || l.startsWith('🏳️') ? 'fin' : ''}>{l}</div>
         ))}
       </div>
+      {done && (
+        <div className="battle-summary">
+          <div className="section-title">Battle summary</div>
+          <table>
+            <thead>
+              <tr><th>Monster</th><th>Dealt</th><th>Taken</th><th>Healed</th><th>Crits</th><th></th></tr>
+            </thead>
+            <tbody>
+              {summaryRows.map((r) => (
+                <tr key={r.side + r.slot} className={r.side === 'A' ? 'sideA' : 'sideB'}>
+                  <td>{r.side === 'A' ? '🟢' : '🔴'} {r.name}</td>
+                  <td>{Math.round(r.dealt)}</td>
+                  <td>{Math.round(r.taken)}</td>
+                  <td>{r.healed > 0 ? Math.round(r.healed) : '–'}</td>
+                  <td>{r.crits > 0 ? r.crits : '–'}</td>
+                  <td>{r.koed ? '💀 KO' : ''}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       {done && (
         <details className="arena-transcript">
           <summary className="dim">📜 full battle transcript</summary>

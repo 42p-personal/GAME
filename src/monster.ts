@@ -302,7 +302,11 @@ export function staminaDamageMult(stamina: number): number {
 }
 
 export const maxHp = (s: Stats) => Math.round(50 + s.CON * 2.5)
-export const maxMana = (s: Stats) => s.WIS
+// WIS is the mana FOUNDATION (and stays the sole regen stat); INT contributes
+// half its value to the pool (2026-07-25 review fix: maxMana = WIS alone
+// starved INT-primary classes — a Spellsword's whole chain-caster identity
+// died on a tiny MP pool because its class stats are INT/CON, not WIS).
+export const maxMana = (s: Stats) => s.WIS + Math.floor(s.INT / 2)
 export const dodgeChance = (s: Stats) => Math.min(35, s.DEX * 0.06)
 
 // Per-turn regen + proc chances derived from stats (user spec 2026-07-19) —

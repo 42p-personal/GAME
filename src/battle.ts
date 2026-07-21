@@ -478,8 +478,8 @@ function wakeIfSleeping(c: Combatant, log: string[]): void {
 // Statuses stack (bleed, capped) or refresh (everything else) — never duplicate.
 // Bleed is the ONE stacking status: up to 3 concurrent stacks, each ticking its
 // own damage; re-applying any other status just refreshes its duration.
-const BLEED_MAX_STACKS = 3
-function applyStatus(c: Combatant, kind: StatusKind, duration: number): boolean {
+export const BLEED_MAX_STACKS = 3
+export function applyStatus(c: { statuses: ActiveStatus[] }, kind: StatusKind, duration: number): boolean {
   if (kind === 'bleed') {
     if (c.statuses.filter((s) => s.kind === 'bleed').length >= BLEED_MAX_STACKS) return false
     c.statuses.push({ kind, turns: duration })
@@ -566,6 +566,14 @@ function effPower(mv: Move, foe: Combatant): number {
   if (e?.execute && foe.hp / foe.maxHp <= e.execute) p *= 1.5
   if (e?.bonusVsStatus && hasStatus(foe, e.bonusVsStatus.kind)) p *= e.bonusVsStatus.mult
   if (e?.maxHpDmg) p += foe.maxHp * e.maxHpDmg
+  // Element-aware (2026-07-25 review fix): the damage calc has always applied
+  // the body-type resist/weak multiplier, but the AI never consulted it when
+  // ranking moves — so a caster would happily throw a resisted element when a
+  // neutral or super-effective option sat in the same loadout.
+  if (mv.element) p *= elementMultiplier(foe.m.species.body, mv.element)
+  // First-strike tools ranked at their real value when the foe hasn't acted
+  // yet this round (the hit resolves immediately, so live state is correct).
+  if (e?.firstStrikeMult && !foe.actedThisRound) p *= e.firstStrikeMult
   return p
 }
 
@@ -613,7 +621,10 @@ function chooseAction(self: Combatant, foe: Combatant, rng: RNG): Action {
     return { kind: 'attack' }
   }
   const ready = self.m.loadout.filter((mv) => (self.cooldowns[mv.id] ?? 0) <= 0 && moveCost(mv) <= self.mana)
-  const heals = ready.filter((mv) => mv.type !== 'damage' && mv.power > 0)
+  // Strongest heal first (2026-07-25 review fix: `heals[0]` used to be loadout
+  // order, so a monster carrying Purge AND Vital Surge could "emergency heal"
+  // for 10 when 46 was equally ready).
+  const heals = ready.filter((mv) => mv.type !== 'damage' && mv.power > 0).sort((a, b) => b.power - a.power)
   const dmgs = ready.filter((mv) => mv.type === 'damage').sort((a, b) => effPower(b, foe) - effPower(a, foe))
   // timed buffs not currently active (or about to expire — worth refreshing);
   // debuffs the foe isn't currently suffering from (or is about to shake off)
@@ -628,8 +639,13 @@ function chooseAction(self: Combatant, foe: Combatant, rng: RNG): Action {
   const foeThreats = foe.m.loadout.filter((mv) => (foe.cooldowns[mv.id] ?? 0) <= 1 && moveCost(mv) <= foe.mana + manaRegen(foe.m.stats))
   const threat = Math.max(ATTACK_POWER, ...foeThreats.filter((mv) => mv.type === 'damage').map((mv) => effPower(mv, self)))
 
-  // Emergency heal beats everything.
-  if (hpFrac < p.healAt && heals.length) return { kind: 'skill', move: heals[0] }
+  // Emergency heal beats everything. Prefer a heal that can actually reach
+  // SELF (self/team target) — an 'ally'-target heal goes to the neediest
+  // teammate instead, which is no rescue for the dying caster; it's still the
+  // fallback when it's all that's equipped (and in a solo fight it self-casts).
+  if (hpFrac < p.healAt && heals.length) {
+    return { kind: 'skill', move: heals.find((mv) => mv.target !== 'ally') ?? heals[0] }
+  }
 
   // Hurt with a real hit incoming → guard up (how often is personality).
   if (hpFrac < p.healAt && threat >= 20 && chance(rng, p.blockWhenHurt)) return { kind: 'block' }
@@ -944,7 +960,6 @@ function resolveDamageOnTarget(attacker: Combatant, target: Combatant, move: Mov
     wardNote = ` (${absorbed} absorbed by shield)`
   }
   target.hp -= dmg
-  target.guard = 0
   attacker.hasLandedHit = true
   if (dmg > 0) wakeIfSleeping(target, log)
 
@@ -1030,6 +1045,12 @@ function resolveMove(attacker: Combatant, ctx: BattleContext, move: Move, rng: R
     const hostile = move.target === 'enemy' || move.target === 'allEnemies'
     if (!hostile) { for (const t of targets) resolveUtilityOnTarget(attacker, t, move, rng, log, ev); return }
     for (const t of targets) resolveHostileUtilityOnTarget(attacker, t, move, rng, log, ev)
+    // Self-guard rider on a HOSTILE utility (2026-07-25 review fix): this
+    // branch used to return without it, so Bulwark's Challenge — a 'debuff'
+    // move whose whole design is "mass taunt AND brace behind guard 20" —
+    // never actually received its guard. Only the damage branch's identical
+    // rider below ever ran.
+    if (move.effects?.guard) applyBeneficialEffects(attacker, attacker, move, rng, log)
     return
   }
 
@@ -1047,8 +1068,14 @@ function takeTurn(attacker: Combatant, ctx: BattleContext, rng: RNG, log: string
   // set unconditionally, before any stun/fear/sleep short-circuit, since even
   // a skipped turn means this combatant's initiative slot has passed.
   attacker.actedThisRound = true
-  // A Block stance lasts until the blocker's next action — it ends now.
+  // A Block stance lasts until the blocker's next action — it ends now. Guard
+  // works the same way (2026-07-25 review fix): it used to vanish after ONE
+  // landed hit, which contradicted its "until next action" description and
+  // gutted tanks in team fights — Bulwark's Challenge taunts up to 6 enemies
+  // onto the guardian, and the guard evaporated on the first of those hits.
+  // Now every hit until the guardian's next turn is mitigated.
   attacker.blockAvoid = 0
+  attacker.guard = 0
   // regen mana (innate mana engines + regen buffs add to it) and HP (25 CON = 1/turn)
   attacker.mana = Math.min(attacker.maxMana, attacker.mana + manaRegen(attacker.m.stats) + attacker.innate.regen + attacker.regenMod)
   const hpRegenMult = hasStatus(attacker, 'healblock') ? HEALBLOCK_MULT : 1

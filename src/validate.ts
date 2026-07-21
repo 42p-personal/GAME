@@ -1,13 +1,18 @@
 // Dev-only design validation. Catches data drift that produced real bugs before:
 // species whose stats derive a different class than their naturalClass, duplicate
-// class stat-pairs (which shadow each other), and degenerate stat spreads.
-import { BODY_ELEMENT, BodyType, CLASSES, LEAGUES, STATS, classForStats } from './core'
+// class stat-pairs (which shadow each other), degenerate stat spreads, orphaned
+// statuses (engine support with zero in-game sources), innate-table drift, and
+// hand-synced reward tables drifting apart. `designProblems()` returns the raw
+// list so the vitest suite can assert it's empty; `validateDesign()` is the
+// console wrapper main.tsx runs in dev.
+import { BODY_ELEMENT, BodyType, CLASSES, LEAGUES, STATS, STATUS_INFO, StatusKind, classForStats } from './core'
 import { SPECIES } from './species'
 import { ALL_MOVES } from './moves'
-import { trainingProfileFor } from './game'
-import { RANK_UP_MONTHS, RANK_UP_WEEK, tournamentCalendarFor } from './town'
+import { LEAGUE_TOP_GOLD, trainingProfileFor } from './game'
+import { CIRCUIT_REWARDS, PRESTIGE_EVENTS, RANK_UP_MONTHS, RANK_UP_WEEK, TEAM_SIZE_BY_LEAGUE, tournamentCalendarFor } from './town'
+import { INNATE_EFFECTS } from './battle'
 
-export function validateDesign(): void {
+export function designProblems(): string[] {
   const problems: string[] = []
 
   // Class table: primary/secondary pairs must be unique or later entries are unreachable.
@@ -94,6 +99,59 @@ export function validateDesign(): void {
     }
   }
 
+  // Every status in the design must have at least one in-game SOURCE (a move
+  // that inflicts it, or an innate statusOnHit). Orphaned statuses carry live
+  // engine code and player-facing STATUS_INFO text that can never fire —
+  // confusion and knockback sat in exactly that state until 2026-07-25.
+  const statusSources = new Set<StatusKind>()
+  for (const mv of ALL_MOVES) if (mv.status) statusSources.add(mv.status.kind)
+  for (const eff of Object.values(INNATE_EFFECTS)) if (eff.statusOnHit) statusSources.add(eff.statusOnHit.kind)
+  for (const kind of Object.keys(STATUS_INFO) as StatusKind[]) {
+    if (!statusSources.has(kind)) problems.push(`STATUS: ${kind} has no source — no move or innate can inflict it.`)
+  }
+
+  // Innate table <-> species data, both directions: every species innate must
+  // have a mechanical entry (the "no flavour-only innates" rule), and every
+  // table key must belong to some species (renames must land on both sides —
+  // this drift produced real bugs during the species reimagines).
+  const speciesInnateNames = new Set(SPECIES.flatMap((sp) => sp.innate.map((ab) => ab.name)))
+  for (const sp of SPECIES) for (const ab of sp.innate) {
+    if (!INNATE_EFFECTS[ab.name]) problems.push(`INNATES: ${sp.name}'s "${ab.name}" has no INNATE_EFFECTS entry.`)
+  }
+  for (const key of Object.keys(INNATE_EFFECTS)) {
+    if (!speciesInnateNames.has(key)) problems.push(`INNATES: table entry "${key}" matches no species innate (stale after a rename?).`)
+  }
+
+  // Team sizes climb the ladder monotonically, every league has an entry, and
+  // the full 6v6 roster fight is TAMER ELITE ONLY (user spec 2026-07-25) —
+  // the top league's exclusive spectacle, never available below it.
+  let prevSize = 0
+  for (const l of LEAGUES) {
+    const size = TEAM_SIZE_BY_LEAGUE[l.name]
+    if (size === undefined) { problems.push(`TEAMS: no team size for ${l.name}.`); continue }
+    if (size < prevSize) problems.push(`TEAMS: ${l.name} (${size}) fields a smaller team than the league below it (${prevSize}).`)
+    if (size >= 6 && l.name !== 'Tamer Elite') problems.push(`TEAMS: ${l.name} fields ${size}v${size} — 6v6 is reserved for Tamer Elite.`)
+    prevSize = size
+  }
+
+  // game.ts:LEAGUE_TOP_GOLD is hand-kept in sync with the tournament reward
+  // tables (it caps excursion income at ~1/3 of a league's 1st-place gold) —
+  // assert the sync instead of trusting the comment.
+  for (const [league, r] of Object.entries(CIRCUIT_REWARDS)) {
+    if (LEAGUE_TOP_GOLD[league] !== r.gold) problems.push(`ECONOMY: LEAGUE_TOP_GOLD.${league} (${LEAGUE_TOP_GOLD[league]}) != CIRCUIT_REWARDS gold (${r.gold}).`)
+  }
+  for (const p of PRESTIGE_EVENTS) {
+    if (LEAGUE_TOP_GOLD[p.league] !== p.rewards.gold) problems.push(`ECONOMY: LEAGUE_TOP_GOLD.${p.league} (${LEAGUE_TOP_GOLD[p.league]}) != ${p.name}'s gold (${p.rewards.gold}).`)
+  }
+  for (const l of LEAGUES) {
+    if (LEAGUE_TOP_GOLD[l.name] === undefined) problems.push(`ECONOMY: LEAGUE_TOP_GOLD has no entry for ${l.name}.`)
+  }
+
+  return problems
+}
+
+export function validateDesign(): void {
+  const problems = designProblems()
   const sample = tournamentCalendarFor('probe-a', 0)
   if (problems.length) console.warn('[design-validation] issues found:\n - ' + problems.join('\n - '))
   else console.info(`[design-validation] ${SPECIES.length} species, ${CLASSES.length} classes, ${ALL_MOVES.length} moves, ~${sample.length} tournaments/yr — all consistent ✓`)

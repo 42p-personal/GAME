@@ -62,7 +62,7 @@ export interface MoveEffects {
   hits?: [number, number] // multi-hit: strikes N times; `power` is per hit
   execute?: number // 0..1 — 1.5× damage when target HP is below this fraction
   manaBurn?: number // flat MP burned off the target
-  guard?: number // flat damage reduction until the user's next action
+  guard?: number // flat damage reduction on EVERY hit taken until the user's next action
   ward?: number // absorb shield (HP pool) that soaks damage before health — CON-exclusive
   cleanse?: boolean // remove negative statuses (self, or the whole team if target is 'team')
   tauntForce?: boolean // forces the target's single-target hostile actions onto the caster for `duration` rounds; cast via target 'allEnemies' it taunts the WHOLE enemy team onto one monster

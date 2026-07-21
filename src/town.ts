@@ -34,7 +34,7 @@ export interface Tournament {
 // the game's financial backbone; scarcity makes the calendar worth planning
 // around. Silver+ are fixed one-per-year prestige events. A monster may also
 // enter BELOW its league at reduced rewards (§rewardMultiplier).
-const CIRCUIT_REWARDS: Record<string, { gold: number; exp: number }> = {
+export const CIRCUIT_REWARDS: Record<string, { gold: number; exp: number }> = {
   Wood: { gold: 100, exp: 50 },
   Copper: { gold: 150, exp: 75 },
   Tin: { gold: 200, exp: 100 },
@@ -53,7 +53,7 @@ const CIRCUIT_EVENT_NAMES: Record<string, string[]> = {
   Iron: ['The Anvil Championship', 'Hammerfall Cup', 'The Forge Trials', 'Ironclad Open', "The Smelter's Stand", 'Blackfurnace Bout', 'The Iron Gauntlet', 'Quenchfire Classic'],
 }
 
-const PRESTIGE_EVENTS: Omit<Tournament, 'id'>[] = [
+export const PRESTIGE_EVENTS: Omit<Tournament, 'id'>[] = [
   { name: 'The Silver Crescent', month: 6, week: 2, league: 'Silver', rewards: { gold: 350, exp: 175 } },
   { name: 'The Gilded Crown', month: 7, week: 2, league: 'Gold', rewards: { gold: 400, exp: 200 } },
   { name: 'The Radiant Throne', month: 8, week: 2, league: 'Platinum', rewards: { gold: 450, exp: 225 } },
@@ -111,13 +111,15 @@ export function cupLore(t: Tournament): CupLore {
   }
 }
 
-// Team size per league (user spec 2026-07-21): Wood/Copper stay 1v1; Tin steps
-// to 2v2, Bronze to 3v3, Silver to 4v4, Platinum to 5v5, Masters to 6v6 —
-// leagues not named hold the previous named size (Iron holds Bronze's 3, since
-// Iron sits between Bronze and Silver's step-up; Gold holds Silver's 4; Tamer
-// Elite holds Masters' 6).
+// Team size per league (user spec 2026-07-21, amended twice 2026-07-25): only
+// Wood is a solo duel now — Copper steps straight to 2v2, then the ladder
+// climbs in even pairs (Tin 2, Bronze 3, Iron 4, Silver 4, Gold 5, Platinum 5,
+// Masters 5). **6v6 is TAMER ELITE ONLY** (user spec: "the maximum fight...
+// will be tamer league only") — the full-roster fight is the top league's
+// exclusive spectacle, enforced by validate.ts (sizes must also never shrink
+// while climbing).
 export const TEAM_SIZE_BY_LEAGUE: Record<string, number> = {
-  Wood: 1, Copper: 1, Tin: 2, Bronze: 3, Iron: 3, Silver: 4, Gold: 4, Platinum: 5, Masters: 6, 'Tamer Elite': 6,
+  Wood: 1, Copper: 2, Tin: 2, Bronze: 3, Iron: 4, Silver: 4, Gold: 5, Platinum: 5, Masters: 5, 'Tamer Elite': 6,
 }
 export const teamSizeForLeague = (league: string): number => TEAM_SIZE_BY_LEAGUE[league] ?? 1
 
@@ -284,6 +286,9 @@ export interface GameState {
   // result), shown once on the next feeding screen so results aren't buried
   // in per-monster logs.
   lastWeek: string[]
+  // Contextual tutorial tips already dismissed (only shown while
+  // tutorialEnabled): 'signup' | 'injury' | 'rankup' so far.
+  tipsSeen: string[]
 }
 
 // Calendar helpers off the global week clock.
@@ -336,6 +341,7 @@ export function newGame(seed = 'start', opts?: { trainerName?: string; tutorialE
     enteredThisMonth: [],
     weekPlans: {},
     lastWeek: [],
+    tipsSeen: [],
   }
 }
 
@@ -431,6 +437,12 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
   })
   if (rentalDue > 0) gold -= rentalDue // no monster processed the charge (all retired)
 
+  // Snapshot post-activity, PRE-tournament state so the digest below can
+  // attribute changes honestly (2026-07-25 playtest fix): tournament injuries
+  // and exp used to fold into the activity line — "Study: INT +6, HP −62"
+  // read as if the drill itself cost 62 HP.
+  const afterActivities = stable.map((c) => ({ stats: { ...c.stats }, hp: c.hp, mp: c.mp, stamina: c.stamina }))
+
   // Tournament battle (if signed up) fights with this week's training applied.
   const { gold: goldAfterBattle, lastBattle } = resolveTournament(g, stable, gold)
   gold = goldAfterBattle
@@ -444,6 +456,7 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
   const lastWeek: string[] = []
   for (let i = 0; i < g.stable.length; i++) {
     const before = g.stable[i]
+    const mid = afterActivities[i] // post-activity, pre-tournament — the activity's OWN effects
     const after = stable[i]
     if (before.retired) continue
     const plan = plans[before.id]
@@ -454,12 +467,12 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
           : drill?.name ?? plan.activity
     const bits: string[] = []
     for (const k of STATS) {
-      const d = after.stats[k] - before.stats[k]
+      const d = mid.stats[k] - before.stats[k]
       if (d !== 0) bits.push(`${k} ${d > 0 ? '+' : ''}${d}`)
     }
-    const hpD = after.hp - before.hp
-    const mpD = after.mp - before.mp
-    const stD = after.stamina - before.stamina
+    const hpD = mid.hp - before.hp
+    const mpD = mid.mp - before.mp
+    const stD = mid.stamina - before.stamina
     if (hpD !== 0) bits.push(`HP ${hpD > 0 ? '+' : ''}${hpD}`)
     if (mpD !== 0) bits.push(`MP ${mpD > 0 ? '+' : ''}${mpD}`)
     if (stD !== 0) bits.push(`stamina ${stD > 0 ? '+' : ''}${stD}`)
@@ -468,7 +481,17 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
   }
   if (lastBattle) {
     lastWeek.push(`🏟 ${lastBattle.tournamentName}: finished ${placementLabel(lastBattle.playerPlacement)} of ${lastBattle.fieldSize}`
-      + (lastBattle.goldReward > 0 ? ` — +${lastBattle.goldReward}g` : ' — no reward'))
+      + (lastBattle.goldReward > 0 ? ` — +${lastBattle.goldReward}g` : ' — no reward')
+      + (lastBattle.expNote ? ` · exp: ${lastBattle.expNote}` : ''))
+    // Tournament-caused changes (exp stat gains, the coming-home injury roll)
+    // get their own attributed lines instead of polluting the activity line.
+    for (let i = 0; i < g.stable.length; i++) {
+      const mid = afterActivities[i]
+      const after = stable[i]
+      if (g.stable[i].retired) continue
+      const changed = after.hp !== mid.hp || after.mp !== mid.mp
+      if (changed) lastWeek.push(`  ↳ ${after.name} comes home at ${after.hp}/${maxHp(after.stats)} HP · ${after.mp}/${maxMana(after.stats)} MP — rest to recover`)
+    }
   }
 
   const week = g.week + 1
@@ -532,10 +555,24 @@ export function setActiveInnate(g: GameState, id: string, index: number): GameSt
 
 // --- Tournaments (§3): sign up in the review phase, battle resolves on the weekly tick ---
 // A monster may enter its own league's events (full rewards) or any league BELOW
-// it (reduced rewards via rewardMultiplier) — never above its license.
+// it (reduced rewards via rewardMultiplier) — never above its license, EXCEPT
+// as a licensed leader's guest (2026-07-25, the Copper-2v2 gate fix): in a
+// TEAM event, as long as at least one member holds the event's league license
+// (the "leader" — they vouch for the team), the other members may be up to ONE
+// league below it. 1v1 events collapse to the old rule (the sole member IS the
+// leader). Reward punch-down still keys off the team's minimum licenseIndex,
+// and entering at-or-above your license is never penalized, so a guest never
+// reduces the payout.
 export function eligibleForTournament(g: GameState, t: Tournament): Career[] {
   const tIdx = leagueIndexOf(t.league)
-  return g.stable.filter((c) => !c.retired && c.licenseIndex >= tIdx)
+  const floor = teamSizeForLeague(t.league) > 1 ? tIdx - 1 : tIdx
+  return g.stable.filter((c) => !c.retired && c.licenseIndex >= floor)
+}
+
+// Does this roster satisfy the licensed-leader rule for the event?
+export function teamHasLicensedLeader(g: GameState, t: Tournament, monsterIds: string[]): boolean {
+  const tIdx = leagueIndexOf(t.league)
+  return monsterIds.some((id) => (g.stable.find((x) => x.id === id)?.licenseIndex ?? -1) >= tIdx)
 }
 
 export function signUp(g: GameState, tournamentId: string, monsterIds: string[]): GameState {
@@ -546,11 +583,13 @@ export function signUp(g: GameState, tournamentId: string, monsterIds: string[])
   if (monsterIds.length !== needed) return g
   if (new Set(monsterIds).size !== monsterIds.length) return g // no duplicate roster slots
   const tIdx = leagueIndexOf(t.league)
+  const floor = needed > 1 ? tIdx - 1 : tIdx
   const ok = monsterIds.every((id) => {
     const c = g.stable.find((x) => x.id === id)
-    return !!c && !c.retired && c.licenseIndex >= tIdx
+    return !!c && !c.retired && c.licenseIndex >= floor
   })
   if (!ok) return g
+  if (!teamHasLicensedLeader(g, t, monsterIds)) return g // guests need a licensed leader
   const fee = entryFee(t.league)
   if (g.gold < fee) return g
   return { ...g, gold: g.gold - fee, pendingTournament: { tournamentId, monsterIds, feePaid: fee } }
@@ -672,10 +711,18 @@ function resolveTournament(g: GameState, stable: Career[], gold: number): { gold
   const pending = g.pendingTournament
   if (!pending) return { gold, lastBattle: null }
   const t = tournamentCalendarFor(g.seed, yearOfWeek(g.week)).find((x) => x.id === pending.tournamentId)
-  const idxs = pending.monsterIds.map((id) => stable.findIndex((x) => x.id === id))
+  let idxs = pending.monsterIds.map((id) => stable.findIndex((x) => x.id === id))
   if (!t || idxs.some((i) => i < 0 || stable[i].retired)) return { gold, lastBattle: null }
 
   const teamSize = teamSizeForLeague(t.league)
+  // A sign-up made before a team-size change (e.g. Masters 6v6 → 5v5, or the
+  // Copper/Iron/Gold step-ups, both 2026-07-25) can carry a different member
+  // count than the league now fields. Oversized: bench the extras rather than
+  // running a lopsided round robin. Undersized: fight short-handed for this
+  // one event — the engine handles NvM fine, and the next sign-up validates
+  // at the new size. (signUp validates every NEW entry; this only fires on an
+  // in-flight pre-change save.)
+  if (idxs.length > teamSize) idxs = idxs.slice(0, teamSize)
   const playerCareers = idxs.map((i) => stable[i])
 
   // Tournament matches always start fresh, full HP/MP — home condition
@@ -724,13 +771,20 @@ function resolveTournament(g: GameState, stable: Career[], gold: number): { gold
   const placeFrac = placementRewardFraction(playerPlacement)
   const mult = placeFrac * leagueMult
   const goldPrize = Math.round(t.rewards.gold * mult)
+  // Participation exp (2026-07-25 playtest fix): 4th+ used to earn NOTHING —
+  // a new player's first cup is a near-guaranteed sweep against the fixed
+  // league standard, and going home with zero on top of the injury + entry fee
+  // read as pure punishment. Hard lessons are still lessons: a small exp
+  // trickle (no gold) softens the floor without touching the podium's value.
+  const PARTICIPATION_EXP_FRACTION = 0.15
+  const expMult = mult > 0 ? mult : PARTICIPATION_EXP_FRACTION * leagueMult
 
   let expNote = ''
   const updatedCareers = playerCareers.map((c) => {
     const nc: Career = { ...c, stats: { ...c.stats }, log: [...c.log], tournamentHistory: [...c.tournamentHistory] }
-    if (mult > 0) {
+    if (expMult > 0) {
       const prof = trainingProfileFor(c.species)
-      const pts = Math.max(1, Math.round((t.rewards.exp * mult) / 10))
+      const pts = Math.max(1, Math.round((t.rewards.exp * expMult) / 10))
       const cap = LEAGUES[c.licenseIndex].cap
       if (prof.major) {
         // 60/40 split between the individually-authored major and the
@@ -766,6 +820,28 @@ function resolveTournament(g: GameState, stable: Career[], gold: number): { gold
       playerPlacement, fieldSize, goldReward: goldPrize, expNote,
     },
   }
+}
+
+// --- Infirmary (2026-07-25 playtest addition): pay to restore a monster's
+// HP/MP RIGHT NOW instead of spending a week resting — agency after a rough
+// tournament, and a recurring gold sink that scales with league. Fee scales
+// with how much is actually missing (min 5g), so topping up a scratch is
+// cheap and a full revive after a sweep costs real money. Stamina is NOT
+// restored — only Rest recovers fatigue; the infirmary mends wounds.
+export function infirmaryFee(c: Career): number {
+  const missingHp = 1 - c.hp / maxHp(c.stats)
+  const missingMp = maxMana(c.stats) > 0 ? 1 - c.mp / maxMana(c.stats) : 0
+  if (missingHp <= 0 && missingMp <= 0) return 0
+  return Math.max(5, Math.ceil((missingHp + missingMp) * (c.licenseIndex + 1) * 12))
+}
+
+export function healAtInfirmary(g: GameState, id: string): GameState {
+  const c = g.stable.find((x) => x.id === id)
+  if (!c) return g
+  const fee = infirmaryFee(c)
+  if (fee <= 0 || g.gold < fee) return g
+  const nc: Career = { ...c, hp: maxHp(c.stats), mp: maxMana(c.stats), log: [...c.log, `⛑ Infirmary visit — fully mended (−${fee}g).`].slice(-40) }
+  return { ...g, gold: g.gold - fee, stable: g.stable.map((x) => (x.id === id ? nc : x)) }
 }
 
 // --- Lab (§13.1): freeze / thaw / fuse ---

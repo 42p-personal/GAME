@@ -1,4 +1,4 @@
-import { Dispatch, SetStateAction, useEffect, useMemo, useRef, useState } from 'react'
+import { Dispatch, ReactNode, SetStateAction, useEffect, useMemo, useRef, useState } from 'react'
 import {
   BODY_ELEMENT, BODY_MINOR, BodyType, Element, FOODS, INNATE_SECONDARY_LEVEL, LEAGUES, Monster, Move, STATS, Stat, classForStats,
   feedDelta, happinessMultiplier, hashString, mulberry32, roleOfClass,
@@ -15,10 +15,10 @@ import {
   dateLabel, foodName, previewWeekEffects, rankUpFee, stageInfo, trainingProfileFor,
 } from './game'
 import {
-  BULK_FOOD_COST, ELITE_LICENSE_COST, EventMatch, EventStanding, FUSION_COST, GameState, RENTAL_PER_FROZEN, SPECIAL_LICENSE_COST,
+  BULK_FOOD_COST, ELITE_LICENSE_COST, EventMatch, EventStanding, FUSION_COST, GameState, RENTAL_PER_FROZEN, RIVAL_BAND_MIN, SPECIAL_LICENSE_COST,
   WeekPlanEntry, advanceWeek, barnCost, buyBulkFood, buyEliteLicense, buyMonster,
-  buySpecialLicense, cancelSignUp, cupLore, eligibleForTournament, freeze, fuse, fusionRoom, goto, monthOfWeek,
-  RANK_UP_MONTHS, RANK_UP_WEEK, entryFee, isRankUpWeek, placementLabel, scoutFee, teamSizeForLeague,
+  buySpecialLicense, cancelSignUp, cupLore, eligibleForTournament, freeze, fuse, fusionRoom, generateRivalTeamsForTournament, goto, healAtInfirmary, infirmaryFee, leagueIndexOf, monthOfWeek,
+  RANK_UP_MONTHS, RANK_UP_WEEK, entryFee, isRankUpWeek, placementLabel, scoutFee, teamHasLicensedLeader, teamSizeForLeague,
   newGame, offerMonster, promoteMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, signUp, thaw,
   tournamentCalendarFor, upgradeBarn, visibleLeagueCount, weekOfMonth, yearOfWeek,
 } from './town'
@@ -123,7 +123,7 @@ function MonsterCard({ m }: { m: Monster }) {
         {m.innateUnlocked ? '2nd choice unlocked — edit abilities to switch.' : `2nd choice unlocks at ${INNATE_SECONDARY_LEVEL} in a stat.`}
       </div>
 
-      <div className="section-title">Loadout (equipped 3 of {m.learned.length} learned)</div>
+      <div className="section-title">Loadout (equipped {m.loadout.length} of {m.learned.length} learned)</div>
       <div className="moves">
         {m.loadout.length === 0 && <div className="md">No moves yet — train a stat past 40.</div>}
         {m.loadout.map((mv) => (
@@ -522,6 +522,26 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
           <div className="hint">Raise your active monster week by week — train, feed, rest, rank up.</div>
           <button className="enter" disabled={game.stable.length === 0} onClick={() => setGame((g) => goto(g, 'ranch'))}>Enter the Ranch →</button>
           {game.stable.length === 0 && <div className="dim">Buy a monster first.</div>}
+        </div>
+
+        {/* Infirmary (2026-07-25): pay to mend wounds NOW instead of resting a
+            week away — fee scales with league and how much is missing.
+            Stamina is untouched; only Rest cures fatigue. */}
+        <div className="card loc">
+          <div className="loc-h"><span>⛑ Infirmary</span><span className="dim">mends HP &amp; MP · not stamina</span></div>
+          {game.stable.filter((c) => !c.retired && infirmaryFee(c) > 0).length === 0
+            ? <div className="dim">Everyone is in fighting shape.</div>
+            : game.stable.filter((c) => !c.retired && infirmaryFee(c) > 0).map((c) => (
+              <div className="shoprow" key={c.id}>
+                <div>
+                  <b>{c.name}</b>
+                  <div className="dim">{c.hp}/{maxHp(c.stats)} HP · {c.mp}/{maxMana(c.stats)} MP</div>
+                </div>
+                <button disabled={game.gold < infirmaryFee(c)} onClick={() => setGame((g) => healAtInfirmary(g, c.id))}>
+                  Heal · {infirmaryFee(c)}g
+                </button>
+              </div>
+            ))}
         </div>
 
         {/* Ranch Shop */}
@@ -926,6 +946,12 @@ function RanchView({ game, setGame, onBattleScreen }: {
   // Which of the player's upcoming matches have been paid-scouted, and at
   // what tier — keyed by matchIdx, reset each new tournament event.
   const [scouted, setScouted] = useState<Record<number, 'basic' | 'full'>>({})
+  // Pre-signup field scouting (2026-07-25): rival teams are deterministic per
+  // (seed, week, tournament), so they can be scouted BEFORE committing a
+  // roster — when loadout edits are still free and the intel is actionable.
+  // Keyed `${tournamentId}:${rivalIdx}`; local state, same convention as
+  // `scouted` above (paying again at the bracket is match-day re-intel).
+  const [fieldScout, setFieldScout] = useState<Record<string, 'basic' | 'full'>>({})
   const [selectedMonsterId, setSelectedMonsterId] = useState(() => game.stable.find((c) => !c.retired)?.id ?? game.stable[0]?.id ?? '')
   const [abilityEditorFor, setAbilityEditorFor] = useState<string | null>(null)
   const [showHistoryFor, setShowHistoryFor] = useState<string | null>(null)
@@ -979,6 +1005,15 @@ function RanchView({ game, setGame, onBattleScreen }: {
     )
 
     if (battleSub === 'preamble') {
+      // Expectation-setting (2026-07-25 playtest addition): rivals fight at the
+      // league's own FIXED standard, so a young team's first cup is usually a
+      // hard field — say so up front instead of letting a sweep read as failure.
+      const playerRoster = teamRoster('Your Team', lb.matches)
+      const perMonsterBudget = (LEAGUES[leagueIndexOf(lb.league)]?.cap ?? 100) * 3.5
+      const avgTotal = playerRoster && playerRoster.length
+        ? playerRoster.reduce((s, m) => s + STATS.reduce((t, k) => t + m.stats[k], 0), 0) / playerRoster.length
+        : Infinity
+      const underdog = avgTotal < perMonsterBudget * RIVAL_BAND_MIN
       return (
         <>
           {header}
@@ -986,6 +1021,12 @@ function RanchView({ game, setGame, onBattleScreen }: {
             <div className="section-title">{lb.tournamentName} — {lb.league} League</div>
             <p className="sub">{lore?.intro ?? `${lb.tournamentName} is under way.`}</p>
             <p className="dim">Prize on the line: up to {tourney?.rewards.gold ?? lb.goldReward}g for 1st place, {lb.fieldSize} teams competing round robin.</p>
+            {underdog && (
+              <p className="dim">
+                ⚠ The field here fights at the {lb.league}-league standard, and your team looks young for it —
+                a rough day is normal. Every match is experience; champions grow into their first cups, not through them.
+              </p>
+            )}
             <div className="carerow" style={{ justifyContent: 'center' }}>
               <button className="enter" onClick={() => setBattleSub('bracket')}>Enter the Cup →</button>
             </div>
@@ -1120,6 +1161,12 @@ function RanchView({ game, setGame, onBattleScreen }: {
         </div>
         <p className="sub">Feed {currentCareer.name} for this week — favourites and hated foods differ per monster.</p>
 
+        {isInjured(currentCareer) && (
+          <TipBanner game={game} setGame={setGame} id="injury">
+            {currentCareer.name} is hurt. Injuries only mend by <b>Resting</b> for a week or paying the
+            Town <b>Infirmary</b> — training won't fix HP, and an injured monster fights badly.
+          </TipBanner>
+        )}
         {decisionIdx === 0 && (game.lastWeek?.length ?? 0) > 0 && (
           <div className="card lastweek">
             <div className="section-title">Last week</div>
@@ -1245,6 +1292,12 @@ function RanchView({ game, setGame, onBattleScreen }: {
         {pendingEventName && <span className="up">✅ {pendingEventName}</span>}
       </div>
       <div className="feedok">✓ feeding complete for this week — plan training below, or check the calendar</div>
+      {isRankUpWeek(game.week) && (
+        <TipBanner game={game} setGame={setGame} id="rankup">
+          ⭐ Rank-up trials run THIS week — if a monster's best stat is near its league cap, promote it
+          from its detail panel before advancing. The next trials are months away.
+        </TipBanner>
+      )}
 
       <div className="stablescreen">
         <div className="stablemain">
@@ -1467,6 +1520,8 @@ function RanchView({ game, setGame, onBattleScreen }: {
                 const t = selectedTournament
                 const teamSize = teamSizeForLeague(t.league)
                 const eligible = eligibleForTournament(game, t)
+                const tIdx = leagueIndexOf(t.league)
+                const isGuest = (c: Career) => c.licenseIndex < tIdx // licensed-leader rule: allowed, but someone must hold the license
                 const signedHere = game.pendingTournament?.tournamentId === t.id
                 const signedMonsters = signedHere ? game.stable.filter((c) => game.pendingTournament!.monsterIds.includes(c.id)) : []
                 const alreadyEntered = (game.enteredThisMonth ?? []).includes(t.id)
@@ -1478,6 +1533,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
                 const pickIds = teamSize === 1 && rawPickIds.length === 0 && eligible[0] ? [eligible[0].id] : rawPickIds
                 const pickedCareers = pickIds.map((id) => eligible.find((c) => c.id === id)!).filter(Boolean)
                 const teamFull = pickedCareers.length === teamSize
+                const hasLeader = teamHasLicensedLeader(game, t, pickIds)
                 const mult = teamFull ? rewardMultiplier(Math.min(...pickedCareers.map((c) => c.licenseIndex)), t.league) : 1
                 const fatigued = pickedCareers.filter((c) => staminaDamageMult(c.stamina) < 1)
                 const injured = pickedCareers.filter(isInjured)
@@ -1500,6 +1556,48 @@ function RanchView({ game, setGame, onBattleScreen }: {
                     {game.gold < entryFee(t.league) && !signedHere && !alreadyEntered && (
                       <div className="neg" style={{ fontSize: 12 }}>Not enough gold for the {entryFee(t.league)}g entry fee.</div>
                     )}
+                    {isOpenWeek && !alreadyEntered && (
+                      <TipBanner game={game} setGame={setGame} id="signup">
+                        Your team fights every other team once, round robin. Rivals fight at the league's own fixed
+                        standard — scout the field below, then pick monsters and loadouts to match. Win or lose,
+                        everyone comes home needing rest.
+                      </TipBanner>
+                    )}
+                    {isOpenWeek && !alreadyEntered && (() => {
+                      // Rival teams are week-seeded, so this preview IS the real field.
+                      const rivalTeams = generateRivalTeamsForTournament(game, t)
+                      return (
+                        <details className="scout-field">
+                          <summary>🔍 Scout the field — {rivalTeams.length} rival teams</summary>
+                          {rivalTeams.map((team, r) => {
+                            const key = `${t.id}:${r}`
+                            const tier = fieldScout[key]
+                            const basicFee = scoutFee(t.league, 'basic')
+                            const fullFee = scoutFee(t.league, 'full')
+                            return (
+                              <div key={key} className="scout-report">
+                                <div className="section-title">Rival Team {r + 1}</div>
+                                {team.map((m, i) => <ScoutReport key={i} m={m} tier={tier} />)}
+                                <div className="carerow">
+                                  {!tier && (
+                                    <button className="ghost" disabled={game.gold < basicFee}
+                                      onClick={() => { setGame((g) => ({ ...g, gold: g.gold - basicFee })); setFieldScout((s) => ({ ...s, [key]: 'basic' })) }}>
+                                      🔍 Class &amp; loadout — {basicFee}g
+                                    </button>
+                                  )}
+                                  {tier !== 'full' && (
+                                    <button className="ghost" disabled={game.gold < fullFee}
+                                      onClick={() => { setGame((g) => ({ ...g, gold: g.gold - fullFee })); setFieldScout((s) => ({ ...s, [key]: 'full' })) }}>
+                                      🔍 Full report — {fullFee}g
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </details>
+                      )
+                    })()}
                     {signedHere ? (
                       <div>
                         ✅ {signedMonsters.map((c) => c.name).join(', ') || '?'} compete{signedMonsters.length === 1 ? 's' : ''} this week{' '}
@@ -1514,7 +1612,10 @@ function RanchView({ game, setGame, onBattleScreen }: {
                             : `Week ${t.week} has passed for this event.`}
                       </div>
                     ) : eligible.length < teamSize ? (
-                      <div className="dim">Requires {teamSize} {t.league}-league (or higher) monster{teamSize > 1 ? 's' : ''} — only {eligible.length} eligible.</div>
+                      <div className="dim">
+                        Requires {teamSize} eligible monster{teamSize > 1 ? 's' : ''} — only {eligible.length} available.
+                        {teamSize > 1 && ` (Guests one league below ${t.league} may join, but at least one member must hold the ${t.league} license.)`}
+                      </div>
                     ) : game.pendingTournament ? (
                       <div className="dim">Already entered a tournament this week.</div>
                     ) : teamSize === 1 ? (
@@ -1545,10 +1646,18 @@ function RanchView({ game, setGame, onBattleScreen }: {
                       <>
                         <TeamPicker pool={eligible} teamSize={teamSize} monsterIds={pickIds} onChange={(ids) => setTeamPick((sp) => ({ ...sp, [t.id]: ids }))} />
                         <div className="carerow" style={{ marginTop: 8 }}>
-                          <button className="signup" disabled={!teamFull} onClick={() => setGame((g) => signUp(g, t.id, pickIds))}>
-                            {teamFull ? 'Sign Up →' : `Pick ${teamSize - pickedCareers.length} more`}
+                          <button className="signup" disabled={!teamFull || !hasLeader} onClick={() => setGame((g) => signUp(g, t.id, pickIds))}>
+                            {!teamFull ? `Pick ${teamSize - pickedCareers.length} more` : !hasLeader ? `Needs a ${t.league}-licensed leader` : 'Sign Up →'}
                           </button>
                         </div>
+                        {teamFull && !hasLeader && (
+                          <div className="neg" style={{ fontSize: 12 }}>
+                            ⚠ Every picked monster is below {t.league} league — at least one member must hold the {t.league} license to vouch for the team.
+                          </div>
+                        )}
+                        {pickedCareers.some(isGuest) && hasLeader && (
+                          <div className="dim">🎫 {pickedCareers.filter(isGuest).map((c) => c.name).join(', ')} enter{pickedCareers.filter(isGuest).length === 1 ? 's' : ''} as a licensed leader's guest (one league below).</div>
+                        )}
                         {mult < 1 && (
                           <div className="dim">⚠ your whole team is above {t.league} league — rewards reduced to {Math.round(mult * 100)}%.</div>
                         )}
@@ -1653,6 +1762,7 @@ function sanitizeAndMigrate(raw: string): GameState | null {
     if (typeof g.trainerName !== 'string' || !g.trainerName) g.trainerName = 'Tamer'
     if (typeof g.tutorialEnabled !== 'boolean') g.tutorialEnabled = false // already playing — skip tips by default
     if (typeof g.tutorialDismissed !== 'boolean') g.tutorialDismissed = true
+    if (!Array.isArray(g.tipsSeen)) g.tipsSeen = []
     return g as GameState
   } catch {
     return null
@@ -1714,7 +1824,35 @@ function SlotPicker({ mode, onBack, onPickEmpty, onPickOccupied }: {
   onPickEmpty: (slot: number) => void
   onPickOccupied: (slot: number) => void
 }) {
-  const slots = useMemo(() => Array.from({ length: SAVE_SLOTS }, (_, i) => i + 1).map((slot) => ({ slot, game: loadSlot(slot) })), [])
+  // Slot management (2026-07-25): delete (confirmed), export (downloads the
+  // raw save JSON — cheap insurance while alpha migrations still bite), and
+  // import (paste exported JSON into an empty slot). `refresh` re-reads
+  // localStorage after any of them.
+  const [refresh, setRefresh] = useState(0)
+  const slots = useMemo(() => Array.from({ length: SAVE_SLOTS }, (_, i) => i + 1).map((slot) => ({ slot, game: loadSlot(slot) })),
+    [refresh]) // eslint-disable-line react-hooks/exhaustive-deps
+  const deleteSlot = (slot: number) => {
+    if (!window.confirm(`Delete the save in Slot ${slot}? This cannot be undone.`)) return
+    localStorage.removeItem(slotKey(slot))
+    setRefresh((r) => r + 1)
+  }
+  const exportSlot = (slot: number) => {
+    const raw = localStorage.getItem(slotKey(slot))
+    if (!raw) return
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([raw], { type: 'application/json' }))
+    a.download = `monster-tamer-slot-${slot}.json`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+  const importSlot = (slot: number) => {
+    const raw = window.prompt('Paste an exported save (the JSON from a .json backup):')
+    if (!raw) return
+    const g = sanitizeAndMigrate(raw)
+    if (!g) { window.alert('That doesn\'t look like a valid Monster Tamer save.') ; return }
+    localStorage.setItem(slotKey(slot), JSON.stringify(g))
+    setRefresh((r) => r + 1)
+  }
   return (
     <div className="titlescreen">
       <div className="titlecard slotcard">
@@ -1725,22 +1863,28 @@ function SlotPicker({ mode, onBack, onPickEmpty, onPickOccupied }: {
             const summary = game ? slotSummary(game) : null
             const disabled = mode === 'continue' && empty
             return (
-              <button
-                key={slot}
-                className={'slotrow' + (empty ? ' empty' : '')}
-                disabled={disabled}
-                onClick={() => (empty ? onPickEmpty(slot) : onPickOccupied(slot))}
-              >
-                <span className="slotnum">Slot {slot}</span>
-                {empty
-                  ? <span className="slotmeta dim">— empty —{mode === 'new' ? ' (start here)' : ''}</span>
-                  : (
-                    <span className="slotmeta">
-                      <b>{summary!.trainerName}</b> · {summary!.league} league · {summary!.date} · 🪙{summary!.gold}g · {summary!.monsterCount} monster{summary!.monsterCount === 1 ? '' : 's'}
-                      {mode === 'new' && <span className="slotoverwrite"> · overwrite?</span>}
-                    </span>
-                  )}
-              </button>
+              <div key={slot} className={'slotrow' + (empty ? ' empty' : '')}>
+                <button
+                  className="slotmain"
+                  disabled={disabled}
+                  onClick={() => (empty ? onPickEmpty(slot) : onPickOccupied(slot))}
+                >
+                  <span className="slotnum">Slot {slot}</span>
+                  {empty
+                    ? <span className="slotmeta dim">— empty —{mode === 'new' ? ' (start here)' : ''}</span>
+                    : (
+                      <span className="slotmeta">
+                        <b>{summary!.trainerName}</b> · {summary!.league} league · {summary!.date} · 🪙{summary!.gold}g · {summary!.monsterCount} monster{summary!.monsterCount === 1 ? '' : 's'}
+                        {mode === 'new' && <span className="slotoverwrite"> · overwrite?</span>}
+                      </span>
+                    )}
+                </button>
+                <div className="slotactions">
+                  {!empty && <button className="slotaction" title="Export save as a JSON backup" onClick={() => exportSlot(slot)}>⬇</button>}
+                  {!empty && <button className="slotaction danger" title="Delete this save" onClick={() => deleteSlot(slot)}>🗑</button>}
+                  {empty && <button className="slotaction" title="Import a save backup into this slot" onClick={() => importSlot(slot)}>⬆</button>}
+                </div>
+              </div>
             )
           })}
         </div>
@@ -1794,6 +1938,21 @@ function AlphaDisclaimer({ onContinue }: { onContinue: () => void }) {
         </p>
         <button className="titlebtn primary" onClick={onContinue}>Got it, let's go!</button>
       </div>
+    </div>
+  )
+}
+
+// Contextual one-shot tutorial tips (2026-07-25 playtest addition): shown at
+// the moment a system first matters (sign-up, first injury, rank-up week),
+// only while tutorialEnabled, each dismissible exactly once (GameState.tipsSeen).
+function TipBanner({ game, setGame, id, children }: {
+  game: GameState; setGame: Dispatch<SetStateAction<GameState>>; id: string; children: ReactNode
+}) {
+  if (!game.tutorialEnabled || (game.tipsSeen ?? []).includes(id)) return null
+  return (
+    <div className="tipbanner">
+      <span>💡 {children}</span>
+      <button className="tutorial-dismiss" onClick={() => setGame((g) => ({ ...g, tipsSeen: [...(g.tipsSeen ?? []), id] }))}>✕</button>
     </div>
   )
 }
