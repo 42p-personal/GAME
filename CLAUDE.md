@@ -90,6 +90,33 @@ CON/turn-order changes are the tuning knobs to revisit.
 
 ### What changed this session, newest first
 
+-39. **All 45 sprite alphas rebuilt from raw art — restores rembg-eaten limbs (2026-07-25),
+    committed and deployed (`ac38cec`, manual deploy).** User reported sprites "missing arms"
+    once the arena backgrounds made transparency visible. A full green-backdrop audit of all 45
+    shipped PNGs + raw-vs-rembg-vs-shipped comparison strips found TWO distinct damage sources:
+    (1) **rembg's soft matting had silently half-erased pale/glowing extremities** on many
+    sprites — Mantevoke's entire left scythe arm, Mantaris's wing membranes, Harmonybringer's
+    both forearms + all musical notes, Stellarion's bow + arrow, Crocmaw's raised tail,
+    Abyssomancer's raised arms + cyan rune ring, Maelurk's tentacle tips + sigils, Carcharun's
+    staff, Corvaan's spell sigil, Tortavos's head sigil, Chrono-Leviathan's time rings (several
+    of these were never noticed because the old dark card background hid partial alpha); and
+    (2) the `cut_enclosed_holes` cleanup had additionally cut pale BODY regions it mistook for
+    background (Mantaris's white belly/wings being the worst).
+    - **New canonical pipeline — `flood_dewhite.js`** (scratchpad `exclusive-sprites/gen/`,
+      alongside `rebuild_all.sh` with the full species→raw-file map): background is now derived
+      DETERMINISTICALLY from each raw white-bg generation — border-connected flood fill (only
+      near-white pixels reachable from the canvas edge become transparent) + a strict
+      enclosed-region pass that only cuts near-PURE-white gaps (avg min-channel ≥246) + a light
+      edge feather. Enclosed art structurally cannot be eaten. rembg is no longer part of the
+      sprite pipeline at all; the raw generations in the two scratchpad dirs are the recovery
+      source of truth.
+    - All 45 rebuilt, exported through the same trim/pad/320px path, verified complete over a
+      green backdrop (3 audit montage pages), zero background remnants, build/tests clean, and
+      deployed via the standing manual `npm run deploy` workaround (git builds still
+      EBADPLATFORM). Live byte-size spot-checks matched; one CDN edge cache entry (stellarion)
+      served stale for a few minutes until its 4h max-age revalidated — origin was correct
+      throughout.
+
 -38. **Real sprite art for the 15 exclusive-body species (2026-07-25), build/typecheck/test/
     browser-verified, committed and deployed (`b83017d`, manual deploy — git-triggered builds
     failed with the standing EBADPLATFORM bug).** Direct follow-on to item -37's "Stormlerath looks wrong"
