@@ -8,7 +8,7 @@ import { generateMonster, maxHp, maxMana } from './monster'
 import { BattleResult, simulateTeamBattle } from './battle'
 import {
   Career, MAX_STAMINA, START_GOLD, WEEKS_PER_MONTH, WEEKS_PER_YEAR, WeeklyAction, ageOneWeek, applyWeek, buyFood,
-  careerMonster, newCareer, rankUp, rollMarket, statCapFor, trainingProfileFor,
+  careerMonster, forageFeed, newCareer, rankUp, rollMarket, statCapFor, trainingProfileFor,
 } from './game'
 import { ALL_DRILLS } from './drills'
 import { learnedMoves } from './monster'
@@ -223,7 +223,12 @@ export function tournamentCalendarFor(seed: string, year: number): Tournament[] 
       const guaranteed = q === marqueeQuarter ? 0 : 1
       const count = guaranteed + (rng() < 0.4 ? 1 : 0)
       for (let i = 0; i < count && months.length; i++) {
-        const month = months.splice(Math.floor(rng() * months.length), 1)[0]
+        // Always consume an rng draw for the month pick, but force Wood's Q1
+        // guaranteed cup to Month 1 (user spec): a new player must have a Wood
+        // cup in the first month to get competing straight away.
+        const roll = Math.floor(rng() * months.length)
+        const forceMonth1 = league === 'Wood' && q === 0 && i === 0 && months.includes(1)
+        const month = months.splice(forceMonth1 ? months.indexOf(1) : roll, 1)[0]
         // Trial months (4/8/12) reserve Week 4 for the rank-up trials — circuit
         // events there land Weeks 1-3 only, so no event count is ever lost.
         const weekChoices = RANK_UP_MONTHS.includes(month) ? WEEKS_PER_MONTH - 1 : WEEKS_PER_MONTH
@@ -553,7 +558,7 @@ export function goto(g: GameState, area: Area): GameState {
 // chosen activity. Monsters with no plan (or retired) still age. Lab rental is
 // charged once. The global clock advances; food prices reroll weekly and the
 // monster market restocks at the start of each month.
-export interface WeekPlanEntry { activity: string; food: Food | '' } // activity: drill id | 'rest' | 'excursion'
+export interface WeekPlanEntry { activity: string; food: Food | ''; forage?: boolean } // activity: drill id | 'rest' | 'excursion'; forage = free fallback when broke
 
 // ---------------------------------------------------------------------------
 // Weekly events (LOOP_DESIGN.md Phase 1) — the connective-tissue framework.
@@ -870,6 +875,8 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
       const fed = buyFood(cur, gold, plan.food, g.foodMarket, foodDiscountFor(g, plan.food))
       cur = fed.c
       gold = fed.gold
+    } else if (plan.forage) {
+      cur = forageFeed(cur) // free fallback — costs stamina + happiness, no gold
     }
     const action: WeeklyAction =
       plan.activity === 'rest' ? { kind: 'rest' }

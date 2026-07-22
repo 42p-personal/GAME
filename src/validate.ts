@@ -81,6 +81,8 @@ export function designProblems(): string[] {
   for (const seed of ['probe-a', 'probe-b', 'probe-c']) {
     for (let year = 0; year < 4; year++) {
       const cal = tournamentCalendarFor(seed, year)
+      // A new player must have a Wood cup in Month 1 to start competing (user spec).
+      if (!cal.some((t) => t.league === 'Wood' && t.month === 1)) problems.push(`CALENDAR(${seed}/y${year}): no Wood cup in Month 1.`)
       const ids = new Set<string>()
       const names = new Set<string>()
       for (const t of cal) {

@@ -191,12 +191,14 @@ function rollDrillGain(rng: RNG, base: number, happiness: number): number {
 // its training + feeding math exactly (same seeded rng as applyWeek, so the
 // roll shown IS the roll that will land) so the Ranch screen can show the
 // happiness swing and exact stat gains/maluses before the player commits.
-export function previewWeekEffects(c: Career, activity: string, food: Food | ''): WeekPreview {
-  // Food resolves BEFORE the activity in the real tick (buyFood runs first),
-  // so the preview establishes post-feed happiness + stamina baselines, then
-  // runs the activity off them — matching applyWeek exactly.
-  const foodHap = food ? foodHappinessDelta(c, food) : -1 // -1 = the unfed hunger penalty
-  const foodStam = food ? foodStaminaDelta(food) : 0
+export function previewWeekEffects(c: Career, activity: string, food: Food | '', forage = false): WeekPreview {
+  // Food resolves BEFORE the activity in the real tick (buyFood/forageFeed run
+  // first), so the preview establishes post-feed happiness + stamina baselines,
+  // then runs the activity off them — matching applyWeek exactly. Forage is the
+  // free fallback: fixed stamina + happiness cost, no training boost.
+  const fed = forage || !!food
+  const foodHap = forage ? -FORAGE_HAPPINESS_COST : food ? foodHappinessDelta(c, food) : -1 // -1 = the unfed hunger penalty
+  const foodStam = forage ? -FORAGE_STAMINA_COST : food ? foodStaminaDelta(food) : 0
   let happinessDelta = foodHap
   const statDeltas: Partial<Record<Stat, number>> = {}
   let staminaDelta = foodStam !== 0 ? Math.max(0, Math.min(MAX_STAMINA, c.stamina + foodStam)) - c.stamina : 0
@@ -205,7 +207,7 @@ export function previewWeekEffects(c: Career, activity: string, food: Food | '')
   let mpDelta = 0
   if (c.retired) return { happinessDelta, statDeltas, staminaDelta, goldDelta, hpDelta, mpDelta }
   const startStam = Math.max(0, Math.min(MAX_STAMINA, c.stamina + foodStam)) // stamina the activity starts from
-  const postFeedHappiness = food ? Math.max(0, Math.min(MAX_HAPPINESS, c.happiness + foodHap)) : c.happiness
+  const postFeedHappiness = fed ? Math.max(0, Math.min(MAX_HAPPINESS, c.happiness + foodHap)) : c.happiness
   const rng = mulberry32(hashString(c.id + ':' + c.week))
   const drill = ALL_DRILLS.find((d) => d.id === activity)
   if (drill) {
@@ -342,6 +344,22 @@ export function buyFood(c: Career, gold: number, food: Food, market: Record<Food
   return {
     c: push(n, `Wk ${c.week + 1}: fed ${foodName(food)} (−${price}g).${bits ? ' ' + bits + '.' : ''}`),
     gold: gold - price,
+  }
+}
+
+// Forage (user spec): the free fallback when the player can't afford ANY food —
+// the monster feeds itself for the week (satisfies the food gate, no gold spent)
+// but it's tiring and joyless. Costs stamina + happiness; grants no training
+// boost (like eating nothing special). Mirrored in previewWeekEffects.
+export const FORAGE_STAMINA_COST = 25
+export const FORAGE_HAPPINESS_COST = 2
+export function forageFeed(c: Career): Career {
+  if (c.retired || c.fedThisWeek) return c
+  const happiness = Math.max(0, Math.min(MAX_HAPPINESS, c.happiness - FORAGE_HAPPINESS_COST))
+  const stamina = Math.max(0, Math.min(MAX_STAMINA, c.stamina - FORAGE_STAMINA_COST))
+  return {
+    ...c, happiness, stamina, fedThisWeek: true, lastFood: undefined,
+    log: [...c.log, `Wk ${c.week + 1}: foraged for the week — tiring and joyless, but fed (no gold spent).`].slice(-40),
   }
 }
 

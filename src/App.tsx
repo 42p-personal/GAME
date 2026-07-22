@@ -13,7 +13,7 @@ import { BIOS } from './bestiary'
 import { BASIC_DRILLS, Drill, INTENSIVE_DRILLS } from './drills'
 import {
   BASIC_DRILL_STAMINA, Career, INTENSIVE_DRILL_STAMINA, MAX_STAMINA, canRankUp, careerMonster,
-  dateLabel, foodName, previewWeekEffects, rankUpFee, stageInfo, trainingProfileFor,
+  dateLabel, foodName, FORAGE_STAMINA_COST, FORAGE_HAPPINESS_COST, previewWeekEffects, rankUpFee, stageInfo, trainingProfileFor,
 } from './game'
 import {
   PANTRY_CONTRACT_COST, GRAND_LARDER_COST, ELITE_LICENSE_COST, EventMatch, EventStanding, FUSION_COST, GameState, PendingEvent, RENTAL_PER_FROZEN, RIVAL_BAND_MIN, SPECIAL_LICENSE_COST,
@@ -706,11 +706,11 @@ function DigestLine({ text, className }: { text: string; className: string }) {
 // One training-row block: a drill's LIVE preview for the selected monster this
 // week (exact, not estimated — previewWeekEffects shares applyWeek's seeded
 // rng) so the happiness-weighted roll shows the real number, not a nominal one.
-function TrainBlock({ d, career, food, selected, onClick }: {
-  d: Drill; career: Career; food: WeekPlanEntry['food']; selected: boolean; onClick: () => void
+function TrainBlock({ d, career, food, forage, selected, onClick }: {
+  d: Drill; career: Career; food: WeekPlanEntry['food']; forage?: boolean; selected: boolean; onClick: () => void
 }) {
   const stat = primaryStatOf(d)
-  const preview = previewWeekEffects(career, d.id, food)
+  const preview = previewWeekEffects(career, d.id, food, forage)
   const gain = preview.statDeltas[stat]
   const malusEntry = (Object.entries(d.gains) as [Stat, number][]).find(([, v]) => v < 0)
   const malus = malusEntry ? preview.statDeltas[malusEntry[0]] ?? malusEntry[1] : undefined
@@ -740,7 +740,7 @@ function TrainBlock({ d, career, food, selected, onClick }: {
 // Live and exact — previewWeekEffects shares applyWeek's seeded rng, and the
 // preview re-rolls with the post-feed happiness as the food selection changes.
 function PlanBenefit({ career, plan }: { career: Career; plan: WeekPlanEntry }) {
-  const preview = previewWeekEffects(career, plan.activity, plan.food)
+  const preview = previewWeekEffects(career, plan.activity, plan.food, plan.forage)
   const drill = [...BASIC_DRILLS, ...INTENSIVE_DRILLS].find((d) => d.id === plan.activity)
   const label = drill ? `💪 ${drill.name}` : plan.activity === 'excursion' ? '🧭 Excursion' : '😴 Rest'
   const cap = LEAGUES[career.licenseIndex].cap
@@ -1455,7 +1455,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
             ) : (
               <>
                 <div className="section-title">Food — buy 1 this week</div>
-                <div className={'foodgroups' + (currentPlan.food ? '' : ' foods-missing')}>
+                <div className={'foodgroups' + (currentPlan.food || currentPlan.forage ? '' : ' foods-missing')}>
                   {([['normal', 'Rations'], ['training', 'Training foods'], ['premium', 'Premium']] as [FoodTier, string][]).map(([tier, label]) => {
                     const discounted = tier === 'normal' ? game.pantryContract : game.grandLarder
                     return (
@@ -1469,7 +1469,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
                             const eff = foodEffectLabel(f, currentCareer)
                             return (
                               <button key={f.id} className={`food ${f.tier}${selected ? ' selected' : ''}`} disabled={!afford}
-                                onClick={() => setPlanFor(currentCareer.id, { ...currentPlan, food: selected ? '' : f.id })}
+                                onClick={() => setPlanFor(currentCareer.id, { ...currentPlan, food: selected ? '' : f.id, forage: false })}
                                 title={f.desc}>
                                 <span className="food-top">{f.icon} {f.name}{selected ? ' ✓' : ''}</span>
                                 <span className={'food-eff ' + eff.cls}>{eff.primary}</span>
@@ -1483,14 +1483,24 @@ function RanchView({ game, setGame, onBattleScreen }: {
                     )
                   })}
                 </div>
+                {/* Forage fallback (user spec): only when nearly broke (< 10g) —
+                    a free "feed" that costs stamina + happiness so a skint player is
+                    never soft-locked out of advancing. */}
+                {game.gold < 10 && (
+                  <button className={'forage-option' + (currentPlan.forage ? ' selected' : '')}
+                    onClick={() => setPlanFor(currentCareer.id, { ...currentPlan, food: '', forage: !currentPlan.forage })}>
+                    <span className="forage-top">🌿 Forage for the week{currentPlan.forage ? ' ✓' : ''}</span>
+                    <span className="forage-sub">no gold — but −{FORAGE_STAMINA_COST} stamina · −{FORAGE_HAPPINESS_COST} happiness</span>
+                  </button>
+                )}
                 <PlanBenefit career={currentCareer} plan={currentPlan} />
               </>
             )}
             <div className="carerow" style={{ marginTop: '1rem' }}>
               <button
                 className="enter"
-                disabled={!currentCareer.retired && !currentPlan.food}
-                title={!currentCareer.retired && !currentPlan.food ? 'Pick a food for this monster first' : undefined}
+                disabled={!currentCareer.retired && !currentPlan.food && !currentPlan.forage}
+                title={!currentCareer.retired && !currentPlan.food && !currentPlan.forage ? 'Pick a food (or forage) for this monster first' : undefined}
                 onClick={advanceFeeding}
               >
                 {decisionIdx < game.stable.length - 1 ? 'Next Monster →' : 'Continue to Stable →'}
@@ -1716,9 +1726,9 @@ function RanchView({ game, setGame, onBattleScreen }: {
                   return (
                     <div className="traincol" key={stat}>
                       <div className="traincol-h" style={{ color: STAT_COLOR[stat] }}>{stat}</div>
-                      <TrainBlock d={basic} career={selectedCareer} food={selPlan.food} selected={selPlan.activity === basic.id} onClick={() => setSelActivity(basic.id)} />
+                      <TrainBlock d={basic} career={selectedCareer} food={selPlan.food} forage={selPlan.forage} selected={selPlan.activity === basic.id} onClick={() => setSelActivity(basic.id)} />
                       {intensives.map((d) => (
-                        <TrainBlock key={d.id} d={d} career={selectedCareer} food={selPlan.food} selected={selPlan.activity === d.id} onClick={() => setSelActivity(d.id)} />
+                        <TrainBlock key={d.id} d={d} career={selectedCareer} food={selPlan.food} forage={selPlan.forage} selected={selPlan.activity === d.id} onClick={() => setSelActivity(d.id)} />
                       ))}
                     </div>
                   )
@@ -1726,8 +1736,8 @@ function RanchView({ game, setGame, onBattleScreen }: {
                 <div className="traincol">
                   <div className="traincol-h dim">OTHER</div>
                   {(() => {
-                    const restPrev = previewWeekEffects(selectedCareer, 'rest', selPlan.food)
-                    const excPrev = previewWeekEffects(selectedCareer, 'excursion', selPlan.food)
+                    const restPrev = previewWeekEffects(selectedCareer, 'rest', selPlan.food, selPlan.forage)
+                    const excPrev = previewWeekEffects(selectedCareer, 'excursion', selPlan.food, selPlan.forage)
                     return (
                       <>
                         <button className={'trainblock' + (selPlan.activity === 'rest' ? ' selected' : '')} onClick={() => setSelActivity('rest')}>
@@ -2020,7 +2030,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
             // Every active monster needs a food chosen before the week can
             // advance (user spec 2026-07-22: "monsters always require food").
             const active = game.stable.filter((c) => !c.retired)
-            const unfed = active.filter((c) => !weekPlan[c.id]?.food)
+            const unfed = active.filter((c) => !weekPlan[c.id]?.food && !weekPlan[c.id]?.forage)
             const trainN = active.filter((c) => weekPlan[c.id] && weekPlan[c.id].activity !== 'rest' && weekPlan[c.id].activity !== 'excursion').length
             const excN = active.filter((c) => weekPlan[c.id]?.activity === 'excursion').length
             const restN = active.length - trainN - excN

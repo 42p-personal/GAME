@@ -547,6 +547,12 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 .xpfill { height: 100%; background: var(--accent, #6ad); border-radius: 4px; transition: width .3s ease; }
 .potential { color: var(--cha, #d9a94a); font-weight: 700; }
 
+/* Forage fallback (feeding screen, shown only when the player can't afford food). */
+.forage-option { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; margin-top: 8px; padding: 9px 12px; border: 1px dashed var(--con, #5bd47a); border-radius: 9px; background: rgba(91,212,122,.06); text-align: left; }
+.forage-option.selected { border-style: solid; background: rgba(91,212,122,.14); }
+.forage-top { font-weight: 700; font-size: 13px; }
+.forage-sub { font-size: 11px; color: var(--muted); }
+
 /* Winner banner: the fight's climax gets a real centered moment, not a
    corner chip. */
 .winner-banner { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 4;
