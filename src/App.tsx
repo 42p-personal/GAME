@@ -42,19 +42,37 @@ function StatBar({ stat, value, max }: { stat: Stat; value: number; max: number 
 }
 
 
-// Training aptitude (primary/secondary/weakness) — same metric the Ranch
-// screen tags stats with, so this line always agrees with it. (Previously
-// showed a DIFFERENT metric — current stats vs body-type average — which
-// looked like training info but wasn't; that mismatch was the actual bug.)
+// Training-aptitude marks (2026-07-25): one uniform rendering used everywhere a
+// species' growth profile is summarised, so it reads the same on the Market
+// card, the Bestiary, and a monster card. Each mark is a coloured arrow + its
+// stat, both tinted to that stat's colour. Major = ▲ (large up), minor = ▴
+// (small up — a weaker buff), flaw = ▼ (down). The magnitude/word lives in the
+// tooltip so the line stays a clean set of same-shaped, same-coloured marks.
+const APT_MARK = {
+  major: { glyph: '▲', label: 'major aptitude · trains +20% faster' },
+  minor: { glyph: '▴', label: 'minor aptitude · trains +10% faster' },
+  flaw: { glyph: '▼', label: 'training flaw · trains −20% slower' },
+} as const
+function AptMark({ kind, stat }: { kind: 'major' | 'minor' | 'flaw'; stat: Stat }) {
+  const a = APT_MARK[kind]
+  return <span className={'aptmark ' + kind} style={{ color: STAT_COLOR[stat] }} title={`${stat} — ${a.label}`}>{a.glyph}&nbsp;{stat}</span>
+}
+function AptMarks({ prof }: { prof: { major?: Stat; minor: Stat; flaw?: Stat } }) {
+  return (
+    <span className="aptmarks">
+      {prof.major && <AptMark kind="major" stat={prof.major} />}
+      <AptMark kind="minor" stat={prof.minor} />
+      {prof.flaw && <AptMark kind="flaw" stat={prof.flaw} />}
+    </span>
+  )
+}
+
+// Training aptitude — same metric the Ranch screen tags stats with, so this
+// line always agrees with it.
 function Signature({ m }: { m: Monster }) {
-  const prof = trainingProfileFor(m.species)
   return (
     <div className="meta sig">
-      <span className="up">
-        {prof.major && <>▲ {prof.major} <small>+20%</small> · </>}
-        {prof.minor} <small>+10%</small>
-      </span>
-      {prof.flaw && <span className="down">▼ {prof.flaw} <small>−20%</small></span>}
+      <AptMarks prof={trainingProfileFor(m.species)} />
       <span className="dim">training aptitude</span>
     </div>
   )
@@ -272,14 +290,7 @@ function Bestiary({ specialLicense, eliteLicense }: { specialLicense: boolean; e
                     <Sprite species={s} size={36} />
                     <span className="bn">{s.name}</span>
                     <span className="dim">· {s.flavour}</span>
-                    <span className="dim bsmall">
-                      {prof.major
-                        ? <>
-                            <span style={{ color: STAT_COLOR[prof.major] }}>▲ {prof.major}</span>
-                            {prof.flaw && <> · <span style={{ color: STAT_COLOR[prof.flaw] }}>▼ {prof.flaw}</span></>}
-                          </>
-                        : 'minor only'}
-                    </span>
+                    <span className="bsmall"><AptMarks prof={prof} /></span>
                   </summary>
                   <p className="bio">{BIOS[s.id] ?? s.flavour}</p>
                   <p className="dim bsmall">
@@ -439,8 +450,6 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
       {game.tutorialEnabled && !game.tutorialDismissed && (
         <TutorialBanner onDismiss={() => setGame((g) => ({ ...g, tutorialDismissed: true }))} />
       )}
-      <p className="sub">Town — your hub. Buy monsters at the Market, bank &amp; combine genomes at the Lab, upgrade at the Ranch Shop, then head to the Ranch to raise your active monster.</p>
-
       <div className="townbar">
         <span>🪙 {game.gold}g</span>
         <span>🏠 Stable {game.stable.length}/{game.barnCapacity}</span>
@@ -452,7 +461,7 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
         {/* Market */}
         <div className="card loc">
           <div className="loc-h"><span>🛒 Market</span></div>
-          <div className="hint">3 random monsters · prices swing wider than food (±60%).{barnFull ? ' Stable full — upgrade a barn to buy.' : ''}</div>
+          {barnFull && <div className="hint">🏠 Stable full — upgrade a barn to buy.</div>}
           <div className="offers">
             {game.market.length === 0 && <div className="dim">Sold out — market refreshes at the start of each month.</div>}
             {game.market.map((o, i) => {
@@ -468,9 +477,8 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
                       <Sprite species={m.species} size={44} />
                       <span className="offer-brief-text">
                         <b>{m.name}</b> <span className="dim">· {m.species.name} · {m.className}</span>
-                        <span className="offer-brief-sub dim">
-                          {prof.major && <>▲ <b style={{ color: STAT_COLOR[prof.major] }}>{prof.major}</b> · </>}
-                          minor {prof.minor}{prof.flaw ? <> · ▼ {prof.flaw}</> : ''} · lifespan {m.species.lifespan}y
+                        <span className="offer-brief-sub">
+                          <AptMarks prof={prof} /> <span className="dim">· {m.species.lifespan}y</span>
                         </span>
                       </span>
                       <span className="offer-brief-more dim">details ▾</span>
@@ -538,7 +546,6 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
         {/* Ranch */}
         <div className="card loc">
           <div className="loc-h"><span>🐄 Ranch</span></div>
-          <div className="hint">Raise your active monster week by week — train, feed, rest, rank up.</div>
           <button className="enter" disabled={game.stable.length === 0} onClick={() => setGame((g) => goto(g, 'ranch'))}>Enter the Ranch →</button>
           {game.stable.length === 0 && <div className="dim">Buy a monster first.</div>}
         </div>
@@ -1333,7 +1340,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
           <span>Feeding {decisionIdx + 1}/{game.stable.length}</span>
           {decisionIdx > 0 && <button className="ghost" onClick={() => setDecisionIdx((i) => i - 1)}>← Previous</button>}
         </div>
-        <p className="sub">Feed {currentCareer.name} for this week — favourites and hated foods differ per monster.</p>
+        <p className="sub">Feed {currentCareer.name} for the week.</p>
 
         {isInjured(currentCareer) && (
           <TipBanner game={game} setGame={setGame} id="injury">
@@ -1390,7 +1397,6 @@ function RanchView({ game, setGame, onBattleScreen }: {
                     )
                   })}
                 </div>
-                <div className="hint">♥ favourite food · +1 happiness — ✖ hated · −1 happiness — others neutral</div>
                 <PlanBenefit career={currentCareer} plan={currentPlan} />
               </>
             )}
@@ -1546,14 +1552,16 @@ function RanchView({ game, setGame, onBattleScreen }: {
 
             <div className="card detail-stats">
               {STATS.map((s) => {
-                const tag = selProf.major === s ? 'MAJOR +20%' : selProf.minor === s ? 'MINOR +10%' : selProf.flaw === s ? 'FLAW −20%' : ''
-                const tagClass = selProf.major === s ? 'pos' : selProf.flaw === s ? 'neg' : 'dim'
+                // Same ▲/▴/▼ aptitude vocabulary as the Market/Bestiary marks —
+                // the stat is already the row label, so the tag is just the
+                // arrow + magnitude, tinted to the stat.
+                const tag = selProf.major === s ? '▲ +20%' : selProf.minor === s ? '▴ +10%' : selProf.flaw === s ? '▼ −20%' : ''
                 return (
                   <div className="detailstat" key={s}>
                     {/* Aptitude tag sits right beside its stat's name — parked
                         at the row's far end it read as a detached floater. */}
                     <span style={{ color: STAT_COLOR[s], fontWeight: 700 }}>{s}</span>
-                    <span className={'detailstat-tag ' + tagClass}>{tag}</span>
+                    <span className="detailstat-tag" style={{ color: STAT_COLOR[s] }}>{tag}</span>
                     <span className="bar"><i style={{ width: `${Math.min(100, (selectedCareer.stats[s] / LEAGUES[selectedCareer.licenseIndex].cap) * 100)}%`, background: STAT_COLOR[s] }} /></span>
                     <span className="v">{selectedCareer.stats[s]}</span>
                   </div>
@@ -1610,7 +1618,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
             <div className="retired">🏁 {selectedCareer.name} has retired and can no longer train.</div>
           ) : (
             <>
-              <div className="section-title">Training — condensed by stat</div>
+              <div className="section-title">Training</div>
               <div className="trainrow">
                 {STATS.map((stat) => {
                   const basic = BASIC_DRILLS.find((d) => primaryStatOf(d) === stat)!

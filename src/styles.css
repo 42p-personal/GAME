@@ -55,10 +55,16 @@ button:hover { filter: brightness(1.08); }
 .ability { font-size: 13px; color: var(--ink); }
 .ability small { color: var(--muted); }
 
-.sig { display: flex; gap: 8px; align-items: center; margin-top: 3px; }
-.sig .up { color: var(--dex); font-weight: 700; }
-.sig .down { color: var(--str); font-weight: 700; }
+.sig { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; margin-top: 3px; }
 .sig .dim { color: var(--muted); font-size: 11px; }
+
+/* Training-aptitude marks (2026-07-25): uniform coloured arrow + stat, tinted
+   to the stat's own colour, everywhere a growth profile is summarised. Major
+   ▲ / minor ▴ (smaller glyph = weaker buff) / flaw ▼. */
+.aptmarks { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 3px 10px; }
+.aptmark { font-weight: 700; white-space: nowrap; }
+.aptmark.major { font-size: 1.02em; }
+.aptmark.minor { font-size: .96em; }
 
 .afftaste { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; margin: 6px 0 10px; color: var(--muted); }
 .afftaste .up { color: var(--dex); }
