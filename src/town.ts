@@ -8,7 +8,7 @@ import { generateMonster, maxHp, maxMana } from './monster'
 import { BattleResult, simulateTeamBattle } from './battle'
 import {
   Career, MAX_STAMINA, START_GOLD, WEEKS_PER_MONTH, WEEKS_PER_YEAR, WeeklyAction, ageOneWeek, applyWeek, buyFood,
-  careerMonster, forageFeed, newCareer, rankUp, rollMarket, statCapFor, trainingProfileFor,
+  careerMonster, forageFeed, newCareer, rollMarket, statCapFor, trainingProfileFor,
 } from './game'
 import { ALL_DRILLS } from './drills'
 import { learnedMoves } from './monster'
@@ -229,10 +229,9 @@ export function tournamentCalendarFor(seed: string, year: number): Tournament[] 
         const roll = Math.floor(rng() * months.length)
         const forceMonth1 = league === 'Wood' && q === 0 && i === 0 && months.includes(1)
         const month = months.splice(forceMonth1 ? months.indexOf(1) : roll, 1)[0]
-        // Trial months (4/8/12) reserve Week 4 for the rank-up trials — circuit
-        // events there land Weeks 1-3 only, so no event count is ever lost.
-        const weekChoices = RANK_UP_MONTHS.includes(month) ? WEEKS_PER_MONTH - 1 : WEEKS_PER_MONTH
-        const week = 1 + Math.floor(rng() * weekChoices)
+        // Rank-up trials are DE-CALENDARIZED (v0.5) — on-demand challenges, not
+        // scheduled weeks — so cups may land in any week of any month.
+        const week = 1 + Math.floor(rng() * WEEKS_PER_MONTH)
         out.push({
           id: `${league.toLowerCase().replace(' ', '-')}-y${year}-m${month}`,
           name: takeName(), month, week, league,
@@ -246,21 +245,17 @@ export function tournamentCalendarFor(seed: string, year: number): Tournament[] 
 
 export const leagueIndexOf = (league: string): number => LEAGUES.findIndex((l) => l.name === league)
 
-// Rank-up trials are scheduled calendar EVENTS (user spec 2026-07-19): held in
-// Week 4 of months 4, 8 and 12, for every league at once. Promotion is only
-// possible during one of these weeks — the Ranch rank-up button unlocks then.
-export const RANK_UP_MONTHS = [4, 8, 12]
-export const RANK_UP_WEEK = 4
-export const isRankUpWeek = (week: number) =>
-  RANK_UP_MONTHS.includes(monthOfWeek(week)) && weekOfMonth(week) === RANK_UP_WEEK
+// Rank-up trials were DE-CALENDARIZED in v0.5 — see startTrial/trialStatus.
+// The old scheduled trial weeks (months 4/8/12, week 4) are gone: the gate is
+// now skill (beat the league champion) + gold (buy the license), not the clock.
 
 // Competing below your league pays less: same league 100%, one league above the
-// event 50%, two or more above 20%. (You can never enter above your license.)
+// event 50%, two or more above 10%. (You can never enter above your license.)
 export function rewardMultiplier(monsterLeagueIndex: number, tournamentLeague: string): number {
   const d = monsterLeagueIndex - leagueIndexOf(tournamentLeague)
   if (d <= 0) return 1
   if (d === 1) return 0.5
-  return 0.2
+  return 0.1 // steepened 0.2 → 0.1 (v0.5): deep punch-downs are near-worthless — and a farmed cup now costs the WEEK too (compete is the weekly action)
 }
 
 // A banked genome: enough of a monster to restore it (thaw) or fuse it later.
@@ -332,6 +327,7 @@ export interface LastBattle {
   fieldSize: number // rivalTeamCount + 1
   goldReward: number
   expNote: string
+  isTrial?: boolean // v0.5: a rank-up trial (single champion match), not a cup
 }
 
 export interface GameState {
@@ -379,6 +375,21 @@ export interface GameState {
   // podium cup finishes and raising monsters to retirement; the derived level
   // grants extra barn capacity. The ranch is the account; monsters are the runs.
   trainerXp: number
+  // Per-PLAYER licensing (v0.5, user spec 2026-07-22): the license belongs to
+  // the trainer, not the monster — recruiting for a 5v5 shouldn't mean
+  // re-climbing the ladder with every new member. Every stable Career's own
+  // licenseIndex is kept SYNCED to this value (one invariant, enforced at every
+  // career-creation/​license-change funnel) so the many per-career consumers
+  // (stat caps, fees, exp clamps) keep working unchanged.
+  licenseIndex: number
+  // Highest license EARNED via a rank-up trial win but possibly not yet BOUGHT —
+  // the trial unlocks the license in the Ranch Shop; paying activates it.
+  licenseEarned: number
+  // An on-demand rank-up trial signed up for THIS week (consumes the entered
+  // monsters' weekly action, like a cup). Resolved in advanceWeek.
+  pendingTrial: { monsterIds: string[] } | null
+  // Week gate after a FAILED trial — no re-attempt until g.week >= this.
+  trialCooldownUntil: number
 }
 
 // Calendar helpers off the global week clock.
@@ -393,7 +404,7 @@ export const weekOfMonth = (week: number) => (week % WEEKS_PER_MONTH) + 1
 export function visibleLeagueCount(g: GameState): number {
   const silverIdx = leagueIndexOf('Silver')
   const mastersIdx = leagueIndexOf('Masters')
-  const maxIdx = Math.max(0, ...g.stable.map((c) => c.licenseIndex), ...g.frozen.map((f) => f.licenseIndex))
+  const maxIdx = g.licenseIndex // per-player license (v0.5)
   if (maxIdx >= mastersIdx) return LEAGUES.length
   if (maxIdx > silverIdx) return mastersIdx + 1
   return silverIdx + 1
@@ -443,7 +454,63 @@ export function newGame(seed = 'start', opts?: { trainerName?: string; tutorialE
     pendingEvent: null,
     rivals: [generateRival(seed, 0)],
     trainerXp: 0,
+    licenseIndex: 0,
+    licenseEarned: 0,
+    pendingTrial: null,
+    trialCooldownUntil: 0,
   }
+}
+
+// --- Per-player licensing + rank-up trials (v0.5) ---
+// Cost to BUY the license for league index i, once its trial is won. Anchored
+// at 50g (user spec) and grown ~i^1.5 — each step lands around 1-1.5 cup wins
+// at the tier you're leaving, so a player who can WIN the trial can afford the
+// license soon after (never a doubling wall). validate.ts asserts monotonic.
+export const LICENSE_COSTS = [0, 50, 120, 220, 350, 520, 750, 1000, 1300, 1650]
+export const nextLicenseCost = (g: GameState): number => LICENSE_COSTS[g.licenseIndex + 1] ?? Infinity
+// The one sync invariant of per-player licensing: every stable career trains
+// and is fee-assessed at the PLAYER's license tier.
+const syncLicenses = (stable: Career[], licenseIndex: number): Career[] =>
+  stable.map((c) => (c.licenseIndex === licenseIndex ? c : { ...c, licenseIndex }))
+// A stable monster has hit the current cap−10 — strong enough to challenge.
+export const trialReady = (g: GameState): boolean =>
+  g.stable.some((c) => !c.retired && Math.max(...STATS.map((s) => c.stats[s])) >= LEAGUES[g.licenseIndex].cap - 10)
+export function trialStatus(g: GameState): { ok: boolean; reason?: string } {
+  if (g.licenseIndex >= LEAGUES.length - 1) return { ok: false, reason: 'top league reached' }
+  if (g.licenseEarned > g.licenseIndex) return { ok: false, reason: 'license already earned — buy it in the Ranch Shop' }
+  if (g.week < g.trialCooldownUntil) return { ok: false, reason: `recovering from the last attempt — ready in ${g.trialCooldownUntil - g.week}wk` }
+  if (!trialReady(g)) return { ok: false, reason: `train a monster to ${LEAGUES[g.licenseIndex].cap - 10} in a stat first` }
+  if (g.pendingTournament) return { ok: false, reason: 'already signed up for a cup this week' }
+  return { ok: true }
+}
+// Sign up for the trial — an on-demand champion fight (de-calendarized, v0.5:
+// the trial gate is now skill + gold, not the calendar; it consumes the entered
+// monsters' week exactly like a cup).
+export function startTrial(g: GameState, monsterIds: string[]): GameState {
+  if (!trialStatus(g).ok || g.pendingTrial) return g
+  const size = teamSizeForLeague(LEAGUES[g.licenseIndex].name)
+  const unique = [...new Set(monsterIds)]
+  if (unique.length !== size) return g
+  if (!unique.every((id) => g.stable.some((c) => c.id === id && !c.retired))) return g
+  // The trial consumes the entered monsters' week, exactly like a cup.
+  const weekPlans = { ...(g.weekPlans ?? {}) }
+  for (const id of unique) weekPlans[id] = { ...(weekPlans[id] ?? { activity: 'rest', food: '' as const }), activity: 'compete' }
+  return { ...g, weekPlans, pendingTrial: { monsterIds: unique } }
+}
+export function cancelTrial(g: GameState): GameState {
+  const weekPlans = { ...(g.weekPlans ?? {}) }
+  for (const id of g.pendingTrial?.monsterIds ?? []) {
+    if (weekPlans[id]?.activity === 'compete') weekPlans[id] = { ...weekPlans[id], activity: 'rest' }
+  }
+  return { ...g, weekPlans, pendingTrial: null }
+}
+// Pay for an earned license: the whole ACCOUNT advances a league.
+export function buyLicense(g: GameState): GameState {
+  if (g.licenseEarned <= g.licenseIndex) return g
+  const cost = nextLicenseCost(g)
+  if (g.gold < cost) return g
+  const licenseIndex = g.licenseIndex + 1
+  return { ...g, gold: g.gold - cost, licenseIndex, stable: syncLicenses(g.stable, licenseIndex) }
 }
 
 // --- Trainer level (LOOP_DESIGN Phase 5) ---
@@ -487,7 +554,7 @@ export function generateRival(seed: string, i: number): Rival {
 // Highest license the player has earned (stable + banked genomes), the target
 // a rival climbs toward each week so it stays a credible, at-level threat.
 export function playerMaxLicense(g: GameState): number {
-  return Math.max(0, ...g.stable.map((c) => c.licenseIndex), ...g.frozen.map((f) => f.licenseIndex))
+  return g.licenseIndex // per-player license (v0.5)
 }
 // One-per-week nudge toward the player's level (never past it).
 function rubberBandRivals(g: GameState): Rival[] {
@@ -544,7 +611,7 @@ export function buyMonster(g: GameState, index: number): GameState {
   if (isExclusive && !g.specialLicense) return g
   if (isMythical && !g.eliteLicense) return g
 
-  const c = newCareer(o.seed, { id: 'own-' + g.nextId + '-' + o.seed })
+  const c = newCareer(o.seed, { id: 'own-' + g.nextId + '-' + o.seed, licenseIndex: g.licenseIndex }) // recruits join at the PLAYER's license (v0.5)
   const market = g.market.filter((_, i) => i !== index)
   return { ...g, gold: g.gold - o.price, stable: [...g.stable, c], market, activeId: g.activeId || c.id, nextId: g.nextId + 1 }
 }
@@ -621,7 +688,7 @@ function runRivalChallenge(g: GameState, careerId?: string): GameState {
   const rival = g.rivals[0]
   if (!c || !rival) return g
   const playerMon = careerMonster(c)
-  const budget = LEAGUES[rival.licenseIndex].cap * 3.5 * 0.85
+  const budget = LEAGUES[rival.licenseIndex].cap * RIVAL_BUDGET_MULT * 0.85
   const rivalMon = generateRivalMonster(g.seed + ':' + g.week + ':rivalmon', budget, false)
   const res = simulateTeamBattle(
     [{ ...playerMon, hp: maxHp(playerMon.stats), mp: maxMana(playerMon.stats) }],
@@ -862,6 +929,10 @@ export function resolveEvent(g: GameState, choiceIdx: number): GameState {
 
 export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPlanEntry>): GameState {
   const plans = plansOverride ?? g.weekPlans ?? {}
+  // Competing IS the weekly action (v0.5): monsters entered in a cup or the
+  // rank-up trial fight instead of training — enforced here at the data layer
+  // regardless of what the stored plan says (the UI locks it too).
+  const competing = new Set([...(g.pendingTournament?.monsterIds ?? []), ...(g.pendingTrial?.monsterIds ?? [])])
   let gold = g.gold
   let rentalDue = g.frozen.length * RENTAL_PER_FROZEN
   const stable = g.stable.map((c) => {
@@ -878,8 +949,9 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
     } else if (plan.forage) {
       cur = forageFeed(cur) // free fallback — costs stamina + happiness, no gold
     }
-    const action: WeeklyAction =
-      plan.activity === 'rest' ? { kind: 'rest' }
+    const action: WeeklyAction = competing.has(c.id)
+      ? { kind: 'compete' }
+      : plan.activity === 'rest' || plan.activity === 'compete' ? { kind: 'rest' } // stale 'compete' with no live entry falls back to rest
         : plan.activity === 'excursion' ? { kind: 'excursion' }
           : { kind: 'train', drillId: plan.activity }
     // Pass the food ONLY if it was actually bought (buyFood sets fedThisWeek) —
@@ -898,8 +970,22 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
   const afterActivities = stable.map((c) => ({ stats: { ...c.stats }, hp: c.hp, mp: c.mp, stamina: c.stamina }))
 
   // Tournament battle (if signed up) fights with this week's training applied.
-  const { gold: goldAfterBattle, lastBattle, trainerXpGain } = resolveTournament(g, stable, gold)
-  gold = goldAfterBattle
+  const tournamentResult = resolveTournament(g, stable, gold)
+  gold = tournamentResult.gold
+  let lastBattle = tournamentResult.lastBattle
+  let trainerXpGain = tournamentResult.trainerXpGain
+  // Rank-up trial (v0.5) — mutually exclusive with a cup (startTrial/signUp
+  // guard each other), so at most one of the two produces this week's battle.
+  let licenseEarned = g.licenseEarned
+  let trialCooldownUntil = g.trialCooldownUntil
+  if (!lastBattle && g.pendingTrial) {
+    const trial = resolveTrial(g, stable)
+    if (trial) {
+      lastBattle = trial.lastBattle
+      if (trial.won) { licenseEarned = g.licenseIndex + 1; trainerXpGain += 50 }
+      else trialCooldownUntil = g.week + 1 + TRIAL_COOLDOWN_WEEKS
+    }
+  }
   // Trainer XP (Phase 5): cup podium + any monster that retired this week.
   const retiredThisWeek = stable.filter((c, i) => c.retired && !g.stable[i].retired).length
   const trainerXp = (g.trainerXp ?? 0) + trainerXpGain + retiredThisWeek * RETIREMENT_XP
@@ -918,10 +1004,11 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
     if (before.retired) continue
     const plan = plans[before.id]
     const drill = plan ? ALL_DRILLS.find((d) => d.id === plan.activity) : undefined
-    const actName = !plan ? 'rested (no plan set)'
-      : plan.activity === 'rest' ? 'rested'
-        : plan.activity === 'excursion' ? 'excursion'
-          : drill?.name ?? plan.activity
+    const actName = competing.has(before.id) ? (g.pendingTrial ? '🎖 rank-up trial' : '🏟 competed')
+      : !plan ? 'rested (no plan set)'
+        : plan.activity === 'rest' ? 'rested'
+          : plan.activity === 'excursion' ? 'excursion'
+            : drill?.name ?? plan.activity
     const bits: string[] = []
     for (const k of STATS) {
       const d = mid.stats[k] - before.stats[k]
@@ -936,7 +1023,17 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
     lastWeek.push(`${before.name} — ${actName}${bits.length ? ': ' + bits.join(', ') : ''}`)
     if (after.retired && !before.retired) lastWeek.push(`🏁 ${before.name} has retired.`)
   }
-  if (lastBattle) {
+  if (lastBattle?.isTrial) {
+    lastWeek.push(lastBattle.playerPlacement === 1
+      ? `🏆 ${lastBattle.tournamentName}: VICTORY — the ${LEAGUES[Math.min(g.licenseIndex + 1, LEAGUES.length - 1)].name} license is in the Ranch Shop (${nextLicenseCost(g)}g)!`
+      : `💢 ${lastBattle.tournamentName}: defeated — next attempt in ${TRIAL_COOLDOWN_WEEKS} weeks.`)
+    for (let i = 0; i < g.stable.length; i++) {
+      const mid = afterActivities[i]
+      const after = stable[i]
+      if (g.stable[i].retired) continue
+      if (after.hp !== mid.hp || after.mp !== mid.mp) lastWeek.push(`  ↳ ${after.name} comes home at ${after.hp}/${maxHp(after.stats)} HP · ${after.mp}/${maxMana(after.stats)} MP — rest to recover`)
+    }
+  } else if (lastBattle) {
     lastWeek.push(`🏟 ${lastBattle.tournamentName}: finished ${placementLabel(lastBattle.playerPlacement)} of ${lastBattle.fieldSize}`
       + (lastBattle.goldReward > 0 ? ` — +${lastBattle.goldReward}g` : ' — no reward')
       + (lastBattle.expNote ? ` · exp: ${lastBattle.expNote}` : ''))
@@ -956,6 +1053,26 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
     lastWeek.push(`🎓 Trainer level ${lvl}!${lvl % 2 === 1 ? ' (+1 barn slot)' : ''}`)
   }
 
+  // Seated-rival head-to-head (v0.5): if the named rival's team was in this
+  // cup's field and the player's match against it was decisive, the grudge
+  // record moves — cups are now where the rivalry mostly plays out.
+  let rivals = g.rivals
+  if (lastBattle && !lastBattle.isTrial && g.pendingTournament) {
+    const t = tournamentCalendarFor(g.seed, yearOfWeek(g.week)).find((x) => x.id === g.pendingTournament!.tournamentId)
+    const seat = t ? seatedRivalTeamIndex(g, t) : null
+    if (seat !== null) {
+      const label = `Rival Team ${seat + 1}`
+      const m = lastBattle.matches.find((mm) => mm.involvesPlayer && (mm.aLabel === label || mm.bLabel === label))
+      if (m && m.result.winner !== 'draw') {
+        const playerWon = (m.aLabel === 'Your Team') === (m.result.winner === 'A')
+        rivals = rivals.map((rv, i) => (i === 0 ? { ...rv, wins: rv.wins + (playerWon ? 1 : 0), losses: rv.losses + (playerWon ? 0 : 1) } : rv))
+        lastWeek.push(playerWon
+          ? `🥊 You beat ${g.rivals[0].name}'s team in the cup — you lead ${rivals[0].wins}–${rivals[0].losses}.`
+          : `🥊 ${g.rivals[0].name}'s team got the better of you — the record stands ${rivals[0].wins}–${rivals[0].losses}.`)
+      }
+    }
+  }
+
   const week = g.week + 1
   const monthTurned = week % WEEKS_PER_MONTH === 0
   const base: GameState = {
@@ -968,27 +1085,26 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
       ? rollMarketOffers(g.seed, week / WEEKS_PER_MONTH, g.specialLicense, g.eliteLicense)
       : g.market,
     pendingTournament: null,
+    pendingTrial: null,
+    licenseEarned,
+    trialCooldownUntil,
     lastBattle,
     enteredThisMonth: monthTurned ? [] : entered,
-    // carry each monster's planned ACTIVITY into the new week; food resets
-    weekPlans: Object.fromEntries(Object.entries(plans).map(([id, p]) => [id, { activity: p.activity, food: '' as const }])),
+    // carry each monster's planned ACTIVITY into the new week; food resets, and
+    // a locked 'compete' activity resets to rest (the event is over)
+    weekPlans: Object.fromEntries(Object.entries(plans).map(([id, p]) => [id, { activity: p.activity === 'compete' ? 'rest' : p.activity, food: '' as const }])),
     lastWeek,
     pendingEvent: null,
     // rivals climb toward the player's level each week (LOOP_DESIGN Phase 2)
-    rivals: rubberBandRivals({ ...g, stable }),
+    rivals: rubberBandRivals({ ...g, rivals, stable }),
     trainerXp,
   }
   // Roll the new week's incident off the POST-tick state the player will see.
   return { ...base, pendingEvent: rollWeeklyEvent(base) }
 }
 
-export function promoteMonster(g: GameState, id: string): GameState {
-  if (!isRankUpWeek(g.week)) return g // trials only run on scheduled trial weeks
-  const c = g.stable.find((x) => x.id === id)
-  if (!c) return g
-  const { c: nc, gold } = rankUp(c, g.gold)
-  return { ...g, gold, stable: g.stable.map((x) => (x.id === id ? nc : x)) }
-}
+// promoteMonster is GONE (v0.5): promotion = win the on-demand trial
+// (startTrial → advanceWeek resolves it) then buyLicense in the Ranch Shop.
 
 export function renameMonster(g: GameState, id: string, name: string): GameState {
   const trimmed = name.trim().slice(0, 24)
@@ -1050,7 +1166,7 @@ export function setProtectTarget(g: GameState, careerId: string | null): GameSta
 export const firstTeamLeagueIndex = (): number => LEAGUES.findIndex((lg) => teamSizeForLeague(lg.name) > 1)
 export function teamTacticsUnlocked(g: GameState): boolean {
   const idx = firstTeamLeagueIndex()
-  return g.stable.some((c) => c.licenseIndex >= idx) || g.frozen.some((f) => f.licenseIndex >= idx)
+  return g.licenseIndex >= idx // per-player license (v0.5)
 }
 
 // Kill order (wave 2): mark one member of a scouted rival team — the whole
@@ -1100,15 +1216,25 @@ export function signUp(g: GameState, tournamentId: string, monsterIds: string[])
     return !!c && !c.retired && c.licenseIndex >= floor
   })
   if (!ok) return g
-  if (!teamHasLicensedLeader(g, t, monsterIds)) return g // guests need a licensed leader
+  if (g.pendingTrial) return g // one arena event per week (v0.5) — cancel the trial first
   const fee = entryFee(t.league)
   if (g.gold < fee) return g
-  return { ...g, gold: g.gold - fee, pendingTournament: { tournamentId, monsterIds, feePaid: fee } }
+  // Competing IS the weekly action (v0.5): entered monsters' plans lock to
+  // 'compete' (advanceWeek enforces it at the data layer regardless).
+  const weekPlans = { ...(g.weekPlans ?? {}) }
+  for (const id of monsterIds) weekPlans[id] = { ...(weekPlans[id] ?? { activity: 'rest', food: '' as const }), activity: 'compete' }
+  return { ...g, gold: g.gold - fee, weekPlans, pendingTournament: { tournamentId, monsterIds, feePaid: fee } }
 }
 
-// Cancelling before the weekly tick refunds the entry fee in full.
-export const cancelSignUp = (g: GameState): GameState =>
-  ({ ...g, gold: g.gold + (g.pendingTournament?.feePaid ?? 0), pendingTournament: null })
+// Cancelling before the weekly tick refunds the entry fee in full (and frees
+// the entered monsters' locked 'compete' week back to rest).
+export function cancelSignUp(g: GameState): GameState {
+  const weekPlans = { ...(g.weekPlans ?? {}) }
+  for (const id of g.pendingTournament?.monsterIds ?? []) {
+    if (weekPlans[id]?.activity === 'compete') weekPlans[id] = { ...weekPlans[id], activity: 'rest' }
+  }
+  return { ...g, gold: g.gold + (g.pendingTournament?.feePaid ?? 0), weekPlans, pendingTournament: null }
+}
 
 // League strength band (user spec 2026-07-21: "a wood cup should always stay
 // capped to its league limit" — the league is a FIXED standard, independent of
@@ -1120,6 +1246,12 @@ export const cancelSignUp = (g: GameState): GameState =>
 // rubber-banding.
 export const RIVAL_BAND_MIN = 0.6
 export const RIVAL_BAND_MAX = 1.0
+// Per-rival-monster stat budget = cap × this × band (2026-07-22 balance): was
+// 3.5, which put every rival ~3-4 stats near cap — far beyond what a player can
+// train in a monster's lifespan, so a just-ranked-up player placed dead last at
+// every league. 2.0 is a strong-but-reachable well-rounded monster (2-3 stats
+// near cap), so a dedicated player is genuinely competitive at-league.
+export const RIVAL_BUDGET_MULT = 1.8
 
 // Rival team composition (user spec 2026-07-21): "a mixture of support and
 // damage dealing classes, with more damage dealing classes in the case of an
@@ -1190,16 +1322,36 @@ function applyGameplan(team: Monster[], gp: TeamGameplan): Monster[] {
   return team.map((m, i) => ({ ...m, tactics: info.tactics, protect: i === carryIdx ? true : m.protect }))
 }
 
+// The named rival seated into a cup's field (v0.5): at the player's own league,
+// the rival appears in ~1/3 of regular cups and is GUARANTEED at the annual
+// marquee events — a recurring face, not an everywhere face. Deterministic per
+// event (seed+week+id), so scouting, resolution, and the record all agree.
+// Returns the rival-team index they occupy, or null.
+export const RIVAL_PERSONALITY_GAMEPLAN: Record<RivalPersonality, TeamGameplan> = {
+  aggressive: 'rushdown', cagey: 'bulwark', flashy: 'focusfire',
+}
+export const isMarqueeEvent = (t: Tournament): boolean => PRESTIGE_EVENTS.some((p) => p.name === t.name)
+export function seatedRivalTeamIndex(g: GameState, t: Tournament): number | null {
+  const rival = g.rivals?.[0]
+  if (!rival || rival.licenseIndex !== leagueIndexOf(t.league)) return null
+  if (isMarqueeEvent(t)) return 0
+  const rng = mulberry32(hashString(g.seed + ':' + g.week + ':' + t.id + ':rivalseat'))
+  return rng() < 1 / 3 ? 0 : null
+}
+
 export function generateRivalTeamsForTournament(g: GameState, t: Tournament): Monster[][] {
   const teamSize = teamSizeForLeague(t.league)
   const rivalCount = rivalTeamCountForLeague(t.league)
   const allowExclusive = leagueIndexOf(t.league) >= leagueIndexOf('Silver')
-  const leagueBudget = LEAGUES[leagueIndexOf(t.league)].cap * 3.5
+  const leagueBudget = LEAGUES[leagueIndexOf(t.league)].cap * RIVAL_BUDGET_MULT
+  const seated = seatedRivalTeamIndex(g, t)
   return Array.from({ length: rivalCount }, (_, r) => {
     const bandRng = mulberry32(hashString(g.seed + ':' + g.week + ':' + t.id + ':band:r' + r))
     const teamBudget = leagueBudget * (RIVAL_BAND_MIN + bandRng() * (RIVAL_BAND_MAX - RIVAL_BAND_MIN))
     const team = generateRivalTeam(g.seed + ':' + g.week + ':' + t.id + ':r' + r, teamSize, teamBudget, allowExclusive)
-    return applyGameplan(team, gameplanForRivalTeam(g.seed, g.week, t.id, r))
+    // The seated rival runs THEIR personality's gameplan — scoutable identity.
+    const gp = r === seated ? RIVAL_PERSONALITY_GAMEPLAN[g.rivals[0].personality] : gameplanForRivalTeam(g.seed, g.week, t.id, r)
+    return applyGameplan(team, gp)
   })
 }
 
@@ -1381,6 +1533,60 @@ function resolveTournament(g: GameState, stable: Career[], gold: number): { gold
   }
 }
 
+// Rank-up trial resolution (v0.5): one champion match at the CURRENT league's
+// team size vs a hard same-league team (1.15× the standard — above the 0.6-1.0
+// rival band, so it's a genuine test, not another cup match). Win → the next
+// license unlocks in the Ranch Shop. Mutates `stable` in place like
+// resolveTournament; standard post-event injury applies win or lose.
+export const TRIAL_CHAMPION_MULT = 1.25
+export const TRIAL_COOLDOWN_WEEKS = 3
+function resolveTrial(g: GameState, stable: Career[]): { lastBattle: LastBattle; won: boolean } | null {
+  const pending = g.pendingTrial
+  if (!pending || g.licenseIndex >= LEAGUES.length - 1) return null
+  const idxs = pending.monsterIds.map((id) => stable.findIndex((x) => x.id === id))
+  if (idxs.some((i) => i < 0 || stable[i].retired)) return null
+  const league = LEAGUES[g.licenseIndex].name
+  const teamSize = teamSizeForLeague(league)
+  const use = idxs.slice(0, teamSize)
+  const playerCareers = use.map((i) => stable[i])
+  const playerTeam: Monster[] = playerCareers.map((c) => {
+    const m = careerMonster(c)
+    return { ...m, hp: maxHp(m.stats), mp: maxMana(m.stats) } // trials start fresh, same as cup matches
+  })
+  const champBudget = LEAGUES[g.licenseIndex].cap * RIVAL_BUDGET_MULT * TRIAL_CHAMPION_MULT
+  const champRaw = generateRivalTeam(g.seed + ':' + g.week + ':trial:' + g.licenseIndex, teamSize, champBudget, g.licenseIndex >= leagueIndexOf('Silver'))
+  const champTeam = applyGameplan(champRaw, gameplanForRivalTeam(g.seed, g.week, 'trial-' + g.licenseIndex, 0))
+  const result = simulateTeamBattle(playerTeam, champTeam, playerCareers.map((c) => c.happiness), champTeam.map(() => 5))
+  const won = result.winner === 'A' // a draw is NOT good enough to dethrone the champion
+  const hpFrac = (team: Monster[], side: 'A' | 'B') =>
+    result.finals.filter((f) => f.side === side).reduce((s, f) => s + f.hp / maxHp(team[f.slot].stats), 0) / teamSize
+  const standings: EventStanding[] = [
+    { label: 'Your Team', isPlayer: true, wins: won ? 1 : 0, draws: result.winner === 'draw' ? 1 : 0, losses: won || result.winner === 'draw' ? 0 : 1, hpFracSum: hpFrac(playerTeam, 'A'), placement: won ? 1 : 2 },
+    { label: 'League Champion', isPlayer: false, wins: won ? 0 : result.winner === 'draw' ? 0 : 1, draws: result.winner === 'draw' ? 1 : 0, losses: won ? 1 : 0, hpFracSum: hpFrac(champTeam, 'B'), placement: won ? 2 : 1 },
+  ].sort((a, b) => a.placement - b.placement)
+  const nextLeague = LEAGUES[g.licenseIndex + 1].name
+  const updated = playerCareers.map((c) => {
+    const nc: Career = { ...c, log: [...c.log] }
+    const injRng = mulberry32(hashString(g.seed + ':' + g.week + ':trial:injury:' + c.id))
+    nc.hp = Math.max(1, Math.round(maxHp(nc.stats) * injRng() * 0.5))
+    nc.mp = Math.round(maxMana(nc.stats) * injRng() * 0.5)
+    nc.log.push(won
+      ? `🏆 Defeated the ${league} Champion! The ${nextLeague} license is available in the Ranch Shop.`
+      : `💢 Fell to the ${league} Champion — recover, train, and challenge again in ${TRIAL_COOLDOWN_WEEKS} weeks.`)
+    nc.log = nc.log.slice(-40)
+    return nc
+  })
+  updated.forEach((nc, k) => { stable[use[k]] = nc })
+  return {
+    won,
+    lastBattle: {
+      tournamentId: 'trial-' + g.licenseIndex, tournamentName: `Rank-up Trial — the ${league} Champion`, league, teamSize,
+      matches: [{ aLabel: 'Your Team', bLabel: 'League Champion', teamA: playerTeam, teamB: champTeam, result, involvesPlayer: true }],
+      standings, playerPlacement: won ? 1 : 2, fieldSize: 2, goldReward: 0, expNote: '', isTrial: true,
+    },
+  }
+}
+
 // --- Infirmary (2026-07-25 playtest addition): pay to restore a monster's
 // HP/MP RIGHT NOW instead of spending a week resting — agency after a rough
 // tournament, and a recurring gold sink that scales with league. Fee scales
@@ -1421,7 +1627,7 @@ export function thaw(g: GameState, fid: string): GameState {
   if (g.stable.length >= effectiveBarnCap(g)) return g
   const fr = g.frozen.find((x) => x.id === fid)
   if (!fr) return g
-  const c = careerFromFrozen(fr, fr.id)
+  const c = { ...careerFromFrozen(fr, fr.id), licenseIndex: g.licenseIndex } // thaws at the PLAYER's license (v0.5)
   return {
     ...g,
     stable: [...g.stable, c],
@@ -1445,7 +1651,7 @@ export function fuse(g: GameState, aId: string, bId: string): GameState {
   // trajectory is the reason to breed.
   const potential = breedPotential(a.potential, b.potential)
   const babySeed = 'fuse-' + a.id + '+' + b.id
-  const baby = newCareer(babySeed, { id: 'own-fuse-' + g.nextId + '-' + babySeed, ageWeeks: 0, licenseIndex: 0, potential })
+  const baby = newCareer(babySeed, { id: 'own-fuse-' + g.nextId + '-' + babySeed, ageWeeks: 0, licenseIndex: g.licenseIndex, potential })
   baby.species = a.species // base parent supplies the frame (§10.1)
   const stars = '★'.repeat(Math.round((potential - 1) / BREEDING_BONUS))
   baby.log = [`${baby.name}, a child of ${a.name} and ${b.name}, hatches — bloodline potential ×${potential.toFixed(2)} ${stars} (unlicensed).`]

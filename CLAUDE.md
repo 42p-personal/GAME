@@ -1,6 +1,6 @@
 # Monster Tamer — Development Guide
 
-## Current state (v0.45)
+## Current state (v0.5)
 
 Everything is **committed on `main`/`preview` and deployed live**. `tsc`/`npm run build`/`npm test`
 (12/12) clean; `validateDesign()` reports `45 species, 11 classes, 90 moves, ~48 tournaments/yr —
@@ -13,10 +13,47 @@ buffs/debuffs + a status framework; round-robin **team tournaments** (1v1→6v6,
 is a real N-vs-N engine); a **tactics** system (temperament, target priority, formation/row order,
 kill-order marks, protect, scripted opener, combo discipline, mana policy — team orders locked
 until the first team league); title screen + 3-slot saves; **food system** (rations + training +
-premium tiers, satiety, two-stage discount contracts); and the five `docs/LOOP_DESIGN.md` phases:
-**events**, **rivals** (named, rubber-banded, challenge skirmishes), **rival gameplans + scouting
-reveal**, **causal battle report**, and **meta-progression** (trainer level + bloodline breeding
-where `potential` lifts the stat cap and climbs each generation).
+premium tiers, satiety, forage fallback when <10g, two-stage discount contracts); the five
+`docs/LOOP_DESIGN.md` phases: **events**, **rivals** (named, rubber-banded, challenge skirmishes),
+**rival gameplans + scouting reveal**, **causal battle report**, and **meta-progression** (trainer
+level + bloodline breeding where `potential` lifts the stat cap and climbs each generation).
+
+**v0.5 also ships the sim-driven COMBAT BALANCE PASS (2026-07-22, ~2,500 battles measured):**
+sudden-death chip is now **%-of-max-HP** (8% +5%/rd from rd 35 — flat chip let raw HP auto-win
+the clock, double-dipping CON; the 3v3 golden went draw→decisive); **turn order = highest DEX
+first** (replaces CON-ascending; symmetric tiebreak killed the old side-A bias that flipped ~1
+in 5 mirror matchups); **WIS is the caster foundation** (+WIS×0.6 to magic/voice damage — was a
+dead stat at 0% win); `maxHp = 40 + CON×2.0` (was 50+2.5), CON melee mitigation 0.05→0.04;
+**`RIVAL_BUDGET_MULT` 3.5→1.8** (was: every rival had 3-4 stats near cap, unreachable in a
+lifespan — a just-ranked player placed LAST 100% at Iron+; now a dedicated player is competitive
+at every league). Results: draws 10→4%, Tank 71→52%, Wizard 49→62%, Bard/Orator strong in teams
+(a support 3rd now beats a 3rd Warrior in 3v3), all four battle goldens deliberately recaptured.
+
+**v0.5 — per-player licensing + trial battles + compete-as-action (2026-07-22):**
+- **The license belongs to the TRAINER** (`GameState.licenseIndex`), not the monster — recruits/
+  thaws/babies join at the player's tier; every stable `Career.licenseIndex` is kept SYNCED to it
+  (the one invariant, enforced at every career-creation funnel + `buyLicense` + migration), so the
+  many per-career consumers (stat caps, fees, exp clamps) work unchanged. The guest-leader rule is
+  obsolete and removed from sign-up.
+- **Rank-up = win an on-demand TRIAL BATTLE, then BUY the license.** `startTrial` (Ranch panel)
+  sets a champion fight vs a hard same-league team (`TRIAL_CHAMPION_MULT` 1.25× of cap ×
+  `RIVAL_BUDGET_MULT` — sim-tuned: a just-ready single-stat monster wins ~38%, a capped one ~63%);
+  resolves in `advanceWeek` (mutually exclusive with a cup — one arena event per week); win →
+  license unlocks in the Ranch Shop (`licenseEarned`), lose → 3-week cooldown; standard injury
+  either way. `LICENSE_COSTS` = 0/50/120/220/350/520/750/1000/1300/1650 (~i^1.5, validator-checked
+  monotonic + never-doubling). Trials are DE-CALENDARIZED (RANK_UP_MONTHS/isRankUpWeek/
+  promoteMonster/rankUp all gone; calendar week-4 reservation removed).
+- **Competing IS the weekly action**: cup/trial monsters get `{kind:'compete'}` forced in
+  advanceWeek (no training/rest that week), plans lock to 'compete' at signUp/startTrial and free
+  on cancel; training row shows a lock banner.
+- **Punch-down steepened**: 2+ leagues below now pays 10% (was 20%).
+- **Named rival seated in cups**: `seatedRivalTeamIndex` — ~1/3 of at-league cups, GUARANTEED at
+  marquee events; the seated team runs the rival's personality gameplan
+  (`RIVAL_PERSONALITY_GAMEPLAN`), the scout panel shows "🥊 {name}'s Team · record", and the
+  player-vs-rival cup result moves the head-to-head.
+- Sign-up gained an **underpowered-team warning** (below the league band) and a competing-week
+  notice. Browser-verified E2E: trial → victory → shop unlock → buy (−50g) → account at Copper →
+  Tin gate at 120g. Old saves migrate (player license = max of old per-career licenses).
 
 ### ⚠️ Deploying — READ THIS
 Cloudflare's **git-triggered auto-deploy is unreliable** (a standing `EBADPLATFORM —

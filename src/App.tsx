@@ -13,15 +13,16 @@ import { BIOS } from './bestiary'
 import { BASIC_DRILLS, Drill, INTENSIVE_DRILLS } from './drills'
 import {
   BASIC_DRILL_STAMINA, Career, INTENSIVE_DRILL_STAMINA, MAX_STAMINA, canRankUp, careerMonster,
-  dateLabel, foodName, FORAGE_STAMINA_COST, FORAGE_HAPPINESS_COST, previewWeekEffects, rankUpFee, stageInfo, trainingProfileFor,
+  dateLabel, foodName, FORAGE_STAMINA_COST, FORAGE_HAPPINESS_COST, previewWeekEffects, stageInfo, trainingProfileFor,
 } from './game'
 import {
-  PANTRY_CONTRACT_COST, GRAND_LARDER_COST, ELITE_LICENSE_COST, EventMatch, EventStanding, FUSION_COST, GameState, PendingEvent, RENTAL_PER_FROZEN, RIVAL_BAND_MIN, SPECIAL_LICENSE_COST,
+  PANTRY_CONTRACT_COST, GRAND_LARDER_COST, ELITE_LICENSE_COST, EventMatch, EventStanding, FUSION_COST, GameState, PendingEvent, RENTAL_PER_FROZEN, RIVAL_BAND_MIN, RIVAL_BUDGET_MULT, SPECIAL_LICENSE_COST,
   WeekPlanEntry, advanceWeek, barnCost, buyPantryContract, buyGrandLarder, buyEliteLicense, buyMonster, foodDiscountFor, resolveEvent,
   buySpecialLicense, cancelSignUp, cupLore, eligibleForTournament, freeze, fuse, fusionRoom, gameplanForRivalTeam, generateRivalTeamsForTournament, goto, healAtInfirmary, infirmaryFee, leagueIndexOf, monthOfWeek,
-  RANK_UP_MONTHS, RANK_UP_WEEK, entryFee, isRankUpWeek, placementLabel, scoutFee, teamHasLicensedLeader, teamSizeForLeague,
+  entryFee, placementLabel, scoutFee, teamSizeForLeague, seatedRivalTeamIndex,
   trainerXpProgress, trainerBarnBonus, effectiveBarnCap, BREEDING_BONUS,
-  firstTeamLeagueIndex, generateRival, newGame, offerMonster, promoteMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, setMarkTarget, setProtectTarget, setTactics, signUp, teamTacticsUnlocked, thaw,
+  buyLicense, cancelTrial, nextLicenseCost, startTrial, trialStatus, TRIAL_CHAMPION_MULT, RIVAL_PERSONALITY_GAMEPLAN,
+  firstTeamLeagueIndex, generateRival, newGame, offerMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, setMarkTarget, setProtectTarget, setTactics, signUp, teamTacticsUnlocked, thaw,
   tournamentCalendarFor, upgradeBarn, visibleLeagueCount, weekOfMonth, yearOfWeek,
 } from './town'
 import { APP_VERSION } from './version'
@@ -634,6 +635,27 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
         {/* Ranch Shop */}
         <div className="card loc">
           <div className="loc-h"><span>🏗️ Ranch Shop</span></div>
+          {/* League license (v0.5): unlocked by WINNING the rank-up trial, then
+              bought here — the whole account advances a league. */}
+          {game.licenseEarned > game.licenseIndex ? (
+            <div className="shoprow license-ready">
+              <div>
+                <b>🎫 {LEAGUES[game.licenseIndex + 1].name} License</b>
+                <div className="dim">Trial won! Unlocks the {LEAGUES[game.licenseIndex + 1].name} league for your whole stable.</div>
+              </div>
+              <button disabled={game.gold < nextLicenseCost(game)} onClick={() => setGame((g) => buyLicense(g))}>
+                Buy · {nextLicenseCost(game)}g
+              </button>
+            </div>
+          ) : game.licenseIndex < LEAGUES.length - 1 && (
+            <div className="shoprow">
+              <div>
+                <b>🎫 {LEAGUES[game.licenseIndex + 1].name} License</b>
+                <div className="dim">Beat the {LEAGUES[game.licenseIndex].name} Champion (rank-up trial, at the Ranch) to unlock · {nextLicenseCost(game)}g</div>
+              </div>
+              <button disabled>🔒</button>
+            </div>
+          )}
           <div className="shoprow">
             <div>
               <b>Bigger Barn</b>
@@ -1191,6 +1213,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
   // Keyed `${tournamentId}:${rivalIdx}`; local state, same convention as
   // `scouted` above (paying again at the bracket is match-day re-intel).
   const [fieldScout, setFieldScout] = useState<Record<string, 'basic' | 'full'>>({})
+  const [trialPick, setTrialPick] = useState<string[]>([]) // rank-up trial roster picks (v0.5)
   const [selectedMonsterId, setSelectedMonsterId] = useState(() => game.stable.find((c) => !c.retired)?.id ?? game.stable[0]?.id ?? '')
   const [abilityEditorFor, setAbilityEditorFor] = useState<string | null>(null)
   const [showHistoryFor, setShowHistoryFor] = useState<string | null>(null)
@@ -1270,8 +1293,10 @@ function RanchView({ game, setGame, onBattleScreen }: {
           {header}
           <div className="card">
             <div className="section-title">{lb.tournamentName} — {lb.league} League</div>
-            <p className="sub">{lore?.intro ?? `${lb.tournamentName} is under way.`}</p>
-            <p className="dim">Prize on the line: up to {tourney?.rewards.gold ?? lb.goldReward}g for 1st place, {lb.fieldSize} teams competing round robin.</p>
+            <p className="sub">{lb.isTrial
+              ? `The ${lb.league} Champion awaits. Win, and the ${LEAGUES[Math.min(leagueIndexOf(lb.league) + 1, LEAGUES.length - 1)].name} license opens in the Ranch Shop. Lose, and it's back to training.`
+              : lore?.intro ?? `${lb.tournamentName} is under way.`}</p>
+            {!lb.isTrial && <p className="dim">Prize on the line: up to {tourney?.rewards.gold ?? lb.goldReward}g for 1st place, {lb.fieldSize} teams competing round robin.</p>}
             {underdog && (
               <p className="dim">
                 ⚠ The field here fights at the {lb.league}-league standard, and your team looks young for it —
@@ -1372,9 +1397,13 @@ function RanchView({ game, setGame, onBattleScreen }: {
           <BracketGrid standings={lb.standings} allMatches={lb.matches} revealed={lb.matches} />
           {lore?.outroFlavour && <p className="sub">{lore.outroFlavour}</p>}
           <div className="battle-summary">
-            {lb.goldReward > 0
-              ? `You finished ${placementLabel(lb.playerPlacement)} of ${lb.fieldSize}! +${lb.goldReward}g${lb.expNote ? ` · training bonus: ${lb.expNote}` : ''}`
-              : `You finished ${placementLabel(lb.playerPlacement)} of ${lb.fieldSize} — no reward this time. Train harder and try again.`}
+            {lb.isTrial
+              ? lb.playerPlacement === 1
+                ? `🎫 VICTORY! The ${LEAGUES[Math.min(leagueIndexOf(lb.league) + 1, LEAGUES.length - 1)].name} license is now available in the Ranch Shop.`
+                : `Defeated. The Champion holds the gate — recover, train, and challenge again in a few weeks.`
+              : lb.goldReward > 0
+                ? `You finished ${placementLabel(lb.playerPlacement)} of ${lb.fieldSize}! +${lb.goldReward}g${lb.expNote ? ` · training bonus: ${lb.expNote}` : ''}`
+                : `You finished ${placementLabel(lb.playerPlacement)} of ${lb.fieldSize} — no reward this time. Train harder and try again.`}
           </div>
         </div>
         <div className="carerow" style={{ justifyContent: 'center' }}>
@@ -1535,8 +1564,8 @@ function RanchView({ game, setGame, onBattleScreen }: {
   const tournamentsThisMonth = tournamentCalendarFor(game.seed, yearOfWeek(game.week)).filter((t) => t.month === calendarMonth)
   const visibleLeagues = LEAGUES.slice(0, visibleLeagueCount(game))
   const visibleTournamentsThisMonth = tournamentsThisMonth.filter((t) => visibleLeagues.some((lg) => lg.name === t.league))
-  const isTrialMonth = RANK_UP_MONTHS.includes(calendarMonth)
   const selectedTournament = visibleTournamentsThisMonth.find((t) => t.id === selectedTournamentId) ?? null
+  const trialGate = trialStatus(game) // on-demand rank-up trial (v0.5)
 
   const doAdvanceWeek = () => {
     // advanceWeek consumes game.weekPlans and carries each ACTIVITY into the
@@ -1569,10 +1598,11 @@ function RanchView({ game, setGame, onBattleScreen }: {
         {pendingEventName && <span className="up">✅ {pendingEventName}</span>}
       </div>
       <div className="feedok">✓ feeding complete for this week — plan training below, or check the calendar</div>
-      {isRankUpWeek(game.week) && (
+      {trialGate.ok && !game.pendingTrial && (
         <TipBanner game={game} setGame={setGame} id="rankup">
-          ⭐ Rank-up trials run THIS week — if a monster's best stat is near its league cap, promote it
-          from its detail panel before advancing. The next trials are months away.
+          🎖 A monster is strong enough to challenge the {LEAGUES[game.licenseIndex].name} Champion — win the
+          rank-up trial (below the stable) to unlock the {LEAGUES[game.licenseIndex + 1]?.name} license. The
+          fight takes the week, win or lose.
         </TipBanner>
       )}
 
@@ -1686,20 +1716,47 @@ function RanchView({ game, setGame, onBattleScreen }: {
                   <span className="dim">{selM.species.innate[selM.activeInnate]?.desc}</span>
                 </div>
               </div>
-              {canRankUp(selectedCareer) && (
-                isRankUpWeek(game.week) ? (
-                  <button className="carerow rankup" style={{ width: '100%', marginTop: 10 }}
-                    disabled={game.gold < rankUpFee(selectedCareer)}
-                    onClick={() => setGame((g) => promoteMonster(g, selectedCareer.id))}>
-                    ⭐ Rank-up trial · {rankUpFee(selectedCareer)}g → {LEAGUES[selectedCareer.licenseIndex + 1].name} league
-                  </button>
-                ) : (
-                  <div className="hint" style={{ marginTop: 10 }}>
-                    ⭐ Ready for the {LEAGUES[selectedCareer.licenseIndex + 1].name} rank-up trial — trials run
-                    Week {RANK_UP_WEEK} of months {RANK_UP_MONTHS.join(', ')}.
+              {/* Rank-up trial (v0.5): on-demand, PLAYER-level — beat the current
+                  league's Champion to unlock the next license in the Ranch Shop.
+                  The fight consumes the entered monsters' week, like a cup. */}
+              {(() => {
+                const league = LEAGUES[game.licenseIndex]
+                const next = LEAGUES[game.licenseIndex + 1]
+                if (!next) return null
+                if (game.pendingTrial) return (
+                  <div className="trial-panel">
+                    <b>🎖 Trial set:</b> vs the {league.name} Champion — resolves on Advance Week.
+                    <button className="ghost" onClick={() => setGame((g) => cancelTrial(g))}>Cancel</button>
                   </div>
                 )
-              )}
+                if (game.licenseEarned > game.licenseIndex) return (
+                  <div className="hint" style={{ marginTop: 10 }}>🎫 The {next.name} license is waiting in the Ranch Shop ({nextLicenseCost(game)}g).</div>
+                )
+                if (!trialGate.ok) return trialGate.reason?.startsWith('train a monster') && !canRankUp(selectedCareer)
+                  ? null // quiet until someone is close — the ⭐ strip chips already signal readiness
+                  : <div className="hint" style={{ marginTop: 10 }}>🎖 Rank-up trial: {trialGate.reason}</div>
+                const size = teamSizeForLeague(league.name)
+                const pool = game.stable.filter((c) => !c.retired)
+                return (
+                  <div className="trial-panel">
+                    <div className="section-title">🎖 Rank-up Trial — the {league.name} Champion</div>
+                    <div className="dim">Beat a champion-grade {size}v{size} team (≈{Math.round(TRIAL_CHAMPION_MULT * 100)}% of league standard) to unlock the {next.name} license ({nextLicenseCost(game)}g). The fight takes the week — win or lose, your team comes home needing rest.</div>
+                    <div className="carerow" style={{ flexWrap: 'wrap', marginTop: 6 }}>
+                      {pool.map((c) => (
+                        <button key={c.id} className={'tacticopt small' + (trialPick.includes(c.id) ? ' on' : '')}
+                          onClick={() => setTrialPick((p) => p.includes(c.id) ? p.filter((x) => x !== c.id) : p.length < size ? [...p, c.id] : p)}>
+                          {c.name}
+                        </button>
+                      ))}
+                    </div>
+                    <button className="enter" style={{ marginTop: 6 }} disabled={trialPick.length !== size || !!game.pendingTournament}
+                      title={game.pendingTournament ? 'Cancel your cup sign-up first — one arena event per week' : undefined}
+                      onClick={() => { setGame((g) => startTrial(g, trialPick)); setTrialPick([]) }}>
+                      ⚔ Challenge ({trialPick.length}/{size} picked)
+                    </button>
+                  </div>
+                )
+              })()}
             </div>
           </div>
 
@@ -1716,6 +1773,8 @@ function RanchView({ game, setGame, onBattleScreen }: {
             />
           ) : selectedCareer.retired ? (
             <div className="retired">🏁 {selectedCareer.name} has retired and can no longer train.</div>
+          ) : (game.pendingTournament?.monsterIds.includes(selectedCareer.id) || game.pendingTrial?.monsterIds.includes(selectedCareer.id)) ? (
+            <div className="retired">🏟 {selectedCareer.name} is competing this week — the event takes the whole week, no training. (Cancel the {game.pendingTrial ? 'trial' : 'sign-up'} to free the week.)</div>
           ) : (
             <>
               <div className="section-title">Training</div>
@@ -1774,7 +1833,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
               </div>
               <div className="hint">
                 Tournaments this month: {visibleTournamentsThisMonth.length}. Click a 🏆 for entry details.
-                {isTrialMonth && ` · ⭐ rank-up trials run Week ${RANK_UP_WEEK}.`}
+                Competing takes the monster's week — no training that week.
               </div>
 
               {/* True calendar grid: one row per VISIBLE league (leagues unlock
@@ -1788,7 +1847,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
                   const isPastWeek = t && isCurrentMonth && currentWeek > t.week
                   const icon = signedHere ? '✅' : alreadyEntered ? '✔' : isPastWeek ? '➖' : '🏆'
                   const isOpenNow = t && isCurrentMonth && currentWeek === t.week && !alreadyEntered && !signedHere
-                  const hasTrial = isTrialMonth && li < LEAGUES.length - 1
+                  void li // (trial ⭐ markers removed — trials are on-demand since v0.5)
                   return (
                     <div className="calgrid-row" key={lg.name}>
                       <div className="calgrid-label">
@@ -1804,9 +1863,6 @@ function RanchView({ game, setGame, onBattleScreen }: {
                             >
                               {icon}
                             </button>
-                          )}
-                          {hasTrial && w === RANK_UP_WEEK && (
-                            <span className="calicon trial" title={`${lg.name} rank-up trial — take it from the monster panel this week`}>⭐</span>
                           )}
                         </div>
                       ))}
@@ -1827,7 +1883,6 @@ function RanchView({ game, setGame, onBattleScreen }: {
                 const teamSize = teamSizeForLeague(t.league)
                 const eligible = eligibleForTournament(game, t)
                 const tIdx = leagueIndexOf(t.league)
-                const isGuest = (c: Career) => c.licenseIndex < tIdx // licensed-leader rule: allowed, but someone must hold the license
                 const signedHere = game.pendingTournament?.tournamentId === t.id
                 const signedMonsters = signedHere ? game.stable.filter((c) => game.pendingTournament!.monsterIds.includes(c.id)) : []
                 const alreadyEntered = (game.enteredThisMonth ?? []).includes(t.id)
@@ -1839,8 +1894,12 @@ function RanchView({ game, setGame, onBattleScreen }: {
                 const pickIds = teamSize === 1 && rawPickIds.length === 0 && eligible[0] ? [eligible[0].id] : rawPickIds
                 const pickedCareers = pickIds.map((id) => eligible.find((c) => c.id === id)!).filter(Boolean)
                 const teamFull = pickedCareers.length === teamSize
-                const hasLeader = teamHasLicensedLeader(game, t, pickIds)
-                const mult = teamFull ? rewardMultiplier(Math.min(...pickedCareers.map((c) => c.licenseIndex)), t.league) : 1
+                const mult = teamFull ? rewardMultiplier(game.licenseIndex, t.league) : 1
+                // Underpowered warning (v0.5): with per-player licensing a fresh
+                // recruit can legally enter any league you hold — flag a team that
+                // sits below the league's rival band rather than silently feeding it in.
+                const leagueFloor = LEAGUES[tIdx].cap * RIVAL_BUDGET_MULT * RIVAL_BAND_MIN
+                const underpowered = pickedCareers.filter((c) => STATS.reduce((s, k) => s + c.stats[k], 0) < leagueFloor * 0.8)
                 const fatigued = pickedCareers.filter((c) => staminaDamageMult(c.stamina) < 1)
                 const injured = pickedCareers.filter(isInjured)
                 const condition = (c: Career) => {
@@ -1880,10 +1939,16 @@ function RanchView({ game, setGame, onBattleScreen }: {
                             const tier = fieldScout[key]
                             const basicFee = scoutFee(t.league, 'basic')
                             const fullFee = scoutFee(t.league, 'full')
-                            const gp = GAMEPLANS[gameplanForRivalTeam(game.seed, game.week, t.id, r)]
+                            // Seated rival (v0.5): the named rival occupies this slot —
+                            // their team runs THEIR personality's gameplan.
+                            const seat = seatedRivalTeamIndex(game, t)
+                            const isRivalTeam = seat === r
+                            const gp = GAMEPLANS[isRivalTeam ? RIVAL_PERSONALITY_GAMEPLAN[game.rivals[0].personality] : gameplanForRivalTeam(game.seed, game.week, t.id, r)]
                             return (
                               <div key={key} className="scout-report">
-                                <div className="section-title">Rival Team {r + 1}</div>
+                                <div className="section-title">
+                                  {isRivalTeam ? <>🥊 {game.rivals[0].name}'s Team <span className="dim">· your rival{game.rivals[0].wins + game.rivals[0].losses > 0 ? ` · record ${game.rivals[0].wins}–${game.rivals[0].losses}` : ''}</span></> : `Rival Team ${r + 1}`}
+                                </div>
                                 {/* Gameplan reveal (LOOP_DESIGN Phase 3): the tactical intel scouting
                                     is FOR — revealed with the basic tier alongside class + loadout. */}
                                 {tier ? (
@@ -1966,10 +2031,18 @@ function RanchView({ game, setGame, onBattleScreen }: {
                           <select value={pickIds[0]} onChange={(ev) => setTeamPick((sp) => ({ ...sp, [t.id]: [ev.target.value] }))}>
                             {eligible.map((c) => <option key={c.id} value={c.id}>{c.name} ({LEAGUES[c.licenseIndex].name}){condition(c)}</option>)}
                           </select>
-                          <button className="signup" onClick={() => setGame((g) => signUp(g, t.id, pickIds))}>Sign Up →</button>
+                          <button className="signup" disabled={!!game.pendingTrial}
+                            title={game.pendingTrial ? 'Cancel your rank-up trial first — one arena event per week' : undefined}
+                            onClick={() => setGame((g) => signUp(g, t.id, pickIds))}>
+                            {game.pendingTrial ? 'Trial already set this week' : 'Sign Up →'}
+                          </button>
                         </div>
+                        <div className="dim" style={{ fontSize: 12 }}>🏟 Competing takes the monster's week — it won't train.</div>
+                        {underpowered.length > 0 && (
+                          <div className="neg" style={{ fontSize: 12 }}>⚠ {underpowered.map((c) => c.name).join(', ')} sits well below the {t.league} standard — expect a rough field.</div>
+                        )}
                         {mult < 1 && pickedCareers[0] && (
-                          <div className="dim">⚠ {pickedCareers[0].name} is above {t.league} league — rewards reduced to {Math.round(mult * 100)}%.</div>
+                          <div className="dim">⚠ you hold a license above {t.league} — punching down pays only {Math.round(mult * 100)}%.</div>
                         )}
                         {fatigued[0] && (
                           <div className="neg" style={{ fontSize: 12 }}>
@@ -1988,20 +2061,20 @@ function RanchView({ game, setGame, onBattleScreen }: {
                       <>
                         <TeamPicker pool={eligible} teamSize={teamSize} monsterIds={pickIds} onChange={(ids) => setTeamPick((sp) => ({ ...sp, [t.id]: ids }))} />
                         <div className="carerow" style={{ marginTop: 8 }}>
-                          <button className="signup" disabled={!teamFull || !hasLeader} onClick={() => setGame((g) => signUp(g, t.id, pickIds))}>
-                            {!teamFull ? `Pick ${teamSize - pickedCareers.length} more` : !hasLeader ? `Needs a ${t.league}-licensed leader` : 'Sign Up →'}
+                          <button className="signup" disabled={!teamFull || !!game.pendingTrial}
+                            title={game.pendingTrial ? 'Cancel your rank-up trial first — one arena event per week' : undefined}
+                            onClick={() => setGame((g) => signUp(g, t.id, pickIds))}>
+                            {!teamFull ? `Pick ${teamSize - pickedCareers.length} more` : game.pendingTrial ? 'Trial already set this week' : 'Sign Up →'}
                           </button>
                         </div>
-                        {teamFull && !hasLeader && (
+                        <div className="dim" style={{ fontSize: 12 }}>🏟 Competing takes each entered monster's week — they won't train.</div>
+                        {underpowered.length > 0 && (
                           <div className="neg" style={{ fontSize: 12 }}>
-                            ⚠ Every picked monster is below {t.league} league — at least one member must hold the {t.league} license to vouch for the team.
+                            ⚠ {underpowered.map((c) => c.name).join(', ')} {underpowered.length === 1 ? 'is' : 'are'} well below the {t.league} standard — expect a rough field.
                           </div>
                         )}
-                        {pickedCareers.some(isGuest) && hasLeader && (
-                          <div className="dim">🎫 {pickedCareers.filter(isGuest).map((c) => c.name).join(', ')} enter{pickedCareers.filter(isGuest).length === 1 ? 's' : ''} as a licensed leader's guest (one league below).</div>
-                        )}
                         {mult < 1 && (
-                          <div className="dim">⚠ your whole team is above {t.league} league — rewards reduced to {Math.round(mult * 100)}%.</div>
+                          <div className="dim">⚠ you hold a license above {t.league} — punching down pays only {Math.round(mult * 100)}% of the rewards.</div>
                         )}
                         {fatigued.length > 0 && (
                           <div className="neg" style={{ fontSize: 12 }}>
@@ -2125,6 +2198,18 @@ function sanitizeAndMigrate(raw: string): GameState | null {
     if (!Array.isArray(g.rivals) || g.rivals.length === 0) g.rivals = [generateRival(g.seed, 0)]
     // migrate pre-trainer-XP saves (LOOP_DESIGN Phase 5); potential stays absent (= 1.0)
     if (typeof g.trainerXp !== 'number') g.trainerXp = 0
+    // migrate pre-per-player-license saves (v0.5): the player's license = the
+    // highest any monster had earned (stable + frozen — nobody loses progress),
+    // and every stable career syncs to it (the one per-player invariant).
+    if (typeof g.licenseIndex !== 'number') {
+      g.licenseIndex = Math.max(0,
+        ...(Array.isArray(g.stable) ? g.stable.map((c: { licenseIndex?: number }) => c.licenseIndex ?? 0) : [0]),
+        ...(Array.isArray(g.frozen) ? g.frozen.map((f: { licenseIndex?: number }) => f.licenseIndex ?? 0) : [0]))
+    }
+    if (typeof g.licenseEarned !== 'number') g.licenseEarned = g.licenseIndex
+    if (g.pendingTrial === undefined) g.pendingTrial = null
+    if (typeof g.trialCooldownUntil !== 'number') g.trialCooldownUntil = 0
+    for (const c of g.stable) if (c.licenseIndex !== g.licenseIndex) c.licenseIndex = g.licenseIndex
     return g as GameState
   } catch {
     return null

@@ -547,6 +547,10 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 .xpfill { height: 100%; background: var(--accent, #6ad); border-radius: 4px; transition: width .3s ease; }
 .potential { color: var(--cha, #d9a94a); font-weight: 700; }
 
+/* Rank-up trial panel + earned-license shop row (v0.5). */
+.trial-panel { border: 1px solid var(--cha, #d9a94a); border-radius: 10px; padding: 10px 12px; margin-top: 10px; display: flex; flex-direction: column; gap: 4px; background: rgba(217,169,74,.06); font-size: 13px; }
+.license-ready { outline: 1px solid var(--con, #5bd47a); border-radius: 8px; }
+
 /* Forage fallback (feeding screen, shown only when the player can't afford food). */
 .forage-option { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; margin-top: 8px; padding: 9px 12px; border: 1px dashed var(--con, #5bd47a); border-radius: 9px; background: rgba(91,212,122,.06); text-align: left; }
 .forage-option.selected { border-style: solid; background: rgba(91,212,122,.14); }

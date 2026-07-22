@@ -13,43 +13,44 @@ const team = (seeds: string[], train: number) => seeds.map((s) => generateMonste
 const GOLDENS = [
   {
     name: '1v1-low', a: ['gold-a1'], b: ['gold-b1'], train: 150,
-    winner: 'A', events: 239, logLines: 172,
+    winner: 'A', events: 173, logLines: 123,
     finals: [
-      { side: 'A', slot: 0, hp: 233, mana: 5, wasKOd: false },
-      { side: 'B', slot: 0, hp: 0, mana: 9, wasKOd: true },
+      { side: 'A', slot: 0, hp: 183, mana: 3, wasKOd: false },
+      { side: 'B', slot: 0, hp: 0, mana: 5, wasKOd: true },
     ],
   },
   {
     name: '1v1-high', a: ['gold-a2'], b: ['gold-b2'], train: 1800,
-    winner: 'B', events: 220, logLines: 162,
+    winner: 'B', events: 74, logLines: 57,
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 338, wasKOd: true },
-      { side: 'B', slot: 0, hp: 353, mana: 676, wasKOd: false },
+      { side: 'A', slot: 0, hp: 0, mana: 437, wasKOd: true },
+      { side: 'B', slot: 0, hp: 511, mana: 673, wasKOd: false },
     ],
   },
   {
     name: '2v2-mid', a: ['gold-a3', 'gold-a4'], b: ['gold-b3', 'gold-b4'], train: 700,
-    winner: 'A', events: 138, logLines: 105,
+    winner: 'B', events: 111, logLines: 85,
     finals: [
-      { side: 'A', slot: 0, hp: 246, mana: 136, wasKOd: false },
-      { side: 'A', slot: 1, hp: 190, mana: 180, wasKOd: false },
-      { side: 'B', slot: 0, hp: 0, mana: 99, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 141, wasKOd: true },
+      { side: 'A', slot: 0, hp: 0, mana: 460, wasKOd: true },
+      { side: 'A', slot: 1, hp: 0, mana: 179, wasKOd: true },
+      { side: 'B', slot: 0, hp: 43, mana: 35, wasKOd: false },
+      { side: 'B', slot: 1, hp: 216, mana: 331, wasKOd: false },
     ],
   },
   {
-    // full-wipe draw — exercises the round-35 sudden-death chip path
-    // Golden recaptured 2026-07-25 (wave-2 formations): front/back rows made
-    // single-target melee front-restricted, a deliberate engine change.
+    // exercises the round-35 sudden-death path — now DECISIVE (was a full-wipe
+    // draw). Recaptured 2026-07-22 after the %-of-max-HP sudden-death rework
+    // (flat chip → % chip), CON coefficient trims, and WIS spell-power — the
+    // clock now resolves a winner instead of wiping both.
     name: '3v3-high', a: ['gold-a5', 'gold-a6', 'gold-a7'], b: ['gold-b5', 'gold-b6', 'gold-b7'], train: 2000,
-    winner: 'draw', events: 582, logLines: 423,
+    winner: 'A', events: 413, logLines: 297,
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 709, wasKOd: true },
-      { side: 'A', slot: 1, hp: 0, mana: 8, wasKOd: true },
-      { side: 'A', slot: 2, hp: 0, mana: 737, wasKOd: true },
-      { side: 'B', slot: 0, hp: 0, mana: 725, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 746, wasKOd: true },
-      { side: 'B', slot: 2, hp: 0, mana: 19, wasKOd: true },
+      { side: 'A', slot: 0, hp: 941, mana: 690, wasKOd: false },
+      { side: 'A', slot: 1, hp: 1262, mana: 19, wasKOd: false },
+      { side: 'A', slot: 2, hp: 1348, mana: 751, wasKOd: false },
+      { side: 'B', slot: 0, hp: 0, mana: 729, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 772, wasKOd: true },
+      { side: 'B', slot: 2, hp: 0, mana: 55, wasKOd: true },
     ],
   },
 ] as const

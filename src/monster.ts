@@ -301,7 +301,7 @@ export function staminaDamageMult(stamina: number): number {
   return 0.5
 }
 
-export const maxHp = (s: Stats) => Math.round(50 + s.CON * 2.5)
+export const maxHp = (s: Stats) => Math.round(40 + s.CON * 2.0)
 // WIS is the mana FOUNDATION (and stays the sole regen stat); INT contributes
 // half its value to the pool (2026-07-25 review fix: maxMana = WIS alone
 // starved INT-primary classes — a Spellsword's whole chain-caster identity

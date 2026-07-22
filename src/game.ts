@@ -96,6 +96,7 @@ export type WeeklyAction =
   | { kind: 'train'; drillId: string }
   | { kind: 'rest' }
   | { kind: 'excursion' }
+  | { kind: 'compete' } // v0.5: entered in a cup/trial — the event IS the week (no training/rest)
 
 // Stamina malus: exp penalty scales with stamina level
 export function staminaMalus(stamina: number): number {
@@ -410,20 +411,9 @@ export function canRankUp(c: Career): boolean {
   return Math.max(...STATS.map((s) => c.stats[s])) >= cap - 10
 }
 
-export function rankUpFee(c: Career): number {
-  return (c.licenseIndex + 1) * 40
-}
-
-export function rankUp(c: Career, gold: number): { c: Career; gold: number } {
-  if (!canRankUp(c)) return { c, gold }
-  const fee = rankUpFee(c)
-  if (gold < fee) return { c: push(c, `Rank-up trial costs ${fee}g — not enough gold.`), gold }
-  const n: Career = { ...c, licenseIndex: c.licenseIndex + 1, log: [...c.log] }
-  return {
-    c: push(n, `⭐ Passed the rank-up trial! Promoted to ${LEAGUES[n.licenseIndex].name} (cap ${LEAGUES[n.licenseIndex].cap}).`),
-    gold: gold - fee,
-  }
-}
+// rankUpFee/rankUp are GONE (v0.5): promotion is per-PLAYER — win the on-demand
+// trial (town.ts:startTrial) then buy the license (town.ts:buyLicense).
+// canRankUp (above) survives as the per-monster "champion-ready" indicator.
 
 function push(c: Career, line: string): Career {
   return { ...c, log: [...c.log, line].slice(-40) }
@@ -482,6 +472,10 @@ export function applyWeek(c: Career, action: WeeklyAction, gold: number, rental 
     }
     n.stamina = Math.max(0, n.stamina - stamCost)
     n.log.push(`Wk ${wk}: ${drill.name} — ${changes.length > 0 ? changes.join(', ') : 'no gain (capped)'}.`)
+  } else if (action.kind === 'compete') {
+    // Competing IS the week (v0.5): no training, no rest recovery — the cup or
+    // trial (resolved after activities in advanceWeek) is what this week was for.
+    n.log.push(`Wk ${wk}: competed in the arena.`)
   } else if (action.kind === 'rest') {
     const restMin = Math.round(0.3 * MAX_STAMINA)
     const restMax = Math.round(1 * MAX_STAMINA)

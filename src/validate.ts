@@ -9,7 +9,7 @@ import { BODY_ELEMENT, BodyType, CLASSES, GAMEPLANS, LEAGUES, STATS, STATUS_INFO
 import { SPECIES } from './species'
 import { ALL_MOVES } from './moves'
 import { LEAGUE_TOP_GOLD, trainingProfileFor } from './game'
-import { activeQuartersFor, BREEDING_BONUS, CIRCUIT_REWARDS, EVENTS, MAX_POTENTIAL, PRESTIGE_EVENTS, RANK_UP_MONTHS, RANK_UP_WEEK, TEAM_SIZE_BY_LEAGUE, breedPotential, tournamentCalendarFor } from './town'
+import { activeQuartersFor, BREEDING_BONUS, CIRCUIT_REWARDS, EVENTS, LICENSE_COSTS, MAX_POTENTIAL, PRESTIGE_EVENTS, TEAM_SIZE_BY_LEAGUE, breedPotential, tournamentCalendarFor } from './town'
 import { INNATE_EFFECTS } from './battle'
 
 export function designProblems(): string[] {
@@ -93,8 +93,7 @@ export function designProblems(): string[] {
         if (!LEAGUES.some((l) => l.name === t.league)) problems.push(`CALENDAR(${seed}/y${year}): unknown league "${t.league}".`)
         if (t.month < 1 || t.month > 12) problems.push(`CALENDAR(${seed}/y${year}): ${t.name} invalid month ${t.month}.`)
         if (t.week < 1 || t.week > 4) problems.push(`CALENDAR(${seed}/y${year}): ${t.name} invalid week ${t.week}.`)
-        if (RANK_UP_MONTHS.includes(t.month) && t.week === RANK_UP_WEEK)
-          problems.push(`CALENDAR(${seed}/y${year}): ${t.name} collides with the rank-up trials (month ${t.month}, week ${t.week}).`)
+        // (v0.5: rank-up trials are de-calendarized — no reserved weeks to collide with.)
       }
       for (const league of fullDensity) {
         for (let q = 0; q < 4; q++) {
@@ -195,6 +194,14 @@ export function designProblems(): string[] {
   for (let gen = 0; gen < 50; gen++) pot = breedPotential(pot, pot) // inbreed the strongest line
   if (pot > MAX_POTENTIAL + 1e-9) problems.push(`BREEDING: potential exceeds MAX_POTENTIAL after 50 generations (${pot}).`)
   if (breedPotential(1, 1) <= 1) problems.push(`BREEDING: breeding two wild monsters must raise potential above 1.`)
+
+  // License costs (v0.5): one entry per league, strictly growing after the free
+  // Wood start, and never a doubling wall (each step < 2× the last).
+  if (LICENSE_COSTS.length !== LEAGUES.length) problems.push(`LICENSES: ${LICENSE_COSTS.length} costs for ${LEAGUES.length} leagues.`)
+  for (let i = 2; i < LICENSE_COSTS.length; i++) {
+    if (LICENSE_COSTS[i] <= LICENSE_COSTS[i - 1]) problems.push(`LICENSES: cost[${i}] (${LICENSE_COSTS[i]}) not greater than cost[${i - 1}].`)
+    if (LICENSE_COSTS[i] >= LICENSE_COSTS[i - 1] * 2 && i > 2) problems.push(`LICENSES: cost[${i}] doubles or worse (${LICENSE_COSTS[i - 1]} → ${LICENSE_COSTS[i]}).`)
+  }
 
   return problems
 }

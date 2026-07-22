@@ -992,7 +992,12 @@ function resolveDamageOnTarget(attacker: Combatant, target: Combatant, move: Mov
     return
   }
 
-  const atk = attackStat(attacker.m.stats, move.channel)
+  // WIS is the caster FOUNDATION (2026-07-22 balance): magic (INT) and voice
+  // (CHA) damage scale partly off WIS too, so WIS stops being a dead offensive
+  // stat and caster/support classes (Sage, Bard, Orator) get real teeth — and
+  // it creates INT+WIS / CHA+WIS synergy instead of pure single-stat builds.
+  const spellStat = move.channel === 'magic' || move.channel === 'voice'
+  const atk = attackStat(attacker.m.stats, move.channel) + (spellStat ? attacker.m.stats.WIS * 0.6 : 0)
   const variance = 0.85 + rng() * 0.3
   const hits = e?.hits ? randInt(rng, e.hits[0], e.hits[1]) : 1
   // softened growth curve so high-stat monsters don't one-shot before defense
@@ -1054,7 +1059,7 @@ function resolveDamageOnTarget(attacker: Combatant, target: Combatant, move: Mov
   // CON coefficient trimmed 0.06 → 0.05 (2026-07-25) — part of the anti-tank-
   // dominance package alongside the giant-killer maxHpDmg tools.
   let mitigation = ((move.channel === 'melee' || move.channel === 'ranged')
-    ? target.m.stats.CON * 0.05 + target.guard
+    ? target.m.stats.CON * 0.04 + target.guard
     : target.m.stats.WIS * 0.05) + target.innate.flatDR + target.defFlat
   // skill pierce + innate pierce + STR's own armour-breaking (100 STR = 1% of mitigation ignored)
   mitigation = Math.max(0, mitigation) * (1 - Math.min(1, (e?.pierce ?? 0) + attacker.innate.pierce + mitigationPierce(attacker.m.stats)))
@@ -1248,9 +1253,15 @@ function turnOrderCompare(x: Combatant, y: Combatant): number {
   const bucket = (c: Combatant) => (hasStatus(c, 'haste') ? -1 : 0) + (hasStatus(c, 'knockback') ? 1 : 0)
   const bx = bucket(x), by = bucket(y)
   if (bx !== by) return bx - by
-  if (y.m.stats.CON !== x.m.stats.CON) return x.m.stats.CON - y.m.stats.CON
+  // Speed = DEX (2026-07-22): the fastest monster acts first. Replaces the old
+  // CON-ascending order (tanks act last) — DEX is the intuitive agility stat,
+  // and comparing it is symmetric so swapping sides can never change the order
+  // (killing the old "side A first" positional bias). CON no longer gates turn
+  // order (its reward is now purely HP + mitigation).
   if (y.m.stats.DEX !== x.m.stats.DEX) return y.m.stats.DEX - x.m.stats.DEX
-  if (x.side !== y.side) return x.side === 'A' ? -1 : 1
+  // Exact-DEX ties fall to a symmetric identity signature, never to side/slot.
+  const sig = (c: Combatant) => c.m.stats.STR + c.m.stats.CON * 13 + c.m.stats.WIS * 17 + c.m.stats.INT * 23 + c.m.stats.CHA * 29 + c.m.name.length * 101
+  if (sig(x) !== sig(y)) return sig(x) - sig(y)
   return x.slot - y.slot
 }
 
@@ -1310,13 +1321,17 @@ export function simulateTeamBattle(teamA: Monster[], teamB: Monster[], happA: nu
 
     // Sudden-death clock (user spec 2026-07-22): some early-game matchups
     // grind for a long time with neither side able to close it out. From
-    // round 35, EVERY living combatant takes flat TRUE damage (bypasses
-    // ward/mitigation, so a defensive comp can't out-tank the clock) that
-    // doubles each round, guaranteeing a winner within a handful more rounds.
+    // From round 35, EVERY living combatant takes escalating TRUE damage as a
+    // FRACTION of its OWN max HP (bypasses ward/mitigation, so no comp out-tanks
+    // the clock). % — not flat — is deliberate (2026-07-22 balance): flat chip
+    // let raw HP pool auto-win the timeout, double-dipping CON. %-of-max makes
+    // the tiebreak reward who's actually HEALTHIER (HP fraction), so an ahead
+    // tank still wins but a same-fraction tank no longer wins for free. The
+    // escalation (8% +5%/round) guarantees a decisive finish within ~6 rounds.
     if (round >= CHIP_START_ROUND && teamAlive(A) && teamAlive(B)) {
-      const chip = Math.pow(2, round - CHIP_START_ROUND)
-      for (const c of ctx.all) if (c.hp > 0) c.hp = Math.max(0, c.hp - chip)
-      log.push(`   ⏱️  Sudden death (Rd ${round}): everyone takes ${chip} damage.`)
+      const frac = 0.08 + 0.05 * (round - CHIP_START_ROUND)
+      for (const c of ctx.all) if (c.hp > 0) c.hp = Math.max(0, c.hp - Math.max(1, Math.round(c.maxHp * frac)))
+      log.push(`   ⏱️  Sudden death (Rd ${round}): everyone loses ${Math.round(frac * 100)}% of max HP.`)
     }
 
     snap()
