@@ -90,6 +90,69 @@ CON/turn-order changes are the tuning knobs to revisit.
 
 ### What changed this session, newest first
 
+-49. **LOOP_DESIGN.md all 5 phases + food system + food-price tuning — v0.4, COMMITTED and
+    DEPLOYED (preview→main→manual `npm run deploy`, user: "push and commit to live").** A big
+    multi-turn arc off a design critique (the user asked what makes the game fun / where it falls
+    short; the answer + build plan live in `docs/LOOP_DESIGN.md`). Everything below is
+    `tsc`/build/`npm test` 12-of-12 green (goldens untouched throughout — see the NORMAL_FOODS
+    note) and browser-verified. `APP_VERSION`/package.json bumped 0.3 → 0.4.
+    - **Food system overhaul** (`core.ts` FoodDef/tiers, `game.ts` foodHappinessDelta/
+      foodStaminaDelta/foodTrainMult, `town.ts` contracts, `App.tsx` tiered picker): 4 basic
+      rations (10g) + 3 **training foods** (75g, +30% to their two stats, −1 happiness/−15
+      stamina) + 3 **premium** (Vigor Melon +30 stamina, Bliss Berry +3 happiness, Golden Truffle
+      500g = win next cup → +50% gold&exp). **Satiety** (repeat food → happiness halved),
+      two-stage **Pantry Contract 400g / Grand Larder 1500g** (20% off normal / premium). All
+      rng-mirrored (previewWeekEffects == buyFood+applyWeek, verified byte-exact incl. HP/MP).
+      **Golden-test fix**: growing FOODS 4→10 shifted `generateMonster`'s favourite/hated-food
+      rng draw and broke the battle goldens — fixed by drawing fav/hated from a new
+      `core.ts:NORMAL_FOODS` (the 4 rations), which restores the exact rng stream AND is
+      semantically right. **Food-price tuning** (`game.ts:rollMarket`, per user): basic rations
+      swing ±60% (0.4–1.6×), training+premium only discount 10% but spike +50% (0.9–1.5×) — the
+      good stuff stays reliably expensive.
+    - **Phase 1 — event framework** (`town.ts` EVENTS/rollWeeklyEvent/resolveEvent,
+      `App.tsx:EventModal`): a weekly incident (45% of eligible weeks, seeded/deterministic) shown
+      on the feeding screen as a blocking choice-with-trade-off modal. 6 starter events (sponsor,
+      illness, breakthrough, festival, lucky find, restless), all immediate-effect (no next-week
+      modifiers → applyWeek/preview untouched). `resolveEvent` supports CHAINED follow-up events
+      (used by the rival challenge). `GameState.pendingEvent`, migrated. THE connective tissue —
+      the rival challenge, and later illness/sponsor/minigame hooks, all hang off this.
+    - **Phase 2 — rival system** (`core.ts:Rival`, `town.ts`): one named primary rival at
+      newGame (migrated for old saves), rubber-banded one license/week toward the player's max so
+      it stays at-level. A **rival-challenge event** runs a self-contained simulated 1v1 skirmish
+      (deterministic), updates a tracked head-to-head, and CHAINS a result modal. `🥊 Rivals`
+      panel in Town (name · league · personality · record). NOTE: seating the named rival into
+      cup round-robins was deferred to (folded into) Phase 3's territory but NOT built — the
+      bracket/scout/standings label plumbing is still a clean follow-up; the rival's presence is
+      currently via challenge skirmishes only.
+    - **Phase 3 — rival gameplans + scouting reveal** (`core.ts:GAMEPLANS`, `town.ts`
+      gameplanForRivalTeam/applyGameplan, `App.tsx` scout panel): 5 archetypes (Rushdown,
+      Bulwark, Attrition, Focus-Fire, Zone), each a `Tactics` config run through the EXISTING
+      engine (side-agnostic — zero engine changes; Bulwark also `protect`s its top carry).
+      Deterministic per (seed, week, cup, teamIdx) so the scouted plan == the one fought. The
+      scout panel reveals the archetype + a counter-hint at the basic tier — closing the front
+      half of the causality loop. `validate.ts` asserts every archetype → legal Tactics.
+    - **Phase 4 — causal battle report** (`battleReport.ts` new + pure, `arena.tsx` render):
+      `analyzeBattle(events, teams, result, playerSide?)` → turning point (biggest HP-swing
+      round), counter-read (reverse-maps the foe's tactics to name their gameplan), tactic
+      outcomes (✓/✗ on whether your mark/protect/opener actually fired — HONEST about failures),
+      key moments. A `📋 Battle report` card above the summary table; player-side threaded from
+      the tournament match, neutral in Sandbox. No engine change → goldens safe.
+    - **Phase 5 — meta-progression** (`game.ts:statCapFor`, `town.ts` trainer XP + breeding
+      rewrite, `App.tsx`): **Trainer level** (`GameState.trainerXp`, migrated) — XP from cup
+      podiums (60/35/20 +league) and monster retirement (+40); perk = +1 barn slot / 2 levels via
+      `effectiveBarnCap` (threaded into every barn check); `🎓 Trainer` panel + XP bar + level-up
+      digest line. **Bloodline breeding** — replaced the "avg −10% = downgrade" fusion stub:
+      `Career.potential`/`Frozen.potential` is a stat-cap MULTIPLIER (`statCapFor(c)` = league cap
+      × potential, wired into all 4 career training/reward clamps; wild = 1.0, generation/battle
+      never consult it → goldens safe). A bred baby hatches fresh at Wood but inherits
+      `avg(parents)+0.05` potential (capped 1.5), so a bred line trains ABOVE any wild ceiling
+      (sim: bred CON 98→104 vs wild cap 100); retire→freeze→stud seeds the next generation.
+      ★ badge on the monster detail. `validate.ts` asserts potential is bounded.
+    - **Deferred (noted in memory + the doc)**: Hall of Fame live perks, lifespan elixir, richer
+      inheritance (aptitude-mix/signature-move), the named-rival-in-cups seating, **achievements
+      + goal-gradient**, and the **economy rebalance** (deliberately last — do it once these
+      systems' sinks/sources are all in). Two project memories written for the last two.
+
 -42. **Multi-combatant tactics locked until team play (2026-07-25), browser-verified,
     uncommitted.** User: "lock the tactics options that pertain to multiple combatants until
     the tin league is unlocked" — implemented keyed to the FIRST TEAM LEAGUE derived from

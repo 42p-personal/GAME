@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { BattleEvent, BattleResult, BattleSide } from './battle'
 import { Channel, Element, Monster, StatusKind, frontRowCount } from './core'
 import { maxHp, maxMana } from './monster'
+import { analyzeBattle } from './battleReport'
 import { Sprite } from './Sprite'
 import { backgroundFor } from './leagueArt'
 
@@ -110,7 +111,7 @@ function MoveFx({ fx }: { fx: Fx }) {
   return null
 }
 
-export function ArenaBattle({ teamA, teamB, result, league, onDone }: { teamA: Monster[]; teamB: Monster[]; result: BattleResult; league?: string; onDone?: () => void }) {
+export function ArenaBattle({ teamA, teamB, result, league, playerSide, onDone }: { teamA: Monster[]; teamB: Monster[]; result: BattleResult; league?: string; playerSide?: BattleSide; onDone?: () => void }) {
   const is1v1 = teamA.length === 1 && teamB.length === 1
   const events = result.events
   const bgImage = useMemo(() => backgroundFor(league), [league])
@@ -289,6 +290,10 @@ export function ArenaBattle({ teamA, teamB, result, league, onDone }: { teamA: M
     return [...rows.values()].sort((x, y) => (x.side === y.side ? x.slot - y.slot : x.side === 'A' ? -1 : 1))
   }, [result, teamA, teamB])
 
+  // Causal report (LOOP_DESIGN Phase 4): "you won BECAUSE…" — turning point,
+  // whether your orders fired, and what the opponent was running.
+  const report = useMemo(() => analyzeBattle(result.events, teamA, teamB, result, playerSide), [result, teamA, teamB, playerSide])
+
   // Shared tail: the live turn log, plus (once the replay finishes) the battle
   // summary and the raw sim transcript — richer than the captions (buff
   // durations, resist notes).
@@ -299,6 +304,17 @@ export function ArenaBattle({ teamA, teamB, result, league, onDone }: { teamA: M
           <div key={i} className={l.startsWith('— Round') ? 'rnd' : l.startsWith('🏆') || l.startsWith('🏳️') ? 'fin' : ''}>{l}</div>
         ))}
       </div>
+      {done && (report.turningPoint || report.tacticOutcomes.length > 0 || report.keyMoments.length > 0) && (
+        <div className="battle-report">
+          <div className="section-title">📋 Battle report</div>
+          {report.turningPoint && <div className="br-turn">{report.turningPoint}</div>}
+          {report.counterRead && <div className="br-counter">🧠 {report.counterRead}</div>}
+          {report.tacticOutcomes.map((o, i) => (
+            <div key={i} className={'br-tactic ' + (o.ok ? 'ok' : 'no')}>{o.ok ? '✓' : '✗'} {o.text}</div>
+          ))}
+          {report.keyMoments.map((m, i) => <div key={i} className="br-moment">• {m}</div>)}
+        </div>
+      )}
       {done && (
         <div className="battle-summary">
           <div className="section-title">Battle summary</div>

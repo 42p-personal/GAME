@@ -5,11 +5,11 @@
 // hand-synced reward tables drifting apart. `designProblems()` returns the raw
 // list so the vitest suite can assert it's empty; `validateDesign()` is the
 // console wrapper main.tsx runs in dev.
-import { BODY_ELEMENT, BodyType, CLASSES, LEAGUES, STATS, STATUS_INFO, StatusKind, classForStats } from './core'
+import { BODY_ELEMENT, BodyType, CLASSES, GAMEPLANS, LEAGUES, STATS, STATUS_INFO, StatusKind, TARGET_PRIORITY_INFO, TEMPERAMENT_INFO, classForStats } from './core'
 import { SPECIES } from './species'
 import { ALL_MOVES } from './moves'
 import { LEAGUE_TOP_GOLD, trainingProfileFor } from './game'
-import { activeQuartersFor, CIRCUIT_REWARDS, PRESTIGE_EVENTS, RANK_UP_MONTHS, RANK_UP_WEEK, TEAM_SIZE_BY_LEAGUE, tournamentCalendarFor } from './town'
+import { activeQuartersFor, BREEDING_BONUS, CIRCUIT_REWARDS, EVENTS, MAX_POTENTIAL, PRESTIGE_EVENTS, RANK_UP_MONTHS, RANK_UP_WEEK, TEAM_SIZE_BY_LEAGUE, breedPotential, tournamentCalendarFor } from './town'
 import { INNATE_EFFECTS } from './battle'
 
 export function designProblems(): string[] {
@@ -163,6 +163,36 @@ export function designProblems(): string[] {
   for (const l of LEAGUES) {
     if (LEAGUE_TOP_GOLD[l.name] === undefined) problems.push(`ECONOMY: LEAGUE_TOP_GOLD has no entry for ${l.name}.`)
   }
+
+  // Weekly events (LOOP_DESIGN Phase 1): unique ids, at least one choice each,
+  // and the display roll produces a resolvable branch for every registered
+  // event (a monster-scoped event with a non-null target must find its career).
+  const eventIds = new Set<string>()
+  for (const ev of EVENTS) {
+    if (eventIds.has(ev.id)) problems.push(`EVENTS: duplicate event id "${ev.id}".`)
+    eventIds.add(ev.id)
+    if (!ev.choices || ev.choices.length === 0) problems.push(`EVENTS: "${ev.id}" has no choices.`)
+  }
+
+  // Rival gameplans (LOOP_DESIGN Phase 3): every archetype maps to a legal
+  // Tactics config the engine understands — so scouting can never advertise a
+  // plan the AI can't actually run.
+  const validTemper = new Set(TEMPERAMENT_INFO.map((x) => x.id))
+  const validPriority = new Set(TARGET_PRIORITY_INFO.map((x) => x.id))
+  for (const [key, gp] of Object.entries(GAMEPLANS)) {
+    if (!validTemper.has(gp.tactics.temperament)) problems.push(`GAMEPLANS: ${key} has invalid temperament "${gp.tactics.temperament}".`)
+    if (!validPriority.has(gp.tactics.targetPriority)) problems.push(`GAMEPLANS: ${key} has invalid targetPriority "${gp.tactics.targetPriority}".`)
+    if (!gp.name || !gp.counter) problems.push(`GAMEPLANS: ${key} is missing a name or counter-hint.`)
+  }
+
+  // Breeding potential (LOOP_DESIGN Phase 5): each generation climbs but stays
+  // bounded — a bloodline plateaus at MAX_POTENTIAL, it never runs away.
+  if (BREEDING_BONUS <= 0) problems.push(`BREEDING: BREEDING_BONUS must be positive (is ${BREEDING_BONUS}).`)
+  if (MAX_POTENTIAL <= 1) problems.push(`BREEDING: MAX_POTENTIAL must exceed 1 (is ${MAX_POTENTIAL}).`)
+  let pot = 1
+  for (let gen = 0; gen < 50; gen++) pot = breedPotential(pot, pot) // inbreed the strongest line
+  if (pot > MAX_POTENTIAL + 1e-9) problems.push(`BREEDING: potential exceeds MAX_POTENTIAL after 50 generations (${pot}).`)
+  if (breedPotential(1, 1) <= 1) problems.push(`BREEDING: breeding two wild monsters must raise potential above 1.`)
 
   return problems
 }

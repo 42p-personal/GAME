@@ -2,7 +2,7 @@
 // weekly actions (train drill / rest / feed / excursion), stamina, gold, aging.
 import {
   BODY_MINOR, FOODS, Food, INNATE_SECONDARY_LEVEL, LEAGUES, MAX_HAPPINESS, Monster, Move, RNG, STATS, Sex, Species, Stats, Stat, Tactics, TrainingProfile,
-  classForStats, feedDelta, hashString, mulberry32,
+  classForStats, feedDelta, foodDef, hashString, mulberry32,
 } from './core'
 import { ALL_DRILLS } from './drills'
 import { chooseLoadout, generateMonster, learnedMoves, maxHp, maxMana } from './monster'
@@ -69,15 +69,24 @@ export interface Career {
   loadout: string[] // persisted equipped-move ids (≤3); empty = auto-pick (chooseLoadout)
   activeInnate: number // 0 or 1 — which of the species' two innates is active; changed like a loadout swap
   tactics?: Tactics // standing battle orders (2026-07-25); absent = DEFAULT_TACTICS behavior
+  lastFood?: Food // food fed LAST week — drives the satiety rule (repeat → halved happiness)
+  truffleReady?: boolean // a Golden Truffle is banked — the next cup WON pays +50% (consumed win or lose)
+  potential?: number // bloodline "star rating" (LOOP_DESIGN Phase 5): a stat-cap multiplier that climbs each breeding generation; absent = 1.0 (wild-caught)
   tournamentHistory: TournamentResult[]
   log: string[]
 }
 
-// Weekly food prices fluctuate ±40% around each food's base value (§2.5).
+// Weekly food prices fluctuate around each food's base value, by tier
+// (user spec 2026-07-22): basic rations swing ±60% (0.4–1.6×), while training
+// and premium foods only discount 10% but can spike +50% (0.9–1.5×) — so the
+// good stuff stays reliably expensive and is only occasionally on sale.
 export function rollMarket(id: string, week: number): Record<Food, number> {
   const rng = mulberry32(hashString(id + ':mkt:' + week))
   const m = {} as Record<Food, number>
-  for (const f of FOODS) m[f.id] = Math.max(1, Math.round(f.price * (0.6 + rng() * 0.8)))
+  for (const f of FOODS) {
+    const [lo, span] = f.tier === 'normal' ? [0.4, 1.2] : [0.9, 0.6] // normal: 0.4–1.6×; training/premium: 0.9–1.5×
+    m[f.id] = Math.max(1, Math.round(f.price * (lo + rng() * span)))
+  }
   return m
 }
 
@@ -183,32 +192,38 @@ function rollDrillGain(rng: RNG, base: number, happiness: number): number {
 // roll shown IS the roll that will land) so the Ranch screen can show the
 // happiness swing and exact stat gains/maluses before the player commits.
 export function previewWeekEffects(c: Career, activity: string, food: Food | ''): WeekPreview {
-  let happinessDelta = food ? feedDelta(food, c.favouriteFood, c.hatedFood) : -1
+  // Food resolves BEFORE the activity in the real tick (buyFood runs first),
+  // so the preview establishes post-feed happiness + stamina baselines, then
+  // runs the activity off them — matching applyWeek exactly.
+  const foodHap = food ? foodHappinessDelta(c, food) : -1 // -1 = the unfed hunger penalty
+  const foodStam = food ? foodStaminaDelta(food) : 0
+  let happinessDelta = foodHap
   const statDeltas: Partial<Record<Stat, number>> = {}
-  let staminaDelta = 0
+  let staminaDelta = foodStam !== 0 ? Math.max(0, Math.min(MAX_STAMINA, c.stamina + foodStam)) - c.stamina : 0
   let goldDelta = 0
   let hpDelta = 0
   let mpDelta = 0
   if (c.retired) return { happinessDelta, statDeltas, staminaDelta, goldDelta, hpDelta, mpDelta }
+  const startStam = Math.max(0, Math.min(MAX_STAMINA, c.stamina + foodStam)) // stamina the activity starts from
+  const postFeedHappiness = food ? Math.max(0, Math.min(MAX_HAPPINESS, c.happiness + foodHap)) : c.happiness
   const rng = mulberry32(hashString(c.id + ':' + c.week))
   const drill = ALL_DRILLS.find((d) => d.id === activity)
   if (drill) {
-    const cap = LEAGUES[c.licenseIndex].cap
+    const cap = statCapFor(c) // bloodline potential lifts the training ceiling (Phase 5)
     const { trainMult } = stageInfo(c.ageWeeks, c.species.lifespan)
-    const eff = trainMult * staminaMalus(c.stamina)
-    // feeding resolves before training in the real weekly tick (advanceWeek),
-    // so the roll below must use the POST-feed happiness to match exactly
-    const trainHappiness = food ? Math.max(0, Math.min(MAX_HAPPINESS, c.happiness + feedDelta(food, c.favouriteFood, c.hatedFood))) : c.happiness
+    // stamina malus reads the POST-feed stamina (a Vigor Melon can lift you out
+    // of the fatigue bracket before you train)
+    const eff = trainMult * staminaMalus(startStam)
     for (const [stat, delta] of Object.entries(drill.gains) as [Stat, number][]) {
       const applied = delta > 0
-        ? Math.round(rollDrillGain(rng, delta, trainHappiness) * eff * statTrainingBonus(c.species, stat))
+        ? Math.round(rollDrillGain(rng, delta, postFeedHappiness) * eff * statTrainingBonus(c.species, stat) * foodTrainMult(food, stat))
         : Math.round(delta * statMalusMultiplier(c.species, stat))
       const nv = Math.max(1, Math.min(cap, c.stats[stat] + applied))
       const real = nv - c.stats[stat]
       if (real !== 0) statDeltas[stat] = real
     }
     const stamCost = drill.kind === 'basic' ? BASIC_DRILL_STAMINA : INTENSIVE_DRILL_STAMINA
-    staminaDelta = Math.max(0, c.stamina - stamCost) - c.stamina
+    staminaDelta = Math.max(0, startStam - stamCost) - c.stamina
     // Mirror applyWeek's growth top-up exactly (2026-07-25): raised max HP/MP
     // raises current by the same amount; a malus that SHRINKS max clamps
     // current down — same formula both sides, so the preview stays exact.
@@ -221,17 +236,17 @@ export function previewWeekEffects(c: Career, activity: string, food: Food | '')
     const restMin = Math.round(0.3 * MAX_STAMINA)
     const restMax = Math.round(1 * MAX_STAMINA)
     const restAmount = restMin + Math.floor(rng() * ((restMax - restMin) / 5 + 1)) * 5
-    staminaDelta = Math.min(MAX_STAMINA, c.stamina + restAmount) - c.stamina
+    staminaDelta = Math.min(MAX_STAMINA, startStam + restAmount) - c.stamina
     const healAmt = Math.round(maxHp(c.stats) * (0.3 + rng() * 0.4))
     const mpAmt = Math.round(maxMana(c.stats) * (0.25 + rng() * 0.55))
     hpDelta = Math.min(maxHp(c.stats), c.hp + healAmt) - c.hp
     mpDelta = Math.min(maxMana(c.stats), c.mp + mpAmt) - c.mp
   } else if (activity === 'excursion') {
-    staminaDelta = Math.max(0, c.stamina - EXCURSION_COST) - c.stamina
+    staminaDelta = Math.max(0, startStam - EXCURSION_COST) - c.stamina
     goldDelta = excursionGold(rng, c.licenseIndex)
     // mirror applyWeek's +1 happiness exactly, including the cap (feeding
     // resolves first, so the bonus applies on top of the post-feed value)
-    const afterFood = Math.max(0, Math.min(MAX_HAPPINESS, c.happiness + happinessDelta))
+    const afterFood = postFeedHappiness
     happinessDelta += Math.min(MAX_HAPPINESS, afterFood + 1) - afterFood
   }
   return { happinessDelta, statDeltas, staminaDelta, goldDelta, hpDelta, mpDelta }
@@ -243,6 +258,15 @@ export interface NewCareerOpts {
   stats?: Stats // override seed stats (fusion averages the parents)
   licenseIndex?: number
   happiness?: number
+  potential?: number // bloodline star rating (bred monsters inherit + climb it)
+}
+
+// The effective stat ceiling for a career: the league cap, lifted by the
+// monster's bloodline potential (LOOP_DESIGN Phase 5). Wild-caught monsters
+// (potential absent) get the plain league cap, so nothing changes for them —
+// and generation/battle never consult this, only career training does.
+export function statCapFor(c: { licenseIndex: number; potential?: number }): number {
+  return Math.round(LEAGUES[c.licenseIndex].cap * (c.potential ?? 1))
 }
 
 // Create a raising Career. Stats/species/name come from `seed`; `opts.id` lets the
@@ -265,6 +289,7 @@ export function newCareer(seed: string, opts: NewCareerOpts = {}): Career {
     stamina: MAX_STAMINA,
     happiness: opts.happiness ?? 5,
     licenseIndex: opts.licenseIndex ?? 0,
+    potential: opts.potential,
     week: 0,
     retired: false,
     fedThisWeek: false,
@@ -275,6 +300,28 @@ export function newCareer(seed: string, opts: NewCareerOpts = {}): Career {
   }
 }
 
+// --- Shared food-effect math (2026-07-25 overhaul) — one source of truth so
+// the real weekly tick (buyFood + applyWeek) and the preview can never drift.
+
+// Happiness a food grants THIS week. Training/premium foods carry a FIXED value
+// (ignoring taste); normal foods use taste (feedDelta). Satiety: feeding the
+// SAME food two weeks running halves a POSITIVE gain (floored) — a bored
+// monster enjoys the repeat less. Negative/zero deltas are unaffected.
+export function foodHappinessDelta(c: Career, food: Food): number {
+  const def = foodDef(food)
+  const raw = def.happiness !== undefined ? def.happiness : feedDelta(food, c.favouriteFood, c.hatedFood)
+  if (raw > 0 && c.lastFood === food) return Math.floor(raw / 2)
+  return raw
+}
+export const foodStaminaDelta = (food: Food): number => foodDef(food).stamina ?? 0
+// Training multiplier a food applies to a drill's positive gain for `stat`
+// (1 = no boost). '' (no food) is always 1.
+export function foodTrainMult(food: Food | '', stat: Stat): number {
+  if (!food) return 1
+  const def = foodDef(food)
+  return def.boostStats?.includes(stat) ? 1 + (def.boostMult ?? 0) : 1
+}
+
 // Buy one food from this week's town food market. Does NOT advance the week —
 // feeding is a start-of-week choice, resolved BEFORE the weekly activity. Gold is
 // game-owned, so it's passed in and returned; `discount` is the bulk-food perk.
@@ -282,11 +329,18 @@ export function buyFood(c: Career, gold: number, food: Food, market: Record<Food
   if (c.retired || c.fedThisWeek) return { c, gold }
   const price = Math.max(1, Math.round(market[food] * discount))
   if (gold < price) return { c: push(c, `Wk ${c.week + 1}: can't afford ${foodName(food)} (${price}g).`), gold }
-  const d = feedDelta(food, c.favouriteFood, c.hatedFood)
+  const def = foodDef(food)
+  const d = foodHappinessDelta(c, food) // reads c.lastFood (the PREVIOUS food) for satiety before we overwrite it
   const happiness = Math.max(0, Math.min(MAX_HAPPINESS, c.happiness + d))
-  const n: Career = { ...c, happiness, fedThisWeek: true, log: [...c.log] }
+  const stamina = Math.max(0, Math.min(MAX_STAMINA, c.stamina + foodStaminaDelta(food)))
+  const n: Career = {
+    ...c, happiness, stamina, fedThisWeek: true, lastFood: food,
+    truffleReady: def.rewardMult ? true : c.truffleReady,
+    log: [...c.log],
+  }
+  const bits = [d !== 0 ? `Happiness ${happiness}/10${d > 0 ? ' ♥' : ' ✖'}` : '', def.stamina ? `stamina ${stamina}/${MAX_STAMINA}` : '', def.rewardMult ? '🟡 cup reward primed' : ''].filter(Boolean).join(' · ')
   return {
-    c: push(n, `Wk ${c.week + 1}: fed ${foodName(food)} (−${price}g). Happiness ${happiness}/10${d > 0 ? ' ♥' : d < 0 ? ' ✖' : ''}.`),
+    c: push(n, `Wk ${c.week + 1}: fed ${foodName(food)} (−${price}g).${bits ? ' ' + bits + '.' : ''}`),
     gold: gold - price,
   }
 }
@@ -379,12 +433,12 @@ export function ageOneWeek(c: Career): Career {
   return n
 }
 
-export function applyWeek(c: Career, action: WeeklyAction, gold: number, rental = 0): { c: Career; gold: number } {
+export function applyWeek(c: Career, action: WeeklyAction, gold: number, rental = 0, food: Food | '' = ''): { c: Career; gold: number } {
   if (c.retired) return { c, gold }
   let g = gold
   const n: Career = { ...c, stats: { ...c.stats }, log: [...c.log] }
   const rng = mulberry32(hashString(c.id + ':' + c.week))
-  const cap = LEAGUES[c.licenseIndex].cap
+  const cap = statCapFor(c) // bloodline potential lifts the training ceiling (Phase 5)
   const { stage, trainMult } = stageInfo(c.ageWeeks, c.species.lifespan)
   const beforeMoves = learnedMoves(c.stats).length
   const wk = c.week + 1
@@ -398,8 +452,10 @@ export function applyWeek(c: Career, action: WeeklyAction, gold: number, rental 
     for (const [stat, delta] of Object.entries(drill.gains) as [Stat, number][]) {
       // positive gains roll (happiness-weighted, see rollDrillGain), then scale by
       // life stage, stamina, and species aptitude; drill maluses apply flat
+      // Training foods (2026-07-25) multiply the positive gain for their
+      // stat-pair (foodTrainMult); maluses are unaffected.
       const applied = delta > 0
-        ? Math.round(rollDrillGain(rng, delta, n.happiness) * eff * statTrainingBonus(c.species, stat))
+        ? Math.round(rollDrillGain(rng, delta, n.happiness) * eff * statTrainingBonus(c.species, stat) * foodTrainMult(food, stat))
         : Math.round(delta * statMalusMultiplier(c.species, stat))
       const nv = Math.max(1, Math.min(cap, n.stats[stat] + applied))
       const real = nv - n.stats[stat]

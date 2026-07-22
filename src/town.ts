@@ -1,14 +1,14 @@
 // Shared game state + the Town hub economy (§13). One gold wallet and one stable
 // span all areas; the Ranch (src/game.ts) raises the active monster week by week.
 import {
-  ClassRole, Food, INNATE_SECONDARY_LEVEL, LEAGUES, Monster, Sex, Species, Stat, STATS, Stats, Tactics, classForStats, hashString,
+  ClassRole, Food, GAMEPLANS, INNATE_SECONDARY_LEVEL, LEAGUES, MAX_HAPPINESS, Monster, Rival, RivalPersonality, Sex, Species, Stat, STATS, Stats, Tactics, TeamGameplan, classForStats, foodDiscountGroup, hashString,
   mulberry32, roleOfClass,
 } from './core'
 import { generateMonster, maxHp, maxMana } from './monster'
 import { BattleResult, simulateTeamBattle } from './battle'
 import {
-  Career, START_GOLD, WEEKS_PER_MONTH, WEEKS_PER_YEAR, WeeklyAction, ageOneWeek, applyWeek, buyFood,
-  careerMonster, newCareer, rankUp, rollMarket, trainingProfileFor,
+  Career, MAX_STAMINA, START_GOLD, WEEKS_PER_MONTH, WEEKS_PER_YEAR, WeeklyAction, ageOneWeek, applyWeek, buyFood,
+  careerMonster, newCareer, rankUp, rollMarket, statCapFor, trainingProfileFor,
 } from './game'
 import { ALL_DRILLS } from './drills'
 import { learnedMoves } from './monster'
@@ -268,6 +268,7 @@ export interface Frozen {
   favouriteFood: Food
   hatedFood: Food
   licenseIndex: number
+  potential?: number // bloodline star rating, banked so breeding can inherit it (Phase 5)
 }
 
 // One Market listing: a deterministic seed (so the preview == what you buy) + price.
@@ -339,7 +340,8 @@ export interface GameState {
   activeId: string
   frozen: Frozen[]
   barnCapacity: number
-  bulkFood: boolean // Ranch Shop upgrade: 20% off food
+  pantryContract: boolean // Ranch Shop: 20% off NORMAL foods
+  grandLarder: boolean // Ranch Shop: 20% off PREMIUM foods (training + fruits + truffle)
   specialLicense: boolean // Silver rank: unlock Draconic + Abyssal
   eliteLicense: boolean // Masters rank: unlock Mythical
   area: Area
@@ -361,6 +363,17 @@ export interface GameState {
   // Contextual tutorial tips already dismissed (only shown while
   // tutorialEnabled): 'signup' | 'injury' | 'rankup' so far.
   tipsSeen: string[]
+  // A weekly incident awaiting the player's decision, rolled by the last tick
+  // for the NEW week and shown on the feeding screen. null = quiet week.
+  pendingEvent: PendingEvent | null
+  // Rival trainers (LOOP_DESIGN Phase 2) — a recurring named face on the ladder
+  // with a tracked head-to-head. One primary rival for now; the array leaves
+  // room for a circuit later.
+  rivals: Rival[]
+  // Trainer XP (LOOP_DESIGN Phase 5) — the persistent meta character. Earned by
+  // podium cup finishes and raising monsters to retirement; the derived level
+  // grants extra barn capacity. The ranch is the account; monsters are the runs.
+  trainerXp: number
 }
 
 // Calendar helpers off the global week clock.
@@ -385,7 +398,14 @@ export function visibleLeagueCount(g: GameState): number {
 export const RENTAL_PER_FROZEN = 8 // weekly upkeep per frozen genome
 export const MARKET_BASE = 150 // base monster price; fluctuates ±60%
 export const FUSION_COST = 500 // huge, one-off
-export const BULK_FOOD_COST = 200 // one-off Ranch Shop upgrade
+export const PANTRY_CONTRACT_COST = 400 // Ranch Shop: 20% off normal foods
+export const GRAND_LARDER_COST = 1500 // Ranch Shop: 20% off premium foods — a serious late-game investment
+// Per-food discount given the player's owned contracts (2026-07-25): normal
+// foods key off the Pantry Contract, everything premium off the Grand Larder.
+export function foodDiscountFor(g: GameState, food: Food): number {
+  const owned = foodDiscountGroup(food) === 'normal' ? g.pantryContract : g.grandLarder
+  return owned ? 0.8 : 1
+}
 export const FUSION_PENALTY = 0.9 // average of parents − 10% (§10.2)
 export const START_BARN = 2
 
@@ -401,7 +421,8 @@ export function newGame(seed = 'start', opts?: { trainerName?: string; tutorialE
     activeId: '',
     frozen: [],
     barnCapacity: START_BARN,
-    bulkFood: false,
+    pantryContract: false,
+    grandLarder: false,
     specialLicense: false,
     eliteLicense: false,
     area: 'town',
@@ -414,7 +435,59 @@ export function newGame(seed = 'start', opts?: { trainerName?: string; tutorialE
     weekPlans: {},
     lastWeek: [],
     tipsSeen: [],
+    pendingEvent: null,
+    rivals: [generateRival(seed, 0)],
+    trainerXp: 0,
   }
+}
+
+// --- Trainer level (LOOP_DESIGN Phase 5) ---
+export const TRAINER_XP_PER_LEVEL = 250
+export const trainerLevel = (g: GameState): number => Math.floor((g.trainerXp ?? 0) / TRAINER_XP_PER_LEVEL) + 1
+// Progress within the current level, for the XP bar.
+export function trainerXpProgress(g: GameState): { level: number; into: number; need: number } {
+  const xp = g.trainerXp ?? 0
+  return { level: Math.floor(xp / TRAINER_XP_PER_LEVEL) + 1, into: xp % TRAINER_XP_PER_LEVEL, need: TRAINER_XP_PER_LEVEL }
+}
+// Perk: +1 barn slot every 2 trainer levels, on top of the shop-bought capacity.
+export const trainerBarnBonus = (g: GameState): number => Math.floor((trainerLevel(g) - 1) / 2)
+export const effectiveBarnCap = (g: GameState): number => g.barnCapacity + trainerBarnBonus(g)
+// XP for a cup finish (podium only) — bigger for higher placement and league.
+export function cupTrainerXp(placement: number, leagueIndex: number): number {
+  const base = placement === 1 ? 60 : placement === 2 ? 35 : placement === 3 ? 20 : 0
+  return base > 0 ? base + leagueIndex * 10 : 0
+}
+export const RETIREMENT_XP = 40 // raising a monster its whole career
+
+// --- Breeding (LOOP_DESIGN Phase 5) ---
+export const BREEDING_BONUS = 0.05 // each generation adds 5% to the parents' average potential
+export const MAX_POTENTIAL = 1.5 // bounded so a bloodline plateaus, not runs away
+export const breedPotential = (a?: number, b?: number): number =>
+  Math.min(MAX_POTENTIAL, Math.round(((((a ?? 1) + (b ?? 1)) / 2) + BREEDING_BONUS) * 100) / 100)
+
+// --- Rivals (LOOP_DESIGN Phase 2) ---
+const RIVAL_NAMES = ['Rex', 'Vera', 'Dorn', 'Mira', 'Kane', 'Sable', 'Bram', 'Nyx', 'Talia', 'Garruk', 'Odessa', 'Roan']
+const RIVAL_PERSONALITIES: RivalPersonality[] = ['aggressive', 'cagey', 'flashy']
+export function generateRival(seed: string, i: number): Rival {
+  const rng = mulberry32(hashString(seed + ':rival:' + i))
+  return {
+    id: 'rival-' + i,
+    name: RIVAL_NAMES[Math.floor(rng() * RIVAL_NAMES.length)],
+    personality: RIVAL_PERSONALITIES[Math.floor(rng() * RIVAL_PERSONALITIES.length)],
+    licenseIndex: 0,
+    wins: 0,
+    losses: 0,
+  }
+}
+// Highest license the player has earned (stable + banked genomes), the target
+// a rival climbs toward each week so it stays a credible, at-level threat.
+export function playerMaxLicense(g: GameState): number {
+  return Math.max(0, ...g.stable.map((c) => c.licenseIndex), ...g.frozen.map((f) => f.licenseIndex))
+}
+// One-per-week nudge toward the player's level (never past it).
+function rubberBandRivals(g: GameState): Rival[] {
+  const target = playerMaxLicense(g)
+  return g.rivals.map((rv) => (rv.licenseIndex < target ? { ...rv, licenseIndex: rv.licenseIndex + 1 } : rv))
 }
 
 // --- Market (§13.1) — 3 equal-weighted base monsters; price band wider than food. ---
@@ -454,7 +527,7 @@ export const offerMonster = (o: MarketOffer) => generateMonster(o.seed, { train:
 
 export function buyMonster(g: GameState, index: number): GameState {
   const o = g.market[index]
-  if (!o || g.gold < o.price || g.stable.length >= g.barnCapacity) return g
+  if (!o || g.gold < o.price || g.stable.length >= effectiveBarnCap(g)) return g
 
   const monster = generateMonster(o.seed, { train: 0 })
   const bodyType = monster.species.body
@@ -482,6 +555,306 @@ export function goto(g: GameState, area: Area): GameState {
 // monster market restocks at the start of each month.
 export interface WeekPlanEntry { activity: string; food: Food | '' } // activity: drill id | 'rest' | 'excursion'
 
+// ---------------------------------------------------------------------------
+// Weekly events (LOOP_DESIGN.md Phase 1) — the connective-tissue framework.
+// A weekly incident, mostly a CHOICE with a trade-off, shown on the feeding
+// screen for the new week. Every effect resolves IMMEDIATELY (no next-week
+// modifiers) so applyWeek / previewWeekEffects stay untouched, and the roll is
+// deterministic off the seed so it's replay-safe. Later phases hang the rival
+// challenge, illness cures, off-ladder teachers, etc. off this same table.
+// ---------------------------------------------------------------------------
+export type EventScope = 'global' | 'monster'
+
+// What the UI renders — display text is BAKED at roll time so App.tsx needs no
+// lookup back into the table (and a saved-mid-event game reloads verbatim).
+export interface PendingEvent {
+  id: string
+  careerId?: string
+  title: string
+  body: string
+  choices: { label: string; note?: string; cost?: number }[]
+}
+
+interface EventChoiceDef {
+  label: string
+  note?: (g: GameState, c?: Career) => string
+  cost?: (g: GameState, c?: Career) => number // gold gate — button disables if > wallet
+  apply: (g: GameState, careerId?: string) => GameState
+}
+interface GameEvent {
+  id: string
+  scope: EventScope
+  weight: (g: GameState, c?: Career) => number // 0 = ineligible; higher = likelier
+  title: string
+  body: (g: GameState, c?: Career) => string
+  choices: EventChoiceDef[]
+}
+
+const clampStat = (v: number, cap: number) => Math.max(1, Math.min(cap, v))
+const clampStam = (v: number) => Math.max(0, Math.min(MAX_STAMINA, v))
+const clampHap = (v: number) => Math.max(0, Math.min(MAX_HAPPINESS, v))
+// Mutate one career in the stable (no-op if the id is gone), functionally.
+function updateCareer(g: GameState, id: string | undefined, fn: (c: Career) => Career): GameState {
+  if (!id) return g
+  return { ...g, stable: g.stable.map((c) => (c.id === id ? fn(c) : c)) }
+}
+// The stat an event boosts: the species' authored major, else its current best.
+function boostStatOf(c: Career): Stat {
+  const major = trainingProfileFor(c.species).major
+  if (major) return major
+  return STATS.reduce((best, s) => (c.stats[s] > c.stats[best] ? s : best), STATS[0])
+}
+const sponsorPurse = (c: Career) => 120 + 40 * c.licenseIndex
+
+// Rival challenge (LOOP_DESIGN Phase 2): a self-contained off-calendar 1v1
+// skirmish vs the primary rival's monster. Simulated deterministically, the
+// head-to-head record updated, and the outcome CHAINED as a follow-up
+// 'challenge-result' event (a single-OK modal with dynamic text) — resolveEvent
+// keeps a pending event the apply sets rather than clearing it.
+function runRivalChallenge(g: GameState, careerId?: string): GameState {
+  const c = g.stable.find((x) => x.id === careerId)
+  const rival = g.rivals[0]
+  if (!c || !rival) return g
+  const playerMon = careerMonster(c)
+  const budget = LEAGUES[rival.licenseIndex].cap * 3.5 * 0.85
+  const rivalMon = generateRivalMonster(g.seed + ':' + g.week + ':rivalmon', budget, false)
+  const res = simulateTeamBattle(
+    [{ ...playerMon, hp: maxHp(playerMon.stats), mp: maxMana(playerMon.stats) }],
+    [rivalMon], [c.happiness], [5],
+  )
+  const won = res.winner === 'A'
+  const reward = 40 + 20 * rival.licenseIndex
+  let ng = won ? { ...g, gold: g.gold + reward } : g
+  ng = updateCareer(ng, careerId, (m) => (won
+    ? { ...m, happiness: clampHap(m.happiness + 1) }
+    : { ...m, happiness: clampHap(m.happiness - 1), hp: Math.max(1, Math.round(m.hp * 0.6)) }))
+  ng = { ...ng, rivals: ng.rivals.map((rv, i) => (i === 0 ? { ...rv, wins: rv.wins + (won ? 1 : 0), losses: rv.losses + (won ? 0 : 1) } : rv)) }
+  const r0 = ng.rivals[0]
+  const result: PendingEvent = {
+    id: 'challenge-result',
+    careerId,
+    title: won ? '🏆 You Won the Bout!' : '💢 You Lost the Bout',
+    body: won
+      ? `${c.name} bested ${rival.name}'s monster — +${reward}g and a prouder monster. You now lead ${rival.name} ${r0.wins}–${r0.losses}.`
+      : `${rival.name}'s monster got the better of ${c.name}, which comes away bruised and sulking. ${rival.name} leads the rivalry ${r0.losses}–${r0.wins}.`,
+    choices: [{ label: 'OK' }],
+  }
+  return { ...ng, pendingEvent: result }
+}
+
+export const EVENTS: GameEvent[] = [
+  {
+    id: 'rival-challenge',
+    scope: 'monster',
+    weight: (g, c) => (g.rivals.length > 0 && c && !c.retired ? 3 : 0),
+    title: '⚔️ Rival Challenge',
+    body: (g, c) => `${g.rivals[0]?.name} spots you in town and calls you out — a friendly bout, ${c!.name} against one of their monsters. Bragging rights on the line.`,
+    choices: [
+      {
+        label: 'Accept the challenge',
+        note: () => 'win: gold & pride · lose: bruised & sore',
+        apply: (g, id) => runRivalChallenge(g, id),
+      },
+      {
+        label: 'Wave them off',
+        note: (g) => `${g.rivals[0]?.name} smirks and moves on`,
+        apply: (g) => g,
+      },
+    ],
+  },
+  // Follow-up shown after a challenge resolves — never rolls on its own
+  // (weight 0); its text is baked dynamically by runRivalChallenge.
+  {
+    id: 'challenge-result',
+    scope: 'global',
+    weight: () => 0,
+    title: '',
+    body: () => '',
+    choices: [{ label: 'OK', apply: (g) => g }],
+  },
+  {
+    id: 'sponsor',
+    scope: 'monster',
+    weight: (_g, c) => (c && !c.retired ? 3 + c.licenseIndex : 0),
+    title: '📣 Sponsor Appearance',
+    body: (_g, c) =>
+      `A travelling merchant will pay ${sponsorPurse(c!)}g to feature ${c!.name} at their stall — but a day of being poked and posed leaves it tired.`,
+    choices: [
+      {
+        label: 'Accept the booking',
+        note: (_g, c) => `+${sponsorPurse(c!)}g · −25 stamina · −1 happiness`,
+        apply: (g, id) => {
+          const c = g.stable.find((x) => x.id === id)
+          if (!c) return g
+          const purse = sponsorPurse(c)
+          return updateCareer({ ...g, gold: g.gold + purse }, id, (m) => ({
+            ...m, stamina: clampStam(m.stamina - 25), happiness: clampHap(m.happiness - 1),
+          }))
+        },
+      },
+      {
+        label: 'Politely decline',
+        note: (_g, c) => `keep ${c!.name} fresh · +1 happiness`,
+        apply: (g, id) => updateCareer(g, id, (m) => ({ ...m, happiness: clampHap(m.happiness + 1) })),
+      },
+    ],
+  },
+  {
+    id: 'illness',
+    scope: 'monster',
+    weight: (_g, c) => (c && !c.retired ? 3 : 0),
+    title: '🤒 Under the Weather',
+    body: (_g, c) =>
+      `${c!.name} woke sluggish and off its food. A town healer can set it right for 40g, or it can shake it off on its own — the slow, uncomfortable way.`,
+    choices: [
+      {
+        label: 'Pay for treatment',
+        note: () => '−40g · restores stamina & some HP',
+        cost: () => 40,
+        apply: (g, id) => {
+          const c = g.stable.find((x) => x.id === id)
+          if (!c) return g
+          return updateCareer({ ...g, gold: g.gold - 40 }, id, (m) => ({
+            ...m, stamina: clampStam(m.stamina + 40), hp: Math.min(maxHp(m.stats), m.hp + Math.round(maxHp(m.stats) * 0.2)),
+          }))
+        },
+      },
+      {
+        label: 'Let it pass naturally',
+        note: () => '−20 stamina · −1 happiness',
+        apply: (g, id) => updateCareer(g, id, (m) => ({
+          ...m, stamina: clampStam(m.stamina - 20), happiness: clampHap(m.happiness - 1),
+        })),
+      },
+    ],
+  },
+  {
+    id: 'breakthrough',
+    scope: 'monster',
+    weight: (_g, c) => (c && !c.retired ? 2 : 0),
+    title: '✨ Training Breakthrough',
+    body: (_g, c) => `${c!.name} suddenly clicked with a technique it had been struggling on. There's momentum here — if you push it.`,
+    choices: [
+      {
+        label: 'Channel the momentum',
+        note: (_g, c) => `+8 ${boostStatOf(c!)} · −10 stamina`,
+        apply: (g, id) => updateCareer(g, id, (m) => {
+          const stat = boostStatOf(m)
+          const cap = statCapFor(m) // bloodline potential lifts the ceiling (Phase 5)
+          return { ...m, stats: { ...m.stats, [stat]: clampStat(m.stats[stat] + 8, cap) }, stamina: clampStam(m.stamina - 10) }
+        }),
+      },
+      {
+        label: 'Let it rest on the win',
+        note: () => '+2 happiness',
+        apply: (g, id) => updateCareer(g, id, (m) => ({ ...m, happiness: clampHap(m.happiness + 2) })),
+      },
+    ],
+  },
+  {
+    id: 'festival',
+    scope: 'global',
+    weight: (g) => (g.stable.some((c) => !c.retired) ? 2 : 0),
+    title: '🎪 Festival Week',
+    body: () => "The town's seasonal festival fills the square with banners and music. Bringing your monsters along lifts everyone's spirits.",
+    choices: [
+      {
+        label: 'Join the festivities',
+        note: () => 'all monsters +1 happiness',
+        apply: (g) => ({ ...g, stable: g.stable.map((c) => (c.retired ? c : { ...c, happiness: clampHap(c.happiness + 1) })) }),
+      },
+    ],
+  },
+  {
+    id: 'luckyfind',
+    scope: 'monster',
+    // only contented monsters wander off and come back with treasure
+    weight: (_g, c) => (c && !c.retired ? Math.max(0, c.happiness - 4) : 0),
+    title: '🍀 Lucky Find',
+    body: (_g, c) => `${c!.name} trotted back from its walk looking pleased with itself, a stray pouch of coins in its jaws. Finders keepers.`,
+    choices: [
+      { label: 'Pocket the coins', note: () => '+50g', apply: (g) => ({ ...g, gold: g.gold + 50 }) },
+    ],
+  },
+  {
+    id: 'restless',
+    scope: 'monster',
+    // unhappy monsters get fractious; the unhappier, the likelier
+    weight: (_g, c) => (c && !c.retired ? Math.max(0, 5 - c.happiness) : 0),
+    title: '😤 Restless Streak',
+    body: (_g, c) => `${c!.name} is pacing and snappish. A calming afternoon (and a treat) would settle it — or you can let it tire itself out.`,
+    choices: [
+      {
+        label: 'Spend time settling it',
+        note: () => '−30g · +1 happiness',
+        cost: () => 30,
+        apply: (g, id) => updateCareer({ ...g, gold: g.gold - 30 }, id, (m) => ({ ...m, happiness: clampHap(m.happiness + 1) })),
+      },
+      {
+        label: 'Let it burn off the energy',
+        note: () => '−20 stamina',
+        apply: (g, id) => updateCareer(g, id, (m) => ({ ...m, stamina: clampStam(m.stamina - 20) })),
+      },
+    ],
+  },
+]
+
+const eventById = (id: string) => EVENTS.find((e) => e.id === id)
+
+// Flat per-week chance an eligible event fires. Kept simple/predictable for
+// Phase 1; tuning knob lives here.
+export const EVENT_CHANCE = 0.45
+
+// Deterministic weekly roll — same (seed, week, stable) always yields the same
+// result, so replays and reloads are stable. Returns the display-baked
+// PendingEvent, or null for a quiet week.
+export function rollWeeklyEvent(g: GameState): PendingEvent | null {
+  const candidates: { ev: GameEvent; c?: Career; w: number }[] = []
+  for (const ev of EVENTS) {
+    if (ev.scope === 'global') {
+      const w = ev.weight(g)
+      if (w > 0) candidates.push({ ev, w })
+    } else {
+      for (const c of g.stable) {
+        if (c.retired) continue
+        const w = ev.weight(g, c)
+        if (w > 0) candidates.push({ ev, c, w })
+      }
+    }
+  }
+  if (candidates.length === 0) return null
+  const rng = mulberry32(hashString(g.seed + ':' + g.week + ':event'))
+  if (rng() >= EVENT_CHANCE) return null
+  const total = candidates.reduce((s, x) => s + x.w, 0)
+  let r = rng() * total
+  let chosen = candidates[candidates.length - 1]
+  for (const x of candidates) { if (r < x.w) { chosen = x; break } r -= x.w }
+  const { ev, c } = chosen
+  return {
+    id: ev.id,
+    careerId: c?.id,
+    title: ev.title,
+    body: ev.body(g, c),
+    choices: ev.choices.map((ch) => ({ label: ch.label, note: ch.note?.(g, c), cost: ch.cost?.(g, c) })),
+  }
+}
+
+// Apply the chosen branch and clear the pending event. Defensive: an
+// unaffordable choice (the UI already disables it) leaves the event OPEN
+// rather than driving gold negative, so a stray call can't corrupt state.
+export function resolveEvent(g: GameState, choiceIdx: number): GameState {
+  const pe = g.pendingEvent
+  if (!pe) return g
+  const choice = eventById(pe.id)?.choices[choiceIdx]
+  if (!choice) return { ...g, pendingEvent: null }
+  const c = g.stable.find((x) => x.id === pe.careerId)
+  if ((choice.cost?.(g, c) ?? 0) > g.gold) return g
+  const applied = choice.apply(g, pe.careerId)
+  // An apply may CHAIN a follow-up (e.g. the challenge → result); respect a
+  // newly-set pending event, otherwise clear it.
+  return applied.pendingEvent && applied.pendingEvent !== pe ? applied : { ...applied, pendingEvent: null }
+}
+
 export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPlanEntry>): GameState {
   const plans = plansOverride ?? g.weekPlans ?? {}
   let gold = g.gold
@@ -494,7 +867,7 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
     const plan = plans[c.id] ?? { activity: 'rest', food: '' as const }
     let cur = c
     if (plan.food) {
-      const fed = buyFood(cur, gold, plan.food, g.foodMarket, g.bulkFood ? 0.8 : 1)
+      const fed = buyFood(cur, gold, plan.food, g.foodMarket, foodDiscountFor(g, plan.food))
       cur = fed.c
       gold = fed.gold
     }
@@ -502,7 +875,9 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
       plan.activity === 'rest' ? { kind: 'rest' }
         : plan.activity === 'excursion' ? { kind: 'excursion' }
           : { kind: 'train', drillId: plan.activity }
-    const r = applyWeek(cur, action, gold, rentalDue)
+    // Pass the food ONLY if it was actually bought (buyFood sets fedThisWeek) —
+    // an unaffordable food must not grant its training boost.
+    const r = applyWeek(cur, action, gold, rentalDue, cur.fedThisWeek ? plan.food : '')
     rentalDue = 0 // charged once per week, not per monster
     gold = r.gold
     return r.c
@@ -516,8 +891,11 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
   const afterActivities = stable.map((c) => ({ stats: { ...c.stats }, hp: c.hp, mp: c.mp, stamina: c.stamina }))
 
   // Tournament battle (if signed up) fights with this week's training applied.
-  const { gold: goldAfterBattle, lastBattle } = resolveTournament(g, stable, gold)
+  const { gold: goldAfterBattle, lastBattle, trainerXpGain } = resolveTournament(g, stable, gold)
   gold = goldAfterBattle
+  // Trainer XP (Phase 5): cup podium + any monster that retired this week.
+  const retiredThisWeek = stable.filter((c, i) => c.retired && !g.stable[i].retired).length
+  const trainerXp = (g.trainerXp ?? 0) + trainerXpGain + retiredThisWeek * RETIREMENT_XP
   const entered = lastBattle && g.pendingTournament
     ? [...(g.enteredThisMonth ?? []), g.pendingTournament.tournamentId]
     : (g.enteredThisMonth ?? [])
@@ -565,10 +943,15 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
       if (changed) lastWeek.push(`  ↳ ${after.name} comes home at ${after.hp}/${maxHp(after.stats)} HP · ${after.mp}/${maxMana(after.stats)} MP — rest to recover`)
     }
   }
+  // Trainer level-up notice (Phase 5): crossing a level threshold this week.
+  if (Math.floor(trainerXp / TRAINER_XP_PER_LEVEL) > Math.floor((g.trainerXp ?? 0) / TRAINER_XP_PER_LEVEL)) {
+    const lvl = Math.floor(trainerXp / TRAINER_XP_PER_LEVEL) + 1
+    lastWeek.push(`🎓 Trainer level ${lvl}!${lvl % 2 === 1 ? ' (+1 barn slot)' : ''}`)
+  }
 
   const week = g.week + 1
   const monthTurned = week % WEEKS_PER_MONTH === 0
-  return {
+  const base: GameState = {
     ...g,
     stable,
     gold,
@@ -583,7 +966,13 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
     // carry each monster's planned ACTIVITY into the new week; food resets
     weekPlans: Object.fromEntries(Object.entries(plans).map(([id, p]) => [id, { activity: p.activity, food: '' as const }])),
     lastWeek,
+    pendingEvent: null,
+    // rivals climb toward the player's level each week (LOOP_DESIGN Phase 2)
+    rivals: rubberBandRivals({ ...g, stable }),
+    trainerXp,
   }
+  // Roll the new week's incident off the POST-tick state the player will see.
+  return { ...base, pendingEvent: rollWeeklyEvent(base) }
 }
 
 export function promoteMonster(g: GameState, id: string): GameState {
@@ -773,6 +1162,27 @@ function generateRivalTeam(seedBase: string, teamSize: number, targetTotal: numb
 // tournament id) — deterministic and side-effect-free, so it can be called
 // ahead of resolution (scouting reports, the bracket preview screen) and
 // reproduce byte-identical teams to what resolveTournament actually fights.
+// A rival team's gameplan (LOOP_DESIGN Phase 3): deterministic per
+// (seed, week, tournament, team index), so scouting and resolution agree and a
+// scouted plan is the one actually fought.
+const ALL_GAMEPLANS: TeamGameplan[] = ['rushdown', 'bulwark', 'attrition', 'focusfire', 'zone']
+export function gameplanForRivalTeam(seed: string, week: number, tId: string, r: number): TeamGameplan {
+  const rng = mulberry32(hashString(seed + ':' + week + ':' + tId + ':gameplan:r' + r))
+  return ALL_GAMEPLANS[Math.floor(rng() * ALL_GAMEPLANS.length)]
+}
+// Stamp a gameplan's standing orders onto a rival team — the SAME Tactics the
+// player uses, consumed side-agnostically by the engine (personalityFor /
+// pickEnemyTargetFor / protect all read m.tactics/m.protect). Bulwark also
+// guards its top damage dealer.
+function applyGameplan(team: Monster[], gp: TeamGameplan): Monster[] {
+  const info = GAMEPLANS[gp]
+  const dmgStat = (m: Monster) => Math.max(m.stats.STR, m.stats.DEX, m.stats.INT, m.stats.CHA)
+  const carryIdx = info.protectCarry && team.length > 1
+    ? team.reduce((best, m, i) => (dmgStat(m) > dmgStat(team[best]) ? i : best), 0)
+    : -1
+  return team.map((m, i) => ({ ...m, tactics: info.tactics, protect: i === carryIdx ? true : m.protect }))
+}
+
 export function generateRivalTeamsForTournament(g: GameState, t: Tournament): Monster[][] {
   const teamSize = teamSizeForLeague(t.league)
   const rivalCount = rivalTeamCountForLeague(t.league)
@@ -781,7 +1191,8 @@ export function generateRivalTeamsForTournament(g: GameState, t: Tournament): Mo
   return Array.from({ length: rivalCount }, (_, r) => {
     const bandRng = mulberry32(hashString(g.seed + ':' + g.week + ':' + t.id + ':band:r' + r))
     const teamBudget = leagueBudget * (RIVAL_BAND_MIN + bandRng() * (RIVAL_BAND_MAX - RIVAL_BAND_MIN))
-    return generateRivalTeam(g.seed + ':' + g.week + ':' + t.id + ':r' + r, teamSize, teamBudget, allowExclusive)
+    const team = generateRivalTeam(g.seed + ':' + g.week + ':' + t.id + ':r' + r, teamSize, teamBudget, allowExclusive)
+    return applyGameplan(team, gameplanForRivalTeam(g.seed, g.week, t.id, r))
   })
 }
 
@@ -827,12 +1238,12 @@ export function roundRobinSchedule(n: number): [number, number][] {
 // team returns home: a flat random 0-50% of max HP/MP regardless of how the
 // event went — "only injured when they return to the ranch... must rest
 // before they train again."
-function resolveTournament(g: GameState, stable: Career[], gold: number): { gold: number; lastBattle: LastBattle | null } {
+function resolveTournament(g: GameState, stable: Career[], gold: number): { gold: number; lastBattle: LastBattle | null; trainerXpGain: number } {
   const pending = g.pendingTournament
-  if (!pending) return { gold, lastBattle: null }
+  if (!pending) return { gold, lastBattle: null, trainerXpGain: 0 }
   const t = tournamentCalendarFor(g.seed, yearOfWeek(g.week)).find((x) => x.id === pending.tournamentId)
   let idxs = pending.monsterIds.map((id) => stable.findIndex((x) => x.id === id))
-  if (!t || idxs.some((i) => i < 0 || stable[i].retired)) return { gold, lastBattle: null }
+  if (!t || idxs.some((i) => i < 0 || stable[i].retired)) return { gold, lastBattle: null, trainerXpGain: 0 }
 
   const teamSize = teamSizeForLeague(t.league)
   // A sign-up made before a team-size change (e.g. Masters 6v6 → 5v5, or the
@@ -902,7 +1313,12 @@ function resolveTournament(g: GameState, stable: Career[], gold: number): { gold
   const leagueMult = rewardMultiplier(teamMinLicense, t.league)
   const placeFrac = placementRewardFraction(playerPlacement)
   const mult = placeFrac * leagueMult
-  const goldPrize = Math.round(t.rewards.gold * mult)
+  // Golden Truffle (2026-07-25): a monster that banked one and then WINS the cup
+  // (1st place) earns +50% gold & exp. The flag is consumed either way (a loss
+  // wastes the gamble) — cleared on every entrant below.
+  const truffleWin = playerPlacement === 1 && playerCareers.some((c) => c.truffleReady)
+  const truffleMult = truffleWin ? 1.5 : 1
+  const goldPrize = Math.round(t.rewards.gold * mult * truffleMult)
   // Participation exp (2026-07-25 playtest fix): 4th+ used to earn NOTHING —
   // a new player's first cup is a near-guaranteed sweep against the fixed
   // league standard, and going home with zero on top of the injury + entry fee
@@ -913,11 +1329,13 @@ function resolveTournament(g: GameState, stable: Career[], gold: number): { gold
 
   let expNote = ''
   const updatedCareers = playerCareers.map((c) => {
-    const nc: Career = { ...c, stats: { ...c.stats }, log: [...c.log], tournamentHistory: [...c.tournamentHistory] }
+    // Consume any banked Golden Truffle on every entrant (win or lose).
+    const nc: Career = { ...c, stats: { ...c.stats }, log: [...c.log], tournamentHistory: [...c.tournamentHistory], truffleReady: false }
+    if (truffleWin && c.truffleReady) nc.log.push(`  ↳ 🟡 Golden Truffle paid off — cup reward boosted +50%!`)
     if (expMult > 0) {
       const prof = trainingProfileFor(c.species)
-      const pts = Math.max(1, Math.round((t.rewards.exp * expMult) / 10))
-      const cap = LEAGUES[c.licenseIndex].cap
+      const pts = Math.max(1, Math.round((t.rewards.exp * expMult * truffleMult) / 10))
+      const cap = statCapFor(c) // bloodline potential lifts the ceiling (Phase 5)
       if (prof.major) {
         // 60/40 split between the individually-authored major and the
         // body-derived minor — a "vanilla" species (no authored major) puts
@@ -947,6 +1365,8 @@ function resolveTournament(g: GameState, stable: Career[], gold: number): { gold
 
   return {
     gold: gold + goldPrize,
+    // Trainer XP for a podium finish (LOOP_DESIGN Phase 5).
+    trainerXpGain: cupTrainerXp(playerPlacement, leagueIndexOf(t.league)),
     lastBattle: {
       tournamentId: t.id, tournamentName: t.name, league: t.league, teamSize, matches, standings: withPlacement,
       playerPlacement, fieldSize, goldReward: goldPrize, expNote,
@@ -983,7 +1403,7 @@ export function freeze(g: GameState, id: string): GameState {
   const fr: Frozen = {
     id: c.id, name: c.name, species: c.species, sex: c.sex,
     stats: { ...c.stats }, favouriteFood: c.favouriteFood, hatedFood: c.hatedFood,
-    licenseIndex: c.licenseIndex,
+    licenseIndex: c.licenseIndex, potential: c.potential,
   }
   const stable = g.stable.filter((x) => x.id !== id)
   const activeId = g.activeId === id ? stable[0]?.id ?? '' : g.activeId
@@ -991,7 +1411,7 @@ export function freeze(g: GameState, id: string): GameState {
 }
 
 export function thaw(g: GameState, fid: string): GameState {
-  if (g.stable.length >= g.barnCapacity) return g
+  if (g.stable.length >= effectiveBarnCap(g)) return g
   const fr = g.frozen.find((x) => x.id === fid)
   if (!fr) return g
   const c = careerFromFrozen(fr, fr.id)
@@ -1003,21 +1423,25 @@ export function thaw(g: GameState, fid: string): GameState {
   }
 }
 
-export const fusionRoom = (g: GameState): boolean => g.stable.length < g.barnCapacity
+export const fusionRoom = (g: GameState): boolean => g.stable.length < effectiveBarnCap(g)
 
 export function fuse(g: GameState, aId: string, bId: string): GameState {
   if (aId === bId || g.gold < FUSION_COST || !fusionRoom(g)) return g
   const a = g.frozen.find((x) => x.id === aId)
   const b = g.frozen.find((x) => x.id === bId)
   if (!a || !b) return g
-  // Baby potential = average of the two sources − a small penalty (§10.2). The full
-  // genome/appearance-parts model is a later TODO; here we average current stats.
-  const stats = {} as Stats
-  for (const s of STATS) stats[s as Stat] = Math.max(1, Math.round(((a.stats[s] + b.stats[s]) / 2) * FUSION_PENALTY))
+  // Bloodline breeding (LOOP_DESIGN Phase 5): a baby doesn't inherit its
+  // parents' trained muscle — it inherits their POTENTIAL. It hatches as a fresh
+  // Wood-league monster of the base parent's species, but with a star rating
+  // that climbs each generation (avg of the parents + a breeding bonus). Train
+  // it up and its ceiling sits ABOVE any wild-caught monster's — that upward
+  // trajectory is the reason to breed.
+  const potential = breedPotential(a.potential, b.potential)
   const babySeed = 'fuse-' + a.id + '+' + b.id
-  const baby = newCareer(babySeed, { id: 'own-fuse-' + g.nextId + '-' + babySeed, ageWeeks: 0, stats, licenseIndex: 0 })
+  const baby = newCareer(babySeed, { id: 'own-fuse-' + g.nextId + '-' + babySeed, ageWeeks: 0, licenseIndex: 0, potential })
   baby.species = a.species // base parent supplies the frame (§10.1)
-  baby.log = [`A fusion of ${a.name} and ${b.name} hatches — a baby with inherited promise (unlicensed).`]
+  const stars = '★'.repeat(Math.round((potential - 1) / BREEDING_BONUS))
+  baby.log = [`${baby.name}, a child of ${a.name} and ${b.name}, hatches — bloodline potential ×${potential.toFixed(2)} ${stars} (unlicensed).`]
   return {
     ...g,
     gold: g.gold - FUSION_COST,
@@ -1030,7 +1454,7 @@ export function fuse(g: GameState, aId: string, bId: string): GameState {
 function careerFromFrozen(fr: Frozen, id: string): Career {
   // Restore a raising shell from a banked genome, preserving stats + league. The
   // monster returns at Teen age (its prior calendar position isn't banked).
-  const c = newCareer(fr.id, { id, stats: fr.stats, licenseIndex: fr.licenseIndex })
+  const c = newCareer(fr.id, { id, stats: fr.stats, licenseIndex: fr.licenseIndex, potential: fr.potential })
   c.name = fr.name
   c.species = fr.species
   c.sex = fr.sex
@@ -1049,9 +1473,13 @@ export function upgradeBarn(g: GameState): GameState {
   return { ...g, gold: g.gold - cost, barnCapacity: g.barnCapacity + 1 }
 }
 
-export function buyBulkFood(g: GameState): GameState {
-  if (g.bulkFood || g.gold < BULK_FOOD_COST) return g
-  return { ...g, gold: g.gold - BULK_FOOD_COST, bulkFood: true }
+export function buyPantryContract(g: GameState): GameState {
+  if (g.pantryContract || g.gold < PANTRY_CONTRACT_COST) return g
+  return { ...g, gold: g.gold - PANTRY_CONTRACT_COST, pantryContract: true }
+}
+export function buyGrandLarder(g: GameState): GameState {
+  if (g.grandLarder || g.gold < GRAND_LARDER_COST) return g
+  return { ...g, gold: g.gold - GRAND_LARDER_COST, grandLarder: true }
 }
 
 export function buySpecialLicense(g: GameState): GameState {

@@ -1,6 +1,6 @@
 // Seed -> monster generator (§10.1 genome idea, simplified) plus derived values.
 import {
-  CLASSES, FOODS, INNATE_SECONDARY_LEVEL, LEAGUES, Monster, Move, RNG, STATS, Stat, Stats, classForStats, hashString,
+  CLASSES, NORMAL_FOODS, INNATE_SECONDARY_LEVEL, LEAGUES, Monster, Move, RNG, STATS, Stat, Stats, classForStats, hashString,
   leagueForStat, mulberry32, pick, randInt,
 } from './core'
 import { ALL_MOVES } from './moves'
@@ -266,9 +266,9 @@ export function generateMonster(seed: string, opts: GenOptions = {}): Monster {
   const loadout = chooseLoadout(learned, stats)
   const maxStat = Math.max(...STATS.map((k) => stats[k]))
 
-  const favouriteFood = pick(rng, FOODS).id
-  let hatedFood = pick(rng, FOODS).id
-  while (hatedFood === favouriteFood) hatedFood = pick(rng, FOODS).id
+  const favouriteFood = pick(rng, NORMAL_FOODS).id
+  let hatedFood = pick(rng, NORMAL_FOODS).id
+  while (hatedFood === favouriteFood) hatedFood = pick(rng, NORMAL_FOODS).id
 
   return {
     seed,

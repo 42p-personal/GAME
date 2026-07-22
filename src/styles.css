@@ -76,13 +76,26 @@ button:hover { filter: brightness(1.08); }
 .happyrow .dim { color: var(--muted); font-size: 12px; }
 .happybar { height: 8px; background: var(--panel2); border-radius: 6px; overflow: hidden; margin-bottom: 8px; }
 .happybar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--con), var(--dex)); border-radius: 6px; transition: width .2s; }
-.foods { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 6px; border-radius: 10px; border: 1px solid transparent; transition: border-color .2s, box-shadow .2s; }
-.food { background: var(--panel2); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 12.5px; font-weight: 600; }
+/* Tiered food picker (2026-07-25): Rations / Training foods / Premium groups,
+   each food a small card showing its effect in-line (not tooltip-only). */
+.foodgroups { display: flex; flex-direction: column; gap: 12px; padding: 6px; border-radius: 10px; border: 1px solid transparent; transition: border-color .2s, box-shadow .2s; }
+.foodgroup-h { font-size: 10.5px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; color: var(--muted); margin-bottom: 5px; }
+.foods { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.food { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; background: var(--panel2); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; font-size: 12.5px; font-weight: 600; }
+.food-top { font-weight: 700; }
+.food-eff { font-size: 11px; font-weight: 600; }
+.food-eff.pos { color: var(--dex); }
+.food-eff.neg { color: #ef5350; }
+.food-eff.gold { color: #e8c77a; }
+.food-eff.dim { color: var(--muted); }
+.food-cost { font-size: 10px; color: var(--muted); }
+.food-price { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.food.selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .food:disabled { opacity: .4; cursor: not-allowed; }
 /* A food hasn't been picked yet — highlight the whole picker so it's obvious
    what's blocking Next Monster / Continue to Stable, rather than silently
    bouncing the player back here (user spec 2026-07-24). */
-.foods-missing { border-color: var(--str); box-shadow: 0 0 0 1px var(--str) inset; animation: foodsPulse 1.6s ease-in-out infinite; }
+.foodgroups.foods-missing { border-color: var(--str); box-shadow: 0 0 0 1px var(--str) inset; animation: foodsPulse 1.6s ease-in-out infinite; }
 @keyframes foodsPulse { 50% { border-color: color-mix(in srgb, var(--str) 50%, var(--line)); } }
 .hint { font-size: 11.5px; color: var(--muted); margin: 6px 0 2px; }
 
@@ -503,6 +516,36 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 .modal-body { color: var(--muted); font-size: 13px; line-height: 1.5; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 .modal-danger { background: transparent; color: var(--str); border: 1px solid var(--str); border-radius: 8px; padding: 7px 12px; font-weight: 700; }
+
+/* Weekly event modal: stacked full-width choice buttons, each showing its
+   trade-off underneath the label so the decision is legible at a glance. */
+.ev-body { margin: 0; }
+.ev-actions { flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 8px; }
+.ev-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 9px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--chip, rgba(255,255,255,.03)); }
+.ev-choice:not(:disabled):hover { border-color: var(--accent); }
+.ev-choice:disabled { opacity: .45; }
+.ev-label { font-weight: 700; font-size: 13px; }
+.ev-note { font-size: 11px; color: var(--muted); }
+
+/* Rival gameplan reveal (LOOP_DESIGN Phase 3) in the scout panel. */
+.gameplan { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; margin: 6px 0; background: rgba(255,255,255,.03); }
+.gameplan.locked { background: transparent; }
+.gp-h { font-weight: 700; font-size: 13px; }
+.gp-counter { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+
+/* Causal battle report (LOOP_DESIGN Phase 4): the "you won because…" card. */
+.battle-report { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 10px 0; background: rgba(255,255,255,.03); display: flex; flex-direction: column; gap: 4px; }
+.br-turn { font-weight: 700; font-size: 13px; }
+.br-counter { font-size: 12px; color: var(--muted); }
+.br-tactic { font-size: 12px; }
+.br-tactic.ok { color: var(--con, #5bd47a); }
+.br-tactic.no { color: var(--str, #e0685f); }
+.br-moment { font-size: 12px; color: var(--muted); }
+
+/* Trainer XP bar + bloodline potential badge (LOOP_DESIGN Phase 5). */
+.xpbar { height: 7px; border-radius: 4px; background: rgba(255,255,255,.08); overflow: hidden; }
+.xpfill { height: 100%; background: var(--accent, #6ad); border-radius: 4px; transition: width .3s ease; }
+.potential { color: var(--cha, #d9a94a); font-weight: 700; }
 
 /* Winner banner: the fight's climax gets a real centered moment, not a
    corner chip. */

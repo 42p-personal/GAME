@@ -48,7 +48,11 @@ export type StatusKind = 'blind' | 'poison' | 'burn' | 'fear' | 'confusion' | 's
 export type Element = 'fire' | 'water' | 'earth' | 'air'
 export const ELEMENTS: Element[] = ['fire', 'water', 'earth', 'air']
 
-export type Food = 'vegetables' | 'fruit' | 'meat' | 'sweet treats'
+export type Food =
+  | 'vegetables' | 'fruit' | 'meat' | 'sweet treats' // normal (taste-based)
+  | 'prime cut' | 'scholars tea' | 'sprinters mix'   // training boosters
+  | 'vigor melon' | 'bliss berry' | 'golden truffle'  // premium specials
+export type FoodTier = 'normal' | 'training' | 'premium'
 
 export interface MoveStatus { kind: StatusKind; chance: number; duration: number }
 
@@ -191,6 +195,54 @@ export const COMBO_INFO: { id: boolean; icon: string; name: string; desc: string
   { id: true, icon: '🔗', name: 'Work the combo', desc: 'Holds a payoff move until its setup status is on the target, and sets up first.' },
 ]
 
+// --- Rival team gameplans (LOOP_DESIGN.md Phase 3) ---
+// A rival team's standing orders, expressed through the SAME Tactics the player
+// uses (no separate rival AI). Scouting reveals the archetype + a counter-hint,
+// closing the scout → adapt → win loop. `tell` is the composition flavour shown
+// once scouted; `counter` is the actionable hint.
+export type TeamGameplan = 'rushdown' | 'bulwark' | 'attrition' | 'focusfire' | 'zone'
+export interface GameplanInfo {
+  name: string
+  icon: string
+  tell: string
+  counter: string
+  tactics: Tactics
+  protectCarry?: boolean // guard the team's top damage dealer (bulwark)
+}
+export const GAMEPLANS: Record<TeamGameplan, GameplanInfo> = {
+  rushdown: {
+    name: 'Rushdown', icon: '🔥',
+    tell: 'Fast, aggressive, no support — all pressure.',
+    counter: "They rush your softest monster and spend big early. Put a tank up front, or burst them before they snowball.",
+    tactics: { temperament: 'aggressive', targetPriority: 'weakest', manaPolicy: 'burst' },
+  },
+  bulwark: {
+    name: 'Bulwark', icon: '🛡',
+    tell: 'Tanks and guardians around a protected carry.',
+    counter: "They turtle and guard one damage dealer. Grind the wall down, or focus the protected monster before its guards react.",
+    tactics: { temperament: 'cautious', targetPriority: 'weakest', manaPolicy: 'conserve' },
+    protectCarry: true,
+  },
+  attrition: {
+    name: 'Attrition', icon: '☠',
+    tell: 'Poison, bleed and stall — out-lasts you.',
+    counter: "They drag the fight long and out-sustain you. End it fast, or bring cleanse and healing to weather it.",
+    tactics: { temperament: 'cautious', targetPriority: 'weakest', manaPolicy: 'conserve', comboDiscipline: true },
+  },
+  focusfire: {
+    name: 'Focus-Fire', icon: '🎯',
+    tell: 'High burst — the whole team piles on one target.',
+    counter: "They assassinate one of your monsters early. Protect your carry, or spread durability so no single loss breaks you.",
+    tactics: { temperament: 'aggressive', targetPriority: 'focus' },
+  },
+  zone: {
+    name: 'Zone', icon: '🌩',
+    tell: 'Back-row casters hunting your fragile monsters.',
+    counter: "They hunt your casters. Shield your back line, or lead with a durable front they have to chew through first.",
+    tactics: { temperament: 'balanced', targetPriority: 'casters' },
+  },
+}
+
 // --- Leagues (license -> stat cap), §3 ---
 export interface League { name: string; cap: number }
 export const LEAGUES: League[] = [
@@ -274,12 +326,47 @@ export function elementMultiplier(body: BodyType, element: Element): number {
 }
 
 // --- Food & happiness (§2.4 / §12) ---
-export const FOODS: { id: Food; name: string; price: number }[] = [
-  { id: 'vegetables', name: 'Vegetables', price: 5 },
-  { id: 'fruit', name: 'Fruit', price: 10 },
-  { id: 'meat', name: 'Meat', price: 20 },
-  { id: 'sweet treats', name: 'Sweet Treats', price: 40 },
+// Three tiers (2026-07-25 food overhaul):
+//   normal   — flat 10g, taste-based ±1 happiness (feedDelta); the casual baseline.
+//   training — a specialist ration: +30% to its stat-pair's drills this week,
+//              paid for with −1 happiness and −15 stamina (a food "intensive drill").
+//   premium  — pricey specials: raw stamina/happiness top-ups, or the Golden
+//              Truffle's win-conditional reward gamble.
+// All prices flow through rollMarket's weekly ±40% fluctuation automatically.
+export interface FoodDef {
+  id: Food
+  name: string
+  price: number
+  tier: FoodTier
+  icon: string
+  desc: string
+  boostStats?: Stat[] // training: drills whose primary stat is here gain boostMult
+  boostMult?: number  // e.g. 0.3 → +30%
+  happiness?: number  // FIXED happiness delta (training/premium ignore taste); undefined = taste via feedDelta (normal)
+  stamina?: number    // flat stamina delta (+restore / −cost)
+  rewardMult?: number // Golden Truffle: pending multiplier on the next cup WON
+}
+export const FOODS: FoodDef[] = [
+  { id: 'vegetables', name: 'Vegetables', price: 10, tier: 'normal', icon: '🥬', desc: 'Basic ration — ±1 happiness by taste.' },
+  { id: 'fruit', name: 'Fruit', price: 10, tier: 'normal', icon: '🍎', desc: 'Basic ration — ±1 happiness by taste.' },
+  { id: 'meat', name: 'Meat', price: 10, tier: 'normal', icon: '🍖', desc: 'Basic ration — ±1 happiness by taste.' },
+  { id: 'sweet treats', name: 'Sweet Treats', price: 10, tier: 'normal', icon: '🍰', desc: 'Basic ration — ±1 happiness by taste.' },
+  { id: 'prime cut', name: 'Prime Cut', price: 75, tier: 'training', icon: '🥩', desc: 'STR & CON training +30% · −1 happiness · −15 stamina.', boostStats: ['STR', 'CON'], boostMult: 0.3, happiness: -1, stamina: -15 },
+  { id: 'scholars tea', name: "Scholar's Tea", price: 75, tier: 'training', icon: '🌿', desc: 'WIS & INT training +30% · −1 happiness · −15 stamina.', boostStats: ['WIS', 'INT'], boostMult: 0.3, happiness: -1, stamina: -15 },
+  { id: 'sprinters mix', name: "Sprinter's Mix", price: 75, tier: 'training', icon: '⚡', desc: 'DEX & CHA training +30% · −1 happiness · −15 stamina.', boostStats: ['DEX', 'CHA'], boostMult: 0.3, happiness: -1, stamina: -15 },
+  { id: 'vigor melon', name: 'Vigor Melon', price: 200, tier: 'premium', icon: '🍈', desc: '+30 stamina.', stamina: 30 },
+  { id: 'bliss berry', name: 'Bliss Berry', price: 250, tier: 'premium', icon: '🫐', desc: '+3 happiness.', happiness: 3 },
+  { id: 'golden truffle', name: 'Golden Truffle', price: 500, tier: 'premium', icon: '🟡', desc: 'Win your next cup → +50% gold & exp. Nothing if you lose.', rewardMult: 1.5 },
 ]
+export const foodDef = (id: Food): FoodDef => FOODS.find((f) => f.id === id)!
+// The basic-taste foods a monster can have as a favourite/hated food. Kept to the
+// four normal rations (a premium/training food isn't a "taste" preference) — this
+// is also what monster generation draws from, so the roster can grow with new
+// training/premium foods without shifting generation's RNG stream.
+export const NORMAL_FOODS: FoodDef[] = FOODS.filter((f) => f.tier === 'normal')
+// Discount group for the two-stage Bulk contracts: normal foods vs everything
+// premium (training foods count as premium for the Grand Larder).
+export const foodDiscountGroup = (id: Food): 'normal' | 'premium' => (foodDef(id).tier === 'normal' ? 'normal' : 'premium')
 export const MAX_HAPPINESS = 10
 // Happiness 0..10 → +1% damage per point (1.10× at 10).
 export const happinessMultiplier = (happiness: number) => 1 + 0.01 * happiness
@@ -288,6 +375,21 @@ export function feedDelta(food: Food, fav: Food, hated: Food): number {
   if (food === fav) return 1
   if (food === hated) return -1
   return 0
+}
+
+// --- Rivals (LOOP_DESIGN.md Phase 2) ---
+// A named trainer who climbs the ladder alongside the player, gives the ladder
+// a recurring face, and carries a tracked head-to-head grudge. Phase 2 meets
+// them via off-calendar challenge skirmishes; Phase 3 seats them into cups with
+// a team gameplan (the `personality` colours that + their between-match voice).
+export type RivalPersonality = 'aggressive' | 'cagey' | 'flashy'
+export interface Rival {
+  id: string
+  name: string
+  personality: RivalPersonality
+  licenseIndex: number // rubber-banded toward the player's highest so they stay a threat
+  wins: number // player's POV: times the player beat this rival
+  losses: number // player's POV: times this rival beat the player
 }
 
 // --- Status descriptions (§7.6) ---

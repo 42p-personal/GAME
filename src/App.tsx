@@ -1,6 +1,6 @@
 import { Dispatch, ReactNode, SetStateAction, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  BODY_ELEMENT, BODY_MINOR, BodyType, COMBO_INFO, DEFAULT_TACTICS, Element, FOODS, INNATE_SECONDARY_LEVEL, LEAGUES, MANA_POLICY_INFO, Monster, Move, STATS, Stat,
+  BODY_ELEMENT, BODY_MINOR, BodyType, COMBO_INFO, DEFAULT_TACTICS, Element, FOODS, FoodDef, FoodTier, GAMEPLANS, INNATE_SECONDARY_LEVEL, LEAGUES, MANA_POLICY_INFO, Monster, Move, STATS, Stat,
   TARGET_PRIORITY_INFO, TEMPERAMENT_INFO, Tactics, classForStats,
   feedDelta, frontRowCount, happinessMultiplier, hashString, mulberry32, roleOfClass, rowOfSlot,
 } from './core'
@@ -16,11 +16,12 @@ import {
   dateLabel, foodName, previewWeekEffects, rankUpFee, stageInfo, trainingProfileFor,
 } from './game'
 import {
-  BULK_FOOD_COST, ELITE_LICENSE_COST, EventMatch, EventStanding, FUSION_COST, GameState, RENTAL_PER_FROZEN, RIVAL_BAND_MIN, SPECIAL_LICENSE_COST,
-  WeekPlanEntry, advanceWeek, barnCost, buyBulkFood, buyEliteLicense, buyMonster,
-  buySpecialLicense, cancelSignUp, cupLore, eligibleForTournament, freeze, fuse, fusionRoom, generateRivalTeamsForTournament, goto, healAtInfirmary, infirmaryFee, leagueIndexOf, monthOfWeek,
+  PANTRY_CONTRACT_COST, GRAND_LARDER_COST, ELITE_LICENSE_COST, EventMatch, EventStanding, FUSION_COST, GameState, PendingEvent, RENTAL_PER_FROZEN, RIVAL_BAND_MIN, SPECIAL_LICENSE_COST,
+  WeekPlanEntry, advanceWeek, barnCost, buyPantryContract, buyGrandLarder, buyEliteLicense, buyMonster, foodDiscountFor, resolveEvent,
+  buySpecialLicense, cancelSignUp, cupLore, eligibleForTournament, freeze, fuse, fusionRoom, gameplanForRivalTeam, generateRivalTeamsForTournament, goto, healAtInfirmary, infirmaryFee, leagueIndexOf, monthOfWeek,
   RANK_UP_MONTHS, RANK_UP_WEEK, entryFee, isRankUpWeek, placementLabel, scoutFee, teamHasLicensedLeader, teamSizeForLeague,
-  firstTeamLeagueIndex, newGame, offerMonster, promoteMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, setMarkTarget, setProtectTarget, setTactics, signUp, teamTacticsUnlocked, thaw,
+  trainerXpProgress, trainerBarnBonus, effectiveBarnCap, BREEDING_BONUS,
+  firstTeamLeagueIndex, generateRival, newGame, offerMonster, promoteMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, setMarkTarget, setProtectTarget, setTactics, signUp, teamTacticsUnlocked, thaw,
   tournamentCalendarFor, upgradeBarn, visibleLeagueCount, weekOfMonth, yearOfWeek,
 } from './town'
 import { APP_VERSION } from './version'
@@ -76,6 +77,24 @@ function Signature({ m }: { m: Monster }) {
       <span className="dim">training aptitude</span>
     </div>
   )
+}
+
+// Compact effect label for a food button (2026-07-25): the primary effect
+// in-line (not tooltip-only), plus a muted `cost` line for the training foods'
+// downside. Normal foods show the taste outcome for the current monster.
+function foodEffectLabel(f: FoodDef, c: Career): { primary: string; cls: string; cost?: string } {
+  if (f.tier === 'normal') {
+    const d = feedDelta(f.id, c.favouriteFood, c.hatedFood)
+    return d > 0 ? { primary: '♥ favourite · +1', cls: 'pos' } : d < 0 ? { primary: '✖ hated · −1', cls: 'neg' } : { primary: 'neutral', cls: 'dim' }
+  }
+  if (f.boostStats) return {
+    primary: `${f.boostStats.join('·')} +${Math.round((f.boostMult ?? 0) * 100)}%`, cls: 'pos',
+    cost: `−${Math.abs(f.happiness ?? 0)} happiness · ${f.stamina} stamina`,
+  }
+  if (f.rewardMult) return { primary: 'win cup → +50% reward', cls: 'gold' }
+  if (f.stamina) return { primary: `+${f.stamina} stamina`, cls: 'pos' }
+  if (f.happiness) return { primary: `+${f.happiness} happiness`, cls: 'pos' }
+  return { primary: '', cls: 'dim' }
 }
 
 // HP → MP → Stamina → Happiness, in that order (user spec 2026-07-19) —
@@ -443,7 +462,7 @@ function SandboxView() {
 function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetStateAction<GameState>> }) {
   const [fuseA, setFuseA] = useState('')
   const [fuseB, setFuseB] = useState('')
-  const barnFull = game.stable.length >= game.barnCapacity
+  const barnFull = game.stable.length >= effectiveBarnCap(game)
 
   return (
     <>
@@ -452,9 +471,10 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
       )}
       <div className="townbar">
         <span>🪙 {game.gold}g</span>
-        <span>🏠 Stable {game.stable.length}/{game.barnCapacity}</span>
+        <span>🏠 Stable {game.stable.length}/{effectiveBarnCap(game)}</span>
         <span>❄️ Frozen {game.frozen.length}</span>
-        {game.bulkFood && <span className="up">🛒 Bulk food</span>}
+        {game.pantryContract && <span className="up">🧺 Pantry</span>}
+        {game.grandLarder && <span className="up">🏰 Larder</span>}
       </div>
 
       <div className="townmap">
@@ -540,7 +560,7 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
               Fuse · {FUSION_COST}g
             </button>
           </div>
-          <div className="hint">Baby inherits the average of both parents minus a small penalty, and starts unlicensed.</div>
+          <div className="hint">Baby hatches unlicensed with a <b>bloodline potential</b> = the parents' average +{Math.round(BREEDING_BONUS * 100)}% — a higher stat ceiling than any wild monster. Breed a line over generations to climb it.</div>
         </div>
 
         {/* Ranch */}
@@ -549,6 +569,47 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
           <button className="enter" disabled={game.stable.length === 0} onClick={() => setGame((g) => goto(g, 'ranch'))}>Enter the Ranch →</button>
           {game.stable.length === 0 && <div className="dim">Buy a monster first.</div>}
         </div>
+
+        {/* Trainer level (LOOP_DESIGN Phase 5): the persistent meta character —
+            the ranch is the account, monsters are the runs. */}
+        {(() => {
+          const p = trainerXpProgress(game)
+          const barn = trainerBarnBonus(game)
+          return (
+            <div className="card loc">
+              <div className="loc-h"><span>🎓 Trainer — {game.trainerName}</span><span className="dim">Level {p.level}</span></div>
+              <div className="xpbar"><div className="xpfill" style={{ width: `${Math.round((p.into / p.need) * 100)}%` }} /></div>
+              <div className="dim" style={{ marginTop: 4 }}>
+                {p.into}/{p.need} XP to level {p.level + 1} · earn XP from cup podiums &amp; raising monsters to retirement
+                {barn > 0 && <> · <b className="up">+{barn} barn slot{barn > 1 ? 's' : ''}</b></>}
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* Rivals (LOOP_DESIGN Phase 2): the recurring face(s) on the ladder,
+            with the running head-to-head. Climb toward the player's level. */}
+        {game.rivals.length > 0 && (
+          <div className="card loc">
+            <div className="loc-h"><span>🥊 Rivals</span></div>
+            {game.rivals.map((rv) => {
+              const led = rv.wins > rv.losses, tied = rv.wins === rv.losses
+              const record = rv.wins === 0 && rv.losses === 0 ? 'Not yet faced'
+                : tied ? `Even ${rv.wins}–${rv.losses}`
+                  : led ? `You lead ${rv.wins}–${rv.losses}` : `${rv.name} leads ${rv.losses}–${rv.wins}`
+              const trait = rv.personality === 'aggressive' ? 'hits hard and early'
+                : rv.personality === 'cagey' ? 'patient and defensive' : 'loves a big play'
+              return (
+                <div className="shoprow" key={rv.id}>
+                  <div>
+                    <b>{rv.name}</b> <span className="dim">· {LEAGUES[rv.licenseIndex].name} · {trait}</span>
+                    <div className={led ? 'up' : tied ? 'dim' : 'down'}>{record}</div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
 
         {/* Infirmary (2026-07-25): pay to mend wounds NOW instead of resting a
             week away — fee scales with league and how much is missing.
@@ -582,11 +643,20 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
           </div>
           <div className="shoprow">
             <div>
-              <b>Bulk Food Contract</b>
-              <div className="dim">{game.bulkFood ? 'Owned — 20% off food.' : 'Permanent 20% off all food.'}</div>
+              <b>🧺 Pantry Contract</b>
+              <div className="dim">{game.pantryContract ? 'Owned — 20% off normal foods.' : 'Permanent 20% off normal foods.'}</div>
             </div>
-            <button disabled={game.bulkFood || game.gold < BULK_FOOD_COST} onClick={() => setGame((g) => buyBulkFood(g))}>
-              {game.bulkFood ? '✓ Owned' : `Buy · ${BULK_FOOD_COST}g`}
+            <button disabled={game.pantryContract || game.gold < PANTRY_CONTRACT_COST} onClick={() => setGame((g) => buyPantryContract(g))}>
+              {game.pantryContract ? '✓ Owned' : `Buy · ${PANTRY_CONTRACT_COST}g`}
+            </button>
+          </div>
+          <div className="shoprow">
+            <div>
+              <b>🏰 Grand Larder</b>
+              <div className="dim">{game.grandLarder ? 'Owned — 20% off premium foods.' : '20% off premium foods (training & fruits).'}</div>
+            </div>
+            <button disabled={game.grandLarder || game.gold < GRAND_LARDER_COST} onClick={() => setGame((g) => buyGrandLarder(g))}>
+              {game.grandLarder ? '✓ Owned' : `Buy · ${GRAND_LARDER_COST}g`}
             </button>
           </div>
           <div className="shoprow">
@@ -1281,7 +1351,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
         <>
           {header}
           <p className="sub">Match {matchIdx + 1} of {playerMatches.length}: {teamName(currentMatch.aLabel, lb.matches)} vs {teamName(currentMatch.bLabel, lb.matches)}</p>
-          <ArenaBattle key={matchIdx} teamA={currentMatch.teamA} teamB={currentMatch.teamB} result={currentMatch.result} league={lb.league} onDone={() => setBattleOver(true)} />
+          <ArenaBattle key={matchIdx} teamA={currentMatch.teamA} teamB={currentMatch.teamB} result={currentMatch.result} league={lb.league} playerSide={currentMatch.aLabel === 'Your Team' ? 'A' : 'B'} onDone={() => setBattleOver(true)} />
           {battleOver && (
             <div className="carerow" style={{ justifyContent: 'center' }}>
               <button className="enter" onClick={() => { setBattleOver(false); setMatchIdx((i) => i + 1); setBattleSub('bracket') }}>
@@ -1316,7 +1386,6 @@ function RanchView({ game, setGame, onBattleScreen }: {
 
   const currentCareer = game.stable[decisionIdx]
   const currentPlan: WeekPlanEntry = weekPlan[currentCareer.id] || { activity: 'rest', food: '' }
-  const discount = game.bulkFood ? 0.8 : 1
 
   const advanceFeeding = () => {
     if (decisionIdx < game.stable.length - 1) setDecisionIdx((i) => i + 1)
@@ -1333,6 +1402,10 @@ function RanchView({ game, setGame, onBattleScreen }: {
     const st = stageInfo(currentCareer.ageWeeks, currentCareer.species.lifespan)
     return (
       <>
+        {game.pendingEvent && (
+          <EventModal pe={game.pendingEvent} gold={game.gold}
+            onChoose={(i) => setGame((g) => resolveEvent(g, i))} />
+        )}
         <div className="ranchtop">
           <button className="ghost" onClick={() => setGame((g) => goto(g, 'town'))}>← 🏛 Town</button>
           <span>📅 {dateLabel(game.week)}</span>
@@ -1381,19 +1454,32 @@ function RanchView({ game, setGame, onBattleScreen }: {
               <div className="retired">🏁 {currentCareer.name} has retired and can no longer compete.</div>
             ) : (
               <>
-                <div className="section-title">Food — buy 1 food this week{game.bulkFood ? ' · 🛒 −20%' : ''}</div>
-                <div className={'foods' + (currentPlan.food ? '' : ' foods-missing')}>
-                  {FOODS.map((f) => {
-                    const price = Math.max(1, Math.round(game.foodMarket[f.id] * discount))
-                    const d = feedDelta(f.id, currentCareer.favouriteFood, currentCareer.hatedFood)
-                    const afford = game.gold >= price
-                    const selected = currentPlan.food === f.id
+                <div className="section-title">Food — buy 1 this week</div>
+                <div className={'foodgroups' + (currentPlan.food ? '' : ' foods-missing')}>
+                  {([['normal', 'Rations'], ['training', 'Training foods'], ['premium', 'Premium']] as [FoodTier, string][]).map(([tier, label]) => {
+                    const discounted = tier === 'normal' ? game.pantryContract : game.grandLarder
                     return (
-                      <button key={f.id} className={`food ${selected ? 'selected' : ''}`} disabled={!afford}
-                        onClick={() => setPlanFor(currentCareer.id, { ...currentPlan, food: selected ? '' : f.id })}
-                        title={d > 0 ? 'favourite (+1 happiness)' : d < 0 ? 'hated (−1 happiness)' : 'neutral'}>
-                        {foodName(f.id)}{selected ? ' ✓' : ''} · {price}g{d > 0 ? ' ♥' : d < 0 ? ' ✖' : ''}
-                      </button>
+                      <div className="foodgroup" key={tier}>
+                        <div className="foodgroup-h">{label}{discounted ? ' · 🛒 −20%' : ''}</div>
+                        <div className="foods">
+                          {FOODS.filter((f) => f.tier === tier).map((f) => {
+                            const price = Math.max(1, Math.round(game.foodMarket[f.id] * foodDiscountFor(game, f.id)))
+                            const afford = game.gold >= price
+                            const selected = currentPlan.food === f.id
+                            const eff = foodEffectLabel(f, currentCareer)
+                            return (
+                              <button key={f.id} className={`food ${f.tier}${selected ? ' selected' : ''}`} disabled={!afford}
+                                onClick={() => setPlanFor(currentCareer.id, { ...currentPlan, food: selected ? '' : f.id })}
+                                title={f.desc}>
+                                <span className="food-top">{f.icon} {f.name}{selected ? ' ✓' : ''}</span>
+                                <span className={'food-eff ' + eff.cls}>{eff.primary}</span>
+                                {eff.cost && <span className="food-cost">{eff.cost}</span>}
+                                <span className="food-price">{price}g</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
                     )
                   })}
                 </div>
@@ -1518,7 +1604,11 @@ function RanchView({ game, setGame, onBattleScreen }: {
                   </>
                 )}
               </div>
-              <div className="dim" style={{ fontSize: 11 }}>{selectedCareer.species.name} · {selM.className}</div>
+              <div className="dim" style={{ fontSize: 11 }}>{selectedCareer.species.name} · {selM.className}
+                {(selectedCareer.potential ?? 1) > 1 && (
+                  <span className="potential" title={`Bloodline potential ×${(selectedCareer.potential ?? 1).toFixed(2)} — trains ${Math.round(((selectedCareer.potential ?? 1) - 1) * 100)}% above the normal league ceiling`}> · {'★'.repeat(Math.round(((selectedCareer.potential ?? 1) - 1) / BREEDING_BONUS))} ×{(selectedCareer.potential ?? 1).toFixed(2)}</span>
+                )}
+              </div>
               {(() => {
                 const st = stageInfo(selectedCareer.ageWeeks, selectedCareer.species.lifespan)
                 return <div className="dim" style={{ fontSize: 11 }}>{st.stage} · age {st.ageYears}y / {selectedCareer.species.lifespan}y · {LEAGUES[selectedCareer.licenseIndex].name} league</div>
@@ -1780,9 +1870,20 @@ function RanchView({ game, setGame, onBattleScreen }: {
                             const tier = fieldScout[key]
                             const basicFee = scoutFee(t.league, 'basic')
                             const fullFee = scoutFee(t.league, 'full')
+                            const gp = GAMEPLANS[gameplanForRivalTeam(game.seed, game.week, t.id, r)]
                             return (
                               <div key={key} className="scout-report">
                                 <div className="section-title">Rival Team {r + 1}</div>
+                                {/* Gameplan reveal (LOOP_DESIGN Phase 3): the tactical intel scouting
+                                    is FOR — revealed with the basic tier alongside class + loadout. */}
+                                {tier ? (
+                                  <div className="gameplan">
+                                    <div className="gp-h">{gp.icon} {gp.name} <span className="dim">· {gp.tell}</span></div>
+                                    <div className="gp-counter">💡 {gp.counter}</div>
+                                  </div>
+                                ) : (
+                                  <div className="gameplan locked"><div className="gp-h dim">🧠 Gameplan: ?? — scout to reveal</div></div>
+                                )}
                                 {team.map((m, i) => <ScoutReport key={i} m={m} tier={tier} />)}
                                 {/* Kill order (wave 2): only while signed up — the mark lives on the pending entry. */}
                                 {signedHere && team.length > 1 && (
@@ -2000,6 +2101,20 @@ function sanitizeAndMigrate(raw: string): GameState | null {
     if (typeof g.tutorialEnabled !== 'boolean') g.tutorialEnabled = false // already playing — skip tips by default
     if (typeof g.tutorialDismissed !== 'boolean') g.tutorialDismissed = true
     if (!Array.isArray(g.tipsSeen)) g.tipsSeen = []
+    // migrate pre-food-overhaul saves (2026-07-25): the single `bulkFood` perk
+    // (20% off all food) becomes the Pantry Contract (normal foods); the new
+    // Grand Larder (premium foods) starts unowned. Career lastFood/truffleReady
+    // default absent — no migration needed.
+    if (typeof g.pantryContract !== 'boolean') g.pantryContract = !!g.bulkFood
+    if (typeof g.grandLarder !== 'boolean') g.grandLarder = false
+    delete g.bulkFood
+    // migrate pre-events saves (LOOP_DESIGN Phase 1): no pending incident
+    if (g.pendingEvent === undefined) g.pendingEvent = null
+    // migrate pre-rival saves (LOOP_DESIGN Phase 2): mint a primary rival so
+    // returning players get one too
+    if (!Array.isArray(g.rivals) || g.rivals.length === 0) g.rivals = [generateRival(g.seed, 0)]
+    // migrate pre-trainer-XP saves (LOOP_DESIGN Phase 5); potential stays absent (= 1.0)
+    if (typeof g.trainerXp !== 'number') g.trainerXp = 0
     return g as GameState
   } catch {
     return null
@@ -2070,6 +2185,31 @@ function Modal({ title, children, actions }: { title: string; children: ReactNod
         <div className="modal-title">{title}</div>
         <div className="modal-body">{children}</div>
         <div className="modal-actions">{actions}</div>
+      </div>
+    </div>
+  )
+}
+
+// Weekly incident (LOOP_DESIGN Phase 1): a choice with a trade-off, shown over
+// the feeding screen. Choices with a gold cost above the wallet disable.
+function EventModal({ pe, gold, onChoose }: { pe: PendingEvent; gold: number; onChoose: (i: number) => void }) {
+  return (
+    <div className="modal-backdrop">
+      <div className="modal-card">
+        <div className="modal-title">{pe.title}</div>
+        <div className="modal-body"><p className="ev-body">{pe.body}</p></div>
+        <div className="modal-actions ev-actions">
+          {pe.choices.map((ch, i) => {
+            const cant = ch.cost != null && ch.cost > gold
+            return (
+              <button key={i} className="ev-choice" disabled={cant} onClick={() => onChoose(i)}
+                title={cant ? 'Not enough gold' : undefined}>
+                <span className="ev-label">{ch.label}</span>
+                {ch.note && <span className="ev-note">{ch.note}</span>}
+              </button>
+            )
+          })}
+        </div>
       </div>
     </div>
   )
