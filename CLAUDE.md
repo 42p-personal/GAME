@@ -91,7 +91,8 @@ CON/turn-order changes are the tuning knobs to revisit.
 ### What changed this session, newest first
 
 -40. **Tactics system, wave 1 (2026-07-25): temperament + target priority + protect target,
-    sim/test/browser-verified, uncommitted.** User request from a Teamfight Manager screenshot:
+    sim/test/browser-verified, committed and deployed (`20b10f9`, manual deploy — git builds
+    still EBADPLATFORM).** User request from a Teamfight Manager screenshot:
     "what could we use in terms of tactics to make the battles more interactive?" then "build
     this." Player is a COACH, not a puppeteer — tactics are pre-battle standing orders that
     parameterize the EXISTING battle AI, matching the game's pre-simulated architecture.
