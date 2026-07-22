@@ -183,7 +183,7 @@ export const TARGET_PRIORITY_INFO: { id: TargetPriority; icon: string; name: str
 ]
 export const MANA_POLICY_INFO: { id: ManaPolicy; icon: string; name: string; desc: string }[] = [
   { id: 'burst', icon: '💥', name: 'Opening burst', desc: 'Spend MP freely and early — hit hard before the enemy settles in.' },
-  { id: 'normal', icon: '💠', name: 'Natural', desc: "Spend MP on the class's own judgement." },
+  { id: 'normal', icon: '💠', name: 'As needed', desc: "Spend MP on the class's own judgement." },
   { id: 'conserve', icon: '💧', name: 'Conserve', desc: 'Save MP for clearly worthwhile skills — charge up rather than waste casts.' },
 ]
 export const COMBO_INFO: { id: boolean; icon: string; name: string; desc: string }[] = [

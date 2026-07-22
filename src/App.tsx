@@ -772,6 +772,8 @@ function AbilitySelector({ m, name, onSetLoadout, onSetInnate, onSetTactics, onC
         <span>⚔ Edit Abilities — {name}</span>
         <button className="ghost" onClick={onClose}>✕ close</button>
       </div>
+      <details className="editor-section" open>
+        <summary className="editor-summary">⚔ Moves &amp; loadout</summary>
       <div className="hint">Pick one of the three equipped slots, then click a move from the pool to put it there.</div>
       <div className="abilityslots">
         {[0, 1, 2].map((i) => {
@@ -809,8 +811,10 @@ function AbilitySelector({ m, name, onSetLoadout, onSetInnate, onSetTactics, onC
         })}
       </div>
       <button className="ghost" style={{ marginTop: 8 }} onClick={() => onSetLoadout([])}>Reset to suggested loadout</button>
+      </details>
 
-      <div className="section-title" style={{ marginTop: 14 }}>Innate — 1 active at a time</div>
+      <details className="editor-section">
+        <summary className="editor-summary">✦ Innate passive</summary>
       <div className="hint">The 2nd choice is an alternative, not an upgrade — click to switch.</div>
       <div className="abilitypool">
         {m.species.innate.map((a, i) => {
@@ -825,17 +829,41 @@ function AbilitySelector({ m, name, onSetLoadout, onSetInnate, onSetTactics, onC
           )
         })}
       </div>
+      </details>
 
       {(() => {
         // Tactics (2026-07-25): Teamfight-Manager-style standing orders — the
         // player coaches how the auto-battler fights, one highlighted choice
-        // per group, with the selected pair explained below.
+        // per group. Groups lead with the always-relevant Temperament and end
+        // with the niche/locked ones; every active choice is spelled out in the
+        // summary below so no tactic's meaning lives in a hover-only tooltip.
         const cur = m.tactics ?? DEFAULT_TACTICS
         const temp = TEMPERAMENT_INFO.find((o) => o.id === cur.temperament)!
         const prio = TARGET_PRIORITY_INFO.find((o) => o.id === cur.targetPriority)!
+        const mana = MANA_POLICY_INFO.find((o) => o.id === (cur.manaPolicy ?? 'normal'))!
+        const combo = COMBO_INFO.find((o) => o.id === (cur.comboDiscipline ?? false))!
+        const openerMove = cur.openerId ? m.loadout.find((mv) => mv.id === cur.openerId) : undefined
+        // Combo discipline only does anything with BOTH halves of a pair
+        // equipped — a payoff (bonusVsStatus) and a move that sets its status.
+        // Gating the toggle stops it being a live-but-inert control (H5).
+        const comboReady = m.loadout.some((p) => p.effects?.bonusVsStatus
+          && m.loadout.some((s) => s.status?.kind === p.effects!.bonusVsStatus!.kind))
+
+        // Every group's ACTIVE choice, spelled out — the panel's single source
+        // of "what are my orders right now", replacing tooltip-only meaning.
+        const summary = [
+          { icon: temp.icon, name: temp.name, desc: temp.desc },
+          { icon: openerMove ? (openerMove.element ? ELEMENT_ICON[openerMove.element] : '▶') : '🎲',
+            name: openerMove ? `Open with ${openerMove.name}` : 'Instinct opener',
+            desc: openerMove ? 'Always throws this move first when it can.' : 'The class picks its own first play.' },
+          { icon: mana.icon, name: mana.name, desc: mana.desc },
+          { icon: combo.icon, name: combo.name, desc: comboReady ? combo.desc : 'No setup→payoff pair equipped yet — no effect.' },
+          { icon: prio.icon, name: prio.name, desc: teamTacticsOpen ? prio.desc : 'Locked until team battles unlock.' },
+        ]
+
         return (
-          <>
-            <div className="section-title" style={{ marginTop: 14 }}>Tactics — battle orders</div>
+          <details className="editor-section">
+            <summary className="editor-summary">🎯 Tactics — battle orders</summary>
             <div className="hint">Standing orders {name} follows in every battle — adjust after scouting a field.</div>
             <div className="tacticgroups">
               <div className="tacticgroup">
@@ -848,6 +876,42 @@ function AbilitySelector({ m, name, onSetLoadout, onSetInnate, onSetTactics, onC
                 ))}
               </div>
               <div className="tacticgroup">
+                <div className="tacticgroup-h">Opening move</div>
+                <button className={'tacticopt' + (!openerMove ? ' on' : '')}
+                  onClick={() => onSetTactics({ ...cur, openerId: undefined })}>
+                  🎲 Instinct
+                </button>
+                {m.loadout.map((mv) => (
+                  <button key={mv.id} className={'tacticopt' + (cur.openerId === mv.id ? ' on' : '')}
+                    onClick={() => onSetTactics({ ...cur, openerId: mv.id })}>
+                    {mv.element ? ELEMENT_ICON[mv.element] + ' ' : '▶ '}{mv.name}
+                  </button>
+                ))}
+              </div>
+              <div className="tacticgroup">
+                <div className="tacticgroup-h">Mana policy</div>
+                {MANA_POLICY_INFO.map((o) => (
+                  <button key={o.id} className={'tacticopt' + ((cur.manaPolicy ?? 'normal') === o.id ? ' on' : '')}
+                    onClick={() => onSetTactics({ ...cur, manaPolicy: o.id })}>
+                    {o.icon} {o.name}
+                  </button>
+                ))}
+              </div>
+              <div className="tacticgroup">
+                <div className="tacticgroup-h">Combo play{comboReady ? '' : ' 🔒'}</div>
+                {COMBO_INFO.map((o) => {
+                  const disabled = o.id === true && !comboReady
+                  return (
+                    <button key={String(o.id)} disabled={disabled}
+                      className={'tacticopt' + ((cur.comboDiscipline ?? false) === o.id ? ' on' : '') + (disabled ? ' lockedopt' : '')}
+                      onClick={() => !disabled && onSetTactics({ ...cur, comboDiscipline: o.id })}>
+                      {o.icon} {o.name}
+                    </button>
+                  )
+                })}
+                {!comboReady && <div className="hint">🔗 Equip a setup move and its matching payoff to use this.</div>}
+              </div>
+              <div className="tacticgroup">
                 <div className="tacticgroup-h">Target priority{teamTacticsOpen ? '' : ' 🔒'}</div>
                 {TARGET_PRIORITY_INFO.map((o) => {
                   // Priorities only matter with multiple combatants — locked
@@ -856,7 +920,6 @@ function AbilitySelector({ m, name, onSetLoadout, onSetInnate, onSetTactics, onC
                   return (
                     <button key={o.id} disabled={locked}
                       className={'tacticopt' + (cur.targetPriority === o.id ? ' on' : '') + (locked ? ' lockedopt' : '')}
-                      title={locked ? `Team orders — unlock by earning the ${LEAGUES[firstTeamLeagueIndex()].name} license` : undefined}
                       onClick={() => !locked && onSetTactics({ ...cur, targetPriority: o.id })}>
                       {o.icon} {o.name}
                     </button>
@@ -867,40 +930,13 @@ function AbilitySelector({ m, name, onSetLoadout, onSetInnate, onSetTactics, onC
                     ({teamSizeForLeague(LEAGUES[firstTeamLeagueIndex()].name)}v{teamSizeForLeague(LEAGUES[firstTeamLeagueIndex()].name)}).</div>
                 )}
               </div>
-              <div className="tacticgroup">
-                <div className="tacticgroup-h">Mana policy</div>
-                {MANA_POLICY_INFO.map((o) => (
-                  <button key={o.id} className={'tacticopt' + ((cur.manaPolicy ?? 'normal') === o.id ? ' on' : '')}
-                    onClick={() => onSetTactics({ ...cur, manaPolicy: o.id })} title={o.desc}>
-                    {o.icon} {o.name}
-                  </button>
-                ))}
-              </div>
-              <div className="tacticgroup">
-                <div className="tacticgroup-h">Combo play</div>
-                {COMBO_INFO.map((o) => (
-                  <button key={String(o.id)} className={'tacticopt' + ((cur.comboDiscipline ?? false) === o.id ? ' on' : '')}
-                    onClick={() => onSetTactics({ ...cur, comboDiscipline: o.id })} title={o.desc}>
-                    {o.icon} {o.name}
-                  </button>
-                ))}
-              </div>
-              <div className="tacticgroup">
-                <div className="tacticgroup-h">Opening move</div>
-                <button className={'tacticopt' + (!cur.openerId || !m.loadout.some((mv) => mv.id === cur.openerId) ? ' on' : '')}
-                  onClick={() => onSetTactics({ ...cur, openerId: undefined })} title="No script — the class picks its own first play">
-                  🎲 Instinct
-                </button>
-                {m.loadout.map((mv) => (
-                  <button key={mv.id} className={'tacticopt' + (cur.openerId === mv.id ? ' on' : '')}
-                    onClick={() => onSetTactics({ ...cur, openerId: mv.id })} title={`Always opens the battle with ${mv.name} when it can`}>
-                    {mv.element ? ELEMENT_ICON[mv.element] + ' ' : '▶ '}{mv.name}
-                  </button>
-                ))}
-              </div>
             </div>
-            <div className="tactic-desc dim">{temp.icon} {temp.desc} — {prio.icon} {prio.desc}</div>
-          </>
+            <div className="tactic-summary">
+              {summary.map((s, i) => (
+                <div key={i} className="tactic-summary-row"><span className="tsr-icon">{s.icon}</span><span><b>{s.name}</b> — {s.desc}</span></div>
+              ))}
+            </div>
+          </details>
         )
       })()}
     </div>

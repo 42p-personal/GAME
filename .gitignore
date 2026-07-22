@@ -5,3 +5,6 @@ dist/
 *.tsbuildinfo
 .claude/settings.local.json
 .wrangler/
+
+# design-review skill source (embedded clone, not part of the game)
+awesome-ux-skills/
