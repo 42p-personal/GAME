@@ -630,7 +630,10 @@ export function setActiveInnate(g: GameState, id: string, index: number): GameSt
 // game plan after scouting the field is exactly what they're for.
 export function setTactics(g: GameState, id: string, tactics: Tactics): GameState {
   if (!g.stable.some((x) => x.id === id)) return g
-  return { ...g, stable: g.stable.map((x) => (x.id === id ? { ...x, tactics } : x)) }
+  // Data-layer enforcement of the multi-combatant gate (UI also locks it):
+  // target-priority orders stay on the default until team play is unlocked.
+  const clamped = teamTacticsUnlocked(g) ? tactics : { ...tactics, targetPriority: 'weakest' as const }
+  return { ...g, stable: g.stable.map((x) => (x.id === id ? { ...x, tactics: clamped } : x)) }
 }
 
 // Team-event protect target: which signed-up monster the rest of the team
@@ -640,6 +643,18 @@ export function setProtectTarget(g: GameState, careerId: string | null): GameSta
   if (!g.pendingTournament) return g
   if (careerId !== null && !g.pendingTournament.monsterIds.includes(careerId)) return g
   return { ...g, pendingTournament: { ...g.pendingTournament, protectId: careerId ?? undefined } }
+}
+
+// Multi-combatant tactics gate (2026-07-25): target-priority orders only
+// mean anything with multiple combatants on the field, so they stay locked
+// until the player has a monster licensed for the first TEAM league —
+// derived from TEAM_SIZE_BY_LEAGUE (currently Copper, 2v2) so this can never
+// drift from the team-size table. Same stable+frozen progress convention as
+// visibleLeagueCount.
+export const firstTeamLeagueIndex = (): number => LEAGUES.findIndex((lg) => teamSizeForLeague(lg.name) > 1)
+export function teamTacticsUnlocked(g: GameState): boolean {
+  const idx = firstTeamLeagueIndex()
+  return g.stable.some((c) => c.licenseIndex >= idx) || g.frozen.some((f) => f.licenseIndex >= idx)
 }
 
 // Kill order (wave 2): mark one member of a scouted rival team — the whole

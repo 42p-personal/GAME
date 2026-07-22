@@ -90,6 +90,22 @@ CON/turn-order changes are the tuning knobs to revisit.
 
 ### What changed this session, newest first
 
+-42. **Multi-combatant tactics locked until team play (2026-07-25), browser-verified,
+    uncommitted.** User: "lock the tactics options that pertain to multiple combatants until
+    the tin league is unlocked" — implemented keyed to the FIRST TEAM LEAGUE derived from
+    `TEAM_SIZE_BY_LEAGUE` (currently **Copper**, 2v2 — the user said "tin", but Copper became
+    2v2 in the item -31 retune, and locking team orders while the player is already fighting
+    Copper 2v2s would be wrong; deriving from the data means it can never drift).
+    `town.ts:firstTeamLeagueIndex()`/`teamTacticsUnlocked(g)` (any stable OR frozen monster
+    holding that license — same progress convention as visibleLeagueCount). The **Target
+    priority** group is the only lockable one (priorities are meaningless in 1v1): non-default
+    options render disabled+dim with a "🔒 unlock by earning the Copper license (2v2)" hint,
+    AND `setTactics` clamps targetPriority to 'weakest' at the data layer while locked.
+    Protect/marks were already inherently team-event-only; temperament/mana/combo/opener all
+    matter in 1v1 and stay open. Sandbox passes `teamTacticsOpen` unconditionally true (it's a
+    testing sandbox). Verified: fresh Wood save shows the three team orders locked with the
+    hint; Sandbox shows zero locked options; tsc/build/12 tests clean, no console errors.
+
 -41. **Tactics wave 2 (2026-07-25): formations (order matters) + kill orders + opener + combo
     discipline + mana policy — sim/test/browser-verified, committed and deployed.** User asked
     "could we make the 'order' of the monsters matter? is there any more strategy?"; built the

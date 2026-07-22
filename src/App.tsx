@@ -20,7 +20,7 @@ import {
   WeekPlanEntry, advanceWeek, barnCost, buyBulkFood, buyEliteLicense, buyMonster,
   buySpecialLicense, cancelSignUp, cupLore, eligibleForTournament, freeze, fuse, fusionRoom, generateRivalTeamsForTournament, goto, healAtInfirmary, infirmaryFee, leagueIndexOf, monthOfWeek,
   RANK_UP_MONTHS, RANK_UP_WEEK, entryFee, isRankUpWeek, placementLabel, scoutFee, teamHasLicensedLeader, teamSizeForLeague,
-  newGame, offerMonster, promoteMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, setMarkTarget, setProtectTarget, setTactics, signUp, thaw,
+  firstTeamLeagueIndex, newGame, offerMonster, promoteMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, setMarkTarget, setProtectTarget, setTactics, signUp, teamTacticsUnlocked, thaw,
   tournamentCalendarFor, upgradeBarn, visibleLeagueCount, weekOfMonth, yearOfWeek,
 } from './town'
 import { APP_VERSION } from './version'
@@ -747,9 +747,10 @@ function PlanBenefit({ career, plan }: { career: Career; plan: WeekPlanEntry }) 
 // then a pool move to swap it in. Filter by stat; equipped moves show dimmed
 // in the pool. Changes apply immediately via onSetLoadout (no separate save
 // step) — free any time except a monster's active tournament week.
-function AbilitySelector({ m, name, onSetLoadout, onSetInnate, onSetTactics, onClose }: {
+function AbilitySelector({ m, name, onSetLoadout, onSetInnate, onSetTactics, onClose, teamTacticsOpen = true }: {
   m: Monster; name: string; onSetLoadout: (ids: string[]) => void
   onSetInnate: (index: number) => void; onSetTactics: (t: Tactics) => void; onClose: () => void
+  teamTacticsOpen?: boolean // false until team battles are unlocked — locks the multi-combatant orders
 }) {
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null)
   const [filter, setFilter] = useState<Stat | 'All'>('All')
@@ -847,13 +848,24 @@ function AbilitySelector({ m, name, onSetLoadout, onSetInnate, onSetTactics, onC
                 ))}
               </div>
               <div className="tacticgroup">
-                <div className="tacticgroup-h">Target priority</div>
-                {TARGET_PRIORITY_INFO.map((o) => (
-                  <button key={o.id} className={'tacticopt' + (cur.targetPriority === o.id ? ' on' : '')}
-                    onClick={() => onSetTactics({ ...cur, targetPriority: o.id })}>
-                    {o.icon} {o.name}
-                  </button>
-                ))}
+                <div className="tacticgroup-h">Target priority{teamTacticsOpen ? '' : ' 🔒'}</div>
+                {TARGET_PRIORITY_INFO.map((o) => {
+                  // Priorities only matter with multiple combatants — locked
+                  // (except the default) until team battles are reachable.
+                  const locked = !teamTacticsOpen && o.id !== 'weakest'
+                  return (
+                    <button key={o.id} disabled={locked}
+                      className={'tacticopt' + (cur.targetPriority === o.id ? ' on' : '') + (locked ? ' lockedopt' : '')}
+                      title={locked ? `Team orders — unlock by earning the ${LEAGUES[firstTeamLeagueIndex()].name} license` : undefined}
+                      onClick={() => !locked && onSetTactics({ ...cur, targetPriority: o.id })}>
+                      {o.icon} {o.name}
+                    </button>
+                  )
+                })}
+                {!teamTacticsOpen && (
+                  <div className="hint">🔒 Orders for team battles — unlock by earning the {LEAGUES[firstTeamLeagueIndex()].name} license
+                    ({teamSizeForLeague(LEAGUES[firstTeamLeagueIndex()].name)}v{teamSizeForLeague(LEAGUES[firstTeamLeagueIndex()].name)}).</div>
+                )}
               </div>
               <div className="tacticgroup">
                 <div className="tacticgroup-h">Mana policy</div>
@@ -1556,6 +1568,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
               onSetInnate={(index) => setGame((g) => setActiveInnate(g, selectedCareer.id, index))}
               onSetTactics={(t) => setGame((g) => setTactics(g, selectedCareer.id, t))}
               onClose={() => setAbilityEditorFor(null)}
+              teamTacticsOpen={teamTacticsUnlocked(game)}
             />
           ) : selectedCareer.retired ? (
             <div className="retired">🏁 {selectedCareer.name} has retired and can no longer train.</div>

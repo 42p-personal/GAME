@@ -567,6 +567,7 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 .tacticopt:hover { color: var(--ink); border-color: var(--muted); }
 .tacticopt.on { background: #eef7f1; color: #0c1a13; border-color: #eef7f1; font-weight: 800; }
 .tacticopt.small { width: auto; padding: 3px 10px; font-size: 12px; border-radius: 6px; }
+.tacticopt.lockedopt { opacity: .35; cursor: not-allowed; }
 .tactic-desc { font-size: 12px; line-height: 1.5; border-top: 1px solid var(--line); padding-top: 8px; margin-top: 2px; }
 .protectrow { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; font-size: 12px; }
 
