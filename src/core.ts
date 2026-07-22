@@ -139,7 +139,31 @@ export interface Monster {
   hp?: number // current HP at fight time — injuries persist; absent = full (rivals, sandbox)
   mp?: number // current MP at fight time — absent = full (rivals, sandbox)
   tameness?: number // 0-100, HIDDEN wild-instinct roll — absent = fully tame (player monsters)
+  tactics?: Tactics // standing battle orders (2026-07-25); absent = DEFAULT_TACTICS (rivals, legacy saves)
+  protect?: boolean // team-event "protect target" designation — allies guard/heal this monster first
 }
+
+// --- Tactics (2026-07-25): pre-battle standing orders, Teamfight-Manager
+// style — the player is a coach, not a puppeteer. Each tactic parameterizes
+// the EXISTING battle AI (class personality thresholds, target picking);
+// the defaults reproduce the untuned AI exactly, so a monster with no
+// tactics set fights precisely as it always has. ---
+export type Temperament = 'aggressive' | 'balanced' | 'cautious'
+export type TargetPriority = 'weakest' | 'casters' | 'tanks' | 'focus'
+export interface Tactics { temperament: Temperament; targetPriority: TargetPriority }
+export const DEFAULT_TACTICS: Tactics = { temperament: 'balanced', targetPriority: 'weakest' }
+
+export const TEMPERAMENT_INFO: { id: Temperament; icon: string; name: string; desc: string }[] = [
+  { id: 'aggressive', icon: '⚔', name: 'Aggressive', desc: 'Keeps swinging even when hurt — blocks, parries and heals late, spends MP freely.' },
+  { id: 'balanced', icon: '⚖', name: 'Balanced', desc: "Fights on its class's natural instincts." },
+  { id: 'cautious', icon: '🛡', name: 'Cautious', desc: 'Guards early and heals early — takes fewer risks, deals less pressure.' },
+]
+export const TARGET_PRIORITY_INFO: { id: TargetPriority; icon: string; name: string; desc: string }[] = [
+  { id: 'weakest', icon: '🎯', name: 'Finish the wounded', desc: 'Strike whichever enemy is closest to falling.' },
+  { id: 'casters', icon: '🧙', name: 'Hunt the casters', desc: "Focus the enemy's strongest INT/WIS monster — silence the spells and heals." },
+  { id: 'tanks', icon: '🐘', name: 'Break the tank', desc: 'Focus the highest-CON wall so its team loses its anchor.' },
+  { id: 'focus', icon: '🤝', name: 'Focus together', desc: 'Pile onto whichever enemy a teammate struck last.' },
+]
 
 // --- Leagues (license -> stat cap), §3 ---
 export interface League { name: string; cap: number }

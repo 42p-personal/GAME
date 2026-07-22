@@ -90,6 +90,47 @@ CON/turn-order changes are the tuning knobs to revisit.
 
 ### What changed this session, newest first
 
+-40. **Tactics system, wave 1 (2026-07-25): temperament + target priority + protect target,
+    sim/test/browser-verified, uncommitted.** User request from a Teamfight Manager screenshot:
+    "what could we use in terms of tactics to make the battles more interactive?" then "build
+    this." Player is a COACH, not a puppeteer — tactics are pre-battle standing orders that
+    parameterize the EXISTING battle AI, matching the game's pre-simulated architecture.
+    **Every default is inert by construction** (balanced temperament = all-zero adjustments,
+    'weakest' priority = the classic lowest-HP% rule, no protect = no code path entered, no rng
+    consumed) — proven by the 4 golden battle tests passing untouched.
+    - **`core.ts`**: `Tactics { temperament, targetPriority }`, `DEFAULT_TACTICS`,
+      `TEMPERAMENT_INFO`/`TARGET_PRIORITY_INFO` (desc==data for the UI); `Monster` gains
+      `tactics?` + `protect?`.
+    - **`battle.ts`**: `TEMPERAMENT_MOD` (aggressive/cautious as ADDITIVE deltas over
+      `CLASS_PERSONALITY`, applied in new `personalityFor()`); `pickEnemyTargetFor()` (casters =
+      highest INT+WIS, tanks = highest CON, focus = the side's shared last-hit mark tracked in new
+      `BattleContext.focus`, updated in resolveMove's damage branch); taunt/confusion/charm
+      precedence unchanged — orders never override compulsions. `pickAllyTarget` prefers a hurt
+      (<85%) protect target; `chooseAction` gained an `allies` param and a protect-order branch —
+      a guardian with a taunt ready throws it immediately when the protect target drops below 60%.
+    - **Persistence**: `Career.tactics?` (careerMonster passes through; no save migration needed
+      — absent = default), `town.ts:setTactics` (editable ANY time, deliberately including while
+      signed up — adjusting the plan after scouting is the point), `PendingTournament.protectId?`
+      + `setProtectTarget` (per-event order, applied to the player team in resolveTournament).
+    - **UI**: AbilitySelector gained a "Tactics — battle orders" section (TFM-style option
+      groups, one highlighted choice each, selected pair explained below); Sandbox FighterSlot
+      carries `tactics` for instant testing; the sign-up panel's signed-in block shows a
+      "🛡 Protect:" member picker for team events.
+    - **Sim-verified, each tactic against its default on identical seeds**: hunt-casters flips
+      the opening target from the B0 tie-break to the slot-B1 caster; break-tank targets the
+      high-CON foe; focus-together has the follower pile onto the leader's mark every hit once
+      the side engages; cautious blocks ~33% more than aggressive over 30 fights (aggressive won
+      18/30 vs cautious 14/30 in that sample — more pressure, more risk); protect pulls the
+      guardian's first taunt from round 5 to round 1. Browser-verified: panel renders in Sandbox
+      + Ranch editors, selections update live, Ranch tactics persist into the save slot
+      (`stable[].tactics`), zero console errors. The protect PICKER row couldn't be exercised
+      live (test save is Wood 1v1; it renders only for signed team events) — its engine path is
+      the sim-verified one above.
+    - **Deliberately wave-1 scope** (proposed follow-ups, user-approved direction): mana policy +
+      combo discipline ("hold the payoff until the setup status lands" — would make the item -25
+      synergy pairs deliberate instead of ~14% opportunistic), then conditional gambits;
+      mid-battle coaching would need match resolution moved from advance-week to fight-time.
+
 -39. **All 45 sprite alphas rebuilt from raw art — restores rembg-eaten limbs (2026-07-25),
     committed and deployed (`ac38cec`, manual deploy).** User reported sprites "missing arms"
     once the arena backgrounds made transparency visible. A full green-backdrop audit of all 45

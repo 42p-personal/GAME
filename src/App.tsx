@@ -1,6 +1,7 @@
 import { Dispatch, ReactNode, SetStateAction, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  BODY_ELEMENT, BODY_MINOR, BodyType, Element, FOODS, INNATE_SECONDARY_LEVEL, LEAGUES, Monster, Move, STATS, Stat, classForStats,
+  BODY_ELEMENT, BODY_MINOR, BodyType, DEFAULT_TACTICS, Element, FOODS, INNATE_SECONDARY_LEVEL, LEAGUES, Monster, Move, STATS, Stat,
+  TARGET_PRIORITY_INFO, TEMPERAMENT_INFO, Tactics, classForStats,
   feedDelta, happinessMultiplier, hashString, mulberry32, roleOfClass,
 } from './core'
 import { generateMonster, manaCost, maxHp, maxMana, staminaDamageMult } from './monster'
@@ -19,7 +20,7 @@ import {
   WeekPlanEntry, advanceWeek, barnCost, buyBulkFood, buyEliteLicense, buyMonster,
   buySpecialLicense, cancelSignUp, cupLore, eligibleForTournament, freeze, fuse, fusionRoom, generateRivalTeamsForTournament, goto, healAtInfirmary, infirmaryFee, leagueIndexOf, monthOfWeek,
   RANK_UP_MONTHS, RANK_UP_WEEK, entryFee, isRankUpWeek, placementLabel, scoutFee, teamHasLicensedLeader, teamSizeForLeague,
-  newGame, offerMonster, promoteMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, signUp, thaw,
+  newGame, offerMonster, promoteMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, setProtectTarget, setTactics, signUp, thaw,
   tournamentCalendarFor, upgradeBarn, visibleLeagueCount, weekOfMonth, yearOfWeek,
 } from './town'
 import { APP_VERSION } from './version'
@@ -309,7 +310,7 @@ function BattleLog({ onClear }: { onClear: () => void }) {
 // deterministically. `loadout: null` means auto-pick (chooseLoadout inside
 // generateMonster); a non-null array is a player-chosen override, same
 // slot-swap mechanism as the Ranch's AbilitySelector.
-interface FighterSlot { id: number; seed: string; train: number; happiness: number; loadout: string[] | null; activeInnate: number | null }
+interface FighterSlot { id: number; seed: string; train: number; happiness: number; loadout: string[] | null; activeInnate: number | null; tactics: Tactics | null }
 const SANDBOX_MAX_TEAM = 6
 const SEED_POOL_A = ['Kongrath', 'Wyna', 'Rex', 'Zeta', 'Ashen', 'Nova']
 const SEED_POOL_B = ['Maelurk', 'Ashryn', 'Doom', 'Vex', 'Iris', 'Talon']
@@ -321,12 +322,13 @@ function buildSandboxMonster(f: FighterSlot): Monster {
     if (picked.length) m.loadout = picked
   }
   if (f.activeInnate != null && (f.activeInnate !== 1 || m.innateUnlocked)) m.activeInnate = f.activeInnate
+  if (f.tactics) m.tactics = f.tactics
   return m
 }
 
 function SandboxView() {
-  const [teamA, setTeamA] = useState<FighterSlot[]>([{ id: 0, seed: SEED_POOL_A[0], train: 300, happiness: 5, loadout: null, activeInnate: null }])
-  const [teamB, setTeamB] = useState<FighterSlot[]>([{ id: 1, seed: SEED_POOL_B[0], train: 300, happiness: 5, loadout: null, activeInnate: null }])
+  const [teamA, setTeamA] = useState<FighterSlot[]>([{ id: 0, seed: SEED_POOL_A[0], train: 300, happiness: 5, loadout: null, activeInnate: null, tactics: null }])
+  const [teamB, setTeamB] = useState<FighterSlot[]>([{ id: 1, seed: SEED_POOL_B[0], train: 300, happiness: 5, loadout: null, activeInnate: null, tactics: null }])
   const nextId = useRef(2)
   const [editing, setEditing] = useState<{ side: 'A' | 'B'; id: number } | null>(null)
   const [result, setResult] = useState<BattleResult | null>(null)
@@ -341,7 +343,7 @@ function SandboxView() {
     const id = nextId.current++
     const pool = side === 'A' ? SEED_POOL_A : SEED_POOL_B
     const seed = pool[list.length] ?? `${side}-${id}`
-    setTeamFor(side)((l) => [...l, { id, seed, train: 300, happiness: 5, loadout: null, activeInnate: null }])
+    setTeamFor(side)((l) => [...l, { id, seed, train: 300, happiness: 5, loadout: null, activeInnate: null, tactics: null }])
     setResult(null) // roster shape changed — the old result no longer lines up
   }
   const removeFighter = (side: 'A' | 'B', id: number) => {
@@ -370,6 +372,7 @@ function SandboxView() {
         name={editingMonster.name}
         onSetLoadout={(ids) => updateFighter(editing.side, editing.id, { loadout: ids.length ? ids : null })}
         onSetInnate={(index) => updateFighter(editing.side, editing.id, { activeInnate: index })}
+        onSetTactics={(t) => updateFighter(editing.side, editing.id, { tactics: t })}
         onClose={() => setEditing(null)}
       />
     )
@@ -744,9 +747,9 @@ function PlanBenefit({ career, plan }: { career: Career; plan: WeekPlanEntry }) 
 // then a pool move to swap it in. Filter by stat; equipped moves show dimmed
 // in the pool. Changes apply immediately via onSetLoadout (no separate save
 // step) — free any time except a monster's active tournament week.
-function AbilitySelector({ m, name, onSetLoadout, onSetInnate, onClose }: {
+function AbilitySelector({ m, name, onSetLoadout, onSetInnate, onSetTactics, onClose }: {
   m: Monster; name: string; onSetLoadout: (ids: string[]) => void
-  onSetInnate: (index: number) => void; onClose: () => void
+  onSetInnate: (index: number) => void; onSetTactics: (t: Tactics) => void; onClose: () => void
 }) {
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null)
   const [filter, setFilter] = useState<Stat | 'All'>('All')
@@ -821,6 +824,42 @@ function AbilitySelector({ m, name, onSetLoadout, onSetInnate, onClose }: {
           )
         })}
       </div>
+
+      {(() => {
+        // Tactics (2026-07-25): Teamfight-Manager-style standing orders — the
+        // player coaches how the auto-battler fights, one highlighted choice
+        // per group, with the selected pair explained below.
+        const cur = m.tactics ?? DEFAULT_TACTICS
+        const temp = TEMPERAMENT_INFO.find((o) => o.id === cur.temperament)!
+        const prio = TARGET_PRIORITY_INFO.find((o) => o.id === cur.targetPriority)!
+        return (
+          <>
+            <div className="section-title" style={{ marginTop: 14 }}>Tactics — battle orders</div>
+            <div className="hint">Standing orders {name} follows in every battle — adjust after scouting a field.</div>
+            <div className="tacticgroups">
+              <div className="tacticgroup">
+                <div className="tacticgroup-h">Temperament</div>
+                {TEMPERAMENT_INFO.map((o) => (
+                  <button key={o.id} className={'tacticopt' + (cur.temperament === o.id ? ' on' : '')}
+                    onClick={() => onSetTactics({ ...cur, temperament: o.id })}>
+                    {o.icon} {o.name}
+                  </button>
+                ))}
+              </div>
+              <div className="tacticgroup">
+                <div className="tacticgroup-h">Target priority</div>
+                {TARGET_PRIORITY_INFO.map((o) => (
+                  <button key={o.id} className={'tacticopt' + (cur.targetPriority === o.id ? ' on' : '')}
+                    onClick={() => onSetTactics({ ...cur, targetPriority: o.id })}>
+                    {o.icon} {o.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="tactic-desc dim">{temp.icon} {temp.desc} — {prio.icon} {prio.desc}</div>
+          </>
+        )
+      })()}
     </div>
   )
 }
@@ -1478,6 +1517,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
               name={selectedCareer.name}
               onSetLoadout={(ids) => setGame((g) => setLoadout(g, selectedCareer.id, ids))}
               onSetInnate={(index) => setGame((g) => setActiveInnate(g, selectedCareer.id, index))}
+              onSetTactics={(t) => setGame((g) => setTactics(g, selectedCareer.id, t))}
               onClose={() => setAbilityEditorFor(null)}
             />
           ) : selectedCareer.retired ? (
@@ -1674,6 +1714,17 @@ function RanchView({ game, setGame, onBattleScreen }: {
                       <div>
                         ✅ {signedMonsters.map((c) => c.name).join(', ') || '?'} compete{signedMonsters.length === 1 ? 's' : ''} this week{' '}
                         <button className="ghost" onClick={() => setGame((g) => cancelSignUp(g))}>Cancel</button>
+                        {signedMonsters.length > 1 && (
+                          <div className="protectrow">
+                            <span className="dim" title="The team guards this monster: taunts fire sooner for it, heals go to it first">🛡 Protect:</span>
+                            <button className={'tacticopt small' + (!game.pendingTournament?.protectId ? ' on' : '')}
+                              onClick={() => setGame((g) => setProtectTarget(g, null))}>Nobody</button>
+                            {signedMonsters.map((c) => (
+                              <button key={c.id} className={'tacticopt small' + (game.pendingTournament?.protectId === c.id ? ' on' : '')}
+                                onClick={() => setGame((g) => setProtectTarget(g, c.id))}>{c.name}</button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ) : alreadyEntered ? (
                       <div className="dim">✔ Already competed this month.</div>

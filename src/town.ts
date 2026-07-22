@@ -1,7 +1,7 @@
 // Shared game state + the Town hub economy (§13). One gold wallet and one stable
 // span all areas; the Ranch (src/game.ts) raises the active monster week by week.
 import {
-  ClassRole, Food, INNATE_SECONDARY_LEVEL, LEAGUES, Monster, Sex, Species, Stat, STATS, Stats, classForStats, hashString,
+  ClassRole, Food, INNATE_SECONDARY_LEVEL, LEAGUES, Monster, Sex, Species, Stat, STATS, Stats, Tactics, classForStats, hashString,
   mulberry32, roleOfClass,
 } from './core'
 import { generateMonster, maxHp, maxMana } from './monster'
@@ -284,7 +284,7 @@ export const entryFee = (league: string): number => (leagueIndexOf(league) + 1) 
 // A tournament entry locked in for this week; resolved during advanceWeek.
 // `monsterIds` length must equal teamSizeForLeague(tournament's league).
 // `feePaid` is refunded by cancelSignUp.
-export interface PendingTournament { tournamentId: string; monsterIds: string[]; feePaid: number }
+export interface PendingTournament { tournamentId: string; monsterIds: string[]; feePaid: number; protectId?: string }
 
 // One resolved match within a round-robin event (§2e resolveTournament).
 export interface EventMatch {
@@ -619,6 +619,23 @@ export function setActiveInnate(g: GameState, id: string, index: number): GameSt
   return { ...g, stable: g.stable.map((x) => (x.id === id ? { ...x, activeInnate: index } : x)) }
 }
 
+// Tactics (2026-07-25): standing battle orders, editable ANY time — unlike
+// loadout/innate swaps they stay open while signed up, since adjusting the
+// game plan after scouting the field is exactly what they're for.
+export function setTactics(g: GameState, id: string, tactics: Tactics): GameState {
+  if (!g.stable.some((x) => x.id === id)) return g
+  return { ...g, stable: g.stable.map((x) => (x.id === id ? { ...x, tactics } : x)) }
+}
+
+// Team-event protect target: which signed-up monster the rest of the team
+// guards (taunts fire sooner for it, heals go to it first). Lives on the
+// pending sign-up — it's an order for THIS event, not a permanent trait.
+export function setProtectTarget(g: GameState, careerId: string | null): GameState {
+  if (!g.pendingTournament) return g
+  if (careerId !== null && !g.pendingTournament.monsterIds.includes(careerId)) return g
+  return { ...g, pendingTournament: { ...g.pendingTournament, protectId: careerId ?? undefined } }
+}
+
 // --- Tournaments (§3): sign up in the review phase, battle resolves on the weekly tick ---
 // A monster may enter its own league's events (full rewards) or any league BELOW
 // it (reduced rewards via rewardMultiplier) — never above its license, EXCEPT
@@ -796,7 +813,9 @@ function resolveTournament(g: GameState, stable: Career[], gold: number): { gold
   // mid-event.
   const playerTeam: Monster[] = playerCareers.map((c) => {
     const m = careerMonster(c)
-    return { ...m, hp: maxHp(m.stats), mp: maxMana(m.stats) }
+    // protect flag rides in from the sign-up's protect target (2026-07-25
+    // tactics) — an order for this event only, never a persistent trait.
+    return { ...m, hp: maxHp(m.stats), mp: maxMana(m.stats), protect: c.id === pending.protectId || undefined }
   })
   const rivalTeams = generateRivalTeamsForTournament(g, t)
 

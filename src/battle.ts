@@ -9,7 +9,7 @@
 // when this was strictly 1v1. `simulateBattle` (still exported) is a thin
 // team-of-1 wrapper over `simulateTeamBattle`, so every existing 1v1 call site
 // (Sandbox) keeps working unchanged.
-import { Ability, Channel, Element, Monster, Move, RNG, StatusKind, chance, elementMultiplier, happinessMultiplier, hashString, mulberry32, randInt } from './core'
+import { Ability, Channel, Element, Monster, Move, RNG, StatusKind, Temperament, chance, elementMultiplier, happinessMultiplier, hashString, mulberry32, randInt } from './core'
 import {
   attackStat, critChance, debuffBonus, debuffReduction, dodgeChance, echoChance, hpRegen,
   manaCost, manaRegen, maxHp, maxMana, mitigationPierce, staminaDamageMult,
@@ -402,8 +402,10 @@ function makeCombatant(m: Monster, happiness: number, side: BattleSide, slot: nu
 }
 
 // --- Shared-battlefield context: both teams flattened into one list, plus the
-// helpers every targeting decision is built from. ---
-interface BattleContext { all: Combatant[] }
+// helpers every targeting decision is built from. `focus` tracks, per side,
+// the last enemy that side dealt damage to — the 'focus' target-priority
+// tactic reads it so teammates can pile onto one victim together. ---
+interface BattleContext { all: Combatant[]; focus: Record<BattleSide, { side: BattleSide; slot: number } | null> }
 const livingTeamOf = (ctx: BattleContext, side: BattleSide) => ctx.all.filter((c) => c.side === side && c.hp > 0)
 const enemiesOf = (ctx: BattleContext, c: Combatant) => livingTeamOf(ctx, c.side === 'A' ? 'B' : 'A')
 const alliesOf = (ctx: BattleContext, c: Combatant) => livingTeamOf(ctx, c.side).filter((x) => x !== c)
@@ -442,7 +444,35 @@ function recomputeInnateAuras(ctx: BattleContext): void {
 // Lowest-HP%-first — rewards finishing blows / prioritizes the neediest ally.
 // Array.sort is spec-stable, so ties preserve roster (slot) order.
 const pickEnemyTarget = (foes: Combatant[]) => foes.slice().sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0]
-const pickAllyTarget = (allies: Combatant[]) => allies.slice().sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0]
+// Heals/support prefer a designated protect target once it's meaningfully
+// hurt (below 85%) — otherwise the plain neediest-ally rule (identical to the
+// pre-tactics behavior whenever no protect target is set).
+const pickAllyTarget = (allies: Combatant[]) => {
+  const protectd = allies.find((a) => a.m.protect && a.hp / a.maxHp < 0.85)
+  return protectd ?? allies.slice().sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0]
+}
+
+// Tactic-aware enemy pick (2026-07-25): the player's target-priority order,
+// falling back to the classic lowest-HP% rule ('weakest' IS that rule, so a
+// monster with no tactics behaves exactly as before). Taunt/confusion/charm
+// still take precedence at the resolveTargets layer — orders don't override
+// compulsions.
+function pickEnemyTargetFor(attacker: Combatant, foes: Combatant[], ctx: BattleContext): Combatant {
+  switch (attacker.m.tactics?.targetPriority) {
+    case 'casters':
+      return foes.slice().sort((a, b) =>
+        (b.m.stats.INT + b.m.stats.WIS) - (a.m.stats.INT + a.m.stats.WIS) || a.hp / a.maxHp - b.hp / b.maxHp)[0]
+    case 'tanks':
+      return foes.slice().sort((a, b) => b.m.stats.CON - a.m.stats.CON || a.hp / a.maxHp - b.hp / b.maxHp)[0]
+    case 'focus': {
+      const f = ctx.focus[attacker.side]
+      const t = f && foes.find((c) => c.side === f.side && c.slot === f.slot)
+      return t || pickEnemyTarget(foes) // nobody's engaged yet (or the mark fell) → open normally
+    }
+    default:
+      return pickEnemyTarget(foes)
+  }
+}
 
 // Does this move apply a timed self-buff (round-limited, refreshed on recast)?
 const isTimedBuff = (mv: Move) => {
@@ -593,6 +623,29 @@ interface ClassPersonality {
   aggro: number // shifts the "damage skill worth its MP" threshold; negative = spammier
 }
 const DEFAULT_PERSONALITY: ClassPersonality = { healAt: 0.45, blockWhenHurt: 55, openBuff: 40, debuff: 35, blockToCharge: 50, parry: 35, aggro: 0 }
+
+// Temperament tactic (2026-07-25): an additive layer over the class
+// personality — the player's coaching adjusts the class's instincts rather
+// than replacing them. 'balanced' is all zeros, so the default reproduces the
+// untuned class personality EXACTLY (golden-battle safe).
+const TEMPERAMENT_MOD: Record<Temperament, Partial<ClassPersonality>> = {
+  aggressive: { healAt: -0.12, blockWhenHurt: -25, openBuff: -15, blockToCharge: -15, parry: -20, aggro: -4 },
+  balanced: {},
+  cautious: { healAt: 0.12, blockWhenHurt: 20, openBuff: 10, blockToCharge: 10, parry: 20, aggro: 4 },
+}
+function personalityFor(self: Combatant): ClassPersonality {
+  const p = { ...DEFAULT_PERSONALITY, ...CLASS_PERSONALITY[self.m.className] }
+  const t = TEMPERAMENT_MOD[self.m.tactics?.temperament ?? 'balanced']
+  return {
+    healAt: Math.min(0.9, Math.max(0.05, p.healAt + (t.healAt ?? 0))),
+    blockWhenHurt: Math.min(95, Math.max(0, p.blockWhenHurt + (t.blockWhenHurt ?? 0))),
+    openBuff: Math.min(95, Math.max(0, p.openBuff + (t.openBuff ?? 0))),
+    debuff: p.debuff,
+    blockToCharge: Math.min(95, Math.max(0, p.blockToCharge + (t.blockToCharge ?? 0))),
+    parry: Math.min(95, Math.max(0, p.parry + (t.parry ?? 0))),
+    aggro: p.aggro + (t.aggro ?? 0),
+  }
+}
 const CLASS_PERSONALITY: Record<string, Partial<ClassPersonality>> = {
   Tank: { healAt: 0.5, blockWhenHurt: 75, openBuff: 65, debuff: 60, parry: 55 }, // shields up early, taunts, blocks often
   Spellshield: { healAt: 0.55, blockWhenHurt: 70, openBuff: 60, parry: 50 },
@@ -611,8 +664,8 @@ const CLASS_PERSONALITY: Record<string, Partial<ClassPersonality>> = {
 // per class via CLASS_PERSONALITY above. Takes a single representative `foe`
 // (the AI's primary threat read) — target FAN-OUT for the move it picks is
 // resolved separately once the move is actually cast (see resolveTargets).
-function chooseAction(self: Combatant, foe: Combatant, rng: RNG): Action {
-  const p = { ...DEFAULT_PERSONALITY, ...CLASS_PERSONALITY[self.m.className] }
+function chooseAction(self: Combatant, foe: Combatant, rng: RNG, allies: Combatant[] = []): Action {
+  const p = personalityFor(self)
   // Silenced: skills are sealed — Attack, or Block if something heavy is coming.
   if (hasStatus(self, 'silence')) {
     const silencedThreats = foe.m.loadout.filter((mv) => (foe.cooldowns[mv.id] ?? 0) <= 1 && moveCost(mv) <= foe.mana)
@@ -649,6 +702,17 @@ function chooseAction(self: Combatant, foe: Combatant, rng: RNG): Action {
 
   // Hurt with a real hit incoming → guard up (how often is personality).
   if (hpFrac < p.healAt && threat >= 20 && chance(rng, p.blockWhenHurt)) return { kind: 'block' }
+
+  // Protect order (2026-07-25 tactics): a designated protect target is in
+  // real trouble → a guardian with a taunt ready throws it NOW, pulling the
+  // enemy's single-target attacks onto itself, ahead of its usual buff/debuff
+  // instincts. No rng consumed when no protect target exists, so battles
+  // without the tactic replay identically.
+  const ward = allies.find((a) => a.m.protect && a.hp > 0 && a.hp / a.maxHp < 0.6)
+  if (ward && !(foe.tauntedBy && foe.tauntedBy.side === self.side && foe.tauntedBy.slot === self.slot)) {
+    const taunt = ready.find((mv) => mv.effects?.tauntForce)
+    if (taunt) return { kind: 'skill', move: taunt }
+  }
 
   // Open with a buff (or shield up) while still healthy.
   if (buffs.length && hpFrac > 0.6 && chance(rng, p.openBuff)) return { kind: 'skill', move: buffs[0] }
@@ -803,7 +867,7 @@ function resolveTargets(attacker: Combatant, ctx: BattleContext, move: Move, rng
       const forced = tauntTargetOf(attacker, ctx)
       if (forced) return [forced]
       const foes = enemiesOf(ctx, attacker)
-      return foes.length ? [pickEnemyTarget(foes)] : []
+      return foes.length ? [pickEnemyTargetFor(attacker, foes, ctx)] : []
     }
   }
 }
@@ -1056,6 +1120,9 @@ function resolveMove(attacker: Combatant, ctx: BattleContext, move: Move, rng: R
 
   const e = move.effects
   const openerEligible = !attacker.hasLandedHit && attacker.innate.firstHitMult > 1
+  // Record this side's engagement for the 'focus' target-priority tactic —
+  // teammates who follow the focus order strike whoever the side hit last.
+  if (targets[0].side !== attacker.side) ctx.focus[attacker.side] = { side: targets[0].side, slot: targets[0].slot }
   for (const t of targets) resolveDamageOnTarget(attacker, t, move, rng, log, ev, openerEligible)
   // self-guard follow-up on a damage move stays targeted at the attacker
   // specifically (a "hit and raise a shield" rider), once per cast — not once
@@ -1096,11 +1163,11 @@ function takeTurn(attacker: Combatant, ctx: BattleContext, rng: RNG, log: string
   // is fed a single representative foe (the taunter if taunted, else the
   // lowest-HP% living enemy) for its threat heuristics; the move it picks
   // resolves its REAL target(s) separately.
-  const primaryFoe = tauntTargetOf(attacker, ctx) ?? pickEnemyTarget(enemies)
+  const primaryFoe = tauntTargetOf(attacker, ctx) ?? pickEnemyTargetFor(attacker, enemies, ctx)
   const tameness = attacker.m.tameness
   const action = (tameness !== undefined && chance(rng, 100 - tameness))
     ? wildAction(attacker, rng)
-    : chooseAction(attacker, primaryFoe, rng)
+    : chooseAction(attacker, primaryFoe, rng, alliesOf(ctx, attacker))
   if (action.kind === 'block') {
     attacker.blockAvoid = blockValue(attacker)
     log.push(`  🛡 ${attacker.m.name} braces to block (+${attacker.blockAvoid}% avoid).`)
@@ -1145,7 +1212,7 @@ export function simulateTeamBattle(teamA: Monster[], teamB: Monster[], happA: nu
   const rng = mulberry32(hashString(seedKey))
   const A = teamA.map((m, i) => makeCombatant(m, happA[i] ?? 0, 'A', i))
   const B = teamB.map((m, i) => makeCombatant(m, happB[i] ?? 0, 'B', i))
-  const ctx: BattleContext = { all: [...A, ...B] }
+  const ctx: BattleContext = { all: [...A, ...B], focus: { A: null, B: null } }
   recomputeInnateAuras(ctx)
   const log: string[] = []
   const ev: BattleEvent[] = []

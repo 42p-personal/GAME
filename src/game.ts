@@ -1,7 +1,7 @@
 // Weekly calendar / career loop (M2, §2). A single monster you raise week by week:
 // weekly actions (train drill / rest / feed / excursion), stamina, gold, aging.
 import {
-  BODY_MINOR, FOODS, Food, INNATE_SECONDARY_LEVEL, LEAGUES, MAX_HAPPINESS, Monster, Move, RNG, STATS, Sex, Species, Stats, Stat, TrainingProfile,
+  BODY_MINOR, FOODS, Food, INNATE_SECONDARY_LEVEL, LEAGUES, MAX_HAPPINESS, Monster, Move, RNG, STATS, Sex, Species, Stats, Stat, Tactics, TrainingProfile,
   classForStats, feedDelta, hashString, mulberry32,
 } from './core'
 import { ALL_DRILLS } from './drills'
@@ -68,6 +68,7 @@ export interface Career {
   fedThisWeek: boolean // only one food may be bought per week per monster
   loadout: string[] // persisted equipped-move ids (≤3); empty = auto-pick (chooseLoadout)
   activeInnate: number // 0 or 1 — which of the species' two innates is active; changed like a loadout swap
+  tactics?: Tactics // standing battle orders (2026-07-25); absent = DEFAULT_TACTICS behavior
   tournamentHistory: TournamentResult[]
   log: string[]
 }
@@ -317,6 +318,7 @@ export function careerMonster(c: Career): Monster {
     // 2nd choice reverts to the 1st if its unlock stat was since trained down
     // (an intensive-drill malus, say) — same shrink-safety as the loadout.
     activeInnate: innateUnlocked ? c.activeInnate : 0,
+    tactics: c.tactics,
     favouriteFood: c.favouriteFood,
     hatedFood: c.hatedFood,
     stamina: c.stamina,
