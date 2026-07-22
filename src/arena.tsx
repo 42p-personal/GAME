@@ -386,6 +386,11 @@ export function ArenaBattle({ teamA, teamB, result, league, onDone }: { teamA: M
             <span className="mirror"><Sprite species={b.species} size={176} bare /></span>
             <div className="floats">{floatsFor('B', 0)}</div>
           </div>
+          {done && (
+            <div className="winner-banner">
+              {result.winner === 'draw' ? <>🏳️ Double knockout — a draw!</> : <>🏆 <b>{result.winnerName}</b> wins!</>}
+            </div>
+          )}
         </div>
 
         <div className="arena-controls">
@@ -394,7 +399,7 @@ export function ArenaBattle({ teamA, teamB, result, league, onDone }: { teamA: M
               {[1, 2, 4].map((s) => (
                 <button key={s} className={'ghost' + (speed === s ? ' selected' : '')} onClick={() => setSpeed(s)}>{s}×</button>
               ))}
-              <button className="ghost" onClick={skip}>skip ⏭</button>
+              <button className="ghost" onClick={skip}>Skip ⏭</button>
             </>
           )}
           <span className="arena-caption">{caption}</span>
@@ -446,6 +451,11 @@ export function ArenaBattle({ teamA, teamB, result, league, onDone }: { teamA: M
         <div className="roster roster-a">{teamA.map((_, i) => renderTile('A', i))}</div>
         <div className="roster-vs">vs</div>
         <div className="roster roster-b">{teamB.map((_, i) => renderTile('B', i))}</div>
+        {done && (
+          <div className="winner-banner">
+            {result.winner === 'draw' ? <>🏳️ Double knockout — a draw!</> : <>🏆 <b>{result.winnerName}</b> wins!</>}
+          </div>
+        )}
       </div>
 
       <div className="arena-controls">
@@ -454,7 +464,7 @@ export function ArenaBattle({ teamA, teamB, result, league, onDone }: { teamA: M
             {[1, 2, 4].map((s) => (
               <button key={s} className={'ghost' + (speed === s ? ' selected' : '')} onClick={() => setSpeed(s)}>{s}×</button>
             ))}
-            <button className="ghost" onClick={skip}>skip ⏭</button>
+            <button className="ghost" onClick={skip}>Skip ⏭</button>
           </>
         )}
         <span className="arena-caption">{caption}</span>

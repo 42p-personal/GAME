@@ -437,8 +437,9 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 .titlecard { width: 100%; max-width: 460px; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 32px 28px; text-align: center; }
 .titlelogo { font-size: 34px; margin: 0 0 4px; letter-spacing: .5px; }
 .titletag { color: var(--muted); margin: 0 0 26px; font-size: 14px; }
-.titlebtns { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
-.titlebtn { width: 100%; padding: 13px 16px; font-size: 15px; background: var(--panel2); color: var(--ink); border: 1px solid var(--line); }
+.titlebtns { display: flex; flex-direction: column; gap: 14px; margin-top: 8px; }
+.titlebtn { width: 100%; padding: 14px 16px; font-size: 15px; background: var(--panel2); color: var(--ink); border: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.titlebtn .btnsub { font-size: 12px; font-weight: 400; opacity: .7; }
 .titlebtn.primary { background: var(--accent); color: #0c1a13; border-color: var(--accent); }
 .titlebtn.back { background: transparent; color: var(--muted); border: 1px solid var(--line); margin-top: 18px; }
 .titlebtn:disabled { opacity: .45; cursor: not-allowed; }
@@ -446,10 +447,7 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 
 .slotcard { max-width: 560px; text-align: left; }
 .slotcard h2 { text-align: center; margin: 0 0 20px; font-size: 19px; }
-.slotlist { display: flex; flex-direction: column; gap: 10px; }
-.slotrow { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 3px; background: var(--panel2); border: 1px solid var(--line); color: var(--ink); padding: 12px 14px; border-radius: 10px; }
-.slotrow:disabled { opacity: .4; cursor: not-allowed; }
-.slotrow.empty { border-style: dashed; }
+.slotlist { display: flex; flex-direction: column; gap: 14px; }
 .slotnum { font-weight: 800; font-size: 13px; color: var(--accent); }
 .slotmeta { font-size: 13px; color: var(--muted); }
 .slotmeta b { color: var(--ink); }
@@ -478,13 +476,83 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 .battle-summary td { padding: 3px 10px 3px 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 50%, transparent); font-variant-numeric: tabular-nums; }
 
 /* Slot rows became a div (main button + action buttons) for delete/export/import. */
-.slotrow { display: flex; align-items: stretch; gap: 6px; background: var(--panel2); border: 1px solid var(--line); padding: 0; border-radius: 10px; overflow: hidden; }
+.slotrow { display: flex; flex-direction: row; align-items: stretch; gap: 6px; background: var(--panel2); border: 1px solid var(--line); padding: 0; border-radius: 10px; overflow: hidden; }
 .slotrow.empty { border-style: dashed; }
-.slotmain { flex: 1; text-align: left; display: flex; flex-direction: column; gap: 3px; background: transparent; border: 0; color: var(--ink); padding: 12px 14px; border-radius: 0; }
+.slotmain { flex: 1; text-align: left; display: flex; flex-direction: column; gap: 4px; background: transparent; border: 0; color: var(--ink); padding: 14px 16px; border-radius: 0; }
 .slotmain:disabled { opacity: .4; cursor: not-allowed; }
-.slotactions { display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 6px; }
-.slotaction { background: var(--panel); color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; font-size: 13px; }
+.slotactions { display: flex; flex-direction: column; justify-content: center; align-items: stretch; gap: 6px; padding: 8px 10px; }
+.slotaction { background: var(--panel); color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 5px 12px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.slotaction:hover { color: var(--ink); border-color: var(--muted); }
 .slotaction.danger:hover { color: var(--str); border-color: var(--str); }
 .tutorial-banner ul { margin: 6px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; line-height: 1.5; }
 .tutorial-banner li { margin-bottom: 3px; }
 .tutorial-dismiss { background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 2px 9px; font-weight: 700; flex-shrink: 0; }
+
+/* ===================== UI polish pass (2026-07-25) ===================== */
+
+/* In-app modal replacing native confirm()/prompt()/alert(). */
+.modal-backdrop { position: fixed; inset: 0; z-index: 100; background: rgba(5, 6, 10, .72); display: flex; align-items: center; justify-content: center; padding: 24px; }
+.modal-card { width: 100%; max-width: 400px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
+.modal-title { font-weight: 800; font-size: 16px; margin-bottom: 8px; }
+.modal-body { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+.modal-danger { background: transparent; color: var(--str); border: 1px solid var(--str); border-radius: 8px; padding: 7px 12px; font-weight: 700; }
+
+/* Winner banner: the fight's climax gets a real centered moment, not a
+   corner chip. */
+.winner-banner { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 4;
+  background: rgba(10, 12, 18, .88); border: 1px solid var(--accent); border-radius: 12px;
+  padding: 12px 26px; font-size: 21px; color: var(--ink); white-space: nowrap;
+  animation: winnerIn .45s ease-out; }
+.winner-banner b { color: var(--accent); }
+@keyframes winnerIn { from { opacity: 0; transform: translate(-50%, -50%) scale(.75); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+
+/* KO stamp: a downed fighter reads instantly, not just "darker". */
+.combatant.ko::after, .roster-tile.ko::after { content: 'KO'; position: absolute; left: 50%; top: 42%;
+  transform: translate(-50%, -50%) rotate(-14deg); z-index: 3; color: #ff5252; border: 3px solid #ff5252;
+  border-radius: 8px; padding: 1px 9px; font-weight: 900; font-size: 20px; letter-spacing: 1px;
+  background: rgba(10, 12, 18, .55); }
+.roster-tile.ko::after { font-size: 13px; border-width: 2px; padding: 0 6px; }
+.roster-tile { position: relative; }
+
+/* Mobile arena: 176px sprites overflowed the floor and clipped at the edges
+   on phones — step them down and pull the fighters in. */
+@media (max-width: 560px) {
+  .arena-floor { height: 250px; padding: 0 4%; }
+  .combatant img, .combatant svg { width: 112px !important; height: 112px !important; }
+  .ahn { font-size: 12px; }
+  .ahn .dim { display: none; } /* name only — species·class didn't fit */
+}
+
+/* Stable detail: aptitude tag now sits beside its stat's name (col 2), and
+   the battle-kit panel fills what used to be dead space under the bars. */
+.detailstat { grid-template-columns: 32px minmax(52px, auto) 1fr 34px; }
+.detailstat-tag { text-align: left; }
+.detail-kit { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 8px; }
+.detail-kit-h { font-size: 10.5px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+.detail-kit-move, .detail-kit-innate { display: flex; align-items: baseline; gap: 7px; font-size: 12px; margin: 3px 0; }
+.detail-kit-move .lvl, .detail-kit-innate .lvl { font-size: 10px; font-weight: 700; color: var(--accent2); flex-shrink: 0; }
+.detail-kit-move .dim, .detail-kit-innate .dim { font-size: 11px; }
+.detail-kit-innate { border-top: 1px dashed var(--line); margin-top: 6px; padding-top: 6px; }
+
+/* Training tiles: selected state is a filled tint (was a thin outline that
+   was easy to lose among 20 tiles), and the text got a readability bump. */
+.trainblock.selected { background: color-mix(in srgb, var(--accent2) 16%, var(--panel2)); border-color: var(--accent2); box-shadow: inset 0 0 0 1px var(--accent2); }
+.trainblock-name { font-size: 10px; }
+.trainblock-sub { font-size: 9.5px; }
+
+/* Market offers: compact by default, full card behind a disclosure. */
+.offer-details > summary { list-style: none; cursor: pointer; }
+.offer-details > summary::-webkit-details-marker { display: none; }
+.offer-brief { display: flex; align-items: center; gap: 10px; }
+.offer-brief-text { flex: 1; min-width: 0; font-size: 13px; }
+.offer-brief-sub { display: block; font-size: 11.5px; margin-top: 2px; }
+.offer-brief-more { font-size: 11px; flex-shrink: 0; }
+.offer-details[open] .offer-brief-more { visibility: hidden; }
+.offer-details[open] > summary { margin-bottom: 10px; }
+.fuserow button:disabled { opacity: .4; cursor: not-allowed; }
+
+/* Ability editor slots: labeled so the click-slot-then-move interaction is
+   discoverable. */
+.slotlabel { font-size: 9px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 3px; }
+.abilityslot.selected .slotlabel { color: var(--accent2); }

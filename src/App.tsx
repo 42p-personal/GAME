@@ -455,9 +455,25 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
             {game.market.map((o, i) => {
               const m = offerMonster(o)
               const afford = game.gold >= o.price
+              const prof = trainingProfileFor(m.species)
               return (
                 <div className="offer" key={o.seed}>
-                  <MonsterCard m={m} />
+                  {/* Compact by default (three full cards made Town very long);
+                      the full MonsterCard is one click away. */}
+                  <details className="offer-details">
+                    <summary className="offer-brief">
+                      <Sprite species={m.species} size={44} />
+                      <span className="offer-brief-text">
+                        <b>{m.name}</b> <span className="dim">· {m.species.name} · {m.className}</span>
+                        <span className="offer-brief-sub dim">
+                          {prof.major && <>▲ <b style={{ color: STAT_COLOR[prof.major] }}>{prof.major}</b> · </>}
+                          minor {prof.minor}{prof.flaw ? <> · ▼ {prof.flaw}</> : ''} · lifespan {m.species.lifespan}y
+                        </span>
+                      </span>
+                      <span className="offer-brief-more dim">details ▾</span>
+                    </summary>
+                    <MonsterCard m={m} />
+                  </details>
                   <button disabled={!afford || barnFull} onClick={() => setGame((g) => buyMonster(g, i))}>
                     Buy · {o.price}g
                   </button>
@@ -591,6 +607,21 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
 // The stat a drill primarily trains — the one with a positive gain (basic
 // drills have exactly one entry; intensive drills pair it with a malus stat).
 const primaryStatOf = (d: Drill): Stat => Object.entries(d.gains).find(([, v]) => (v as number) > 0)![0] as Stat
+
+// A "last week" digest line with its numeric deltas tinted — losses (the line
+// that tells you a monster came home hurt) previously read identically to
+// gains. Splits on signed numbers only; all other text passes through.
+function DigestLine({ text, className }: { text: string; className: string }) {
+  const parts = text.split(/([+-]\d+)/g)
+  return (
+    <div className={className}>
+      {parts.map((p, i) =>
+        /^-\d+$/.test(p) ? <span key={i} className="neg">{p}</span>
+          : /^\+\d+$/.test(p) ? <span key={i} className="pos">{p}</span>
+            : p)}
+    </div>
+  )
+}
 
 // One training-row block: a drill's LIVE preview for the selected monster this
 // week (exact, not estimated — previewWeekEffects shares applyWeek's seeded
@@ -737,17 +768,18 @@ function AbilitySelector({ m, name, onSetLoadout, onSetInnate, onClose }: {
         <span>⚔ Edit Abilities — {name}</span>
         <button className="ghost" onClick={onClose}>✕ close</button>
       </div>
-      <div className="hint">Click a slot below, then a move from the pool to swap it in.</div>
+      <div className="hint">Pick one of the three equipped slots, then click a move from the pool to put it there.</div>
       <div className="abilityslots">
         {[0, 1, 2].map((i) => {
           const mv = loadout[i]
           return (
             <div key={i} className={'abilityslot' + (selectedSlot === i ? ' selected' : '')}
               onClick={() => setSelectedSlot(selectedSlot === i ? null : i)}>
+              <div className="slotlabel">Slot {i + 1}{selectedSlot === i ? ' — pick a move below' : ''}</div>
               {mv ? (
                 <>
                   <div className="mn">{mv.element ? ELEMENT_ICON[mv.element] + ' ' : ''}{mv.name}</div>
-                  <div className="md">{mv.stat} · {manaCost(mv)} MP · cd {mv.cooldown}</div>
+                  <div className="md">{mv.stat} · {mv.channel} · {manaCost(mv)} MP · cd {mv.cooldown}</div>
                 </>
               ) : <div className="dim">empty slot</div>}
             </div>
@@ -767,12 +799,12 @@ function AbilitySelector({ m, name, onSetLoadout, onSetInnate, onClose }: {
             <div key={mv.id} className={'move' + (equipped ? ' dim-eq' : '')} onClick={() => !equipped && swap(mv)}>
               <span className="lvl">{mv.stat} {mv.learnLevel}</span>
               <span className="mn">{mv.element ? ELEMENT_ICON[mv.element] + ' ' : ''}{mv.name}</span>
-              <div className="md">{mv.desc} · {manaCost(mv)} MP · cd {mv.cooldown} · acc {mv.accuracy}{equipped ? ' · equipped' : ''}</div>
+              <div className="md">{mv.desc} · {mv.channel} · {manaCost(mv)} MP · cd {mv.cooldown} · acc {mv.accuracy}{equipped ? ' · equipped' : ''}</div>
             </div>
           )
         })}
       </div>
-      <button className="ghost" style={{ marginTop: 8 }} onClick={() => onSetLoadout([])}>reset to suggested loadout</button>
+      <button className="ghost" style={{ marginTop: 8 }} onClick={() => onSetLoadout([])}>Reset to suggested loadout</button>
 
       <div className="section-title" style={{ marginTop: 14 }}>Innate — 1 active at a time</div>
       <div className="hint">The 2nd choice is an alternative, not an upgrade — click to switch.</div>
@@ -928,8 +960,14 @@ function BracketGrid({ standings, allMatches, revealed }: { standings: EventStan
 function RanchView({ game, setGame, onBattleScreen }: {
   game: GameState; setGame: Dispatch<SetStateAction<GameState>>; onBattleScreen: (v: boolean) => void
 }) {
-  const [phase, setPhase] = useState<'feeding' | 'stable' | 'battle'>('feeding')
-  const [decisionIdx, setDecisionIdx] = useState(0)
+  // If every active monster already has food picked this week (e.g. the player
+  // hopped Town -> Ranch and back), land straight on the stable instead of
+  // replaying the feeding walkthrough; if only SOME are fed (a mid-week Market
+  // buy), start feeding at the first unfed monster rather than monster 1.
+  const firstUnfedIdx = game.stable.findIndex((c) => !c.retired && !game.weekPlans?.[c.id]?.food)
+  const [phase, setPhase] = useState<'feeding' | 'stable' | 'battle'>(() =>
+    game.stable.length > 0 && firstUnfedIdx === -1 ? 'stable' : 'feeding')
+  const [decisionIdx, setDecisionIdx] = useState(() => Math.max(0, firstUnfedIdx))
   // Week plans live in GameState (persisted) so they survive navigating to
   // Town and back, and reloads — this was a real papercut as component state.
   const weekPlan = game.weekPlans ?? {}
@@ -966,11 +1004,23 @@ function RanchView({ game, setGame, onBattleScreen }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onBattleScreenNow])
 
+  // The calendar (and a clicked tournament's entry panel) render BELOW the tall
+  // training grid — without these scrolls, toggling "Tournaments" looked like
+  // it did nothing at all.
+  const calendarRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (showCalendar) calendarRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [showCalendar])
+  const entryRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (selectedTournamentId) entryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [selectedTournamentId])
+
   if (game.stable.length === 0) {
     return (
       <>
         <div className="ranchtop">
-          <button className="ghost" onClick={() => setGame((g) => goto(g, 'town'))}>🏛 Town</button>
+          <button className="ghost" onClick={() => setGame((g) => goto(g, 'town'))}>← 🏛 Town</button>
         </div>
         <p className="sub">Your stable is empty. Head to Town → Market to buy a monster.</p>
       </>
@@ -1153,7 +1203,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
     return (
       <>
         <div className="ranchtop">
-          <button className="ghost" onClick={() => setGame((g) => goto(g, 'town'))}>🏛 Town</button>
+          <button className="ghost" onClick={() => setGame((g) => goto(g, 'town'))}>← 🏛 Town</button>
           <span>📅 {dateLabel(game.week)}</span>
           <span>🪙 {game.gold}g</span>
           <span>Feeding {decisionIdx + 1}/{game.stable.length}</span>
@@ -1171,7 +1221,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
           <div className="card lastweek">
             <div className="section-title">Last week</div>
             {game.lastWeek.map((l, i) => (
-              <div key={i} className={l.startsWith('🏟') || l.startsWith('🏁') ? 'lw-hl' : 'dim'}>{l}</div>
+              <DigestLine key={i} text={l} className={l.startsWith('🏟') || l.startsWith('🏁') ? 'lw-hl' : 'dim'} />
             ))}
           </div>
         )}
@@ -1216,6 +1266,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
                     )
                   })}
                 </div>
+                <div className="hint">♥ favourite food · +1 happiness — ✖ hated · −1 happiness — others neutral</div>
                 <PlanBenefit career={currentCareer} plan={currentPlan} />
               </>
             )}
@@ -1286,7 +1337,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
       {/* Persistent status strip: gold + date were previously invisible on the
           stable screen, where every economic decision actually happens. */}
       <div className="ranchtop">
-        <button className="ghost" onClick={() => setGame((g) => goto(g, 'town'))}>🏛 Town</button>
+        <button className="ghost" onClick={() => setGame((g) => goto(g, 'town'))}>← 🏛 Town</button>
         <span>📅 {dateLabel(game.week)}</span>
         <span>🪙 {game.gold}g</span>
         {pendingEventName && <span className="up">✅ {pendingEventName}</span>}
@@ -1375,13 +1426,34 @@ function RanchView({ game, setGame, onBattleScreen }: {
                 const tagClass = selProf.major === s ? 'pos' : selProf.flaw === s ? 'neg' : 'dim'
                 return (
                   <div className="detailstat" key={s}>
+                    {/* Aptitude tag sits right beside its stat's name — parked
+                        at the row's far end it read as a detached floater. */}
                     <span style={{ color: STAT_COLOR[s], fontWeight: 700 }}>{s}</span>
+                    <span className={'detailstat-tag ' + tagClass}>{tag}</span>
                     <span className="bar"><i style={{ width: `${Math.min(100, (selectedCareer.stats[s] / LEAGUES[selectedCareer.licenseIndex].cap) * 100)}%`, background: STAT_COLOR[s] }} /></span>
                     <span className="v">{selectedCareer.stats[s]}</span>
-                    <span className={'detailstat-tag ' + tagClass}>{tag}</span>
                   </div>
                 )
               })}
+              {/* Battle kit at a glance — previously invisible on this screen
+                  without opening the ability editor, leaving this card mostly
+                  empty space below the six stat rows. */}
+              <div className="detail-kit">
+                <div className="detail-kit-h">Battle kit</div>
+                {selM.loadout.map((mv) => (
+                  <div className="detail-kit-move" key={mv.id}>
+                    <span className="lvl">{mv.stat}</span>
+                    <span>{mv.element ? ELEMENT_ICON[mv.element] + ' ' : ''}{mv.name}</span>
+                    <span className="dim">{manaCost(mv)} MP · cd {mv.cooldown}</span>
+                  </div>
+                ))}
+                {selM.loadout.length === 0 && <div className="dim">No moves learned yet — train a stat past 40.</div>}
+                <div className="detail-kit-innate">
+                  <span className="lvl">✦</span>
+                  <span>{selM.species.innate[selM.activeInnate]?.name}</span>
+                  <span className="dim">{selM.species.innate[selM.activeInnate]?.desc}</span>
+                </div>
+              </div>
               {canRankUp(selectedCareer) && (
                 isRankUpWeek(game.week) ? (
                   <button className="carerow rankup" style={{ width: '100%', marginTop: 10 }}
@@ -1457,7 +1529,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
 
           {/* Tournament calendar (toggled from the rail) */}
           {showCalendar && (
-            <div className="card loc" style={{ marginTop: 12 }}>
+            <div className="card loc" style={{ marginTop: 12 }} ref={calendarRef}>
               <div className="loc-h">
                 <span>📅 Tournament Calendar</span>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -1544,7 +1616,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
                   return parts.length ? ` · ${isInjured(c) ? '🩹 ' : ''}${parts.join(', ')}` : ''
                 }
                 return (
-                  <div className="tour-entry">
+                  <div className="tour-entry" ref={entryRef}>
                     <div className="tour-entry-head">
                       <div><b>{t.name}</b> — {t.league} league · Week {t.week} · {teamSize === 1 ? '1v1' : `${teamSize}v${teamSize}`}</div>
                       <button className="ghost" onClick={() => setSelectedTournamentId(null)}>✕</button>
@@ -1601,7 +1673,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
                     {signedHere ? (
                       <div>
                         ✅ {signedMonsters.map((c) => c.name).join(', ') || '?'} compete{signedMonsters.length === 1 ? 's' : ''} this week{' '}
-                        <button className="ghost" onClick={() => setGame((g) => cancelSignUp(g))}>cancel</button>
+                        <button className="ghost" onClick={() => setGame((g) => cancelSignUp(g))}>Cancel</button>
                       </div>
                     ) : alreadyEntered ? (
                       <div className="dim">✔ Already competed this month.</div>
@@ -1703,7 +1775,13 @@ function RanchView({ game, setGame, onBattleScreen }: {
                 <div className="rail-note" title="what Advance Week will resolve">
                   {unfed.length > 0
                     ? <div className="down">🍽 {unfed.length} unfed — pick food first</div>
-                    : <>💪{trainN} 😴{restN}{excN > 0 ? ` 🧭${excN}` : ''}</>}
+                    : (
+                      <>
+                        <div>💪 {trainN} training</div>
+                        <div>😴 {restN} resting</div>
+                        {excN > 0 && <div>🧭 {excN} exploring</div>}
+                      </>
+                    )}
                   {pendingEventName && <div className="up">🏟 entered</div>}
                 </div>
               </>
@@ -1809,10 +1887,30 @@ function TitleScreen({ onNewGame, onContinue }: { onNewGame: () => void; onConti
         <h1 className="titlelogo">Monster Tamer</h1>
         <p className="titletag">Raise it. Train it. Enter the circuit.</p>
         <div className="titlebtns">
-          <button className="titlebtn primary" onClick={onNewGame}>✨ New Game</button>
-          <button className="titlebtn" onClick={onContinue}>▶ Continue</button>
+          <button className="titlebtn primary" onClick={onNewGame}>
+            <span>✨ New Game</span>
+            <span className="btnsub">Start a fresh adventure in an open save slot</span>
+          </button>
+          <button className="titlebtn" onClick={onContinue}>
+            <span>▶ Continue</span>
+            <span className="btnsub">Resume from a saved game</span>
+          </button>
         </div>
         <p className="titlever">v{APP_VERSION} · early alpha</p>
+      </div>
+    </div>
+  )
+}
+
+// Small in-app modal — the native confirm()/prompt()/alert() dialogs looked
+// jarring against the styled UI (and block the whole renderer while open).
+function Modal({ title, children, actions }: { title: string; children: ReactNode; actions: ReactNode }) {
+  return (
+    <div className="modal-backdrop">
+      <div className="modal-card">
+        <div className="modal-title">{title}</div>
+        <div className="modal-body">{children}</div>
+        <div className="modal-actions">{actions}</div>
       </div>
     </div>
   )
@@ -1826,13 +1924,17 @@ function SlotPicker({ mode, onBack, onPickEmpty, onPickOccupied }: {
 }) {
   // Slot management (2026-07-25): delete (confirmed), export (downloads the
   // raw save JSON — cheap insurance while alpha migrations still bite), and
-  // import (paste exported JSON into an empty slot). `refresh` re-reads
+  // import (a .json backup file into an empty slot). `refresh` re-reads
   // localStorage after any of them.
   const [refresh, setRefresh] = useState(0)
+  const [confirmDeleteSlot, setConfirmDeleteSlot] = useState<number | null>(null)
+  const [confirmOverwriteSlot, setConfirmOverwriteSlot] = useState<number | null>(null)
+  const [importError, setImportError] = useState(false)
+  const importTarget = useRef<number | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const slots = useMemo(() => Array.from({ length: SAVE_SLOTS }, (_, i) => i + 1).map((slot) => ({ slot, game: loadSlot(slot) })),
     [refresh]) // eslint-disable-line react-hooks/exhaustive-deps
   const deleteSlot = (slot: number) => {
-    if (!window.confirm(`Delete the save in Slot ${slot}? This cannot be undone.`)) return
     localStorage.removeItem(slotKey(slot))
     setRefresh((r) => r + 1)
   }
@@ -1845,11 +1947,12 @@ function SlotPicker({ mode, onBack, onPickEmpty, onPickOccupied }: {
     a.click()
     URL.revokeObjectURL(a.href)
   }
-  const importSlot = (slot: number) => {
-    const raw = window.prompt('Paste an exported save (the JSON from a .json backup):')
-    if (!raw) return
-    const g = sanitizeAndMigrate(raw)
-    if (!g) { window.alert('That doesn\'t look like a valid Monster Tamer save.') ; return }
+  const onImportFile = async (file: File | undefined) => {
+    const slot = importTarget.current
+    importTarget.current = null
+    if (!file || slot == null) return
+    const g = sanitizeAndMigrate(await file.text())
+    if (!g) { setImportError(true); return }
     localStorage.setItem(slotKey(slot), JSON.stringify(g))
     setRefresh((r) => r + 1)
   }
@@ -1867,7 +1970,9 @@ function SlotPicker({ mode, onBack, onPickEmpty, onPickOccupied }: {
                 <button
                   className="slotmain"
                   disabled={disabled}
-                  onClick={() => (empty ? onPickEmpty(slot) : onPickOccupied(slot))}
+                  onClick={() => (empty ? onPickEmpty(slot)
+                    : mode === 'new' ? setConfirmOverwriteSlot(slot)
+                      : onPickOccupied(slot))}
                 >
                   <span className="slotnum">Slot {slot}</span>
                   {empty
@@ -1880,15 +1985,53 @@ function SlotPicker({ mode, onBack, onPickEmpty, onPickOccupied }: {
                     )}
                 </button>
                 <div className="slotactions">
-                  {!empty && <button className="slotaction" title="Export save as a JSON backup" onClick={() => exportSlot(slot)}>⬇</button>}
-                  {!empty && <button className="slotaction danger" title="Delete this save" onClick={() => deleteSlot(slot)}>🗑</button>}
-                  {empty && <button className="slotaction" title="Import a save backup into this slot" onClick={() => importSlot(slot)}>⬆</button>}
+                  {!empty && <button className="slotaction" title="Download this save as a JSON backup file" onClick={() => exportSlot(slot)}>⬇ Export</button>}
+                  {!empty && <button className="slotaction danger" title="Delete this save" onClick={() => setConfirmDeleteSlot(slot)}>🗑 Delete</button>}
+                  {empty && <button className="slotaction" title="Load a previously exported .json save backup into this slot" onClick={() => { importTarget.current = slot; fileInputRef.current?.click() }}>⬆ Import</button>}
                 </div>
               </div>
             )
           })}
         </div>
         <button className="titlebtn back" onClick={onBack}>← Back</button>
+        <input
+          ref={fileInputRef} type="file" accept=".json,application/json" style={{ display: 'none' }}
+          onChange={(e) => { void onImportFile(e.target.files?.[0]); e.target.value = '' }}
+        />
+        {confirmDeleteSlot != null && (
+          <Modal
+            title={`Delete the save in Slot ${confirmDeleteSlot}?`}
+            actions={
+              <>
+                <button className="ghost" onClick={() => setConfirmDeleteSlot(null)}>Keep it</button>
+                <button className="modal-danger" onClick={() => { deleteSlot(confirmDeleteSlot); setConfirmDeleteSlot(null) }}>🗑 Delete forever</button>
+              </>
+            }
+          >
+            This cannot be undone. Export a backup first if you might want it back.
+          </Modal>
+        )}
+        {confirmOverwriteSlot != null && (
+          <Modal
+            title={`Overwrite Slot ${confirmOverwriteSlot}?`}
+            actions={
+              <>
+                <button className="ghost" onClick={() => setConfirmOverwriteSlot(null)}>Keep it</button>
+                <button className="modal-danger" onClick={() => { const s = confirmOverwriteSlot; setConfirmOverwriteSlot(null); onPickOccupied(s) }}>Overwrite it</button>
+              </>
+            }
+          >
+            Starting a new game here replaces the existing save. Export a backup first if you might want it back.
+          </Modal>
+        )}
+        {importError && (
+          <Modal
+            title="Import failed"
+            actions={<button className="ghost" onClick={() => setImportError(false)}>OK</button>}
+          >
+            That file doesn't look like a valid Monster Tamer save backup.
+          </Modal>
+        )}
       </div>
     </div>
   )
@@ -2025,11 +2168,10 @@ export function App() {
         onBack={() => setScreen('title')}
         onPickEmpty={(slot) => { setPendingSlot(slot); setScreen('setup') }}
         onPickOccupied={(slot) => {
+          // Overwrite confirmation lives inside SlotPicker as a styled modal —
+          // by the time this fires in 'new' mode, the player already confirmed.
           if (slotMode === 'continue') enterSlot(slot)
-          else if (window.confirm('This will overwrite the existing save in this slot. Continue?')) {
-            setPendingSlot(slot)
-            setScreen('setup')
-          }
+          else { setPendingSlot(slot); setScreen('setup') }
         }}
       />
     )
