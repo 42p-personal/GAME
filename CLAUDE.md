@@ -90,6 +90,48 @@ CON/turn-order changes are the tuning knobs to revisit.
 
 ### What changed this session, newest first
 
+-41. **Tactics wave 2 (2026-07-25): formations (order matters) + kill orders + opener + combo
+    discipline + mana policy — sim/test/browser-verified, committed and deployed.** User asked
+    "could we make the 'order' of the monsters matter? is there any more strategy?"; built the
+    recommended set. **This wave contains ONE deliberate engine change** — the 3v3-high golden
+    was recaptured for it (the 2v2 golden happened not to move); everything else stays inert by
+    default (no tactics set → identical battles, no extra rng).
+    - **Formations — roster ORDER is the formation** (`core.ts:frontRowCount`/`rowOfSlot`;
+      `Combatant.row`): the first ceil(n/2) slots fight in the front line, the rest in the back.
+      Single-target MELEE (including a melee-channel basic Attack — basicAttack channels through
+      the monster's best stat, so wizards' basic pokes shoot over the line while warriors must
+      carve through it) can only reach the front line while it stands; ranged/magic/voice ignore
+      rows; AoE hits everyone; compulsions (taunt/confusion/charm) override rows. Sim: a melee
+      hunt-casters attacker is forced onto front B0 while a mage teammate reaches the back-row
+      caster immediately. Rival teams sort CON-desc at generation (walls front, casters
+      shielded) — deterministic, so scouting still previews the real team. TeamPicker slots show
+      "⚔ Front / 🏹 Back · slot N" labels + a formation hint; the team-mode arena splits each
+      side's tiles into front/back `.roster-line`s with the back line offset.
+    - **Kill orders / marks** (`PendingTournament.marks` rivalIdx→memberIdx,
+      `town.ts:setMarkTarget`, `Monster.marked`): set from the scout panel (only while signed
+      up — "🎯 Mark:" row per scouted rival team, back-row members tagged 🏹); the whole player
+      team strikes the marked monster first while it lives AND is reachable (melee still has to
+      break the front line). Applied ONLY in the player's own matches — rival-vs-rival games
+      never see the player's order. Sim: both attackers open on the marked back-row caster, then
+      fall back to normal priority once it dies.
+    - **Scripted opener** (`Tactics.openerId`, `Combatant.openerPending`): the designated move is
+      the monster's first action when still equipped/castable, else the script silently drops;
+      the flag spends on the first action either way. Sim: scripting each loadout slot in turn
+      redirected the round-1 action accordingly vs a different natural default.
+    - **Combo discipline** (`Tactics.comboDiscipline`): payoff's status live → cash it now;
+      otherwise cast a matching setup and HOLD the payoff out of the generic ranking. Sim over
+      40 fights (Ember→Cinderburst): exploited-payoff rate 18%→34%, wasted payoff casts cut
+      ~37% (255→160 casts with far more of them boosted).
+    - **Mana policy** (`Tactics.manaPolicy`, `MANA_POLICY_MOD` additive over class personality
+      like temperament): burst = spend early/freely, conserve = higher worth-it bar + more
+      block-to-charge. Deliberately a GENTLE dial (~6% cast-count swing in sims) — it shifts
+      thresholds, not identity.
+    - UI: the ability editor's tactics section now has five groups (Temperament, Target priority,
+      Mana policy, Combo play, Opening move — opener lists the current loadout + "🎲 Instinct");
+      `.tacticgroups` went auto-flow 2-col grid. All browser-verified with zero console errors.
+    - Note for future goldens: battle.test's team() passes NO happiness (defaults 0) — capture
+      replacement goldens with the test's exact call shape, not [5,5,5].
+
 -40. **Tactics system, wave 1 (2026-07-25): temperament + target priority + protect target,
     sim/test/browser-verified, committed and deployed (`20b10f9`, manual deploy — git builds
     still EBADPLATFORM).** User request from a Teamfight Manager screenshot:

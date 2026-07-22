@@ -141,6 +141,7 @@ export interface Monster {
   tameness?: number // 0-100, HIDDEN wild-instinct roll — absent = fully tame (player monsters)
   tactics?: Tactics // standing battle orders (2026-07-25); absent = DEFAULT_TACTICS (rivals, legacy saves)
   protect?: boolean // team-event "protect target" designation — allies guard/heal this monster first
+  marked?: boolean // team-event kill order on an ENEMY monster (set via scouting) — the whole opposing team strikes it first while reachable
 }
 
 // --- Tactics (2026-07-25): pre-battle standing orders, Teamfight-Manager
@@ -150,8 +151,24 @@ export interface Monster {
 // tactics set fights precisely as it always has. ---
 export type Temperament = 'aggressive' | 'balanced' | 'cautious'
 export type TargetPriority = 'weakest' | 'casters' | 'tanks' | 'focus'
-export interface Tactics { temperament: Temperament; targetPriority: TargetPriority }
+export type ManaPolicy = 'normal' | 'conserve' | 'burst'
+export interface Tactics {
+  temperament: Temperament
+  targetPriority: TargetPriority
+  manaPolicy?: ManaPolicy // absent = 'normal' (inert)
+  comboDiscipline?: boolean // hold bonusVsStatus payoffs until their setup status is on the target
+  openerId?: string // scripted first action — an equipped move id; ignored if no longer equipped
+}
 export const DEFAULT_TACTICS: Tactics = { temperament: 'balanced', targetPriority: 'weakest' }
+
+// Formation (wave 2): roster ORDER is the formation — the first half of a
+// team fights in the front line, the rest in the back line. Single-target
+// MELEE attacks (including a melee-channel basic Attack) can only reach the
+// front line while it stands; ranged/magic/voice ignore rows entirely, and
+// AoE always hits everyone. A solo team is all front line.
+export const frontRowCount = (teamSize: number) => Math.ceil(teamSize / 2)
+export const rowOfSlot = (slot: number, teamSize: number): 'front' | 'back' =>
+  slot < frontRowCount(teamSize) ? 'front' : 'back'
 
 export const TEMPERAMENT_INFO: { id: Temperament; icon: string; name: string; desc: string }[] = [
   { id: 'aggressive', icon: '⚔', name: 'Aggressive', desc: 'Keeps swinging even when hurt — blocks, parries and heals late, spends MP freely.' },
@@ -163,6 +180,15 @@ export const TARGET_PRIORITY_INFO: { id: TargetPriority; icon: string; name: str
   { id: 'casters', icon: '🧙', name: 'Hunt the casters', desc: "Focus the enemy's strongest INT/WIS monster — silence the spells and heals." },
   { id: 'tanks', icon: '🐘', name: 'Break the tank', desc: 'Focus the highest-CON wall so its team loses its anchor.' },
   { id: 'focus', icon: '🤝', name: 'Focus together', desc: 'Pile onto whichever enemy a teammate struck last.' },
+]
+export const MANA_POLICY_INFO: { id: ManaPolicy; icon: string; name: string; desc: string }[] = [
+  { id: 'burst', icon: '💥', name: 'Opening burst', desc: 'Spend MP freely and early — hit hard before the enemy settles in.' },
+  { id: 'normal', icon: '💠', name: 'Natural', desc: "Spend MP on the class's own judgement." },
+  { id: 'conserve', icon: '💧', name: 'Conserve', desc: 'Save MP for clearly worthwhile skills — charge up rather than waste casts.' },
+]
+export const COMBO_INFO: { id: boolean; icon: string; name: string; desc: string }[] = [
+  { id: false, icon: '🎲', name: 'Free play', desc: 'Casts whatever ranks best each turn.' },
+  { id: true, icon: '🔗', name: 'Work the combo', desc: 'Holds a payoff move until its setup status is on the target, and sets up first.' },
 ]
 
 // --- Leagues (license -> stat cap), §3 ---

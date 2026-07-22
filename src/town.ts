@@ -284,7 +284,13 @@ export const entryFee = (league: string): number => (leagueIndexOf(league) + 1) 
 // A tournament entry locked in for this week; resolved during advanceWeek.
 // `monsterIds` length must equal teamSizeForLeague(tournament's league).
 // `feePaid` is refunded by cancelSignUp.
-export interface PendingTournament { tournamentId: string; monsterIds: string[]; feePaid: number; protectId?: string }
+export interface PendingTournament {
+  tournamentId: string
+  monsterIds: string[]
+  feePaid: number
+  protectId?: string // team protect order (wave 1)
+  marks?: Record<number, number> // kill orders (wave 2): rival team index -> marked member index, set from the scouting panel
+}
 
 // One resolved match within a round-robin event (§2e resolveTournament).
 export interface EventMatch {
@@ -636,6 +642,17 @@ export function setProtectTarget(g: GameState, careerId: string | null): GameSta
   return { ...g, pendingTournament: { ...g.pendingTournament, protectId: careerId ?? undefined } }
 }
 
+// Kill order (wave 2): mark one member of a scouted rival team — the whole
+// player team strikes it first while it lives (and is reachable through the
+// formation rules). Per-event, per-rival-team; null clears the mark.
+export function setMarkTarget(g: GameState, rivalIdx: number, memberIdx: number | null): GameState {
+  if (!g.pendingTournament) return g
+  const marks = { ...(g.pendingTournament.marks ?? {}) }
+  if (memberIdx === null) delete marks[rivalIdx]
+  else marks[rivalIdx] = memberIdx
+  return { ...g, pendingTournament: { ...g.pendingTournament, marks } }
+}
+
 // --- Tournaments (§3): sign up in the review phase, battle resolves on the weekly tick ---
 // A monster may enter its own league's events (full rewards) or any league BELOW
 // it (reduced rewards via rewardMultiplier) — never above its license, EXCEPT
@@ -729,7 +746,12 @@ function generateRivalMonster(seedBase: string, targetTotal: number, allowExclus
 // A full rival TEAM: role slots from the composition template, each member
 // independently scaled to the same per-monster budget.
 function generateRivalTeam(seedBase: string, teamSize: number, targetTotal: number, allowExclusive: boolean): Monster[] {
-  return compositionTemplate(teamSize).map((role, i) => generateRivalMonster(seedBase + ':m' + i, targetTotal, allowExclusive, role))
+  const team = compositionTemplate(teamSize).map((role, i) => generateRivalMonster(seedBase + ':m' + i, targetTotal, allowExclusive, role))
+  // Formation (wave 2): roster order is the formation (front half = front
+  // line), so rivals sort sturdiest-first — walls up front, casters shielded
+  // behind them — instead of the arbitrary generation order. Deterministic
+  // (stable sort on CON), so scouting still previews the exact real team.
+  return team.sort((a, b) => b.stats.CON - a.stats.CON)
 }
 
 // Every rival team a tournament will field, purely a function of (seed, week,
@@ -819,10 +841,16 @@ function resolveTournament(g: GameState, stable: Career[], gold: number): { gold
   })
   const rivalTeams = generateRivalTeamsForTournament(g, t)
 
-  interface Participant { label: string; isPlayer: boolean; team: Monster[]; happiness: number[] }
+  interface Participant { label: string; isPlayer: boolean; team: Monster[]; happiness: number[]; markIdx?: number }
   const participants: Participant[] = [
     { label: 'Your Team', isPlayer: true, team: playerTeam, happiness: playerCareers.map((c) => c.happiness) },
-    ...rivalTeams.map((team, r) => ({ label: `Rival Team ${r + 1}`, isPlayer: false, team, happiness: team.map(() => 5) })),
+    // Kill orders (wave 2): markIdx notes which member the PLAYER marked via
+    // scouting — applied only in the player's own match below, since the mark
+    // is the player's order, not a property rival teams see in each other.
+    ...rivalTeams.map((team, r) => ({
+      label: `Rival Team ${r + 1}`, isPlayer: false, team, happiness: team.map(() => 5),
+      markIdx: pending.marks?.[r],
+    })),
   ]
 
   const standings = participants.map((p) => ({ label: p.label, isPlayer: p.isPlayer, wins: 0, draws: 0, losses: 0, hpFracSum: 0 }))
@@ -830,7 +858,11 @@ function resolveTournament(g: GameState, stable: Career[], gold: number): { gold
 
   for (const [i, j] of roundRobinSchedule(participants.length)) {
     const pa = participants[i], pb = participants[j]
-    const teamA = pa.team, teamB = pb.team // fixed full-strength roster, same every match
+    // Kill orders apply only in the PLAYER's own matches — the mark is the
+    // player's order, invisible to rival-vs-rival games.
+    const applyMark = (p: Participant, opp: Participant): Monster[] =>
+      opp.isPlayer && p.markIdx !== undefined ? p.team.map((m, k) => (k === p.markIdx ? { ...m, marked: true } : m)) : p.team
+    const teamA = applyMark(pa, pb), teamB = applyMark(pb, pa) // fixed full-strength roster, same every match
     const result = simulateTeamBattle(teamA, teamB, pa.happiness, pb.happiness)
     matches.push({ aLabel: pa.label, bLabel: pb.label, teamA, teamB, result, involvesPlayer: pa.isPlayer || pb.isPlayer })
 

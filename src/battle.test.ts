@@ -39,15 +39,17 @@ const GOLDENS = [
   },
   {
     // full-wipe draw — exercises the round-35 sudden-death chip path
+    // Golden recaptured 2026-07-25 (wave-2 formations): front/back rows made
+    // single-target melee front-restricted, a deliberate engine change.
     name: '3v3-high', a: ['gold-a5', 'gold-a6', 'gold-a7'], b: ['gold-b5', 'gold-b6', 'gold-b7'], train: 2000,
-    winner: 'draw', events: 558, logLines: 413,
+    winner: 'draw', events: 582, logLines: 423,
     finals: [
       { side: 'A', slot: 0, hp: 0, mana: 709, wasKOd: true },
-      { side: 'A', slot: 1, hp: 0, mana: 0, wasKOd: true },
+      { side: 'A', slot: 1, hp: 0, mana: 8, wasKOd: true },
       { side: 'A', slot: 2, hp: 0, mana: 737, wasKOd: true },
       { side: 'B', slot: 0, hp: 0, mana: 725, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 756, wasKOd: true },
-      { side: 'B', slot: 2, hp: 0, mana: 1, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 746, wasKOd: true },
+      { side: 'B', slot: 2, hp: 0, mana: 19, wasKOd: true },
     ],
   },
 ] as const

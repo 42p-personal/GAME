@@ -1,8 +1,8 @@
 import { Dispatch, ReactNode, SetStateAction, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  BODY_ELEMENT, BODY_MINOR, BodyType, DEFAULT_TACTICS, Element, FOODS, INNATE_SECONDARY_LEVEL, LEAGUES, Monster, Move, STATS, Stat,
+  BODY_ELEMENT, BODY_MINOR, BodyType, COMBO_INFO, DEFAULT_TACTICS, Element, FOODS, INNATE_SECONDARY_LEVEL, LEAGUES, MANA_POLICY_INFO, Monster, Move, STATS, Stat,
   TARGET_PRIORITY_INFO, TEMPERAMENT_INFO, Tactics, classForStats,
-  feedDelta, happinessMultiplier, hashString, mulberry32, roleOfClass,
+  feedDelta, frontRowCount, happinessMultiplier, hashString, mulberry32, roleOfClass, rowOfSlot,
 } from './core'
 import { generateMonster, manaCost, maxHp, maxMana, staminaDamageMult } from './monster'
 import { BattleResult, simulateTeamBattle } from './battle'
@@ -20,7 +20,7 @@ import {
   WeekPlanEntry, advanceWeek, barnCost, buyBulkFood, buyEliteLicense, buyMonster,
   buySpecialLicense, cancelSignUp, cupLore, eligibleForTournament, freeze, fuse, fusionRoom, generateRivalTeamsForTournament, goto, healAtInfirmary, infirmaryFee, leagueIndexOf, monthOfWeek,
   RANK_UP_MONTHS, RANK_UP_WEEK, entryFee, isRankUpWeek, placementLabel, scoutFee, teamHasLicensedLeader, teamSizeForLeague,
-  newGame, offerMonster, promoteMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, setProtectTarget, setTactics, signUp, thaw,
+  newGame, offerMonster, promoteMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, setMarkTarget, setProtectTarget, setTactics, signUp, thaw,
   tournamentCalendarFor, upgradeBarn, visibleLeagueCount, weekOfMonth, yearOfWeek,
 } from './town'
 import { APP_VERSION } from './version'
@@ -855,6 +855,37 @@ function AbilitySelector({ m, name, onSetLoadout, onSetInnate, onSetTactics, onC
                   </button>
                 ))}
               </div>
+              <div className="tacticgroup">
+                <div className="tacticgroup-h">Mana policy</div>
+                {MANA_POLICY_INFO.map((o) => (
+                  <button key={o.id} className={'tacticopt' + ((cur.manaPolicy ?? 'normal') === o.id ? ' on' : '')}
+                    onClick={() => onSetTactics({ ...cur, manaPolicy: o.id })} title={o.desc}>
+                    {o.icon} {o.name}
+                  </button>
+                ))}
+              </div>
+              <div className="tacticgroup">
+                <div className="tacticgroup-h">Combo play</div>
+                {COMBO_INFO.map((o) => (
+                  <button key={String(o.id)} className={'tacticopt' + ((cur.comboDiscipline ?? false) === o.id ? ' on' : '')}
+                    onClick={() => onSetTactics({ ...cur, comboDiscipline: o.id })} title={o.desc}>
+                    {o.icon} {o.name}
+                  </button>
+                ))}
+              </div>
+              <div className="tacticgroup">
+                <div className="tacticgroup-h">Opening move</div>
+                <button className={'tacticopt' + (!cur.openerId || !m.loadout.some((mv) => mv.id === cur.openerId) ? ' on' : '')}
+                  onClick={() => onSetTactics({ ...cur, openerId: undefined })} title="No script — the class picks its own first play">
+                  🎲 Instinct
+                </button>
+                {m.loadout.map((mv) => (
+                  <button key={mv.id} className={'tacticopt' + (cur.openerId === mv.id ? ' on' : '')}
+                    onClick={() => onSetTactics({ ...cur, openerId: mv.id })} title={`Always opens the battle with ${mv.name} when it can`}>
+                    {mv.element ? ELEMENT_ICON[mv.element] + ' ' : '▶ '}{mv.name}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="tactic-desc dim">{temp.icon} {temp.desc} — {prio.icon} {prio.desc}</div>
           </>
@@ -880,15 +911,21 @@ function TeamPicker({ pool, teamSize, monsterIds, onChange }: {
   }
   return (
     <div className="teampicker">
-      <div className="hint">Pick {teamSize} monsters for this event — click a slot, then a monster below to fill it.</div>
+      <div className="hint">
+        Pick {teamSize} monsters — click a slot, then a monster below. <b>Slot order is your formation</b>:
+        the first {frontRowCount(teamSize)} fight in the ⚔ front line (melee can only reach the front while it
+        stands); the rest shoot from the 🏹 back line.
+      </div>
       <div className="abilityslots">
         {Array.from({ length: teamSize }, (_, i) => {
           const id = monsterIds[i]
           const c = pool.find((x) => x.id === id)
           const cls = c ? classForStats(c.stats) : ''
+          const row = rowOfSlot(i, teamSize)
           return (
             <div key={i} className={'abilityslot' + (selectedSlot === i ? ' selected' : '')}
               onClick={() => setSelectedSlot(selectedSlot === i ? null : i)}>
+              <div className="slotlabel">{row === 'front' ? '⚔ Front' : '🏹 Back'} · slot {i + 1}</div>
               {c ? (
                 <>
                   <div className="mn">{c.name}</div>
@@ -1690,6 +1727,20 @@ function RanchView({ game, setGame, onBattleScreen }: {
                               <div key={key} className="scout-report">
                                 <div className="section-title">Rival Team {r + 1}</div>
                                 {team.map((m, i) => <ScoutReport key={i} m={m} tier={tier} />)}
+                                {/* Kill order (wave 2): only while signed up — the mark lives on the pending entry. */}
+                                {signedHere && team.length > 1 && (
+                                  <div className="protectrow">
+                                    <span className="dim" title="Your whole team strikes the marked monster first while it can be reached (melee must break the front line first)">🎯 Mark:</span>
+                                    <button className={'tacticopt small' + (game.pendingTournament?.marks?.[r] === undefined ? ' on' : '')}
+                                      onClick={() => setGame((g) => setMarkTarget(g, r, null))}>Nobody</button>
+                                    {team.map((m, i) => (
+                                      <button key={i} className={'tacticopt small' + (game.pendingTournament?.marks?.[r] === i ? ' on' : '')}
+                                        onClick={() => setGame((g) => setMarkTarget(g, r, i))}>
+                                        {m.name}{rowOfSlot(i, team.length) === 'back' ? ' 🏹' : ''}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
                                 <div className="carerow">
                                   {!tier && (
                                     <button className="ghost" disabled={game.gold < basicFee}

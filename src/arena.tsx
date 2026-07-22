@@ -7,7 +7,7 @@
 // log for the detailed narration either way.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { BattleEvent, BattleResult, BattleSide } from './battle'
-import { Channel, Element, Monster, StatusKind } from './core'
+import { Channel, Element, Monster, StatusKind, frontRowCount } from './core'
 import { maxHp, maxMana } from './monster'
 import { Sprite } from './Sprite'
 import { backgroundFor } from './leagueArt'
@@ -448,9 +448,22 @@ export function ArenaBattle({ teamA, teamB, result, league, onDone }: { teamA: M
 
       <div className={'arena-floor team-floor'} style={{ backgroundImage: `url(${bgImage})` }}>
         <div className="arena-floor-scrim" />
-        <div className="roster roster-a">{teamA.map((_, i) => renderTile('A', i))}</div>
+        {/* Formation (wave 2): tiles grouped into front/back lines, mirroring
+            the engine's rowOfSlot split — the back line sits slightly offset
+            so the formation reads at a glance. */}
+        <div className="roster roster-a">
+          <div className="roster-line">{teamA.slice(0, frontRowCount(teamA.length)).map((_, i) => renderTile('A', i))}</div>
+          {teamA.length > frontRowCount(teamA.length) && (
+            <div className="roster-line back">{teamA.slice(frontRowCount(teamA.length)).map((_, i) => renderTile('A', i + frontRowCount(teamA.length)))}</div>
+          )}
+        </div>
         <div className="roster-vs">vs</div>
-        <div className="roster roster-b">{teamB.map((_, i) => renderTile('B', i))}</div>
+        <div className="roster roster-b">
+          <div className="roster-line">{teamB.slice(0, frontRowCount(teamB.length)).map((_, i) => renderTile('B', i))}</div>
+          {teamB.length > frontRowCount(teamB.length) && (
+            <div className="roster-line back">{teamB.slice(frontRowCount(teamB.length)).map((_, i) => renderTile('B', i + frontRowCount(teamB.length)))}</div>
+          )}
+        </div>
         {done && (
           <div className="winner-banner">
             {result.winner === 'draw' ? <>🏳️ Double knockout — a draw!</> : <>🏆 <b>{result.winnerName}</b> wins!</>}

@@ -569,3 +569,11 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 .tacticopt.small { width: auto; padding: 3px 10px; font-size: 12px; border-radius: 6px; }
 .tactic-desc { font-size: 12px; line-height: 1.5; border-top: 1px solid var(--line); padding-top: 8px; margin-top: 2px; }
 .protectrow { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; font-size: 12px; }
+
+/* Formation (wave 2): team-mode roster split into front/back lines; the back
+   line sits offset behind so the formation reads at a glance. */
+.roster { display: flex; flex-direction: column; gap: 8px; }
+.roster-line { display: flex; gap: 8px; justify-content: center; }
+.roster-a .roster-line.back { margin-right: 26px; }
+.roster-b .roster-line.back { margin-left: 26px; }
+.roster-line.back .roster-tile { opacity: .92; }

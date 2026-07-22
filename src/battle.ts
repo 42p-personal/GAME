@@ -9,7 +9,7 @@
 // when this was strictly 1v1. `simulateBattle` (still exported) is a thin
 // team-of-1 wrapper over `simulateTeamBattle`, so every existing 1v1 call site
 // (Sandbox) keeps working unchanged.
-import { Ability, Channel, Element, Monster, Move, RNG, StatusKind, Temperament, chance, elementMultiplier, happinessMultiplier, hashString, mulberry32, randInt } from './core'
+import { Ability, Channel, Element, ManaPolicy, Monster, Move, RNG, StatusKind, Temperament, chance, elementMultiplier, happinessMultiplier, hashString, mulberry32, randInt, rowOfSlot } from './core'
 import {
   attackStat, critChance, debuffBonus, debuffReduction, dodgeChance, echoChance, hpRegen,
   manaCost, manaRegen, maxHp, maxMana, mitigationPierce, staminaDamageMult,
@@ -274,6 +274,8 @@ interface Combatant {
   m: Monster
   side: BattleSide
   slot: number // 0-based position within its own team's roster array
+  row: 'front' | 'back' // formation (wave 2): from roster order via rowOfSlot — melee can only reach the front line while it stands
+  openerPending: boolean // scripted opening move (tactics.openerId) not yet attempted — spent on this monster's first action either way
   hp: number
   maxHp: number
   mana: number
@@ -366,12 +368,14 @@ export interface BattleResult {
   finals: { side: BattleSide; slot: number; hp: number; mana: number; wasKOd: boolean }[]
 }
 
-function makeCombatant(m: Monster, happiness: number, side: BattleSide, slot: number): Combatant {
+function makeCombatant(m: Monster, happiness: number, side: BattleSide, slot: number, teamSize: number): Combatant {
   const self = innateEffects(m)
   return {
     m,
     side,
     slot,
+    row: rowOfSlot(slot, teamSize), // formation (wave 2): roster order IS the formation
+    openerPending: !!m.tactics?.openerId,
     // injuries persist: a monster fights from its CURRENT HP/MP when tracked
     hp: Math.min(m.hp ?? maxHp(m.stats), maxHp(m.stats)),
     maxHp: maxHp(m.stats),
@@ -633,17 +637,26 @@ const TEMPERAMENT_MOD: Record<Temperament, Partial<ClassPersonality>> = {
   balanced: {},
   cautious: { healAt: 0.12, blockWhenHurt: 20, openBuff: 10, blockToCharge: 10, parry: 20, aggro: 4 },
 }
+// Mana policy (wave 2): a second additive coaching layer — conserve raises
+// the "worth its MP" bar and charges more; burst lowers both. 'normal' is all
+// zeros (inert).
+const MANA_POLICY_MOD: Record<ManaPolicy, Partial<ClassPersonality>> = {
+  normal: {},
+  conserve: { aggro: 6, blockToCharge: 20 },
+  burst: { aggro: -8, blockToCharge: -20 },
+}
 function personalityFor(self: Combatant): ClassPersonality {
   const p = { ...DEFAULT_PERSONALITY, ...CLASS_PERSONALITY[self.m.className] }
   const t = TEMPERAMENT_MOD[self.m.tactics?.temperament ?? 'balanced']
+  const mp = MANA_POLICY_MOD[self.m.tactics?.manaPolicy ?? 'normal']
   return {
     healAt: Math.min(0.9, Math.max(0.05, p.healAt + (t.healAt ?? 0))),
     blockWhenHurt: Math.min(95, Math.max(0, p.blockWhenHurt + (t.blockWhenHurt ?? 0))),
     openBuff: Math.min(95, Math.max(0, p.openBuff + (t.openBuff ?? 0))),
     debuff: p.debuff,
-    blockToCharge: Math.min(95, Math.max(0, p.blockToCharge + (t.blockToCharge ?? 0))),
+    blockToCharge: Math.min(95, Math.max(0, p.blockToCharge + (t.blockToCharge ?? 0) + (mp.blockToCharge ?? 0))),
     parry: Math.min(95, Math.max(0, p.parry + (t.parry ?? 0))),
-    aggro: p.aggro + (t.aggro ?? 0),
+    aggro: p.aggro + (t.aggro ?? 0) + (mp.aggro ?? 0),
   }
 }
 const CLASS_PERSONALITY: Record<string, Partial<ClassPersonality>> = {
@@ -674,6 +687,14 @@ function chooseAction(self: Combatant, foe: Combatant, rng: RNG, allies: Combata
     return { kind: 'attack' }
   }
   const ready = self.m.loadout.filter((mv) => (self.cooldowns[mv.id] ?? 0) <= 0 && moveCost(mv) <= self.mana)
+  // Scripted opener (wave 2): the designated first play. Fires on this
+  // monster's first real action if the move is still equipped and castable —
+  // otherwise the script is simply dropped (openerPending clears either way
+  // in takeTurn). No rng consumed; monsters without an opener are untouched.
+  if (self.openerPending) {
+    const opener = ready.find((mv) => mv.id === self.m.tactics?.openerId)
+    if (opener) return { kind: 'skill', move: opener }
+  }
   // Strongest heal first (2026-07-25 review fix: `heals[0]` used to be loadout
   // order, so a monster carrying Purge AND Vital Surge could "emergency heal"
   // for 10 when 46 was equally ready).
@@ -720,10 +741,24 @@ function chooseAction(self: Combatant, foe: Combatant, rng: RNG, allies: Combata
   // Land a debuff / control move on a threatening foe.
   if (hostiles.length && threat >= 18 && chance(rng, p.debuff)) return { kind: 'skill', move: hostiles[0] }
 
+  // Work the combo (wave 2): payoff's status is live -> cash it NOW; not live
+  // -> cast a setup for an equipped payoff, and HOLD the payoff itself out of
+  // the generic ranking below (raw power made Bloodletter fire on cooldown
+  // instead of waiting — the exact failure documented in the item -25 sims).
+  let dmgPool = dmgs
+  if (self.m.tactics?.comboDiscipline) {
+    const livePayoff = dmgs.find((mv) => mv.effects?.bonusVsStatus && hasStatus(foe, mv.effects.bonusVsStatus.kind))
+    if (livePayoff) return { kind: 'skill', move: livePayoff }
+    const payoffKinds = new Set(self.m.loadout.filter((mv) => mv.effects?.bonusVsStatus).map((mv) => mv.effects!.bonusVsStatus!.kind))
+    const setup = ready.find((mv) => mv.status && payoffKinds.has(mv.status.kind) && !hasStatus(foe, mv.status.kind))
+    if (setup) return { kind: 'skill', move: setup }
+    dmgPool = dmgs.filter((mv) => !(mv.effects?.bonusVsStatus && payoffKinds.has(mv.effects.bonusVsStatus.kind)))
+  }
+
   // A damage skill is worth its MP if it clearly out-hits a basic Attack, or if
   // it carries a status/debuff rider that a plain Attack never could. Aggro
   // (negative for damage classes) widens what counts as "worth it."
-  const worthIt = dmgs.filter((mv) => effPower(mv, foe) >= ATTACK_POWER + 4 + p.aggro
+  const worthIt = dmgPool.filter((mv) => effPower(mv, foe) >= ATTACK_POWER + 4 + p.aggro
     || ((mv.status !== undefined || isDebuffMove(mv) || mv.effects?.manaBurn !== undefined) && effPower(mv, foe) >= ATTACK_POWER - 4 + p.aggro))
   if (worthIt.length) return { kind: 'skill', move: worthIt[0] }
 
@@ -867,7 +902,18 @@ function resolveTargets(attacker: Combatant, ctx: BattleContext, move: Move, rng
       const forced = tauntTargetOf(attacker, ctx)
       if (forced) return [forced]
       const foes = enemiesOf(ctx, attacker)
-      return foes.length ? [pickEnemyTargetFor(attacker, foes, ctx)] : []
+      if (!foes.length) return []
+      // Formation (wave 2): single-target MELEE can only reach the front line
+      // while it stands; every other channel shoots straight over it. AoE and
+      // compulsions (above) are untouched.
+      const reachable = move.channel === 'melee'
+        ? (foes.some((f) => f.row === 'front') ? foes.filter((f) => f.row === 'front') : foes)
+        : foes
+      // Mark (wave 2): the coach's kill order — a scouted-and-marked enemy is
+      // every teammate's first choice while it lives and can be reached.
+      const marked = reachable.find((f) => f.m.marked)
+      if (marked) return [marked]
+      return [pickEnemyTargetFor(attacker, reachable, ctx)]
     }
   }
 }
@@ -1168,6 +1214,7 @@ function takeTurn(attacker: Combatant, ctx: BattleContext, rng: RNG, log: string
   const action = (tameness !== undefined && chance(rng, 100 - tameness))
     ? wildAction(attacker, rng)
     : chooseAction(attacker, primaryFoe, rng, alliesOf(ctx, attacker))
+  attacker.openerPending = false // the scripted opener rides on the FIRST action only, cast or not
   if (action.kind === 'block') {
     attacker.blockAvoid = blockValue(attacker)
     log.push(`  🛡 ${attacker.m.name} braces to block (+${attacker.blockAvoid}% avoid).`)
@@ -1210,8 +1257,8 @@ function turnOrderCompare(x: Combatant, y: Combatant): number {
 export function simulateTeamBattle(teamA: Monster[], teamB: Monster[], happA: number[] = [], happB: number[] = []): BattleResult {
   const seedKey = teamA.map((m) => m.seed).join(',') + '|' + teamB.map((m) => m.seed).join(',') + '|vs'
   const rng = mulberry32(hashString(seedKey))
-  const A = teamA.map((m, i) => makeCombatant(m, happA[i] ?? 0, 'A', i))
-  const B = teamB.map((m, i) => makeCombatant(m, happB[i] ?? 0, 'B', i))
+  const A = teamA.map((m, i) => makeCombatant(m, happA[i] ?? 0, 'A', i, teamA.length))
+  const B = teamB.map((m, i) => makeCombatant(m, happB[i] ?? 0, 'B', i, teamB.length))
   const ctx: BattleContext = { all: [...A, ...B], focus: { A: null, B: null } }
   recomputeInnateAuras(ctx)
   const log: string[] = []
