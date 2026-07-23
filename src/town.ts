@@ -8,7 +8,7 @@ import { generateMonster, maxHp, maxMana } from './monster'
 import { BattleResult, simulateTeamBattle } from './battle'
 import {
   Career, MAX_STAMINA, START_GOLD, WEEKS_PER_MONTH, WEEKS_PER_YEAR, WeeklyAction, ageOneWeek, applyWeek, buyFood,
-  careerMonster, forageFeed, newCareer, rollMarket, statCapFor, trainingProfileFor,
+  careerMonster, careerSpanYears, forageFeed, newCareer, rollMarket, statCapFor, trainingProfileFor,
 } from './game'
 import { ALL_DRILLS } from './drills'
 import { learnedMoves } from './monster'
@@ -157,7 +157,7 @@ export function cupLore(t: Tournament): CupLore {
 // exclusive spectacle, enforced by validate.ts (sizes must also never shrink
 // while climbing).
 export const TEAM_SIZE_BY_LEAGUE: Record<string, number> = {
-  Wood: 1, Copper: 2, Tin: 2, Bronze: 3, Iron: 4, Silver: 4, Gold: 5, Platinum: 5, Masters: 5, 'Tamer Elite': 6,
+  Wood: 1, Copper: 2, Tin: 2, Bronze: 3, Iron: 3, Silver: 4, Gold: 4, Platinum: 5, Masters: 5, 'Tamer Elite': 6,
 }
 export const teamSizeForLeague = (league: string): number => TEAM_SIZE_BY_LEAGUE[league] ?? 1
 
@@ -269,6 +269,11 @@ export interface Frozen {
   hatedFood: Food
   licenseIndex: number
   potential?: number // bloodline star rating, banked so breeding can inherit it (Phase 5)
+  podiums?: number // decoration captured at freeze time — top-3 finishes (drives stud income)
+  champs?: number // 1st-place finishes at freeze time
+  breedCount?: number // children parented (max BREED_MAX_CHILDREN)
+  generation?: number // dynasty depth carried into children
+  studBook?: boolean // a Stud Book is assigned — earns uncapped stud income weekly
 }
 
 // One Market listing: a deterministic seed (so the preview == what you buy) + price.
@@ -371,6 +376,14 @@ export interface GameState {
   // with a tracked head-to-head. One primary rival for now; the array leaves
   // room for a circuit later.
   rivals: Rival[]
+  // --- v0.6 economy pass ---
+  comfortOwned: string[] // comfort-set item ids owned (stable-wide +2mo career span each)
+  trainingGear: Partial<Record<Stat, number>> // peddler gear tier owned per stat (0-5, +5% training each)
+  tonics: number // Elder Tonics in inventory (use on a monster: +2mo career span)
+  studBooks: number // Stud Books in inventory (assign to a frozen legacy: uncapped stud income)
+  labCapacity: number // frozen-genome slots (base 2, expandable)
+  labTechLoan: boolean // lab-tech loan event taken → freeze upkeep 5→3g/wk
+  extremeUnlocked: boolean // Extreme Training Manual bought → extreme drill row open
   // Trainer XP (LOOP_DESIGN Phase 5) — the persistent meta character. Earned by
   // podium cup finishes and raising monsters to retirement; the derived level
   // grants extra barn capacity. The ranch is the account; monsters are the runs.
@@ -411,7 +424,7 @@ export function visibleLeagueCount(g: GameState): number {
 }
 
 // --- Economy constants (§13.3) ---
-export const RENTAL_PER_FROZEN = 8 // weekly upkeep per frozen genome
+export const RENTAL_PER_FROZEN = 5 // weekly upkeep per frozen genome (8→5 in v0.6; lab-tech loan lowers to 3)
 export const MARKET_BASE = 150 // base monster price; fluctuates ±60%
 export const FUSION_COST = 500 // huge, one-off
 export const PANTRY_CONTRACT_COST = 400 // Ranch Shop: 20% off normal foods
@@ -458,6 +471,140 @@ export function newGame(seed = 'start', opts?: { trainerName?: string; tutorialE
     licenseEarned: 0,
     pendingTrial: null,
     trialCooldownUntil: 0,
+    comfortOwned: [],
+    trainingGear: {},
+    tonics: 0,
+    studBooks: 0,
+    labCapacity: LAB_BASE_SLOTS,
+    labTechLoan: false,
+    extremeUnlocked: false,
+  }
+}
+
+// --- v0.6 economy pass: constants + purchases -------------------------------
+// Cup roster stipend: appearance fees per fielded monster beyond the first —
+// income finally scales (gently, additively) with how many mouths a league
+// makes you feed. Tunable single knob.
+export const CUP_ROSTER_STIPEND = 20
+// Comfort set (town store, STABLE-WIDE permanent): each item adds +2 months
+// (+8wk) of career span to every monster, present and future.
+export const COMFORT_ITEMS = [
+  { id: 'bedding', name: 'Plush Bedding', icon: '🛏️', price: 300 },
+  { id: 'spring', name: 'Hot Spring Pass', icon: '♨️', price: 500 },
+  { id: 'massage', name: 'Monster Massages', icon: '💆', price: 1000 },
+] as const
+export const COMFORT_WEEKS_PER_ITEM = 8
+export const comfortWeeksFor = (g: GameState): number => (g.comfortOwned?.length ?? 0) * COMFORT_WEEKS_PER_ITEM
+const syncComfort = (c: Career, g: GameState): Career => ({ ...c, comfortWeeks: comfortWeeksFor(g) })
+export function buyComfortItem(g: GameState, id: string): GameState {
+  const item = COMFORT_ITEMS.find((x) => x.id === id)
+  if (!item || g.comfortOwned.includes(id) || g.gold < item.price) return g
+  const comfortOwned = [...g.comfortOwned, id]
+  const next = { ...g, gold: g.gold - item.price, comfortOwned }
+  return { ...next, stable: g.stable.map((c) => syncComfort(c, next)) }
+}
+// Training gear (PEDDLER-ONLY): one line per stat, 5 tiers of +5% each, next
+// tier revealed only once the previous is owned. Steep escalation by design.
+export const GEAR_TIER_PRICES = [200, 500, 750, 1000, 1250]
+export const GEAR_NAMES: Record<Stat, string[]> = {
+  STR: ['Dumbbells', 'Barbells', 'Iron Yoke', 'Titan Press', 'Colossus Rig'],
+  DEX: ['Skipping Rope', 'Agility Poles', 'Balance Beam', 'Wind Harness', 'Phantom Treads'],
+  CON: ['Sandbag Vest', 'Training Yoke', 'Granite Pack', 'Juggernaut Plate', 'Mountain Harness'],
+  WIS: ['Prayer Beads', 'Incense Set', 'Meditation Mat', 'Oracle Chimes', 'Sage’s Altar'],
+  INT: ['Puzzle Box', 'Rune Slate', 'Tome Stand', 'Arcane Orrery', 'Grand Athenaeum'],
+  CHA: ['Hand Mirror', 'Stage Costume', 'Golden Megaphone', 'Spotlight Rig', 'Royal Regalia'],
+}
+export function buyGear(g: GameState, stat: Stat): GameState {
+  const tier = g.trainingGear[stat] ?? 0
+  if (tier >= 5) return g
+  const price = GEAR_TIER_PRICES[tier]
+  if (g.gold < price) return g
+  return { ...g, gold: g.gold - price, trainingGear: { ...g.trainingGear, [stat]: tier + 1 } }
+}
+// Elder Tonic (peddler, 500g, unlimited): +2 months to ONE monster per use.
+export const TONIC_COST = 500
+export const TONIC_WEEKS = 8
+export function useTonic(g: GameState, careerId: string): GameState {
+  if ((g.tonics ?? 0) < 1) return g
+  const c = g.stable.find((x) => x.id === careerId)
+  if (!c) return g
+  const nc: Career = { ...c, tonicWeeks: (c.tonicWeeks ?? 0) + TONIC_WEEKS, retired: false, log: [...c.log, `🧪 Elder Tonic — career span +2 months.`].slice(-40) }
+  // a freshly-extended span can un-retire a monster whose age is back under it
+  const stillRetired = Math.floor(nc.ageWeeks / WEEKS_PER_YEAR) >= careerSpanYears(nc)
+  return { ...g, tonics: g.tonics - 1, stable: g.stable.map((x) => (x.id === careerId ? { ...nc, retired: stillRetired } : x)) }
+}
+// Stud Book (peddler, 750g): assign to a FROZEN legacy — it earns UNCAPPED
+// stud income from its record (1g/podium + 3g/championship per week).
+export const STUDBOOK_COST = 750
+export function applyStudBook(g: GameState, frozenId: string): GameState {
+  if ((g.studBooks ?? 0) < 1) return g
+  const fr = g.frozen.find((x) => x.id === frozenId)
+  if (!fr || fr.studBook) return g
+  return { ...g, studBooks: g.studBooks - 1, frozen: g.frozen.map((x) => (x.id === frozenId ? { ...x, studBook: true } : x)) }
+}
+export const studIncome = (fr: { podiums?: number; champs?: number; studBook?: boolean }): number =>
+  fr.studBook ? (fr.podiums ?? 0) * 1 + (fr.champs ?? 0) * 3 : 0
+// Retiree pension: decorated careers keep paying — 2g base + 1g/podium +
+// 2g/championship, capped. Competing all career long is an investment.
+export const PENSION_CAP = 10
+export const pensionFor = (c: Career): number => {
+  if (!c.retired) return 0
+  const podiums = c.tournamentHistory.filter((h) => h.placement <= 3).length
+  const champs = c.tournamentHistory.filter((h) => h.placement === 1).length
+  return Math.min(PENSION_CAP, 2 + podiums + champs * 2)
+}
+// Extreme Training Manual (town store): unlocks the extreme drill row.
+export const EXTREME_MANUAL_COST = 1500
+export const buyExtremeManual = (g: GameState): GameState =>
+  g.extremeUnlocked || g.gold < EXTREME_MANUAL_COST ? g : { ...g, gold: g.gold - EXTREME_MANUAL_COST, extremeUnlocked: true }
+// Lab: limited genome slots (curation, not hoarding) + expandable.
+export const LAB_BASE_SLOTS = 2
+export const LAB_EXPAND_COSTS = [400, 800, 1600]
+export const labExpandCost = (g: GameState): number | null => LAB_EXPAND_COSTS[g.labCapacity - LAB_BASE_SLOTS] ?? null
+export function expandLab(g: GameState): GameState {
+  const cost = labExpandCost(g)
+  if (cost === null || g.gold < cost) return g
+  return { ...g, gold: g.gold - cost, labCapacity: g.labCapacity + 1 }
+}
+export const labUpkeepPerFrozen = (g: GameState): number => (g.labTechLoan ? 3 : RENTAL_PER_FROZEN)
+// Breeding (v0.6, SEPARATE from fusion): two frozen legacies parent a child —
+// parents preserved, each legacy good for at most 2 children. The child gets
+// potential (avg +10% + championship-bloodline bonus, cap 1.5), a ~20% stat
+// head start, parent B's major as a heritage stat (+10% train speed), and a
+// generation tag. Fusion (chunk B) will be transformation, not lineage.
+export const BREED_COST = 300
+export const BREED_MAX_CHILDREN = 2
+export const BREED_POTENTIAL_STEP = 0.10
+export const BREED_HEAD_START = 0.35 // fraction of parents' avg stats a child hatches with (acceptance-tuned)
+export function breedPotentialV2(a: Frozen, b: Frozen): number {
+  const champBonus = Math.min(0.08, Math.floor(((a.champs ?? 0) + (b.champs ?? 0)) / 2) * 0.01)
+  return Math.min(MAX_POTENTIAL, Math.round((((a.potential ?? 1) + (b.potential ?? 1)) / 2 + BREED_POTENTIAL_STEP + champBonus) * 100) / 100)
+}
+export function breed(g: GameState, aId: string, bId: string): GameState {
+  if (aId === bId || g.gold < BREED_COST || g.stable.length >= effectiveBarnCap(g)) return g
+  const a = g.frozen.find((x) => x.id === aId)
+  const b = g.frozen.find((x) => x.id === bId)
+  if (!a || !b || (a.breedCount ?? 0) >= BREED_MAX_CHILDREN || (b.breedCount ?? 0) >= BREED_MAX_CHILDREN) return g
+  const potential = breedPotentialV2(a, b)
+  const generation = Math.max(a.generation ?? 1, b.generation ?? 1) + 1
+  const babySeed = 'breed-' + a.id + '+' + b.id + ':' + g.nextId
+  const baby = newCareer(babySeed, { id: 'own-breed-' + g.nextId + '-' + babySeed, ageWeeks: 0, licenseIndex: g.licenseIndex, potential })
+  baby.species = a.species // parent A provides the frame/species
+  // 35% stat head start from the parents' averages (never below the fresh roll)
+  for (const s of STATS) baby.stats[s] = Math.max(baby.stats[s], Math.round(BREED_HEAD_START * ((a.stats[s] + b.stats[s]) / 2)))
+  baby.hp = maxHp(baby.stats); baby.mp = maxMana(baby.stats)
+  const bProf = b.species.trainingProfile?.major
+  baby.heritageStat = bProf ?? [...STATS].sort((x, y) => b.stats[y] - b.stats[x])[0]
+  baby.generation = generation
+  baby.comfortWeeks = comfortWeeksFor(g)
+  const stars = '★'.repeat(Math.max(0, Math.round((potential - 1) / 0.05)))
+  baby.log = [`${baby.name} is born — Gen ${generation} ${stars}, child of ${a.name} & ${b.name} (potential ×${potential.toFixed(2)}, heritage: ${baby.heritageStat}).`]
+  return {
+    ...g,
+    gold: g.gold - BREED_COST,
+    stable: [...g.stable, baby],
+    frozen: g.frozen.map((x) => (x.id === aId || x.id === bId ? { ...x, breedCount: (x.breedCount ?? 0) + 1 } : x)),
+    nextId: g.nextId + 1,
   }
 }
 
@@ -612,6 +759,7 @@ export function buyMonster(g: GameState, index: number): GameState {
   if (isMythical && !g.eliteLicense) return g
 
   const c = newCareer(o.seed, { id: 'own-' + g.nextId + '-' + o.seed, licenseIndex: g.licenseIndex }) // recruits join at the PLAYER's license (v0.5)
+  c.comfortWeeks = comfortWeeksFor(g) // stable-wide comfort set applies to newcomers too (v0.6)
   const market = g.market.filter((_, i) => i !== index)
   return { ...g, gold: g.gold - o.price, stable: [...g.stable, c], market, activeId: g.activeId || c.id, nextId: g.nextId + 1 }
 }
@@ -652,6 +800,7 @@ interface EventChoiceDef {
   note?: (g: GameState, c?: Career) => string
   cost?: (g: GameState, c?: Career) => number // gold gate — button disables if > wallet
   apply: (g: GameState, careerId?: string) => GameState
+  keepOpen?: boolean // v0.6 (peddler): after applying, REBAKE the event instead of closing — multi-purchase shops
 }
 interface GameEvent {
   id: string
@@ -660,6 +809,7 @@ interface GameEvent {
   title: string
   body: (g: GameState, c?: Career) => string
   choices: EventChoiceDef[]
+  choicesFor?: (g: GameState) => EventChoiceDef[] // v0.6: dynamic stock (peddler tiers) — used for BOTH baking and resolution so indices always align
 }
 
 const clampStat = (v: number, cap: number) => Math.max(1, Math.min(cap, v))
@@ -869,6 +1019,86 @@ export const EVENTS: GameEvent[] = [
       },
     ],
   },
+  // --- v0.6 economy events ---
+  {
+    // The Mysterious Peddler: the ONLY source of training gear, Elder Tonics
+    // and Stud Books. Visits are random — save up in case he comes around.
+    id: 'peddler',
+    scope: 'global',
+    weight: (g) => (g.stable.some((c) => !c.retired) ? 3 : 0),
+    title: '🎪 The Mysterious Peddler',
+    body: () => 'A cloaked wagon creaks to a halt outside the ranch. "Wares for the discerning tamer," the peddler rasps. "Coin only. I do not linger."',
+    choices: [{ label: 'Wave him off', apply: (g) => g }], // static fallback — real stock below
+    choicesFor: (g) => {
+      const stock: EventChoiceDef[] = []
+      for (const s of STATS) {
+        const tier = g.trainingGear?.[s] ?? 0
+        if (tier < 5) stock.push({
+          label: `${GEAR_NAMES[s][tier]} — ${s} training +${(tier + 1) * 5}%`,
+          note: () => `permanent · tier ${tier + 1}/5`,
+          cost: () => GEAR_TIER_PRICES[tier],
+          keepOpen: true,
+          apply: (gg) => buyGear(gg, s),
+        })
+      }
+      stock.push({
+        label: '🧪 Elder Tonic — +2 months career span (one monster)',
+        note: () => 'use it from a monster’s panel · unlimited stock',
+        cost: () => TONIC_COST,
+        keepOpen: true,
+        apply: (gg) => ({ ...gg, gold: gg.gold - TONIC_COST, tonics: (gg.tonics ?? 0) + 1 }),
+      })
+      stock.push({
+        label: '📕 Stud Book — a frozen legacy earns uncapped stud fees',
+        note: () => 'assign it in the Lab',
+        cost: () => STUDBOOK_COST,
+        keepOpen: true,
+        apply: (gg) => ({ ...gg, gold: gg.gold - STUDBOOK_COST, studBooks: (gg.studBooks ?? 0) + 1 }),
+      })
+      stock.push({ label: 'Wave him off', apply: (gg) => gg })
+      return stock
+    },
+  },
+  {
+    // Lab tech loan: once per save, needs a frozen genome — cheaper upkeep forever.
+    id: 'labtech',
+    scope: 'global',
+    weight: (g) => (g.frozen.length >= 1 && !g.labTechLoan ? 2 : 0),
+    title: '🧬 The Lab Tech’s Favour',
+    body: () => 'The lab technician looks sheepish. "Cash-flow trouble. Lend me 300g and I’ll keep your freezers running at cost — permanently."',
+    choices: [
+      {
+        label: 'Lend the 300g',
+        note: () => `freeze upkeep ${RENTAL_PER_FROZEN}g → 3g/wk, forever`,
+        cost: () => 300,
+        apply: (g) => ({ ...g, gold: g.gold - 300, labTechLoan: true }),
+      },
+      { label: 'Money’s tight too', apply: (g) => g },
+    ],
+  },
+  {
+    // Soft-lock backstop (v0.6): with NO active monsters, a stray wanders in —
+    // rollWeeklyEvent force-fires this so an empty stable is never game over.
+    id: 'stray',
+    scope: 'global',
+    weight: (g) => (g.stable.every((c) => c.retired) || g.stable.length === 0 ? 100 : 0),
+    title: '🐾 A Stray at the Gate',
+    body: () => 'A scruffy young monster has been sleeping against your barn door. It looks at you, then at the empty training yard, and refuses to leave.',
+    choices: [
+      {
+        label: 'Take it in',
+        note: () => 'a free (unremarkable) recruit',
+        apply: (g) => {
+          const c = newCareer('stray-' + g.week + '-' + g.nextId, { id: 'own-stray-' + g.nextId, licenseIndex: g.licenseIndex })
+          c.comfortWeeks = comfortWeeksFor(g)
+          c.log = [`${c.name} the stray joins the ranch — scrappy, but willing.`]
+          // deliberately ignores barn capacity: retirees may fill the barn, and
+          // this event exists precisely to break that dead-end
+          return { ...g, stable: [...g.stable, c], nextId: g.nextId + 1 }
+        },
+      },
+    ],
+  },
 ]
 
 const eventById = (id: string) => EVENTS.find((e) => e.id === id)
@@ -881,6 +1111,12 @@ export const EVENT_CHANCE = 0.45
 // result, so replays and reloads are stable. Returns the display-baked
 // PendingEvent, or null for a quiet week.
 export function rollWeeklyEvent(g: GameState): PendingEvent | null {
+  // Soft-lock backstop (v0.6): an empty/all-retired stable ALWAYS draws the
+  // stray — no chance roll. An unrecoverable save must not exist.
+  if (g.stable.length === 0 || g.stable.every((c) => c.retired)) {
+    const stray = eventById('stray')
+    if (stray) return bakeEvent(stray, g)
+  }
   const candidates: { ev: GameEvent; c?: Career; w: number }[] = []
   for (const ev of EVENTS) {
     if (ev.scope === 'global') {
@@ -902,12 +1138,18 @@ export function rollWeeklyEvent(g: GameState): PendingEvent | null {
   let chosen = candidates[candidates.length - 1]
   for (const x of candidates) { if (r < x.w) { chosen = x; break } r -= x.w }
   const { ev, c } = chosen
+  return bakeEvent(ev, g, c)
+}
+
+// Bake an event's display shape (dynamic stock via choicesFor).
+function bakeEvent(ev: GameEvent, g: GameState, c?: Career): PendingEvent {
+  const defs = ev.choicesFor?.(g) ?? ev.choices
   return {
     id: ev.id,
     careerId: c?.id,
     title: ev.title,
     body: ev.body(g, c),
-    choices: ev.choices.map((ch) => ({ label: ch.label, note: ch.note?.(g, c), cost: ch.cost?.(g, c) })),
+    choices: defs.map((ch) => ({ label: ch.label, note: ch.note?.(g, c), cost: ch.cost?.(g, c) })),
   }
 }
 
@@ -917,13 +1159,16 @@ export function rollWeeklyEvent(g: GameState): PendingEvent | null {
 export function resolveEvent(g: GameState, choiceIdx: number): GameState {
   const pe = g.pendingEvent
   if (!pe) return g
-  const choice = eventById(pe.id)?.choices[choiceIdx]
-  if (!choice) return { ...g, pendingEvent: null }
+  const ev = eventById(pe.id)
+  const choice = (ev?.choicesFor?.(g) ?? ev?.choices)?.[choiceIdx]
+  if (!ev || !choice) return { ...g, pendingEvent: null }
   const c = g.stable.find((x) => x.id === pe.careerId)
   if ((choice.cost?.(g, c) ?? 0) > g.gold) return g
   const applied = choice.apply(g, pe.careerId)
-  // An apply may CHAIN a follow-up (e.g. the challenge → result); respect a
-  // newly-set pending event, otherwise clear it.
+  // keepOpen (v0.6, peddler): re-bake the same event over the NEW state so the
+  // player can keep shopping; a normal choice closes it. An apply may also
+  // CHAIN a follow-up (e.g. challenge → result) — respect that.
+  if (choice.keepOpen) return { ...applied, pendingEvent: bakeEvent(ev, applied, c) }
   return applied.pendingEvent && applied.pendingEvent !== pe ? applied : { ...applied, pendingEvent: null }
 }
 
@@ -934,7 +1179,7 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
   // regardless of what the stored plan says (the UI locks it too).
   const competing = new Set([...(g.pendingTournament?.monsterIds ?? []), ...(g.pendingTrial?.monsterIds ?? [])])
   let gold = g.gold
-  let rentalDue = g.frozen.length * RENTAL_PER_FROZEN
+  let rentalDue = g.frozen.length * labUpkeepPerFrozen(g)
   const stable = g.stable.map((c) => {
     if (c.retired) return ageOneWeek(c)
     // A monster with NO plan rests by default — this is what the UI has always
@@ -949,19 +1194,27 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
     } else if (plan.forage) {
       cur = forageFeed(cur) // free fallback — costs stamina + happiness, no gold
     }
+    const planDrill = ALL_DRILLS.find((d) => d.id === plan.activity)
     const action: WeeklyAction = competing.has(c.id)
       ? { kind: 'compete' }
       : plan.activity === 'rest' || plan.activity === 'compete' ? { kind: 'rest' } // stale 'compete' with no live entry falls back to rest
         : plan.activity === 'excursion' ? { kind: 'excursion' }
-          : { kind: 'train', drillId: plan.activity }
+          : planDrill?.kind === 'extreme' && !g.extremeUnlocked ? { kind: 'rest' } // extreme row locked behind the Manual
+            : { kind: 'train', drillId: plan.activity }
     // Pass the food ONLY if it was actually bought (buyFood sets fedThisWeek) —
     // an unaffordable food must not grant its training boost.
-    const r = applyWeek(cur, action, gold, rentalDue, cur.fedThisWeek ? plan.food : '')
+    const r = applyWeek(cur, action, gold, rentalDue, cur.fedThisWeek ? plan.food : '', g.trainingGear ?? {})
     rentalDue = 0 // charged once per week, not per monster
     gold = r.gold
     return r.c
   })
-  if (rentalDue > 0) gold -= rentalDue // no monster processed the charge (all retired)
+  if (rentalDue > 0) gold = Math.max(0, gold - rentalDue) // no monster processed the charge (all retired) — never below zero
+
+  // Pensions + stud income (v0.6): decorated retirees keep earning, and a
+  // Stud Book turns a frozen champion's record into uncapped weekly fees.
+  const pensionGold = g.stable.reduce((s, c) => s + pensionFor(c), 0)
+  const studGold = g.frozen.reduce((s, fr) => s + studIncome(fr), 0)
+  gold += pensionGold + studGold
 
   // Snapshot post-activity, PRE-tournament state so the digest below can
   // attribute changes honestly (2026-07-25 playtest fix): tournament injuries
@@ -1047,6 +1300,11 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
       if (changed) lastWeek.push(`  ↳ ${after.name} comes home at ${after.hp}/${maxHp(after.stats)} HP · ${after.mp}/${maxMana(after.stats)} MP — rest to recover`)
     }
   }
+  if (pensionGold + studGold > 0) {
+    const bits = [pensionGold > 0 ? `pensions +${pensionGold}g` : '', studGold > 0 ? `stud fees +${studGold}g` : ''].filter(Boolean)
+    lastWeek.push(`🏛 Ranch income: ${bits.join(' · ')}`)
+  }
+
   // Trainer level-up notice (Phase 5): crossing a level threshold this week.
   if (Math.floor(trainerXp / TRAINER_XP_PER_LEVEL) > Math.floor((g.trainerXp ?? 0) / TRAINER_XP_PER_LEVEL)) {
     const lvl = Math.floor(trainerXp / TRAINER_XP_PER_LEVEL) + 1
@@ -1477,7 +1735,7 @@ function resolveTournament(g: GameState, stable: Career[], gold: number): { gold
   // wastes the gamble) — cleared on every entrant below.
   const truffleWin = playerPlacement === 1 && playerCareers.some((c) => c.truffleReady)
   const truffleMult = truffleWin ? 1.5 : 1
-  const goldPrize = Math.round(t.rewards.gold * mult * truffleMult)
+  const goldPrize = Math.round((t.rewards.gold + CUP_ROSTER_STIPEND * (teamSize - 1)) * mult * truffleMult)
   // Participation exp (2026-07-25 playtest fix): 4th+ used to earn NOTHING —
   // a new player's first cup is a near-guaranteed sweep against the fixed
   // league standard, and going home with zero on top of the injury + entry fee
@@ -1610,13 +1868,21 @@ export function healAtInfirmary(g: GameState, id: string): GameState {
 }
 
 // --- Lab (§13.1): freeze / thaw / fuse ---
+// Freeze = banking a FINISHED legacy (v0.6): retirees only — a monster's
+// competing years end before its genome enters the bank. Capacity-limited
+// (the bank is a curated collection). Decoration is captured for stud income
+// and championship-bloodline breeding bonuses.
 export function freeze(g: GameState, id: string): GameState {
   const c = g.stable.find((x) => x.id === id)
-  if (!c) return g
+  if (!c || !c.retired) return g
+  if (g.frozen.length >= (g.labCapacity ?? LAB_BASE_SLOTS)) return g
   const fr: Frozen = {
     id: c.id, name: c.name, species: c.species, sex: c.sex,
     stats: { ...c.stats }, favouriteFood: c.favouriteFood, hatedFood: c.hatedFood,
     licenseIndex: c.licenseIndex, potential: c.potential,
+    podiums: c.tournamentHistory.filter((h) => h.placement <= 3).length,
+    champs: c.tournamentHistory.filter((h) => h.placement === 1).length,
+    breedCount: 0, generation: c.generation ?? 1,
   }
   const stable = g.stable.filter((x) => x.id !== id)
   const activeId = g.activeId === id ? stable[0]?.id ?? '' : g.activeId
@@ -1627,7 +1893,16 @@ export function thaw(g: GameState, fid: string): GameState {
   if (g.stable.length >= effectiveBarnCap(g)) return g
   const fr = g.frozen.find((x) => x.id === fid)
   if (!fr) return g
-  const c = { ...careerFromFrozen(fr, fr.id), licenseIndex: g.licenseIndex } // thaws at the PLAYER's license (v0.5)
+  // v0.6: freeze holds FINISHED careers, so thaw un-banks the retiree as a
+  // retiree (pensioner) — not a rejuvenated Teen (that was the old mid-career
+  // freeze model, now an exploit). Their decoration is lost from the bank but
+  // lives on in tournamentHistory-less pension terms — they return as plain
+  // retirees (breeding decoration stays in the Frozen record until thawed).
+  const c = {
+    ...careerFromFrozen(fr, fr.id), licenseIndex: g.licenseIndex,
+    retired: true, ageWeeks: fr.species.lifespan * WEEKS_PER_YEAR,
+    comfortWeeks: comfortWeeksFor(g), generation: fr.generation ?? 1,
+  }
   return {
     ...g,
     stable: [...g.stable, c],

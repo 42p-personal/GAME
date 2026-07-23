@@ -1,6 +1,27 @@
 # Monster Tamer — Development Guide
 
-## Current state (v0.5)
+## Current state (v0.62)
+
+**v0.62 — economy pass + Town hub (2026-07-23):** the big economy rebalance plus a
+Town navigation restructure. Economy (see `docs/ECONOMY_FINDINGS.md` for the sim
+evidence that drove it): cup roster **stipend** (+20g/extra member), league team-size
+redistribution (Iron 4v4→3v3, Gold 5v5→4v4 — perfect pairs), retiree **pension**
+(2 +1/podium +2/champ, cap 10g/wk), freeze = **retirees only** + limited lab slots
+(2, expand 400/800/1600) + upkeep 8→5(→3 via lab-tech loan event), **comfort set**
+(stable-wide +2mo career span each: 300/500/1000), **Mysterious Peddler** event (the
+only source of training gear — 6 stat lines ×5 tiers 200/500/750/1000/1250 with a
+reveal chain; Elder Tonic 500g; Stud Book 750g uncapped stud income), **extreme
+drills** (+20/−6/−6, 1500g manual), **breeding** (two frozen legacies → child, parents
+preserved ≤2 each, potential avg+10%+champ bonus cap 1.5, 35% head start, heritage
+stat, Gen ★), **stray-monster** soft-lock backstop, "career span" rename. Town is now
+a **hub of location buttons** (🛒 Market · 🏟 Stables · 🐎 Breeding Ranch · 🏡 Retirement
+Ranch · 🧪 Lab), each a focused sub-screen; new games still open in the Market. The
+🧪 Lab is a placeholder for the upcoming **fusion** system (`docs/FUSION_DESIGN.md`:
+15 new fusion species across 3 classes — NOT yet built).
+
+---
+
+## Prior state (v0.5)
 
 Everything is **committed on `main`/`preview` and deployed live**. `tsc`/`npm run build`/`npm test`
 (12/12) clean; `validateDesign()` reports `45 species, 11 classes, 90 moves, ~48 tournaments/yr —

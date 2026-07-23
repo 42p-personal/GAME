@@ -10,15 +10,16 @@ import { ArenaBattle } from './arena'
 import { Sprite } from './Sprite'
 import { SPECIES } from './species'
 import { BIOS } from './bestiary'
-import { BASIC_DRILLS, Drill, INTENSIVE_DRILLS } from './drills'
+import { BASIC_DRILLS, Drill, EXTREME_DRILLS, INTENSIVE_DRILLS } from './drills'
 import {
-  BASIC_DRILL_STAMINA, Career, INTENSIVE_DRILL_STAMINA, MAX_STAMINA, canRankUp, careerMonster,
+  BASIC_DRILL_STAMINA, Career, INTENSIVE_DRILL_STAMINA, EXTREME_DRILL_STAMINA, MAX_STAMINA, canRankUp, careerMonster, careerSpanYears,
   dateLabel, foodName, FORAGE_STAMINA_COST, FORAGE_HAPPINESS_COST, previewWeekEffects, stageInfo, trainingProfileFor,
 } from './game'
 import {
-  PANTRY_CONTRACT_COST, GRAND_LARDER_COST, ELITE_LICENSE_COST, EventMatch, EventStanding, FUSION_COST, GameState, PendingEvent, RENTAL_PER_FROZEN, RIVAL_BAND_MIN, RIVAL_BUDGET_MULT, SPECIAL_LICENSE_COST,
+  PANTRY_CONTRACT_COST, GRAND_LARDER_COST, ELITE_LICENSE_COST, EventMatch, EventStanding, GameState, PendingEvent, RIVAL_BAND_MIN, RIVAL_BUDGET_MULT, SPECIAL_LICENSE_COST,
+  COMFORT_ITEMS, EXTREME_MANUAL_COST, BREED_COST, BREED_MAX_CHILDREN, LAB_BASE_SLOTS, applyStudBook, breed, breedPotentialV2, buyComfortItem, buyExtremeManual, expandLab, labExpandCost, labUpkeepPerFrozen, pensionFor, studIncome, useTonic,
   WeekPlanEntry, advanceWeek, barnCost, buyPantryContract, buyGrandLarder, buyEliteLicense, buyMonster, foodDiscountFor, resolveEvent,
-  buySpecialLicense, cancelSignUp, cupLore, eligibleForTournament, freeze, fuse, fusionRoom, gameplanForRivalTeam, generateRivalTeamsForTournament, goto, healAtInfirmary, infirmaryFee, leagueIndexOf, monthOfWeek,
+  buySpecialLicense, cancelSignUp, cupLore, eligibleForTournament, freeze, fusionRoom, gameplanForRivalTeam, generateRivalTeamsForTournament, goto, healAtInfirmary, infirmaryFee, leagueIndexOf, monthOfWeek,
   entryFee, placementLabel, scoutFee, teamSizeForLeague, seatedRivalTeamIndex,
   trainerXpProgress, trainerBarnBonus, effectiveBarnCap, BREEDING_BONUS,
   buyLicense, cancelTrial, nextLicenseCost, startTrial, trialStatus, TRIAL_CHAMPION_MULT, RIVAL_PERSONALITY_GAMEPLAN,
@@ -143,7 +144,7 @@ function MonsterCard({ m }: { m: Monster }) {
       <div className="badges">
         <span className="badge">{m.className}</span>
         <span className="badge">{m.league} league</span>
-        <span className="badge">Lifespan {m.species.lifespan}y</span>
+        <span className="badge">Career {m.species.lifespan}y</span>
       </div>
 
       <div className="afftaste">
@@ -201,7 +202,7 @@ function ScoutReport({ m, tier }: { m: Monster; tier: 'basic' | 'full' | undefin
       <div className="badges">
         <span className={'badge' + (knowsKit ? '' : ' locked')}>{knowsKit ? m.className : '??'}</span>
         <span className="badge">{m.league} league</span>
-        <span className="badge">Lifespan {m.species.lifespan}y</span>
+        <span className="badge">Career {m.species.lifespan}y</span>
       </div>
 
       <div className="afftaste">
@@ -314,7 +315,7 @@ function Bestiary({ specialLicense, eliteLicense }: { specialLicense: boolean; e
                   </summary>
                   <p className="bio">{BIOS[s.id] ?? s.flavour}</p>
                   <p className="dim bsmall">
-                    Innate: {s.innate.map((a) => a.name).join(' · ')} · Lifespan {s.lifespan}y
+                    Innate: {s.innate.map((a) => a.name).join(' · ')} · Career span {s.lifespan}y
                   </p>
                 </details>
                 )
@@ -460,10 +461,19 @@ function SandboxView() {
 }
 
 // ============================ Town hub (§13) ============================
+type TownArea = 'hub' | 'market' | 'breeding' | 'retirement' | 'lab'
+
 function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetStateAction<GameState>> }) {
   const [fuseA, setFuseA] = useState('')
   const [fuseB, setFuseB] = useState('')
+  // The town is a navigable hub of locations. A fresh game (empty stable) opens
+  // straight into the Market to buy a first monster; otherwise land on the hub.
+  const [area, setArea] = useState<TownArea>(game.stable.length === 0 ? 'market' : 'hub')
   const barnFull = game.stable.length >= effectiveBarnCap(game)
+  const active = game.stable.filter((c) => !c.retired)
+  const retirees = game.stable.filter((c) => c.retired)
+  const pensionTotal = retirees.reduce((s, c) => s + pensionFor(c), 0)
+  const studTotal = game.frozen.reduce((s, f) => s + studIncome(f), 0)
 
   return (
     <>
@@ -472,12 +482,190 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
       )}
       <div className="townbar">
         <span>🪙 {game.gold}g</span>
-        <span>🏠 Stable {game.stable.length}/{effectiveBarnCap(game)}</span>
-        <span>❄️ Frozen {game.frozen.length}</span>
+        <span>🏠 Stable {active.length}/{effectiveBarnCap(game)}</span>
+        <span>❄️ Studs {game.frozen.length}/{game.labCapacity}</span>
         {game.pantryContract && <span className="up">🧺 Pantry</span>}
         {game.grandLarder && <span className="up">🏰 Larder</span>}
       </div>
 
+      {area !== 'hub' && (
+        <button className="ghost townback" onClick={() => setArea('hub')}>← Town</button>
+      )}
+
+      {/* ---- HUB: the town map, a grid of location buttons ---- */}
+      {area === 'hub' && (
+        <>
+          <div className="townhub">
+            <button className="hubbtn" onClick={() => setArea('market')}>
+              <span className="hubicon">🛒</span><b>Market</b>
+              <span className="dim">monsters, licenses &amp; supplies</span>
+            </button>
+            <button className="hubbtn" disabled={active.length === 0}
+              title={active.length === 0 ? 'Buy a monster at the Market first' : undefined}
+              onClick={() => setGame((g) => goto(g, 'ranch'))}>
+              <span className="hubicon">🏟</span><b>Stables</b>
+              <span className="dim">{active.length === 0 ? 'empty — visit the Market' : `train your ${active.length} competitor${active.length === 1 ? '' : 's'}`}</span>
+            </button>
+            <button className="hubbtn" onClick={() => setArea('breeding')}>
+              <span className="hubicon">🐎</span><b>Breeding Ranch</b>
+              <span className="dim">{game.frozen.length} stud{game.frozen.length === 1 ? '' : 's'}{studTotal > 0 ? ` · +${studTotal}g/wk` : ' · breed a dynasty'}</span>
+            </button>
+            <button className="hubbtn" onClick={() => setArea('retirement')}>
+              <span className="hubicon">🏡</span><b>Retirement Ranch</b>
+              <span className="dim">{retirees.length} pensioner{retirees.length === 1 ? '' : 's'}{pensionTotal > 0 ? ` · +${pensionTotal}g/wk` : ''}</span>
+            </button>
+            <button className="hubbtn" onClick={() => setArea('lab')}>
+              <span className="hubicon">🧪</span><b>Lab</b>
+              <span className="dim">fusion research</span>
+            </button>
+          </div>
+
+          {/* Glanceable meta on the hub itself */}
+          {(() => {
+            const p = trainerXpProgress(game)
+            const barn = trainerBarnBonus(game)
+            return (
+              <div className="card loc">
+                <div className="loc-h"><span>🎓 Trainer — {game.trainerName}</span><span className="dim">Level {p.level}</span></div>
+                <div className="xpbar"><div className="xpfill" style={{ width: `${Math.round((p.into / p.need) * 100)}%` }} /></div>
+                <div className="dim" style={{ marginTop: 4 }}>
+                  {p.into}/{p.need} XP to level {p.level + 1} · earn XP from cup podiums &amp; raising monsters to retirement
+                  {barn > 0 && <> · <b className="up">+{barn} barn slot{barn > 1 ? 's' : ''}</b></>}
+                </div>
+              </div>
+            )
+          })()}
+          {game.rivals.length > 0 && (
+            <div className="card loc">
+              <div className="loc-h"><span>🥊 Rivals</span></div>
+              {game.rivals.map((rv) => {
+                const led = rv.wins > rv.losses, tied = rv.wins === rv.losses
+                const record = rv.wins === 0 && rv.losses === 0 ? 'Not yet faced'
+                  : tied ? `Even ${rv.wins}–${rv.losses}`
+                    : led ? `You lead ${rv.wins}–${rv.losses}` : `${rv.name} leads ${rv.losses}–${rv.wins}`
+                const trait = rv.personality === 'aggressive' ? 'hits hard and early'
+                  : rv.personality === 'cagey' ? 'patient and defensive' : 'loves a big play'
+                return (
+                  <div className="shoprow" key={rv.id}>
+                    <div>
+                      <b>{rv.name}</b> <span className="dim">· {LEAGUES[rv.licenseIndex].name} · {trait}</span>
+                      <div className={led ? 'up' : tied ? 'dim' : 'down'}>{record}</div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ---- RETIREMENT RANCH: pensioners earning passive gold ---- */}
+      {area === 'retirement' && (
+        <div className="townmap">
+          <div className="card loc">
+            <div className="loc-h"><span>🏡 Retirement Ranch</span>{pensionTotal > 0 && <span className="up">+{pensionTotal}g/wk</span>}</div>
+            <div className="dim" style={{ marginBottom: 6 }}>Champions who've hung up their competing careers earn a weekly pension — richer the more decorated they were. Send one to the Breeding Ranch to found a dynasty instead.</div>
+            {retirees.length === 0 && <div className="dim">No pensioners yet — monsters retire when their career span ends.</div>}
+            {retirees.map((c) => {
+              const podiums = c.tournamentHistory.filter((h) => h.placement <= 3).length
+              const champs = c.tournamentHistory.filter((h) => h.placement === 1).length
+              return (
+                <div className="shoprow" key={c.id}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Sprite species={c.species} size={32} stage="Retiree" />
+                    <div>
+                      <b>{c.name}</b> <span className="dim">· {c.species.name}</span>
+                      <div className="dim">🏅 {podiums} podium{podiums === 1 ? '' : 's'} · 🏆 {champs} · 🏛 +{pensionFor(c)}g/wk</div>
+                    </div>
+                  </div>
+                  <button className="ghost" disabled={game.frozen.length >= game.labCapacity}
+                    title={game.frozen.length >= game.labCapacity ? 'The stud farm is full — expand it at the Breeding Ranch' : 'Move to the Breeding Ranch as breeding stock (ends the pension)'}
+                    onClick={() => setGame((g) => freeze(g, c.id))}>🐎 To Stud</button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ---- BREEDING RANCH: the stud farm + breeding ---- */}
+      {area === 'breeding' && (
+        <div className="townmap">
+          <div className="card loc">
+            <div className="loc-h"><span>🐎 Breeding Ranch</span><span className="dim">{game.frozen.length}/{game.labCapacity} studs · upkeep {labUpkeepPerFrozen(game)}g/wk each{game.labTechLoan ? ' (at cost 🤝)' : ''}</span></div>
+            <div className="section-title">Breeding stock</div>
+            <div className="labrows">
+              {game.frozen.length === 0 && <div className="dim">No studs yet — send a decorated retiree here from the Retirement Ranch.</div>}
+              {game.frozen.map((f) => (
+                <div className="labrow" key={f.id}>
+                  <Sprite species={f.species} size={28} stage="Retiree" />
+                  <span className="bn">{f.name}{f.studBook ? ' 📕' : ''}</span>
+                  <span className="dim">
+                    {f.species.name} · 🏅{f.podiums ?? 0} 🏆{f.champs ?? 0} · {BREED_MAX_CHILDREN - (f.breedCount ?? 0)} breed{BREED_MAX_CHILDREN - (f.breedCount ?? 0) === 1 ? '' : 's'} left
+                    {f.studBook ? ` · stud +${studIncome(f)}g/wk` : ''}
+                  </span>
+                  {(game.studBooks ?? 0) > 0 && !f.studBook && (
+                    <button className="ghost" title="Assign a Stud Book — uncapped weekly fees from this legacy's record"
+                      onClick={() => setGame((g) => applyStudBook(g, f.id))}>📕 Stud</button>
+                  )}
+                  <button className="ghost" disabled={barnFull} title="Return to the stable as a pensioner"
+                    onClick={() => setGame((g) => thaw(g, f.id))}>Recall</button>
+                </div>
+              ))}
+            </div>
+            {labExpandCost(game) !== null && (
+              <button className="ghost" disabled={game.gold < (labExpandCost(game) ?? Infinity)}
+                onClick={() => setGame((g) => expandLab(g))}>
+                ➕ Expand stud farm · {labExpandCost(game)}g ({game.labCapacity} → {game.labCapacity + 1} slots)
+              </button>
+            )}
+            <div className="section-title">Breed (two studs parent a child)</div>
+            <div className="fuserow">
+              <select value={fuseA} onChange={(e) => setFuseA(e.target.value)}>
+                <option value="">— parent A (frame) —</option>
+                {game.frozen.filter((f) => (f.breedCount ?? 0) < BREED_MAX_CHILDREN).map((f) => <option key={f.id} value={f.id}>{f.name} ({f.species.name})</option>)}
+              </select>
+              <select value={fuseB} onChange={(e) => setFuseB(e.target.value)}>
+                <option value="">— parent B (heritage) —</option>
+                {game.frozen.filter((f) => (f.breedCount ?? 0) < BREED_MAX_CHILDREN).map((f) => <option key={f.id} value={f.id}>{f.name} ({f.species.name})</option>)}
+              </select>
+              <button
+                className="rankup"
+                disabled={!fuseA || !fuseB || fuseA === fuseB || game.gold < BREED_COST || !fusionRoom(game)}
+                onClick={() => { setGame((g) => breed(g, fuseA, fuseB)); setFuseA(''); setFuseB('') }}
+              >
+                Breed · {BREED_COST}g
+              </button>
+            </div>
+            {fuseA && fuseB && fuseA !== fuseB && (() => {
+              const a = game.frozen.find((f) => f.id === fuseA)!
+              const b = game.frozen.find((f) => f.id === fuseB)!
+              const pot = breedPotentialV2(a, b)
+              return <div className="hint">Child: {a.species.name} frame · Gen {Math.max(a.generation ?? 1, b.generation ?? 1) + 1} · potential ×{pot.toFixed(2)} {'★'.repeat(Math.max(0, Math.round((pot - 1) / 0.05)))} · ~35% stat head start · trains {b.name}'s best stat +10% faster</div>
+            })()}
+            <div className="hint">Parents are preserved (each stud can parent {BREED_MAX_CHILDREN} children). Championship-decorated parents pass on extra <b>potential</b> — the stat ceiling that lets a bloodline climb past wild limits.</div>
+          </div>
+        </div>
+      )}
+
+      {/* ---- LAB: the fusion facility (fusion itself ships next pass) ---- */}
+      {area === 'lab' && (
+        <div className="townmap">
+          <div className="card loc">
+            <div className="loc-h"><span>🧪 Lab</span><span className="dim">genome bank {game.frozen.length}/{game.labCapacity}</span></div>
+            <div className="section-title">⚗️ Fusion Research</div>
+            <div className="dim">
+              The Lab will let you <b>fuse</b> two monsters into an entirely new hybrid species — a
+              fast-training specialist that founds a brand-new bloodline. Fusion recipes and the new
+              species are in development.
+            </div>
+            <div className="hint" style={{ marginTop: 8 }}>🔬 Coming soon — for now, bank and breed your champions at the Breeding Ranch.</div>
+          </div>
+        </div>
+      )}
+
+      {/* ---- MARKET: buy monsters, licenses, supplies, healing ---- */}
+      {area === 'market' && (
       <div className="townmap">
         {/* Market */}
         <div className="card loc">
@@ -514,103 +702,6 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
             })}
           </div>
         </div>
-
-        {/* Lab */}
-        <div className="card loc">
-          <div className="loc-h"><span>🧪 Lab</span><span className="dim">upkeep {RENTAL_PER_FROZEN}g/wk each</span></div>
-          <div className="section-title">Freeze (bank a genome)</div>
-          <div className="labrows">
-            {game.stable.length === 0 && <div className="dim">No monsters in the stable.</div>}
-            {game.stable.map((c) => (
-              <div className="labrow" key={c.id}>
-                <Sprite species={c.species} size={28} stage={stageInfo(c.ageWeeks, c.species.lifespan).stage} />
-                <span className="bn">{c.name}</span>
-                <span className="dim">{c.species.name}</span>
-                <button className="ghost" onClick={() => setGame((g) => freeze(g, c.id))}>Freeze ❄️</button>
-              </div>
-            ))}
-          </div>
-          <div className="section-title">Thaw</div>
-          <div className="labrows">
-            {game.frozen.length === 0 && <div className="dim">No frozen genomes.</div>}
-            {game.frozen.map((f) => (
-              <div className="labrow" key={f.id}>
-                {/* Frozen genomes carry no age — thaw always returns a Teen. */}
-                <Sprite species={f.species} size={28} stage="Teen" />
-                <span className="bn">{f.name}</span>
-                <span className="dim">{f.species.name}</span>
-                <button className="ghost" disabled={barnFull} onClick={() => setGame((g) => thaw(g, f.id))}>Thaw</button>
-              </div>
-            ))}
-          </div>
-          <div className="section-title">Fuse (combine two frozen → baby)</div>
-          <div className="fuserow">
-            <select value={fuseA} onChange={(e) => setFuseA(e.target.value)}>
-              <option value="">— parent A —</option>
-              {game.frozen.map((f) => <option key={f.id} value={f.id}>{f.name} ({f.species.name})</option>)}
-            </select>
-            <select value={fuseB} onChange={(e) => setFuseB(e.target.value)}>
-              <option value="">— parent B —</option>
-              {game.frozen.map((f) => <option key={f.id} value={f.id}>{f.name} ({f.species.name})</option>)}
-            </select>
-            <button
-              className="rankup"
-              disabled={!fuseA || !fuseB || fuseA === fuseB || game.gold < FUSION_COST || !fusionRoom(game)}
-              onClick={() => { setGame((g) => fuse(g, fuseA, fuseB)); setFuseA(''); setFuseB('') }}
-            >
-              Fuse · {FUSION_COST}g
-            </button>
-          </div>
-          <div className="hint">Baby hatches unlicensed with a <b>bloodline potential</b> = the parents' average +{Math.round(BREEDING_BONUS * 100)}% — a higher stat ceiling than any wild monster. Breed a line over generations to climb it.</div>
-        </div>
-
-        {/* Ranch */}
-        <div className="card loc">
-          <div className="loc-h"><span>🐄 Ranch</span></div>
-          <button className="enter" disabled={game.stable.length === 0} onClick={() => setGame((g) => goto(g, 'ranch'))}>Enter the Ranch →</button>
-          {game.stable.length === 0 && <div className="dim">Buy a monster first.</div>}
-        </div>
-
-        {/* Trainer level (LOOP_DESIGN Phase 5): the persistent meta character —
-            the ranch is the account, monsters are the runs. */}
-        {(() => {
-          const p = trainerXpProgress(game)
-          const barn = trainerBarnBonus(game)
-          return (
-            <div className="card loc">
-              <div className="loc-h"><span>🎓 Trainer — {game.trainerName}</span><span className="dim">Level {p.level}</span></div>
-              <div className="xpbar"><div className="xpfill" style={{ width: `${Math.round((p.into / p.need) * 100)}%` }} /></div>
-              <div className="dim" style={{ marginTop: 4 }}>
-                {p.into}/{p.need} XP to level {p.level + 1} · earn XP from cup podiums &amp; raising monsters to retirement
-                {barn > 0 && <> · <b className="up">+{barn} barn slot{barn > 1 ? 's' : ''}</b></>}
-              </div>
-            </div>
-          )
-        })()}
-
-        {/* Rivals (LOOP_DESIGN Phase 2): the recurring face(s) on the ladder,
-            with the running head-to-head. Climb toward the player's level. */}
-        {game.rivals.length > 0 && (
-          <div className="card loc">
-            <div className="loc-h"><span>🥊 Rivals</span></div>
-            {game.rivals.map((rv) => {
-              const led = rv.wins > rv.losses, tied = rv.wins === rv.losses
-              const record = rv.wins === 0 && rv.losses === 0 ? 'Not yet faced'
-                : tied ? `Even ${rv.wins}–${rv.losses}`
-                  : led ? `You lead ${rv.wins}–${rv.losses}` : `${rv.name} leads ${rv.losses}–${rv.wins}`
-              const trait = rv.personality === 'aggressive' ? 'hits hard and early'
-                : rv.personality === 'cagey' ? 'patient and defensive' : 'loves a big play'
-              return (
-                <div className="shoprow" key={rv.id}>
-                  <div>
-                    <b>{rv.name}</b> <span className="dim">· {LEAGUES[rv.licenseIndex].name} · {trait}</span>
-                    <div className={led ? 'up' : tied ? 'dim' : 'down'}>{record}</div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
 
         {/* Infirmary (2026-07-25): pay to mend wounds NOW instead of resting a
             week away — fee scales with league and how much is missing.
@@ -663,6 +754,28 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
             </div>
             <button disabled={game.gold < barnCost(game)} onClick={() => setGame((g) => upgradeBarn(g))}>Buy · {barnCost(game)}g</button>
           </div>
+          {/* Comfort set (v0.6): stable-wide permanent +2 months career span each. */}
+          {COMFORT_ITEMS.map((it) => (
+            <div className="shoprow" key={it.id}>
+              <div>
+                <b>{it.icon} {it.name}</b>
+                <div className="dim">+2 months career span — every monster, forever{game.comfortOwned.includes(it.id) ? ' · ✓ owned' : ''}</div>
+              </div>
+              {game.comfortOwned.includes(it.id)
+                ? <button disabled>✓</button>
+                : <button disabled={game.gold < it.price} onClick={() => setGame((g) => buyComfortItem(g, it.id))}>Buy · {it.price}g</button>}
+            </div>
+          ))}
+          {/* Extreme Training Manual (v0.6): unlocks the extreme drill row. */}
+          <div className="shoprow">
+            <div>
+              <b>📕 Extreme Training Manual</b>
+              <div className="dim">Unlocks extreme drills: +20 to one stat, −6 to two others, −{EXTREME_DRILL_STAMINA} stamina{game.extremeUnlocked ? ' · ✓ owned' : ''}</div>
+            </div>
+            {game.extremeUnlocked
+              ? <button disabled>✓</button>
+              : <button disabled={game.gold < EXTREME_MANUAL_COST} onClick={() => setGame((g) => buyExtremeManual(g))}>Buy · {EXTREME_MANUAL_COST}g</button>}
+          </div>
           <div className="shoprow">
             <div>
               <b>🧺 Pantry Contract</b>
@@ -701,6 +814,7 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
           </div>
         </div>
       </div>
+      )}
     </>
   )
 }
@@ -728,15 +842,14 @@ function DigestLine({ text, className }: { text: string; className: string }) {
 // One training-row block: a drill's LIVE preview for the selected monster this
 // week (exact, not estimated — previewWeekEffects shares applyWeek's seeded
 // rng) so the happiness-weighted roll shows the real number, not a nominal one.
-function TrainBlock({ d, career, food, forage, selected, onClick }: {
-  d: Drill; career: Career; food: WeekPlanEntry['food']; forage?: boolean; selected: boolean; onClick: () => void
+function TrainBlock({ d, career, food, forage, gear, selected, onClick }: {
+  d: Drill; career: Career; food: WeekPlanEntry['food']; forage?: boolean; gear: GameState['trainingGear']; selected: boolean; onClick: () => void
 }) {
   const stat = primaryStatOf(d)
-  const preview = previewWeekEffects(career, d.id, food, forage)
+  const preview = previewWeekEffects(career, d.id, food, forage, gear)
   const gain = preview.statDeltas[stat]
-  const malusEntry = (Object.entries(d.gains) as [Stat, number][]).find(([, v]) => v < 0)
-  const malus = malusEntry ? preview.statDeltas[malusEntry[0]] ?? malusEntry[1] : undefined
-  const stamCost = d.kind === 'basic' ? BASIC_DRILL_STAMINA : INTENSIVE_DRILL_STAMINA
+  const malusEntries = (Object.entries(d.gains) as [Stat, number][]).filter(([, v]) => v < 0)
+  const stamCost = d.kind === 'basic' ? BASIC_DRILL_STAMINA : d.kind === 'intensive' ? INTENSIVE_DRILL_STAMINA : EXTREME_DRILL_STAMINA
   const gainText = gain !== undefined ? `${gain > 0 ? '+' : ''}${gain} ${stat}` : `+${d.gains[stat]} ${stat}`
   // Aptitude coloring (user spec 2026-07-20): a stat this species trains FASTER
   // (major/minor) gets its number tinted to the stat's own colour instead
@@ -750,7 +863,7 @@ function TrainBlock({ d, career, food, forage, selected, onClick }: {
       <div className="trainblock-name" style={{ color: STAT_COLOR[stat] }}>{d.name}</div>
       <div className="trainblock-sub">
         <span className="benefit-gain" style={hasBenefit ? { color: STAT_COLOR[stat] } : undefined}>{gainText}</span>
-        {malusEntry && <>, <span className="benefit-malus">{malus} {malusEntry[0]}</span></>} · −{stamCost} stam
+        {malusEntries.map(([ms, mv]) => <span key={ms}>, <span className="benefit-malus">{preview.statDeltas[ms] ?? mv} {ms}</span></span>)} · −{stamCost} stam
       </div>
     </button>
   )
@@ -761,9 +874,9 @@ function TrainBlock({ d, career, food, forage, selected, onClick }: {
 // excursion shows the flat gold purse. Gains render white; maluses render black.
 // Live and exact — previewWeekEffects shares applyWeek's seeded rng, and the
 // preview re-rolls with the post-feed happiness as the food selection changes.
-function PlanBenefit({ career, plan }: { career: Career; plan: WeekPlanEntry }) {
-  const preview = previewWeekEffects(career, plan.activity, plan.food, plan.forage)
-  const drill = [...BASIC_DRILLS, ...INTENSIVE_DRILLS].find((d) => d.id === plan.activity)
+function PlanBenefit({ career, plan, gear }: { career: Career; plan: WeekPlanEntry; gear: GameState['trainingGear'] }) {
+  const preview = previewWeekEffects(career, plan.activity, plan.food, plan.forage, gear)
+  const drill = [...BASIC_DRILLS, ...INTENSIVE_DRILLS, ...EXTREME_DRILLS].find((d) => d.id === plan.activity)
   const label = drill ? `💪 ${drill.name}` : plan.activity === 'excursion' ? '🧭 Excursion' : '😴 Rest'
   const cap = LEAGUES[career.licenseIndex].cap
   return (
@@ -1428,7 +1541,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
   // tastes, so a single bulk-feed button can't work) — happens BEFORE the
   // stable screen every week.
   if (phase === 'feeding') {
-    const st = stageInfo(currentCareer.ageWeeks, currentCareer.species.lifespan)
+    const st = stageInfo(currentCareer.ageWeeks, careerSpanYears(currentCareer))
     return (
       <>
         {game.pendingEvent && (
@@ -1466,7 +1579,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
           <div className="card">
             <div className="careerbar">
               <span>{currentCareer.species.name} · {classForStats(currentCareer.stats)}</span>
-              <span>{st.stage} · age {st.ageYears}y / {currentCareer.species.lifespan}y · {LEAGUES[currentCareer.licenseIndex].name}</span>
+              <span>{st.stage} · age {st.ageYears}y / career {+careerSpanYears(currentCareer).toFixed(1)}y · {LEAGUES[currentCareer.licenseIndex].name}</span>
             </div>
             <div className="feedhead">
               <Sprite species={currentCareer.species} size={72} stage={st.stage} />
@@ -1522,7 +1635,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
                     <span className="forage-sub">no gold — but −{FORAGE_STAMINA_COST} stamina · −{FORAGE_HAPPINESS_COST} happiness</span>
                   </button>
                 )}
-                <PlanBenefit career={currentCareer} plan={currentPlan} />
+                <PlanBenefit career={currentCareer} plan={currentPlan} gear={game.trainingGear} />
               </>
             )}
             <div className="carerow" style={{ marginTop: '1rem' }}>
@@ -1600,9 +1713,9 @@ function RanchView({ game, setGame, onBattleScreen }: {
       <div className="feedok">✓ feeding complete for this week — plan training below, or check the calendar</div>
       {trialGate.ok && !game.pendingTrial && (
         <TipBanner game={game} setGame={setGame} id="rankup">
-          🎖 A monster is strong enough to challenge the {LEAGUES[game.licenseIndex].name} Champion — win the
-          rank-up trial (below the stable) to unlock the {LEAGUES[game.licenseIndex + 1]?.name} license. The
-          fight takes the week, win or lose.
+          🎖 A monster can now CHALLENGE the {LEAGUES[game.licenseIndex].name} Champion (rank-up trial, below
+          the stable) — but champions punish one-trick builds. Train two or three stats before you take the
+          fight; the trial panel will tell you honestly where you stand.
         </TipBanner>
       )}
 
@@ -1615,7 +1728,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
               return (
                 <div key={c.id} className={'stablecard' + (c.id === selectedCareer.id ? ' selected' : '') + (c.retired ? ' retired' : '')}
                   onClick={() => { setSelectedMonsterId(c.id); setAbilityEditorFor(null); setShowHistoryFor(null); setRenamingId(null) }}>
-                  <Sprite species={c.species} size={40} stage={stageInfo(c.ageWeeks, c.species.lifespan).stage} />
+                  <Sprite species={c.species} size={40} stage={stageInfo(c.ageWeeks, careerSpanYears(c)).stage} />
                   <span className="bn">{c.name}</span>
                   <div className="dim" style={{ fontSize: 10.5 }}>{c.species.name}</div>
                   {c.retired ? <span className="stablechip warn">🏁 retired</span>
@@ -1631,7 +1744,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
           {/* Detail panel */}
           <div className="detailgrid">
             <div className="card detail-portrait">
-              <Sprite species={selectedCareer.species} size={96} stage={stageInfo(selectedCareer.ageWeeks, selectedCareer.species.lifespan).stage} />
+              <Sprite species={selectedCareer.species} size={96} stage={stageInfo(selectedCareer.ageWeeks, careerSpanYears(selectedCareer)).stage} />
               <div className="detail-namerow">
                 {renamingId === selectedCareer.id ? (
                   <input autoFocus defaultValue={selectedCareer.name} className="detail-nameinput" maxLength={24}
@@ -1650,8 +1763,8 @@ function RanchView({ game, setGame, onBattleScreen }: {
                 )}
               </div>
               {(() => {
-                const st = stageInfo(selectedCareer.ageWeeks, selectedCareer.species.lifespan)
-                return <div className="dim" style={{ fontSize: 11 }}>{st.stage} · age {st.ageYears}y / {selectedCareer.species.lifespan}y · {LEAGUES[selectedCareer.licenseIndex].name} league</div>
+                const st = stageInfo(selectedCareer.ageWeeks, careerSpanYears(selectedCareer))
+                return <div className="dim" style={{ fontSize: 11 }}>{st.stage} · age {st.ageYears}y / career {+careerSpanYears(selectedCareer).toFixed(1)}y · {LEAGUES[selectedCareer.licenseIndex].name} league</div>
               })()}
 
               <button className="detail-actionbtn" disabled={game.pendingTournament?.monsterIds.includes(selectedCareer.id) ?? false}
@@ -1661,6 +1774,20 @@ function RanchView({ game, setGame, onBattleScreen }: {
               <button className="detail-actionbtn" onClick={() => setShowHistoryFor(showHistoryFor === selectedCareer.id ? null : selectedCareer.id)}>
                 🏆 Tournament History
               </button>
+              {(game.tonics ?? 0) > 0 && (
+                <button className="detail-actionbtn" onClick={() => setGame((g) => useTonic(g, selectedCareer.id))}>
+                  🧪 Use Elder Tonic — +2 months career span ({game.tonics} left)
+                </button>
+              )}
+              {(selectedCareer.generation ?? 1) > 1 && (
+                <div className="dim" style={{ fontSize: 11 }}>
+                  🧬 Gen {selectedCareer.generation} {'★'.repeat(Math.max(0, Math.round(((selectedCareer.potential ?? 1) - 1) / 0.05)))} · potential ×{(selectedCareer.potential ?? 1).toFixed(2)}
+                  {selectedCareer.heritageStat ? ` · heritage ${selectedCareer.heritageStat} (+10% training)` : ''}
+                </div>
+              )}
+              {selectedCareer.retired && (
+                <div className="dim" style={{ fontSize: 11 }}>🏛 Pension: +{pensionFor(selectedCareer)}g/wk — or bank the legacy at the Lab for breeding.</div>
+              )}
               {showHistoryFor === selectedCareer.id && (
                 <div className="tour-history">
                   <div className="tour-history-podiums">
@@ -1737,10 +1864,25 @@ function RanchView({ game, setGame, onBattleScreen }: {
                   : <div className="hint" style={{ marginTop: 10 }}>🎖 Rank-up trial: {trialGate.reason}</div>
                 const size = teamSizeForLeague(league.name)
                 const pool = game.stable.filter((c) => !c.retired)
+                // Honest readiness signal (playtest fix): the champion fields
+                // WELL-ROUNDED monsters at ~cap×1.8×1.25 total — one maxed stat
+                // is not enough beyond Wood (sim: 1-stat builds win <10%, 3-stat
+                // ~70%). Compare the picked team's totals against that target.
+                const champTarget = league.cap * RIVAL_BUDGET_MULT * TRIAL_CHAMPION_MULT
+                const picked = trialPick.map((id) => pool.find((c) => c.id === id)!).filter(Boolean)
+                const teamAvg = picked.length ? picked.reduce((s, c) => s + STATS.reduce((t, k) => t + c.stats[k], 0), 0) / picked.length : 0
+                const ratio = teamAvg / champTarget
                 return (
                   <div className="trial-panel">
                     <div className="section-title">🎖 Rank-up Trial — the {league.name} Champion</div>
-                    <div className="dim">Beat a champion-grade {size}v{size} team (≈{Math.round(TRIAL_CHAMPION_MULT * 100)}% of league standard) to unlock the {next.name} license ({nextLicenseCost(game)}g). The fight takes the week — win or lose, your team comes home needing rest.</div>
+                    <div className="dim">Beat a champion-grade {size}v{size} team to unlock the {next.name} license ({nextLicenseCost(game)}g). The Champion fields well-rounded monsters (~{Math.round(champTarget)} total stats each) — one maxed stat won't carry you. The fight takes the week; win or lose, your team comes home needing rest.</div>
+                    {picked.length === size && (
+                      <div className={ratio >= 0.85 ? 'up' : ratio >= 0.6 ? 'dim' : 'neg'} style={{ fontSize: 12 }}>
+                        {ratio >= 0.85 ? `⚔ Your team (~${Math.round(teamAvg)} avg total) stands toe-to-toe with the Champion — a real shot.`
+                          : ratio >= 0.6 ? `⚠ Your team (~${Math.round(teamAvg)} avg total) is the underdog vs ~${Math.round(champTarget)} — train a second stat before challenging.`
+                            : `🛑 Your team (~${Math.round(teamAvg)} avg total) is severely outmatched vs ~${Math.round(champTarget)} — this will almost certainly fail.`}
+                      </div>
+                    )}
                     <div className="carerow" style={{ flexWrap: 'wrap', marginTop: 6 }}>
                       {pool.map((c) => (
                         <button key={c.id} className={'tacticopt small' + (trialPick.includes(c.id) ? ' on' : '')}
@@ -1782,21 +1924,26 @@ function RanchView({ game, setGame, onBattleScreen }: {
                 {STATS.map((stat) => {
                   const basic = BASIC_DRILLS.find((d) => primaryStatOf(d) === stat)!
                   const intensives = INTENSIVE_DRILLS.filter((d) => primaryStatOf(d) === stat)
+                  const extreme = EXTREME_DRILLS.find((d) => primaryStatOf(d) === stat)
+                  const gearTier = game.trainingGear[stat] ?? 0
                   return (
                     <div className="traincol" key={stat}>
-                      <div className="traincol-h" style={{ color: STAT_COLOR[stat] }}>{stat}</div>
-                      <TrainBlock d={basic} career={selectedCareer} food={selPlan.food} forage={selPlan.forage} selected={selPlan.activity === basic.id} onClick={() => setSelActivity(basic.id)} />
+                      <div className="traincol-h" style={{ color: STAT_COLOR[stat] }}>{stat}{gearTier > 0 && <span className="dim"> ⚙+{gearTier * 5}%</span>}</div>
+                      <TrainBlock d={basic} career={selectedCareer} food={selPlan.food} forage={selPlan.forage} gear={game.trainingGear} selected={selPlan.activity === basic.id} onClick={() => setSelActivity(basic.id)} />
                       {intensives.map((d) => (
-                        <TrainBlock key={d.id} d={d} career={selectedCareer} food={selPlan.food} forage={selPlan.forage} selected={selPlan.activity === d.id} onClick={() => setSelActivity(d.id)} />
+                        <TrainBlock key={d.id} d={d} career={selectedCareer} food={selPlan.food} forage={selPlan.forage} gear={game.trainingGear} selected={selPlan.activity === d.id} onClick={() => setSelActivity(d.id)} />
                       ))}
+                      {game.extremeUnlocked && extreme && (
+                        <TrainBlock d={extreme} career={selectedCareer} food={selPlan.food} forage={selPlan.forage} gear={game.trainingGear} selected={selPlan.activity === extreme.id} onClick={() => setSelActivity(extreme.id)} />
+                      )}
                     </div>
                   )
                 })}
                 <div className="traincol">
                   <div className="traincol-h dim">OTHER</div>
                   {(() => {
-                    const restPrev = previewWeekEffects(selectedCareer, 'rest', selPlan.food, selPlan.forage)
-                    const excPrev = previewWeekEffects(selectedCareer, 'excursion', selPlan.food, selPlan.forage)
+                    const restPrev = previewWeekEffects(selectedCareer, 'rest', selPlan.food, selPlan.forage, game.trainingGear)
+                    const excPrev = previewWeekEffects(selectedCareer, 'excursion', selPlan.food, selPlan.forage, game.trainingGear)
                     return (
                       <>
                         <button className={'trainblock' + (selPlan.activity === 'rest' ? ' selected' : '')} onClick={() => setSelActivity('rest')}>
@@ -2209,6 +2356,14 @@ function sanitizeAndMigrate(raw: string): GameState | null {
     if (typeof g.licenseEarned !== 'number') g.licenseEarned = g.licenseIndex
     if (g.pendingTrial === undefined) g.pendingTrial = null
     if (typeof g.trialCooldownUntil !== 'number') g.trialCooldownUntil = 0
+    // v0.6 economy-pass fields
+    if (!Array.isArray(g.comfortOwned)) g.comfortOwned = []
+    if (typeof g.trainingGear !== 'object' || !g.trainingGear) g.trainingGear = {}
+    if (typeof g.tonics !== 'number') g.tonics = 0
+    if (typeof g.studBooks !== 'number') g.studBooks = 0
+    if (typeof g.labCapacity !== 'number') g.labCapacity = Math.max(LAB_BASE_SLOTS, Array.isArray(g.frozen) ? g.frozen.length : 0)
+    if (typeof g.labTechLoan !== 'boolean') g.labTechLoan = false
+    if (typeof g.extremeUnlocked !== 'boolean') g.extremeUnlocked = false
     for (const c of g.stable) if (c.licenseIndex !== g.licenseIndex) c.licenseIndex = g.licenseIndex
     return g as GameState
   } catch {

@@ -150,6 +150,16 @@ input[type=range] { width: 100%; }
 .townbar { display: flex; flex-wrap: wrap; gap: 14px; font-size: 14px; font-weight: 700; margin: 0 0 16px; padding: 10px 14px; background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; }
 .townbar .up { color: var(--accent); }
 .townmap { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+/* Town hub (v0.62): a map of location buttons. */
+.townback { margin-bottom: 12px; }
+.townhub { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+.hubbtn { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left; padding: 16px 18px; background: var(--panel2); border: 1px solid var(--line); border-radius: 12px; cursor: pointer; transition: border-color .12s ease, transform .12s ease; }
+.hubbtn:hover:not(:disabled) { border-color: var(--accent); transform: translateY(-2px); }
+.hubbtn:disabled { opacity: .5; cursor: default; }
+.hubbtn b { font-size: 16px; }
+.hubbtn .hubicon { font-size: 30px; line-height: 1; margin-bottom: 4px; }
+.hubbtn .dim { font-size: 12px; }
+@media (max-width: 720px) { .townhub { grid-template-columns: 1fr; } }
 .loc .loc-h { display: flex; justify-content: space-between; align-items: center; font-size: 16px; font-weight: 700; margin-bottom: 6px; }
 .loc .loc-h .dim { color: var(--muted); font-size: 12px; font-weight: 400; }
 .offers { display: flex; flex-direction: column; gap: 14px; margin-top: 8px; }

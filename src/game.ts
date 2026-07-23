@@ -15,9 +15,18 @@ export const START_GOLD = 500
 export const MAX_STAMINA = 100
 export const BASIC_DRILL_STAMINA = 10
 export const INTENSIVE_DRILL_STAMINA = 25
+export const EXTREME_DRILL_STAMINA = 35 // extreme drills (v0.6): the risk tier
+export const drillStamina = (kind: string): number =>
+  kind === 'basic' ? BASIC_DRILL_STAMINA : kind === 'intensive' ? INTENSIVE_DRILL_STAMINA : EXTREME_DRILL_STAMINA
 const EXCURSION_COST = 25
 
 export type Stage = 'Baby' | 'Teen' | 'Fully Grown' | 'Elder' | 'Retiree'
+
+// Effective CAREER SPAN in years: the species' base competing years plus the
+// stable-wide comfort set (+2mo per item, synced onto the career) and any
+// Elder Tonics used on this monster. 1 month = 4 in-game weeks, year = 48.
+export const careerSpanYears = (c: { species: { lifespan: number }; comfortWeeks?: number; tonicWeeks?: number }): number =>
+  c.species.lifespan + ((c.comfortWeeks ?? 0) + (c.tonicWeeks ?? 0)) / 48
 
 export function stageInfo(ageWeeks: number, lifespan: number): { stage: Stage; trainMult: number; ageYears: number } {
   const ageYears = Math.floor(ageWeeks / WEEKS_PER_YEAR)
@@ -72,6 +81,12 @@ export interface Career {
   lastFood?: Food // food fed LAST week — drives the satiety rule (repeat → halved happiness)
   truffleReady?: boolean // a Golden Truffle is banked — the next cup WON pays +50% (consumed win or lose)
   potential?: number // bloodline "star rating" (LOOP_DESIGN Phase 5): a stat-cap multiplier that climbs each breeding generation; absent = 1.0 (wild-caught)
+  // Career span extensions (v0.6 economy pass). "Career span" is the years a
+  // monster can COMPETE (nothing dies — retirees live on at the ranch).
+  comfortWeeks?: number // stable-wide comfort-set bonus, SYNCED from GameState purchases (+8wk per owned item, like licenseIndex)
+  tonicWeeks?: number // Elder Tonic uses on THIS monster (+8wk each, unlimited)
+  heritageStat?: Stat // bred child: parent B's major — trains +10% faster
+  generation?: number // dynasty depth: absent/1 = wild-caught; children = max(parents)+1
   tournamentHistory: TournamentResult[]
   log: string[]
 }
@@ -192,7 +207,15 @@ function rollDrillGain(rng: RNG, base: number, happiness: number): number {
 // its training + feeding math exactly (same seeded rng as applyWeek, so the
 // roll shown IS the roll that will land) so the Ranch screen can show the
 // happiness swing and exact stat gains/maluses before the player commits.
-export function previewWeekEffects(c: Career, activity: string, food: Food | '', forage = false): WeekPreview {
+// Training gear (v0.6, peddler-sold): +5% per owned tier of that stat's gear
+// line, up to +25%. Heritage stat (bred children): +10% on parent B's major.
+// One shared multiplier so applyWeek and the preview can never drift.
+export type GearTiers = Partial<Record<Stat, number>>
+export function gearHeritageMult(c: { heritageStat?: Stat }, gear: GearTiers, stat: Stat): number {
+  return (1 + 0.05 * (gear[stat] ?? 0)) * (c.heritageStat === stat ? 1.1 : 1)
+}
+
+export function previewWeekEffects(c: Career, activity: string, food: Food | '', forage = false, gear: GearTiers = {}): WeekPreview {
   // Food resolves BEFORE the activity in the real tick (buyFood/forageFeed run
   // first), so the preview establishes post-feed happiness + stamina baselines,
   // then runs the activity off them — matching applyWeek exactly. Forage is the
@@ -213,19 +236,19 @@ export function previewWeekEffects(c: Career, activity: string, food: Food | '',
   const drill = ALL_DRILLS.find((d) => d.id === activity)
   if (drill) {
     const cap = statCapFor(c) // bloodline potential lifts the training ceiling (Phase 5)
-    const { trainMult } = stageInfo(c.ageWeeks, c.species.lifespan)
+    const { trainMult } = stageInfo(c.ageWeeks, careerSpanYears(c))
     // stamina malus reads the POST-feed stamina (a Vigor Melon can lift you out
     // of the fatigue bracket before you train)
     const eff = trainMult * staminaMalus(startStam)
     for (const [stat, delta] of Object.entries(drill.gains) as [Stat, number][]) {
       const applied = delta > 0
-        ? Math.round(rollDrillGain(rng, delta, postFeedHappiness) * eff * statTrainingBonus(c.species, stat) * foodTrainMult(food, stat))
+        ? Math.round(rollDrillGain(rng, delta, postFeedHappiness) * eff * statTrainingBonus(c.species, stat) * foodTrainMult(food, stat) * gearHeritageMult(c, gear, stat))
         : Math.round(delta * statMalusMultiplier(c.species, stat))
       const nv = Math.max(1, Math.min(cap, c.stats[stat] + applied))
       const real = nv - c.stats[stat]
       if (real !== 0) statDeltas[stat] = real
     }
-    const stamCost = drill.kind === 'basic' ? BASIC_DRILL_STAMINA : INTENSIVE_DRILL_STAMINA
+    const stamCost = drillStamina(drill.kind)
     staminaDelta = Math.max(0, startStam - stamCost) - c.stamina
     // Mirror applyWeek's growth top-up exactly (2026-07-25): raised max HP/MP
     // raises current by the same amount; a malus that SHRINKS max clamps
@@ -421,7 +444,7 @@ function push(c: Career, line: string): Career {
 
 // Log a life-stage transition (shared by applyWeek and ageOneWeek). Mutates `n`.
 function applyStageTransition(n: Career, beforeStage: Stage): void {
-  const nowStage = stageInfo(n.ageWeeks, n.species.lifespan).stage
+  const nowStage = stageInfo(n.ageWeeks, careerSpanYears(n)).stage
   if (nowStage === beforeStage) return
   if (nowStage === 'Retiree') {
     n.retired = true
@@ -434,26 +457,26 @@ function applyStageTransition(n: Career, beforeStage: Stage): void {
 // Advance the calendar for a monster that took no weekly action (retired, or no
 // plan submitted) — it still ages.
 export function ageOneWeek(c: Career): Career {
-  const before = stageInfo(c.ageWeeks, c.species.lifespan).stage
+  const before = stageInfo(c.ageWeeks, careerSpanYears(c)).stage
   const n: Career = { ...c, week: c.week + 1, ageWeeks: c.ageWeeks + 1, fedThisWeek: false, log: [...c.log] }
   applyStageTransition(n, before)
   n.log = n.log.slice(-40)
   return n
 }
 
-export function applyWeek(c: Career, action: WeeklyAction, gold: number, rental = 0, food: Food | '' = ''): { c: Career; gold: number } {
+export function applyWeek(c: Career, action: WeeklyAction, gold: number, rental = 0, food: Food | '' = '', gear: GearTiers = {}): { c: Career; gold: number } {
   if (c.retired) return { c, gold }
   let g = gold
   const n: Career = { ...c, stats: { ...c.stats }, log: [...c.log] }
   const rng = mulberry32(hashString(c.id + ':' + c.week))
   const cap = statCapFor(c) // bloodline potential lifts the training ceiling (Phase 5)
-  const { stage, trainMult } = stageInfo(c.ageWeeks, c.species.lifespan)
+  const { stage, trainMult } = stageInfo(c.ageWeeks, careerSpanYears(c))
   const beforeMoves = learnedMoves(c.stats).length
   const wk = c.week + 1
 
   if (action.kind === 'train') {
     const drill = ALL_DRILLS.find((d) => d.id === action.drillId) ?? ALL_DRILLS[0]
-    const stamCost = drill.kind === 'basic' ? BASIC_DRILL_STAMINA : INTENSIVE_DRILL_STAMINA
+    const stamCost = drillStamina(drill.kind)
     const malus = staminaMalus(n.stamina)
     const eff = trainMult * malus
     const changes: string[] = []
@@ -463,7 +486,7 @@ export function applyWeek(c: Career, action: WeeklyAction, gold: number, rental 
       // Training foods (2026-07-25) multiply the positive gain for their
       // stat-pair (foodTrainMult); maluses are unaffected.
       const applied = delta > 0
-        ? Math.round(rollDrillGain(rng, delta, n.happiness) * eff * statTrainingBonus(c.species, stat) * foodTrainMult(food, stat))
+        ? Math.round(rollDrillGain(rng, delta, n.happiness) * eff * statTrainingBonus(c.species, stat) * foodTrainMult(food, stat) * gearHeritageMult(c, gear, stat))
         : Math.round(delta * statMalusMultiplier(c.species, stat))
       const nv = Math.max(1, Math.min(cap, n.stats[stat] + applied))
       const real = nv - n.stats[stat]
@@ -510,7 +533,7 @@ export function applyWeek(c: Career, action: WeeklyAction, gold: number, rental 
 
   // lab upkeep, advance the calendar, age the monster
   if (rental > 0) {
-    g -= rental
+    g = Math.max(0, g - rental) // upkeep can zero the wallet but never indebt it (v0.6)
     n.log.push(`  ↳ lab upkeep −${rental}g (frozen genomes).`)
   }
   n.week += 1

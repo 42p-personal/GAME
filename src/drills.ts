@@ -5,7 +5,7 @@
 // training malus (§9.1). Values are first-pass and meant for tuning.
 import { Stat } from './core'
 
-export type DrillKind = 'basic' | 'intensive'
+export type DrillKind = 'basic' | 'intensive' | 'extreme'
 
 export interface Drill {
   id: string
@@ -43,4 +43,21 @@ export const INTENSIVE_DRILLS: Drill[] = [
   { id: 'showmanship', name: 'Showmanship', kind: 'intensive', gains: { CHA: INTENSIVE_GAIN, CON: -INTENSIVE_COST }, desc: 'Flair over conditioning.' },
 ]
 
-export const ALL_DRILLS: Drill[] = [...BASIC_DRILLS, ...INTENSIVE_DRILLS]
+// Extreme drills (v0.6 economy pass, user spec): the risk tier above intensive —
+// a big gain to one stat at the cost of SIX points across TWO paired stats and
+// heavy stamina. Locked behind the Extreme Training Manual (Ranch Shop, 1500g).
+// Net +8 but the double malus can genuinely un-learn moves / drop class
+// thresholds — a deliberate gamble for rushing a stat, not a default.
+export const EXTREME_GAIN = 20
+export const EXTREME_COST = 6
+
+export const EXTREME_DRILLS: Drill[] = [
+  { id: 'xstr', name: 'Titan Regimen', kind: 'extreme', gains: { STR: EXTREME_GAIN, DEX: -EXTREME_COST, WIS: -EXTREME_COST }, desc: 'Brutal loads; speed and composure pay for it.' },
+  { id: 'xdex', name: 'Gauntlet Sprints', kind: 'extreme', gains: { DEX: EXTREME_GAIN, STR: -EXTREME_COST, CON: -EXTREME_COST }, desc: 'Blinding speed; muscle and mass melt away.' },
+  { id: 'xcon', name: 'Stone Vigil', kind: 'extreme', gains: { CON: EXTREME_GAIN, DEX: -EXTREME_COST, INT: -EXTREME_COST }, desc: 'Unmoving endurance; quickness and wits dull.' },
+  { id: 'xwis', name: 'Void Fast', kind: 'extreme', gains: { WIS: EXTREME_GAIN, STR: -EXTREME_COST, CHA: -EXTREME_COST }, desc: 'Total seclusion; body and charm wither.' },
+  { id: 'xint', name: 'Forbidden Texts', kind: 'extreme', gains: { INT: EXTREME_GAIN, CON: -EXTREME_COST, CHA: -EXTREME_COST }, desc: 'Dangerous knowledge; health and warmth fade.' },
+  { id: 'xcha', name: 'Grand Spectacle', kind: 'extreme', gains: { CHA: EXTREME_GAIN, WIS: -EXTREME_COST, INT: -EXTREME_COST }, desc: 'All showmanship; depth and study abandoned.' },
+]
+
+export const ALL_DRILLS: Drill[] = [...BASIC_DRILLS, ...INTENSIVE_DRILLS, ...EXTREME_DRILLS]
