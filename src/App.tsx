@@ -1903,6 +1903,17 @@ function RanchView({ game, setGame, onBattleScreen }: {
                   {selectedCareer.heritageStat ? ` · heritage ${selectedCareer.heritageStat} (+10% training)` : ''}
                 </div>
               )}
+              {/* Fusion training aptitude (v0.7): inherited per-monster, so it's not
+                  visible from the species — show it explicitly here. */}
+              {selectedCareer.bonusMajor1 && (
+                <div className="dim" style={{ fontSize: 11 }}>
+                  ⚗️ Fusion aptitude:{' '}
+                  <b style={{ color: STAT_COLOR[selectedCareer.bonusMajor1] }}>+20% {selectedCareer.bonusMajor1}</b>
+                  {selectedCareer.bonusMajor2 && <> · <b style={{ color: STAT_COLOR[selectedCareer.bonusMajor2] }}>+20% {selectedCareer.bonusMajor2}</b></>}
+                  {selectedCareer.bonusMinor && <> · <span style={{ color: STAT_COLOR[selectedCareer.bonusMinor] }}>+10% {selectedCareer.bonusMinor}</span></>}
+                  {selectedCareer.bonusFlaw && <> · <span className="neg">−10% {selectedCareer.bonusFlaw}</span></>}
+                </div>
+              )}
               {selectedCareer.retired && (
                 <div className="dim" style={{ fontSize: 11 }}>🏛 Pension: +{pensionFor(selectedCareer)}g/wk — or bank the legacy at the Lab for breeding.</div>
               )}
