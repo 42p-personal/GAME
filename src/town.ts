@@ -694,17 +694,22 @@ export function fuse(g: GameState, aId: string, bId: string): GameState {
   baby.generation = 1 // founds a bloodline — gen-1 Platinum-capped until bred
   for (const s of STATS) baby.stats[s] = FUSION_START_STAT // all 100
   baby.hp = maxHp(baby.stats); baby.mp = maxMana(baby.stats)
-  // Aptitude INHERITED from the two parents' majors (+20% each)...
+  // Aptitude — EVERY fused monster gets exactly two +20% majors, one +10% minor,
+  // one −10% flaw (all on distinct stats). The two majors are INHERITED from the
+  // parents' majors; if the parents share a major, the second falls to parent B's
+  // next-strongest DISTINCT stat so it's always TWO buffs, never one doubled.
   baby.bonusMajor1 = parentMajor(a)
   baby.bonusMajor2 = parentMajor(b)
-  // ...plus a rolled +10% minor / −10% flaw on OTHER stats (per monster).
+  if (baby.bonusMajor2 === baby.bonusMajor1) {
+    baby.bonusMajor2 = [...STATS].sort((x, y) => b.stats[y] - b.stats[x]).find((s) => s !== baby.bonusMajor1)!
+  }
+  // ...plus a rolled +10% minor / −10% flaw on two OTHER (distinct) stats.
   const others = STATS.filter((s) => s !== baby.bonusMajor1 && s !== baby.bonusMajor2)
   baby.bonusMinor = others[Math.floor(rng() * others.length)]
   const flawPool = others.filter((s) => s !== baby.bonusMinor)
   baby.bonusFlaw = flawPool[Math.floor(rng() * flawPool.length)]
   baby.comfortWeeks = comfortWeeksFor(g)
-  const majTxt = baby.bonusMajor1 === baby.bonusMajor2 ? `+${baby.bonusMajor1}×2` : `+${baby.bonusMajor1}, +${baby.bonusMajor2}`
-  baby.log = [`${baby.name} the ${species.name} is forged — a ${spin.classLabel}. Inherited training: ${majTxt} (+20% each), +${baby.bonusMinor}/−${baby.bonusFlaw}. 1½★ bloodline, Platinum-capped until bred onward.`]
+  baby.log = [`${baby.name} the ${species.name} is forged — a ${spin.classLabel}. Training aptitude: +20% ${baby.bonusMajor1} & +20% ${baby.bonusMajor2}, +10% ${baby.bonusMinor}, −10% ${baby.bonusFlaw}. 1½★ bloodline, Platinum-capped until bred onward.`]
   return {
     ...g,
     gold: g.gold - FUSION_COST,
