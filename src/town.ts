@@ -1025,7 +1025,7 @@ export const EVENTS: GameEvent[] = [
     // and Stud Books. Visits are random — save up in case he comes around.
     id: 'peddler',
     scope: 'global',
-    weight: (g) => (g.stable.some((c) => !c.retired) ? 3 : 0),
+    weight: () => 0, // NOT rolled from the random pool — scheduled ~every 5-6 months in rollWeeklyEvent
     title: '🎪 The Mysterious Peddler',
     body: () => 'A cloaked wagon creaks to a halt outside the ranch. "Wares for the discerning tamer," the peddler rasps. "Coin only. I do not linger."',
     choices: [{ label: 'Wave him off', apply: (g) => g }], // static fallback — real stock below
@@ -1106,6 +1106,16 @@ const eventById = (id: string) => EVENTS.find((e) => e.id === id)
 // Flat per-week chance an eligible event fires. Kept simple/predictable for
 // Phase 1; tuning knob lives here.
 export const EVENT_CHANCE = 0.45
+// The Mysterious Peddler visits on a SCHEDULE, not the random pool — about once
+// every 5-6 months (22 weeks), with the exact week jittered per period so it
+// still feels unpredictable. Rare enough that the player saves up for him.
+export const PEDDLER_PERIOD = 22
+export function isPeddlerWeek(g: GameState): boolean {
+  if (!g.stable.some((c) => !c.retired)) return false
+  const period = Math.floor(g.week / PEDDLER_PERIOD)
+  const offset = hashString(g.seed + ':peddler:' + period) % PEDDLER_PERIOD
+  return g.week % PEDDLER_PERIOD === offset
+}
 
 // Deterministic weekly roll — same (seed, week, stable) always yields the same
 // result, so replays and reloads are stable. Returns the display-baked
@@ -1116,6 +1126,13 @@ export function rollWeeklyEvent(g: GameState): PendingEvent | null {
   if (g.stable.length === 0 || g.stable.every((c) => c.retired)) {
     const stray = eventById('stray')
     if (stray) return bakeEvent(stray, g)
+  }
+  // Mysterious Peddler (v0.62): scheduled ~every 5-6 months, force-shown on his
+  // week (bypasses EVENT_CHANCE and the weighted pool) so a rare visit is never
+  // missed to a coin-flip.
+  if (isPeddlerWeek(g)) {
+    const peddler = eventById('peddler')
+    if (peddler) return bakeEvent(peddler, g)
   }
   const candidates: { ev: GameEvent; c?: Career; w: number }[] = []
   for (const ev of EVENTS) {
