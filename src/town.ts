@@ -589,7 +589,7 @@ export const labUpkeepPerFrozen = (g: GameState): number => (g.labTechLoan ? 3 :
 export const BREED_COST = 300
 export const BREED_MAX_CHILDREN = 2
 export const BREED_POTENTIAL_STEP = 0.10
-export const BREED_HEAD_START = 0.35 // fraction of parents' avg stats a child hatches with (acceptance-tuned)
+export const BREED_HEAD_START = 0.45 // fraction of parents' avg stats a child hatches with (0.35→0.45 v0.72: stronger bred monsters, shorter climb per generation)
 export function breedPotentialV2(a: Frozen, b: Frozen): number {
   const champBonus = Math.min(0.08, Math.floor(((a.champs ?? 0) + (b.champs ?? 0)) / 2) * 0.01)
   return Math.min(MAX_POTENTIAL, Math.round((((a.potential ?? 1) + (b.potential ?? 1)) / 2 + BREED_POTENTIAL_STEP + champBonus) * 100) / 100)

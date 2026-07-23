@@ -1,7 +1,7 @@
 # Balancing — findings & working reference
 
 Living doc for the economy/progression balance effort. Condensed from the
-2026-07-23 balancing sessions. Numbers are current as of **v0.72**.
+2026-07-23 balancing sessions. Numbers are current as of **v0.73**.
 
 ## Design principles (from the user)
 - **Challenging but possible.** The top (Masters / Tamer Elite) should be hard-won, not gated shut.
@@ -46,10 +46,10 @@ breeding/fusion actually fire are the headline metrics.
 - **Team size:** Wood/Copper 1 · Tin 2 · Bronze/Iron 3 · Silver/Gold 4 · Platinum 5 · Masters/TE 6.
 - **Trial to rank up:** beat a champion team scaled to `leagueCap × RIVAL_BUDGET_MULT(1.8) × TRIAL_CHAMPION_MULT(1.25)`.
 - **`statCapFor = leagueCap × potential`** (gen-1 fusion hard-capped at Platinum = 800).
-- **Career span** ~6 years; monsters retire and can't compete after.
+- **Career span** ~6 years base; **+2yr pedigree bonus (`PEDIGREE_SPAN_BONUS`, v0.73)** for fusion / prestige (Draconic/Abyssal/Mythical) / bred (gen≥2) monsters — wild base monsters unchanged.
 
 ### Breeding & fusion
-- **Potential:** wild = 1.0; **+0.10 / generation** + up to **+0.08** champion-parent bonus; **cap `MAX_POTENTIAL = 1.5`** (~4–5 generations to reach). Breed cost 300, ≤2 children per stud, heritage stat +10%, **head-start `BREED_HEAD_START = 0.35`** (child hatches at 35% of parents' averaged stats).
+- **Potential:** wild = 1.0; **+0.10 / generation** + up to **+0.08** champion-parent bonus; **cap `MAX_POTENTIAL = 1.5`** (~4–5 generations to reach). Breed cost 300, ≤2 children per stud, heritage stat +10%, **head-start `BREED_HEAD_START = 0.45`** (child hatches at 45% of parents' averaged stats — v0.73).
 - **Fusion:** 1000g, consumes two lab-frozen monsters; result = **all stats 100**, **+20% on each parent's major** + rolled +10%/−10%, species by spinning wheel, **potential 1.075 (1½★)**, gen-1 **Platinum-capped**, then fully breedable (gen-2 ≈ 3★ → Tamer Elite).
 
 ## Sim findings
@@ -97,3 +97,4 @@ gated by:
 ## Ledger of changes made
 - **v0.62** — economy pass #1 (stipend/pension/comfort/peddler/breeding/soft-lock).
 - **v0.72** — cup gold ↑ + trainer gold stipend + excursion nudge. Peak Bronze → Gold/Platinum; breeding now fires.
+- **v0.73** — pedigree span +2yr (fusion/prestige/bred) + bred head-start 0.35→0.45. **Peak Gold → Masters/Tamer Elite** (1 seed reached TE @ yr 12.7); top is now reachable via breeding, still challenging (12–19yr). Fusion still unused by the bot.

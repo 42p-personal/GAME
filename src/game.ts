@@ -22,11 +22,23 @@ const EXCURSION_COST = 25
 
 export type Stage = 'Baby' | 'Teen' | 'Fully Grown' | 'Elder' | 'Retiree'
 
-// Effective CAREER SPAN in years: the species' base competing years plus the
-// stable-wide comfort set (+2mo per item, synced onto the career) and any
-// Elder Tonics used on this monster. 1 month = 4 in-game weeks, year = 48.
-export const careerSpanYears = (c: { species: { lifespan: number }; comfortWeeks?: number; tonicWeeks?: number }): number =>
-  c.species.lifespan + ((c.comfortWeeks ?? 0) + (c.tonicWeeks ?? 0)) / 48
+// Pedigree career-span bonus (v0.72): the monsters you INVEST in — fusion
+// specialists, prestige-tier (Draconic/Abyssal/Mythical), and anything bred
+// (gen ≥ 2) — get extra competing years, so your long-term project lines have
+// the runway to reach champion level before aging out. Wild base monsters get
+// nothing here, so the baseline difficulty is unchanged. Flat, not additive.
+export const PEDIGREE_SPAN_BONUS = 2 // years
+const PRESTIGE_BODIES = ['Draconic', 'Abyssal', 'Mythical']
+export function pedigreeSpanBonus(c: { species: { body: string }; generation?: number }): number {
+  if (isFusionBody(c.species.body as never) || PRESTIGE_BODIES.includes(c.species.body) || (c.generation ?? 1) >= 2) return PEDIGREE_SPAN_BONUS
+  return 0
+}
+
+// Effective CAREER SPAN in years: the species' base competing years + the
+// pedigree bonus (fusion/prestige/bred) + the stable-wide comfort set (+2mo per
+// item, synced onto the career) + any Elder Tonics used. 1 month = 4 weeks.
+export const careerSpanYears = (c: { species: { lifespan: number; body: string }; generation?: number; comfortWeeks?: number; tonicWeeks?: number }): number =>
+  c.species.lifespan + pedigreeSpanBonus(c) + ((c.comfortWeeks ?? 0) + (c.tonicWeeks ?? 0)) / 48
 
 export function stageInfo(ageWeeks: number, lifespan: number): { stage: Stage; trainMult: number; ageYears: number } {
   const ageYears = Math.floor(ageWeeks / WEEKS_PER_YEAR)
