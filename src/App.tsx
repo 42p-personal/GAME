@@ -461,7 +461,7 @@ function SandboxView() {
 }
 
 // ============================ Town hub (§13) ============================
-type TownArea = 'hub' | 'market' | 'breeding' | 'retirement' | 'lab'
+type TownArea = 'hub' | 'market' | 'shop' | 'breeding' | 'retirement' | 'lab'
 
 function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetStateAction<GameState>> }) {
   const [fuseA, setFuseA] = useState('')
@@ -498,7 +498,11 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
           <div className="townhub">
             <button className="hubbtn" onClick={() => setArea('market')}>
               <span className="hubicon">🛒</span><b>Market</b>
-              <span className="dim">monsters, licenses &amp; supplies</span>
+              <span className="dim">buy monsters &amp; heal at the infirmary</span>
+            </button>
+            <button className="hubbtn" onClick={() => setArea('shop')}>
+              <span className="hubicon">🏗️</span><b>Ranch Shop</b>
+              <span className="dim">licenses, barn, care upgrades &amp; contracts</span>
             </button>
             <button className="hubbtn" disabled={active.length === 0}
               title={active.length === 0 ? 'Buy a monster at the Market first' : undefined}
@@ -723,7 +727,12 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
             ))}
         </div>
 
-        {/* Ranch Shop */}
+      </div>
+      )}
+
+      {/* ---- RANCH SHOP: licenses, barn, comfort, care upgrades, contracts ---- */}
+      {area === 'shop' && (
+      <div className="townmap">
         <div className="card loc">
           <div className="loc-h"><span>🏗️ Ranch Shop</span></div>
           {/* League license (v0.5): unlocked by WINNING the rank-up trial, then
