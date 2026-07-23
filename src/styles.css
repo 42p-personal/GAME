@@ -557,6 +557,14 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 .xpfill { height: 100%; background: var(--accent, #6ad); border-radius: 4px; transition: width .3s ease; }
 .potential { color: var(--cha, #d9a94a); font-weight: 700; }
 
+/* Fusion spinning wheel (v0.7). */
+.wheel-overlay { position: fixed; inset: 0; background: rgba(6,8,14,.78); display: flex; align-items: center; justify-content: center; z-index: 200; }
+.wheel-card { background: var(--panel2); border: 1px solid var(--cha, #d9a94a); border-radius: 14px; padding: 22px 30px; display: flex; flex-direction: column; align-items: center; gap: 12px; min-width: 240px; box-shadow: 0 12px 40px rgba(0,0,0,.5); }
+.wheel-reel { display: flex; flex-direction: column; align-items: center; gap: 6px; filter: blur(.4px); transition: filter .2s; }
+.wheel-reel b { font-size: 18px; }
+.wheel-reel.landed { filter: none; animation: wheel-pop .35s ease-out; }
+@keyframes wheel-pop { 0% { transform: scale(.7); } 60% { transform: scale(1.12); } 100% { transform: scale(1); } }
+
 /* Rank-up trial panel + earned-license shop row (v0.5). */
 .trial-panel { border: 1px solid var(--cha, #d9a94a); border-radius: 10px; padding: 10px 12px; margin-top: 10px; display: flex; flex-direction: column; gap: 4px; background: rgba(217,169,74,.06); font-size: 13px; }
 .license-ready { outline: 1px solid var(--con, #5bd47a); border-radius: 8px; }

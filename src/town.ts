@@ -382,9 +382,14 @@ export interface GameState {
   trainingGear: Partial<Record<Stat, number>> // peddler gear tier owned per stat (0-5, +5% training each)
   tonics: number // Elder Tonics in inventory (use on a monster: +2mo career span)
   studBooks: number // Stud Books in inventory (assign to a frozen legacy: uncapped stud income)
-  labCapacity: number // frozen-genome slots (base 2, expandable)
+  studSlots: number // Breeding Ranch stud-farm slots (base 2, expandable)
   labTechLoan: boolean // lab-tech loan event taken → freeze upkeep 5→3g/wk
   extremeUnlocked: boolean // Extreme Training Manual bought → extreme drill row open
+  // Lab freezer (v0.7, FUSION_DESIGN.md) — SEPARATE from the breeding stud farm.
+  // Monsters frozen here are in stasis (aging paused): preserve one until you can
+  // afford an Elder Tonic, or fuse two into a new fusion species.
+  labFrozen: Career[] // full monsters in stasis
+  labSlots: number // lab freezer slots (base 2, expandable from the Ranch Shop)
   // Trainer XP (LOOP_DESIGN Phase 5) — the persistent meta character. Earned by
   // podium cup finishes and raising monsters to retirement; the derived level
   // grants extra barn capacity. The ranch is the account; monsters are the runs.
@@ -475,9 +480,11 @@ export function newGame(seed = 'start', opts?: { trainerName?: string; tutorialE
     trainingGear: {},
     tonics: 0,
     studBooks: 0,
-    labCapacity: LAB_BASE_SLOTS,
+    studSlots: STUD_SLOTS_BASE,
     labTechLoan: false,
     extremeUnlocked: false,
+    labFrozen: [],
+    labSlots: LAB_SLOTS_BASE,
   }
 }
 
@@ -526,12 +533,17 @@ export const TONIC_COST = 500
 export const TONIC_WEEKS = 8
 export function useTonic(g: GameState, careerId: string): GameState {
   if ((g.tonics ?? 0) < 1) return g
-  const c = g.stable.find((x) => x.id === careerId)
-  if (!c) return g
-  const nc: Career = { ...c, tonicWeeks: (c.tonicWeeks ?? 0) + TONIC_WEEKS, retired: false, log: [...c.log, `🧪 Elder Tonic — career span +2 months.`].slice(-40) }
-  // a freshly-extended span can un-retire a monster whose age is back under it
-  const stillRetired = Math.floor(nc.ageWeeks / WEEKS_PER_YEAR) >= careerSpanYears(nc)
-  return { ...g, tonics: g.tonics - 1, stable: g.stable.map((x) => (x.id === careerId ? { ...nc, retired: stillRetired } : x)) }
+  const bump = (c: Career): Career => {
+    const nc: Career = { ...c, tonicWeeks: (c.tonicWeeks ?? 0) + TONIC_WEEKS, log: [...c.log, `🧪 Elder Tonic — career span +2 months.`].slice(-40) }
+    // a freshly-extended span can un-retire a monster whose age is back under it
+    return { ...nc, retired: Math.floor(nc.ageWeeks / WEEKS_PER_YEAR) >= careerSpanYears(nc) }
+  }
+  // Usable on an active/retired stable monster OR a lab-frozen one (v0.7).
+  if (g.stable.some((x) => x.id === careerId))
+    return { ...g, tonics: g.tonics - 1, stable: g.stable.map((x) => (x.id === careerId ? bump(x) : x)) }
+  if (g.labFrozen?.some((x) => x.id === careerId))
+    return { ...g, tonics: g.tonics - 1, labFrozen: g.labFrozen.map((x) => (x.id === careerId ? bump(x) : x)) }
+  return g
 }
 // Stud Book (peddler, 750g): assign to a FROZEN legacy — it earns UNCAPPED
 // stud income from its record (1g/podium + 3g/championship per week).
@@ -558,13 +570,13 @@ export const EXTREME_MANUAL_COST = 1500
 export const buyExtremeManual = (g: GameState): GameState =>
   g.extremeUnlocked || g.gold < EXTREME_MANUAL_COST ? g : { ...g, gold: g.gold - EXTREME_MANUAL_COST, extremeUnlocked: true }
 // Lab: limited genome slots (curation, not hoarding) + expandable.
-export const LAB_BASE_SLOTS = 2
-export const LAB_EXPAND_COSTS = [400, 800, 1600]
-export const labExpandCost = (g: GameState): number | null => LAB_EXPAND_COSTS[g.labCapacity - LAB_BASE_SLOTS] ?? null
-export function expandLab(g: GameState): GameState {
-  const cost = labExpandCost(g)
+export const STUD_SLOTS_BASE = 2
+export const STUD_EXPAND_COSTS = [400, 800, 1600]
+export const studExpandCost = (g: GameState): number | null => STUD_EXPAND_COSTS[g.studSlots - STUD_SLOTS_BASE] ?? null
+export function expandStud(g: GameState): GameState {
+  const cost = studExpandCost(g)
   if (cost === null || g.gold < cost) return g
-  return { ...g, gold: g.gold - cost, labCapacity: g.labCapacity + 1 }
+  return { ...g, gold: g.gold - cost, studSlots: g.studSlots + 1 }
 }
 export const labUpkeepPerFrozen = (g: GameState): number => (g.labTechLoan ? 3 : RENTAL_PER_FROZEN)
 // Breeding (v0.6, SEPARATE from fusion): two frozen legacies parent a child —
@@ -608,73 +620,94 @@ export function breed(g: GameState, aId: string, bId: string): GameState {
   }
 }
 
-// --- FUSION (v0.7, FUSION_DESIGN.md) — the counterpart to breeding ------------
-// Fuse two frozen legacies of the right BODY-TYPE pair into a brand-new fusion
-// species: both legacies are CONSUMED, the result is a Tin-strength, gen-1
-// monster capped at Platinum (statCapFor) until you breed the line to the top.
-// Which of the class's 5 species you get is decided by the parents' combined
-// stats; the +10% minor / −10% flaw is rolled per monster.
+// --- LAB FREEZER (v0.7, FUSION_DESIGN.md) — separate from the breeding stud farm.
+// A stasis freezer: park a monster (aging paused) until you can afford an Elder
+// Tonic, or FUSE two into a brand-new fusion species. Slots expand from the shop.
+export const LAB_SLOTS_BASE = 2
+export const LAB_EXPAND_COSTS = [400, 800, 1600]
+export const labExpandCost = (g: GameState): number | null => LAB_EXPAND_COSTS[(g.labSlots ?? LAB_SLOTS_BASE) - LAB_SLOTS_BASE] ?? null
+export function expandLab(g: GameState): GameState {
+  const cost = labExpandCost(g)
+  if (cost === null || g.gold < cost) return g
+  return { ...g, gold: g.gold - cost, labSlots: g.labSlots + 1 }
+}
+// Freeze an ACTIVE monster into stasis (removed from the stable; ages paused).
+export function freezeToLab(g: GameState, id: string): GameState {
+  const c = g.stable.find((x) => x.id === id)
+  if (!c || (g.labFrozen?.length ?? 0) >= (g.labSlots ?? LAB_SLOTS_BASE)) return g
+  const stable = g.stable.filter((x) => x.id !== id)
+  const activeId = g.activeId === id ? stable.find((x) => !x.retired)?.id ?? stable[0]?.id ?? '' : g.activeId
+  return { ...g, stable, labFrozen: [...(g.labFrozen ?? []), { ...c, log: [...c.log, '🧊 Frozen in stasis at the Lab.'] }], activeId }
+}
+// Thaw a lab-frozen monster back into the active stable (resumes at the same age).
+export function thawFromLab(g: GameState, id: string): GameState {
+  if (g.stable.length >= effectiveBarnCap(g)) return g
+  const c = g.labFrozen?.find((x) => x.id === id)
+  if (!c) return g
+  return { ...g, labFrozen: g.labFrozen.filter((x) => x.id !== id), stable: [...g.stable, { ...c, comfortWeeks: comfortWeeksFor(g) }], activeId: g.activeId || c.id }
+}
+
+// --- FUSION (v0.7) — combine two LAB-FROZEN monsters into a new fusion species.
+// Result: all stats start at 100; the two +20% majors are INHERITED from the two
+// parents' majors; a +10% minor / −10% flaw is rolled per monster; the SPECIES
+// (which of the 5) is a spinning-wheel random; gen-1 potential ×1.075 (1½★),
+// Platinum-capped until bred onward. Both parents are CONSUMED. Money only —
+// nothing to do with breeding legacies.
 export const FUSION_COST = 1000
-export const FUSION_START_FRACTION = 0.5 // start ≈ Tin-strength (parents' avg × this, clamped to Tin cap)
-const TIN_CAP = LEAGUES[2].cap // 300
-// Recipe = an unordered pair of parent body types → the fusion class's species pool.
+export const FUSION_START_STAT = 100 // every fused monster starts at 100 across the board
+export const FUSION_POTENTIAL = 1.075 // 1½ stars — a superior bloodline from birth
 export const FUSION_RECIPES: { bodies: [BodyType, BodyType]; classLabel: string; pool: string[] }[] = [
   { bodies: ['Mammal', 'Reptilian'], classLabel: 'Saurian', pool: ['grendscale', 'vipramane', 'thornhide', 'runewyrm', 'basilroar'] },
 ]
 export function fusionRecipeFor(a: BodyType, b: BodyType) {
   return FUSION_RECIPES.find((r) => (r.bodies[0] === a && r.bodies[1] === b) || (r.bodies[0] === b && r.bodies[1] === a)) ?? null
 }
-// Deterministic tiebreak priority so the same parents always yield the same species.
-const STAT_PRIORITY: Stat[] = ['STR', 'CON', 'DEX', 'WIS', 'INT', 'CHA']
-// Pick the class species whose two role-majors best match the parents' combined stats.
-export function pickFusionSpecies(pool: string[], combined: Stats): Species {
-  const scored = pool.map((id) => {
-    const sp = SPECIES.find((s) => s.id === id)!
-    const prof = sp.trainingProfile!
-    const score = (combined[prof.major!] ?? 0) + (combined[prof.major2!] ?? 0)
-    return { sp, score }
-  })
-  scored.sort((x, y) => y.score - x.score
-    || STAT_PRIORITY.indexOf(x.sp.trainingProfile!.major!) - STAT_PRIORITY.indexOf(y.sp.trainingProfile!.major!))
-  return scored[0].sp
+// A parent's primary training major — inherited into the fusion. Base species use
+// their authored/derived major; a fusion parent passes its own inherited major1.
+function parentMajor(c: Career): Stat {
+  return c.bonusMajor1 ?? trainingProfileFor(c.species).major ?? ([...STATS].sort((x, y) => c.stats[y] - c.stats[x])[0])
 }
-export function fusionPreview(g: GameState, aId: string, bId: string): { species: Species; recipe: NonNullable<ReturnType<typeof fusionRecipeFor>> } | null {
-  const a = g.frozen.find((x) => x.id === aId)
-  const b = g.frozen.find((x) => x.id === bId)
+// The spinning wheel: which of the class's 5 species this fusion lands on
+// (deterministic per pairing+nextId, so the UI can animate to the real result).
+export function fusionSpin(g: GameState, aId: string, bId: string): { speciesId: string; classLabel: string; pool: string[] } | null {
+  const a = g.labFrozen?.find((x) => x.id === aId)
+  const b = g.labFrozen?.find((x) => x.id === bId)
   if (!a || !b || a.id === b.id) return null
   const recipe = fusionRecipeFor(a.species.body, b.species.body)
   if (!recipe) return null
-  const combined = {} as Stats
-  for (const s of STATS) combined[s] = a.stats[s] + b.stats[s]
-  return { species: pickFusionSpecies(recipe.pool, combined), recipe }
+  const rng = mulberry32(hashString('fusewheel:' + a.id + '+' + b.id + ':' + g.nextId))
+  return { speciesId: recipe.pool[Math.floor(rng() * recipe.pool.length)], classLabel: recipe.classLabel, pool: recipe.pool }
 }
 export function fuse(g: GameState, aId: string, bId: string): GameState {
-  if (aId === bId || g.gold < FUSION_COST || !g.specialLicense || g.stable.length >= effectiveBarnCap(g)) return g
-  const a = g.frozen.find((x) => x.id === aId)
-  const b = g.frozen.find((x) => x.id === bId)
-  const prev = fusionPreview(g, aId, bId)
-  if (!a || !b || !prev) return g
+  if (aId === bId || g.gold < FUSION_COST || g.stable.length >= effectiveBarnCap(g)) return g
+  const a = g.labFrozen?.find((x) => x.id === aId)
+  const b = g.labFrozen?.find((x) => x.id === bId)
+  const spin = fusionSpin(g, aId, bId)
+  if (!a || !b || !spin) return g
+  const species = SPECIES.find((s) => s.id === spin.speciesId)!
   const rng = mulberry32(hashString('fuse:' + a.id + '+' + b.id + ':' + g.nextId))
   const babySeed = 'fuse-' + a.id + '+' + b.id + ':' + g.nextId
-  const baby = newCareer(babySeed, { id: 'own-fuse-' + g.nextId + '-' + babySeed, ageWeeks: WEEKS_PER_YEAR, licenseIndex: g.licenseIndex })
-  baby.species = prev.species
-  baby.generation = 1 // a fresh fusion FOUNDS a bloodline (gen-1, Platinum-capped until bred)
-  // Start ≈ Tin-strength: parents' averaged stats × fraction, clamped to the Tin cap.
-  for (const s of STATS) baby.stats[s] = Math.max(1, Math.min(TIN_CAP, Math.round(FUSION_START_FRACTION * ((a.stats[s] + b.stats[s]) / 2))))
+  const baby = newCareer(babySeed, { id: 'own-fuse-' + g.nextId + '-' + babySeed, ageWeeks: WEEKS_PER_YEAR, licenseIndex: g.licenseIndex, potential: FUSION_POTENTIAL })
+  baby.species = species
+  baby.generation = 1 // founds a bloodline — gen-1 Platinum-capped until bred
+  for (const s of STATS) baby.stats[s] = FUSION_START_STAT // all 100
   baby.hp = maxHp(baby.stats); baby.mp = maxMana(baby.stats)
-  // Per-monster minor(+10%)/flaw(−10%), rolled on stats OUTSIDE the two majors.
-  const majors = [prev.species.trainingProfile!.major, prev.species.trainingProfile!.major2]
-  const others = STATS.filter((s) => !majors.includes(s))
+  // Aptitude INHERITED from the two parents' majors (+20% each)...
+  baby.bonusMajor1 = parentMajor(a)
+  baby.bonusMajor2 = parentMajor(b)
+  // ...plus a rolled +10% minor / −10% flaw on OTHER stats (per monster).
+  const others = STATS.filter((s) => s !== baby.bonusMajor1 && s !== baby.bonusMajor2)
   baby.bonusMinor = others[Math.floor(rng() * others.length)]
   const flawPool = others.filter((s) => s !== baby.bonusMinor)
   baby.bonusFlaw = flawPool[Math.floor(rng() * flawPool.length)]
   baby.comfortWeeks = comfortWeeksFor(g)
-  baby.log = [`${baby.name} the ${prev.species.name} is forged from ${a.name} & ${b.name} — a ${prev.recipe.classLabel} (aptitude +${baby.bonusMinor}, −${baby.bonusFlaw}). Capped at Platinum until its bloodline is bred onward.`]
+  const majTxt = baby.bonusMajor1 === baby.bonusMajor2 ? `+${baby.bonusMajor1}×2` : `+${baby.bonusMajor1}, +${baby.bonusMajor2}`
+  baby.log = [`${baby.name} the ${species.name} is forged — a ${spin.classLabel}. Inherited training: ${majTxt} (+20% each), +${baby.bonusMinor}/−${baby.bonusFlaw}. 1½★ bloodline, Platinum-capped until bred onward.`]
   return {
     ...g,
     gold: g.gold - FUSION_COST,
     stable: [...g.stable, baby],
-    frozen: g.frozen.filter((x) => x.id !== aId && x.id !== bId), // both legacies CONSUMED
+    labFrozen: g.labFrozen.filter((x) => x.id !== aId && x.id !== bId), // both CONSUMED
     nextId: g.nextId + 1,
   }
 }
@@ -1963,7 +1996,7 @@ export function healAtInfirmary(g: GameState, id: string): GameState {
 export function freeze(g: GameState, id: string): GameState {
   const c = g.stable.find((x) => x.id === id)
   if (!c || !c.retired) return g
-  if (g.frozen.length >= (g.labCapacity ?? LAB_BASE_SLOTS)) return g
+  if (g.frozen.length >= (g.studSlots ?? STUD_SLOTS_BASE)) return g
   const fr: Frozen = {
     id: c.id, name: c.name, species: c.species, sex: c.sex,
     stats: { ...c.stats }, favouriteFood: c.favouriteFood, hatedFood: c.hatedFood,

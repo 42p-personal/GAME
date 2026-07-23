@@ -87,8 +87,11 @@ export interface Career {
   tonicWeeks?: number // Elder Tonic uses on THIS monster (+8wk each, unlimited)
   heritageStat?: Stat // bred child: parent B's major — trains +10% faster
   generation?: number // dynasty depth: absent/1 = wild-caught; children = max(parents)+1
-  // Fusion monsters (v0.7): a rolled-per-monster minor (+10%) and flaw (−10%) on
-  // stats outside the species' two majors — see FUSION_DESIGN.md.
+  // Fusion monsters (v0.7): aptitude lives PER MONSTER, not the species — the two
+  // +20% majors are INHERITED from the two fused parents' majors, plus a rolled
+  // +10% minor / −10% flaw. See FUSION_DESIGN.md.
+  bonusMajor1?: Stat
+  bonusMajor2?: Stat
   bonusMinor?: Stat
   bonusFlaw?: Stat
   tournamentHistory: TournamentResult[]
@@ -145,7 +148,7 @@ export function trainingProfileFor(species: Species): TrainingProfile {
 // a SECOND major (major2, also +20%) — their dual-major training identity.
 export function statTrainingBonus(species: Species, stat: Stat): number {
   const prof = trainingProfileFor(species)
-  if (stat === prof.major || stat === prof.major2) return 1.2
+  if (stat === prof.major) return 1.2
   if (stat === prof.minor) return 1.1
   if (stat === prof.flaw) return 0.8
   return 1
@@ -216,9 +219,11 @@ function rollDrillGain(rng: RNG, base: number, happiness: number): number {
 // line, up to +25%. Heritage stat (bred children): +10% on parent B's major.
 // One shared multiplier so applyWeek and the preview can never drift.
 export type GearTiers = Partial<Record<Stat, number>>
-export function gearHeritageMult(c: { heritageStat?: Stat; bonusMinor?: Stat; bonusFlaw?: Stat }, gear: GearTiers, stat: Stat): number {
+export function gearHeritageMult(c: { heritageStat?: Stat; bonusMajor1?: Stat; bonusMajor2?: Stat; bonusMinor?: Stat; bonusFlaw?: Stat }, gear: GearTiers, stat: Stat): number {
   return (1 + 0.05 * (gear[stat] ?? 0)) // peddler training gear (+5%/tier)
     * (c.heritageStat === stat ? 1.1 : 1) // bred child heritage (+10%)
+    * (c.bonusMajor1 === stat ? 1.2 : 1) // fusion inherited major from parent A (+20%)
+    * (c.bonusMajor2 === stat ? 1.2 : 1) // fusion inherited major from parent B (+20%)
     * (c.bonusMinor === stat ? 1.1 : 1) // fusion per-monster minor (+10%)
     * (c.bonusFlaw === stat ? 0.9 : 1) // fusion per-monster flaw (−10%)
 }

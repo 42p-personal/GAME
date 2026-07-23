@@ -31,12 +31,12 @@ export type Sex = 'M' | 'F'
 // authored `major`/`flaw` (the exclusive body types — Draconic/Abyssal/
 // Mythical, not yet migrated) fall back to the legacy derivation (top/2nd/
 // lowest base stat) inside game.ts:trainingProfileFor.
-export interface TrainingProfile { minor: Stat; major?: Stat; major2?: Stat; flaw?: Stat }
+export interface TrainingProfile { minor: Stat; major?: Stat; flaw?: Stat }
 
 // What a species DATA ENTRY authors — just major/flaw, never minor (that's
 // always derived from the species' body type, not hand-picked). Resolved
 // into a full TrainingProfile (with minor filled in) by trainingProfileFor.
-export interface AuthoredAptitude { major?: Stat; major2?: Stat; flaw?: Stat }
+export interface AuthoredAptitude { major?: Stat; flaw?: Stat }
 
 // Body type's single minor training bonus (+10%, same for every species of
 // that body — see TrainingProfile above). Only the 6 base body types are

@@ -165,12 +165,23 @@ retiree) is removed/repurposed; freezing = "send to stud" is the permanent move.
 ---
 
 ## BUILD STATUS
-- **Saurian — BUILT (v0.7, data/mechanics/UI, 2026-07-23).** 5 species + dual-major
-  aptitude + per-monster minor/flaw + fusion mechanic (recipe, parents-decide-species,
-  Tin-start, 1000g, Special License gate, consumes both legacies) + gen-1 Platinum
-  cap / gen-2+ lift + Lab fusion UI. Sim-verified (23 fusion checks + dual-major
-  training) + goldens intact + browser. **SPRITES: placeholder (Reptilian grid) —
-  real art needs the image pipeline (no image tool this session).**
+- **Saurian — BUILT & CORRECTED (v0.7, 2026-07-23).** Rebuilt to the corrected model
+  after the first attempt diverged. FINAL mechanics:
+  - **Lab freezer** — a SEPARATE stasis pool (`g.labFrozen`/`g.labSlots`, expandable
+    from Ranch Shop), distinct from the Breeding Ranch stud farm (renamed
+    `labCapacity`→`studSlots`). Freeze any active monster (aging paused); thaw back;
+    Elder Tonic usable on frozen monsters.
+  - **Fuse two lab-frozen** (right body pair, e.g. Mammal+Reptilian → Saurian), 1000g,
+    both CONSUMED. **All stats start at 100** (parent stats irrelevant). Aptitude
+    INHERITED per-monster: **+20% on each parent's major** (`bonusMajor1/2`) + a rolled
+    **+10% minor / −10% flaw**. Species = **spinning wheel** (random of the 5). Potential
+    **×1.075 (1½★)**, gen-1 Platinum-capped, then fully breedable (gen-2 ≈ 3★, TE-capable).
+  - 5 Saurian species are aptitude-neutral shells (`trainingProfile: {}`) — innates + look only.
+  - Sim-verified (8-check corrected sim: freeze/thaw, wheel determinism, all-100 start,
+    inherited majors +20% / minor+10% / flaw−10% via training preview, Platinum cap,
+    tonic-on-frozen, lab expand) + goldens intact + design validation + live browser
+    (Lab freezer + freeze/thaw). **SPRITES: placeholder (Reptilian grid) — real art
+    needs the image pipeline.**
 - Tempestine — not started. Broodkin — not started.
 
 ## CLASS 1 — Saurian (Mammal + Reptilian) · element: resist earth, weak air

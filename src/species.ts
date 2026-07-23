@@ -152,19 +152,19 @@ export const SPECIES: Species[] = [
   // training (two +20% stats per species); the +10% minor / −10% flaw is rolled
   // PER MONSTER at fusion time (Career.bonusMinor/bonusFlaw), not authored here.
   { id: 'grendscale', name: 'Grendscale', body: 'Saurian', naturalClass: 'Warrior', base: s(40, 18, 36, 12, 10, 14), lifespan: 6, flavour: 'Scaled maned silverback, curved horns — warm-blood fury under cold-blood armor.',
-    trainingProfile: { major: 'STR', major2: 'CON' },
+    trainingProfile: {},
     innate: [{ name: 'Scaled Hide', desc: 'Reduces damage taken by 2 per hit.' }, { name: 'Primal Roar', desc: 'Enemies: -4% damage dealt.' }] },
   { id: 'vipramane', name: 'Vipramane', body: 'Saurian', naturalClass: 'Rogue', base: s(30, 38, 20, 12, 14, 12), lifespan: 6, flavour: 'Maned horned serpent-striker, coiled to lunge.',
-    trainingProfile: { major: 'DEX', major2: 'STR' },
+    trainingProfile: {},
     innate: [{ name: 'Serpent\'s Strike', desc: '+35% damage on its first hit. +4% critical hit chance.' }, { name: 'Mane Bristle', desc: '+7% dodge chance.' }] },
   { id: 'thornhide', name: 'Thornhide', body: 'Saurian', naturalClass: 'Tank', base: s(28, 12, 44, 18, 10, 12), lifespan: 6, flavour: 'Tusked plate-scaled wall, braced and immovable.',
-    trainingProfile: { major: 'CON', major2: 'STR' },
+    trainingProfile: {},
     innate: [{ name: 'Thornplate', desc: 'Enters battle with a 16-point protective ward.' }, { name: 'Ironscale', desc: 'Reduces damage taken by 3 per hit.' }] },
   { id: 'runewyrm', name: 'Runewyrm', body: 'Saurian', naturalClass: 'Sage', base: s(16, 16, 20, 36, 32, 12), lifespan: 6, flavour: 'Rune-etched serpent-scholar, an ancient watchful coil.',
-    trainingProfile: { major: 'WIS', major2: 'INT' },
+    trainingProfile: {},
     innate: [{ name: 'Runic Wisdom', desc: '+2 mana regen/turn.' }, { name: 'Petrifying Gaze', desc: '8% chance to Stun on every hit.' }] },
   { id: 'basilroar', name: 'Basilroar', body: 'Saurian', naturalClass: 'Orator', base: s(22, 18, 20, 26, 12, 34), lifespan: 6, flavour: 'Maned basilisk whose bellow rattles a battlefield.',
-    trainingProfile: { major: 'CHA', major2: 'WIS' },
+    trainingProfile: {},
     innate: [{ name: 'Dread Bellow', desc: 'Enemies: -5% accuracy.' }, { name: 'Rally Cry', desc: 'Team: +5% damage.' }] },
 ]
 

@@ -17,13 +17,13 @@ import {
 } from './game'
 import {
   PANTRY_CONTRACT_COST, GRAND_LARDER_COST, ELITE_LICENSE_COST, EventMatch, EventStanding, GameState, PendingEvent, RIVAL_BAND_MIN, RIVAL_BUDGET_MULT, SPECIAL_LICENSE_COST,
-  COMFORT_ITEMS, EXTREME_MANUAL_COST, BREED_COST, BREED_MAX_CHILDREN, LAB_BASE_SLOTS, applyStudBook, breed, breedPotentialV2, buyComfortItem, buyExtremeManual, expandLab, labExpandCost, labUpkeepPerFrozen, pensionFor, studIncome, useTonic,
+  COMFORT_ITEMS, EXTREME_MANUAL_COST, BREED_COST, BREED_MAX_CHILDREN, STUD_SLOTS_BASE, applyStudBook, breed, breedPotentialV2, buyComfortItem, buyExtremeManual, expandStud, studExpandCost, labUpkeepPerFrozen, pensionFor, studIncome, useTonic,
   WeekPlanEntry, advanceWeek, barnCost, buyPantryContract, buyGrandLarder, buyEliteLicense, buyMonster, foodDiscountFor, resolveEvent,
   buySpecialLicense, cancelSignUp, cupLore, eligibleForTournament, freeze, fusionRoom, gameplanForRivalTeam, generateRivalTeamsForTournament, goto, healAtInfirmary, infirmaryFee, leagueIndexOf, monthOfWeek,
   entryFee, placementLabel, scoutFee, teamSizeForLeague, seatedRivalTeamIndex,
   trainerXpProgress, trainerBarnBonus, effectiveBarnCap, BREEDING_BONUS,
   buyLicense, cancelTrial, nextLicenseCost, startTrial, trialStatus, TRIAL_CHAMPION_MULT, RIVAL_PERSONALITY_GAMEPLAN,
-  fuse, fusionPreview, FUSION_COST,
+  fuse, fusionSpin, fusionRecipeFor, freezeToLab, thawFromLab, expandLab, labExpandCost, LAB_SLOTS_BASE, FUSION_COST,
   firstTeamLeagueIndex, generateRival, newGame, offerMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, setMarkTarget, setProtectTarget, setTactics, signUp, teamTacticsUnlocked, thaw,
   tournamentCalendarFor, upgradeBarn, visibleLeagueCount, weekOfMonth, yearOfWeek,
 } from './town'
@@ -461,12 +461,51 @@ function SandboxView() {
   )
 }
 
+// The fusion spinning wheel (v0.7): cycles the class's species, decelerating to
+// the pre-decided result — the "mad-science reveal" of a fusion.
+function FusionWheel({ pool, result, onDone }: { pool: string[]; result: string; onDone: () => void }) {
+  const [idx, setIdx] = useState(0)
+  const [done, setDone] = useState(false)
+  useEffect(() => {
+    const resultIdx = Math.max(0, pool.indexOf(result))
+    const total = pool.length * 3 + resultIdx // 3 full loops, then land on the result
+    let cur = 0
+    let timer: ReturnType<typeof setTimeout>
+    const tick = () => {
+      cur++
+      setIdx(cur % pool.length)
+      if (cur >= total) { setDone(true); return }
+      timer = setTimeout(tick, 50 + Math.pow(cur / total, 3) * 380) // ease-out
+    }
+    timer = setTimeout(tick, 60)
+    return () => clearTimeout(timer)
+  }, [pool, result])
+  const shown = SPECIES.find((s) => s.id === (done ? result : pool[idx]))
+  if (!shown) return null
+  return (
+    <div className="wheel-overlay" onClick={done ? onDone : undefined}>
+      <div className="wheel-card" onClick={(e) => e.stopPropagation()}>
+        <div className="section-title">⚗️ Fusing…</div>
+        <div className={'wheel-reel' + (done ? ' landed' : '')}>
+          <Sprite species={shown} size={96} />
+          <b>{shown.name}</b>
+        </div>
+        {done
+          ? <><div className="up" style={{ textAlign: 'center' }}>A {shown.name}! ({shown.naturalClass})</div>
+              <button className="enter" onClick={onDone}>Take it home →</button></>
+          : <div className="dim" style={{ textAlign: 'center' }}>the chimera takes shape…</div>}
+      </div>
+    </div>
+  )
+}
+
 // ============================ Town hub (§13) ============================
 type TownArea = 'hub' | 'market' | 'shop' | 'breeding' | 'retirement' | 'lab'
 
 function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetStateAction<GameState>> }) {
   const [fuseA, setFuseA] = useState('')
   const [fuseB, setFuseB] = useState('')
+  const [wheel, setWheel] = useState<{ result: string; pool: string[]; a: string; b: string } | null>(null)
   // The town is a navigable hub of locations. A fresh game (empty stable) opens
   // straight into the Market to buy a first monster; otherwise land on the hub.
   const [area, setArea] = useState<TownArea>(game.stable.length === 0 ? 'market' : 'hub')
@@ -484,7 +523,7 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
       <div className="townbar">
         <span>🪙 {game.gold}g</span>
         <span>🏠 Stable {active.length}/{effectiveBarnCap(game)}</span>
-        <span>❄️ Studs {game.frozen.length}/{game.labCapacity}</span>
+        <span>❄️ Studs {game.frozen.length}/{game.studSlots}</span>
         {game.pantryContract && <span className="up">🧺 Pantry</span>}
         {game.grandLarder && <span className="up">🏰 Larder</span>}
       </div>
@@ -583,8 +622,8 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
                       <div className="dim">🏅 {podiums} podium{podiums === 1 ? '' : 's'} · 🏆 {champs} · 🏛 +{pensionFor(c)}g/wk</div>
                     </div>
                   </div>
-                  <button className="ghost" disabled={game.frozen.length >= game.labCapacity}
-                    title={game.frozen.length >= game.labCapacity ? 'The stud farm is full — expand it at the Breeding Ranch' : 'Move to the Breeding Ranch as breeding stock (ends the pension)'}
+                  <button className="ghost" disabled={game.frozen.length >= game.studSlots}
+                    title={game.frozen.length >= game.studSlots ? 'The stud farm is full — expand it at the Breeding Ranch' : 'Move to the Breeding Ranch as breeding stock (ends the pension)'}
                     onClick={() => setGame((g) => freeze(g, c.id))}>🐎 To Stud</button>
                 </div>
               )
@@ -597,7 +636,7 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
       {area === 'breeding' && (
         <div className="townmap">
           <div className="card loc">
-            <div className="loc-h"><span>🐎 Breeding Ranch</span><span className="dim">{game.frozen.length}/{game.labCapacity} studs · upkeep {labUpkeepPerFrozen(game)}g/wk each{game.labTechLoan ? ' (at cost 🤝)' : ''}</span></div>
+            <div className="loc-h"><span>🐎 Breeding Ranch</span><span className="dim">{game.frozen.length}/{game.studSlots} studs · upkeep {labUpkeepPerFrozen(game)}g/wk each{game.labTechLoan ? ' (at cost 🤝)' : ''}</span></div>
             <div className="section-title">Breeding stock</div>
             <div className="labrows">
               {game.frozen.length === 0 && <div className="dim">No studs yet — send a decorated retiree here from the Retirement Ranch.</div>}
@@ -618,10 +657,10 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
                 </div>
               ))}
             </div>
-            {labExpandCost(game) !== null && (
-              <button className="ghost" disabled={game.gold < (labExpandCost(game) ?? Infinity)}
-                onClick={() => setGame((g) => expandLab(g))}>
-                ➕ Expand stud farm · {labExpandCost(game)}g ({game.labCapacity} → {game.labCapacity + 1} slots)
+            {studExpandCost(game) !== null && (
+              <button className="ghost" disabled={game.gold < (studExpandCost(game) ?? Infinity)}
+                onClick={() => setGame((g) => expandStud(g))}>
+                ➕ Expand stud farm · {studExpandCost(game)}g ({game.studSlots} → {game.studSlots + 1} slots)
               </button>
             )}
             <div className="section-title">Breed (two studs parent a child)</div>
@@ -653,44 +692,90 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
         </div>
       )}
 
-      {/* ---- LAB: the fusion facility (v0.7) ---- */}
+      {/* ---- LAB: freezer (stasis) + fusion (v0.7) ---- */}
       {area === 'lab' && (() => {
-        const preview = fuseA && fuseB && fuseA !== fuseB ? fusionPreview(game, fuseA, fuseB) : null
+        const frozen = game.labFrozen ?? []
+        const spin = fuseA && fuseB && fuseA !== fuseB ? fusionSpin(game, fuseA, fuseB) : null
+        const bodyOf = (id: string) => frozen.find((f) => f.id === id)?.species.body
+        const validPair = fuseA && fuseB && fuseA !== fuseB && !!fusionRecipeFor(bodyOf(fuseA)!, bodyOf(fuseB)!)
         return (
         <div className="townmap">
           <div className="card loc">
-            <div className="loc-h"><span>🧪 Lab · Fusion</span><span className="dim">genome bank {game.frozen.length}/{game.labCapacity}</span></div>
+            <div className="loc-h"><span>🧪 Lab · Freezer</span><span className="dim">{frozen.length}/{game.labSlots} slots</span></div>
             <div className="dim" style={{ marginBottom: 6 }}>
-              <b>Fuse</b> two banked legacies into a brand-new <b>fusion species</b> — a Tin-strength,
-              dual-major specialist that founds a fresh bloodline. Both parents are <b>consumed</b>. A
-              gen-1 fusion is capped at <b>Platinum</b>; breed its line onward to reach Tamer Elite.
-              {!game.specialLicense && <> Requires the <b>Special Breeding License</b> (Ranch Shop).</>}
+              Freeze a monster into <b>stasis</b> (aging paused) — park one until you can afford an Elder
+              Tonic, or <b>fuse</b> two into a brand-new species. Separate from the Breeding Ranch.
+            </div>
+            {/* Freeze an active monster in */}
+            <div className="section-title">Freeze into stasis</div>
+            <div className="labrows">
+              {game.stable.filter((c) => !c.retired).length === 0 && <div className="dim">No active monsters to freeze.</div>}
+              {game.stable.filter((c) => !c.retired).map((c) => (
+                <div className="labrow" key={c.id}>
+                  <Sprite species={c.species} size={28} stage="Teen" />
+                  <span className="bn">{c.name}</span>
+                  <span className="dim">{c.species.name} · {c.species.body}</span>
+                  <button className="ghost" disabled={frozen.length >= game.labSlots}
+                    title={frozen.length >= game.labSlots ? 'Freezer full — expand it' : 'Freeze (pauses aging)'}
+                    onClick={() => setGame((g) => freezeToLab(g, c.id))}>❄️ Freeze</button>
+                </div>
+              ))}
+            </div>
+            {/* Frozen monsters */}
+            <div className="section-title">In the freezer</div>
+            <div className="labrows">
+              {frozen.length === 0 && <div className="dim">Empty.</div>}
+              {frozen.map((f) => (
+                <div className="labrow" key={f.id}>
+                  <Sprite species={f.species} size={28} stage="Teen" />
+                  <span className="bn">🧊 {f.name}</span>
+                  <span className="dim">{f.species.name} · {f.species.body}</span>
+                  {(game.tonics ?? 0) > 0 && <button className="ghost" title="Elder Tonic +2mo career span" onClick={() => setGame((g) => useTonic(g, f.id))}>🧪</button>}
+                  <button className="ghost" disabled={barnFull} title="Thaw back into the stable" onClick={() => setGame((g) => thawFromLab(g, f.id))}>Thaw</button>
+                </div>
+              ))}
+            </div>
+            {labExpandCost(game) !== null && (
+              <button className="ghost" disabled={game.gold < (labExpandCost(game) ?? Infinity)}
+                onClick={() => setGame((g) => expandLab(g))}>➕ Expand freezer · {labExpandCost(game)}g ({game.labSlots} → {game.labSlots + 1})</button>
+            )}
+            {/* Fusion */}
+            <div className="section-title">⚗️ Fuse (two frozen → a new species)</div>
+            <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>
+              Combine two frozen monsters of a valid body pair. Stats start at 100; the result inherits
+              each parent's training major (+20%) plus a rolled +10%/−10%; a spinning wheel decides which
+              of the class's species you get. 1½★ bloodline, Platinum-capped until bred onward.
             </div>
             <div className="fuserow">
               <select value={fuseA} onChange={(e) => setFuseA(e.target.value)}>
-                <option value="">— legacy A —</option>
-                {game.frozen.map((f) => <option key={f.id} value={f.id}>{f.name} ({f.species.body})</option>)}
+                <option value="">— monster A —</option>
+                {frozen.map((f) => <option key={f.id} value={f.id}>{f.name} ({f.species.body})</option>)}
               </select>
               <select value={fuseB} onChange={(e) => setFuseB(e.target.value)}>
-                <option value="">— legacy B —</option>
-                {game.frozen.map((f) => <option key={f.id} value={f.id}>{f.name} ({f.species.body})</option>)}
+                <option value="">— monster B —</option>
+                {frozen.map((f) => <option key={f.id} value={f.id}>{f.name} ({f.species.body})</option>)}
               </select>
               <button className="rankup"
-                disabled={!preview || game.gold < FUSION_COST || !game.specialLicense || !fusionRoom(game)}
-                onClick={() => { setGame((g) => fuse(g, fuseA, fuseB)); setFuseA(''); setFuseB('') }}>
+                disabled={!spin || game.gold < FUSION_COST || !fusionRoom(game)}
+                onClick={() => { if (spin) setWheel({ result: spin.speciesId, pool: spin.pool, a: fuseA, b: fuseB }) }}>
                 Fuse · {FUSION_COST}g
               </button>
             </div>
             {fuseA && fuseB && fuseA !== fuseB && (
-              preview
-                ? <div className="hint">⚗️ {game.frozen.find((f) => f.id === fuseA)?.species.body} + {game.frozen.find((f) => f.id === fuseB)?.species.body} → <b>{preview.species.name}</b> ({preview.recipe.classLabel} · {preview.species.naturalClass}). Trains {preview.species.trainingProfile?.major} &amp; {preview.species.trainingProfile?.major2} fast, +a rolled minor/flaw. Starts ~Tin-strength.</div>
-                : <div className="neg" style={{ fontSize: 12 }}>🚫 No known fusion for {game.frozen.find((f) => f.id === fuseA)?.species.body} + {game.frozen.find((f) => f.id === fuseB)?.species.body}. Valid recipe: Mammal + Reptilian → Saurian.</div>
+              validPair
+                ? <div className="hint">⚗️ {bodyOf(fuseA)} + {bodyOf(fuseB)} → a <b>{spin?.classLabel}</b> (the wheel decides which of the {spin?.pool.length}).</div>
+                : <div className="neg" style={{ fontSize: 12 }}>🚫 No known fusion for {bodyOf(fuseA)} + {bodyOf(fuseB)}. Valid recipe: Mammal + Reptilian → Saurian.</div>
             )}
-            {game.frozen.length < 2 && <div className="hint">Bank at least two legacies (Retirement Ranch → 🐎 To Stud) to fuse.</div>}
+            {frozen.length < 2 && <div className="hint">Freeze at least two monsters to fuse.</div>}
           </div>
         </div>
         )
       })()}
+
+      {wheel && (
+        <FusionWheel pool={wheel.pool} result={wheel.result}
+          onDone={() => { setGame((g) => fuse(g, wheel.a, wheel.b)); setFuseA(''); setFuseB(''); setWheel(null) }} />
+      )}
 
       {/* ---- MARKET: buy monsters, licenses, supplies, healing ---- */}
       {area === 'market' && (
@@ -2394,9 +2479,13 @@ function sanitizeAndMigrate(raw: string): GameState | null {
     if (typeof g.trainingGear !== 'object' || !g.trainingGear) g.trainingGear = {}
     if (typeof g.tonics !== 'number') g.tonics = 0
     if (typeof g.studBooks !== 'number') g.studBooks = 0
-    if (typeof g.labCapacity !== 'number') g.labCapacity = Math.max(LAB_BASE_SLOTS, Array.isArray(g.frozen) ? g.frozen.length : 0)
+    // v0.7: the breeding stud-farm capacity was renamed labCapacity → studSlots
+    if (typeof g.studSlots !== 'number') g.studSlots = (g as { labCapacity?: number }).labCapacity ?? Math.max(STUD_SLOTS_BASE, Array.isArray(g.frozen) ? g.frozen.length : 0)
     if (typeof g.labTechLoan !== 'boolean') g.labTechLoan = false
     if (typeof g.extremeUnlocked !== 'boolean') g.extremeUnlocked = false
+    // v0.7 Lab freezer (separate from the stud farm)
+    if (!Array.isArray(g.labFrozen)) g.labFrozen = []
+    if (typeof g.labSlots !== 'number') g.labSlots = LAB_SLOTS_BASE
     for (const c of g.stable) if (c.licenseIndex !== g.licenseIndex) c.licenseIndex = g.licenseIndex
     return g as GameState
   } catch {
