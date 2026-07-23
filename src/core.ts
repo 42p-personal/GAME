@@ -14,6 +14,13 @@ export const STAT_NAMES: Record<Stat, string> = {
 export type Stats = Record<Stat, number>
 
 export type BodyType = 'Mammal' | 'Avian' | 'Marsupial' | 'Aquatic' | 'Insectoid' | 'Reptilian' | 'Draconic' | 'Abyssal' | 'Mythical'
+  | 'Saurian' // fusion class: Mammal + Reptilian (FUSION_DESIGN.md)
+
+// Fusion classes (v0.7): body types that only exist as the RESULT of fusion —
+// never wild, never in the market. Drives the gen-1 Platinum stat cap and the
+// per-monster (not per-species) minor/flaw roll. See FUSION_DESIGN.md.
+export const FUSION_BODIES: BodyType[] = ['Saurian']
+export const isFusionBody = (b: BodyType): boolean => FUSION_BODIES.includes(b)
 export type Sex = 'M' | 'F'
 
 // Training aptitude (user spec 2026-07-23): `minor` is body-type-derived
@@ -24,12 +31,12 @@ export type Sex = 'M' | 'F'
 // authored `major`/`flaw` (the exclusive body types — Draconic/Abyssal/
 // Mythical, not yet migrated) fall back to the legacy derivation (top/2nd/
 // lowest base stat) inside game.ts:trainingProfileFor.
-export interface TrainingProfile { minor: Stat; major?: Stat; flaw?: Stat }
+export interface TrainingProfile { minor: Stat; major?: Stat; major2?: Stat; flaw?: Stat }
 
 // What a species DATA ENTRY authors — just major/flaw, never minor (that's
 // always derived from the species' body type, not hand-picked). Resolved
 // into a full TrainingProfile (with minor filled in) by trainingProfileFor.
-export interface AuthoredAptitude { major?: Stat; flaw?: Stat }
+export interface AuthoredAptitude { major?: Stat; major2?: Stat; flaw?: Stat }
 
 // Body type's single minor training bonus (+10%, same for every species of
 // that body — see TrainingProfile above). Only the 6 base body types are
@@ -315,6 +322,7 @@ export const BODY_ELEMENT: Record<BodyType, { resist: Element; weak: Element }> 
   Draconic: { resist: 'fire', weak: 'water' },
   Abyssal: { resist: 'water', weak: 'fire' }, // crushing depths; surface heat is lethal
   Mythical: { resist: 'air', weak: 'earth' }, // celestial beings; the ground rejects them
+  Saurian: { resist: 'earth', weak: 'air' }, // fusion (Mammal+Reptilian): grounded stone-scaled titans, unsettled by wind
 }
 export const RESIST_MULT = 0.7
 export const WEAK_MULT = 1.3

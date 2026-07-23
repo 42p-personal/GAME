@@ -193,6 +193,18 @@ export const INNATE_EFFECTS: Record<string, InnateEffect> = {
   // a small always-on ward of conviction — the cleanse alone is worthless
   // against teams that carry no debuff moves.
   "Truth's Word": { flatDR: 1 },
+
+  // --- Saurian (fusion class, v0.7) — Mammal+Reptilian chimeras ---
+  'Scaled Hide': { flatDR: 2 }, // warm-blood bulk under cold-blood plate
+  'Primal Roar': { enemyDmgDebuff: 0.04 }, // the roar takes the fight out of them
+  "Serpent's Strike": { firstHitMult: 1.35, crit: 4 }, // the ambush lunge
+  'Mane Bristle': { dodge: 7 }, // the bristling mane reads the strike
+  Thornplate: { startWard: 16 }, // the keeled plates are braced before the bell
+  Ironscale: { flatDR: 3 }, // the heaviest plate a Saurian wears
+  'Runic Wisdom': { regen: 2 }, // rune-lit scales feed the well
+  'Petrifying Gaze': { statusOnHit: { kind: 'stun', chance: 8, duration: 1 } }, // the basilisk look
+  'Dread Bellow': { enemyAccDebuff: 5 }, // foes flinch and swing wide
+  'Rally Cry': { auraDmgMult: 1.05 }, // the war-bellow lifts the whole line
 }
 
 // A species' two innates are ALTERNATIVES, not a stacked pair (user spec

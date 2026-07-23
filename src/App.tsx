@@ -23,6 +23,7 @@ import {
   entryFee, placementLabel, scoutFee, teamSizeForLeague, seatedRivalTeamIndex,
   trainerXpProgress, trainerBarnBonus, effectiveBarnCap, BREEDING_BONUS,
   buyLicense, cancelTrial, nextLicenseCost, startTrial, trialStatus, TRIAL_CHAMPION_MULT, RIVAL_PERSONALITY_GAMEPLAN,
+  fuse, fusionPreview, FUSION_COST,
   firstTeamLeagueIndex, generateRival, newGame, offerMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, setMarkTarget, setProtectTarget, setTactics, signUp, teamTacticsUnlocked, thaw,
   tournamentCalendarFor, upgradeBarn, visibleLeagueCount, weekOfMonth, yearOfWeek,
 } from './town'
@@ -652,21 +653,44 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
         </div>
       )}
 
-      {/* ---- LAB: the fusion facility (fusion itself ships next pass) ---- */}
-      {area === 'lab' && (
+      {/* ---- LAB: the fusion facility (v0.7) ---- */}
+      {area === 'lab' && (() => {
+        const preview = fuseA && fuseB && fuseA !== fuseB ? fusionPreview(game, fuseA, fuseB) : null
+        return (
         <div className="townmap">
           <div className="card loc">
-            <div className="loc-h"><span>🧪 Lab</span><span className="dim">genome bank {game.frozen.length}/{game.labCapacity}</span></div>
-            <div className="section-title">⚗️ Fusion Research</div>
-            <div className="dim">
-              The Lab will let you <b>fuse</b> two monsters into an entirely new hybrid species — a
-              fast-training specialist that founds a brand-new bloodline. Fusion recipes and the new
-              species are in development.
+            <div className="loc-h"><span>🧪 Lab · Fusion</span><span className="dim">genome bank {game.frozen.length}/{game.labCapacity}</span></div>
+            <div className="dim" style={{ marginBottom: 6 }}>
+              <b>Fuse</b> two banked legacies into a brand-new <b>fusion species</b> — a Tin-strength,
+              dual-major specialist that founds a fresh bloodline. Both parents are <b>consumed</b>. A
+              gen-1 fusion is capped at <b>Platinum</b>; breed its line onward to reach Tamer Elite.
+              {!game.specialLicense && <> Requires the <b>Special Breeding License</b> (Ranch Shop).</>}
             </div>
-            <div className="hint" style={{ marginTop: 8 }}>🔬 Coming soon — for now, bank and breed your champions at the Breeding Ranch.</div>
+            <div className="fuserow">
+              <select value={fuseA} onChange={(e) => setFuseA(e.target.value)}>
+                <option value="">— legacy A —</option>
+                {game.frozen.map((f) => <option key={f.id} value={f.id}>{f.name} ({f.species.body})</option>)}
+              </select>
+              <select value={fuseB} onChange={(e) => setFuseB(e.target.value)}>
+                <option value="">— legacy B —</option>
+                {game.frozen.map((f) => <option key={f.id} value={f.id}>{f.name} ({f.species.body})</option>)}
+              </select>
+              <button className="rankup"
+                disabled={!preview || game.gold < FUSION_COST || !game.specialLicense || !fusionRoom(game)}
+                onClick={() => { setGame((g) => fuse(g, fuseA, fuseB)); setFuseA(''); setFuseB('') }}>
+                Fuse · {FUSION_COST}g
+              </button>
+            </div>
+            {fuseA && fuseB && fuseA !== fuseB && (
+              preview
+                ? <div className="hint">⚗️ {game.frozen.find((f) => f.id === fuseA)?.species.body} + {game.frozen.find((f) => f.id === fuseB)?.species.body} → <b>{preview.species.name}</b> ({preview.recipe.classLabel} · {preview.species.naturalClass}). Trains {preview.species.trainingProfile?.major} &amp; {preview.species.trainingProfile?.major2} fast, +a rolled minor/flaw. Starts ~Tin-strength.</div>
+                : <div className="neg" style={{ fontSize: 12 }}>🚫 No known fusion for {game.frozen.find((f) => f.id === fuseA)?.species.body} + {game.frozen.find((f) => f.id === fuseB)?.species.body}. Valid recipe: Mammal + Reptilian → Saurian.</div>
+            )}
+            {game.frozen.length < 2 && <div className="hint">Bank at least two legacies (Retirement Ranch → 🐎 To Stud) to fuse.</div>}
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {/* ---- MARKET: buy monsters, licenses, supplies, healing ---- */}
       {area === 'market' && (

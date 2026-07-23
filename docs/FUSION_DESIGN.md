@@ -164,6 +164,15 @@ retiree) is removed/repurposed; freezing = "send to stud" is the permanent move.
 
 ---
 
+## BUILD STATUS
+- **Saurian — BUILT (v0.7, data/mechanics/UI, 2026-07-23).** 5 species + dual-major
+  aptitude + per-monster minor/flaw + fusion mechanic (recipe, parents-decide-species,
+  Tin-start, 1000g, Special License gate, consumes both legacies) + gen-1 Platinum
+  cap / gen-2+ lift + Lab fusion UI. Sim-verified (23 fusion checks + dual-major
+  training) + goldens intact + browser. **SPRITES: placeholder (Reptilian grid) —
+  real art needs the image pipeline (no image tool this session).**
+- Tempestine — not started. Broodkin — not started.
+
 ## CLASS 1 — Saurian (Mammal + Reptilian) · element: resist earth, weak air
 
 Warm-blood fury fused with cold-blood armor: scaled beasts, maned horned

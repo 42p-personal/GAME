@@ -1,7 +1,7 @@
 // Seed -> monster generator (§10.1 genome idea, simplified) plus derived values.
 import {
   CLASSES, NORMAL_FOODS, INNATE_SECONDARY_LEVEL, LEAGUES, Monster, Move, RNG, STATS, Stat, Stats, classForStats, hashString,
-  leagueForStat, mulberry32, pick, randInt,
+  isFusionBody, leagueForStat, mulberry32, pick, randInt,
 } from './core'
 import { ALL_MOVES } from './moves'
 import { SPECIES } from './species'
@@ -248,9 +248,14 @@ export function chooseLoadout(learned: Move[], stats?: Stats): Move[] {
 
 export interface GenOptions { train?: number }
 
+// Fusion species are NEVER wild/market — they only exist as a fusion RESULT.
+// (Filtering them out also keeps the generation pool — and every golden — byte-
+// identical to before they were added, since they're appended at the array end.)
+const GENERATABLE = SPECIES.filter((s) => !isFusionBody(s.body))
+
 export function generateMonster(seed: string, opts: GenOptions = {}): Monster {
   const rng = mulberry32(hashString(seed || 'egg'))
-  const species = SPECIES[hashString(seed || 'egg') % SPECIES.length]
+  const species = GENERATABLE[hashString(seed || 'egg') % GENERATABLE.length]
   const sex = rng() < 0.5 ? 'M' : 'F'
 
   // Individual variance (±5), order-preserving: jittered values are re-assigned

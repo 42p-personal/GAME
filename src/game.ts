@@ -2,7 +2,7 @@
 // weekly actions (train drill / rest / feed / excursion), stamina, gold, aging.
 import {
   BODY_MINOR, FOODS, Food, INNATE_SECONDARY_LEVEL, LEAGUES, MAX_HAPPINESS, Monster, Move, RNG, STATS, Sex, Species, Stats, Stat, Tactics, TrainingProfile,
-  classForStats, feedDelta, foodDef, hashString, mulberry32,
+  classForStats, feedDelta, foodDef, hashString, isFusionBody, mulberry32,
 } from './core'
 import { ALL_DRILLS } from './drills'
 import { chooseLoadout, generateMonster, learnedMoves, maxHp, maxMana } from './monster'
@@ -87,6 +87,10 @@ export interface Career {
   tonicWeeks?: number // Elder Tonic uses on THIS monster (+8wk each, unlimited)
   heritageStat?: Stat // bred child: parent B's major — trains +10% faster
   generation?: number // dynasty depth: absent/1 = wild-caught; children = max(parents)+1
+  // Fusion monsters (v0.7): a rolled-per-monster minor (+10%) and flaw (−10%) on
+  // stats outside the species' two majors — see FUSION_DESIGN.md.
+  bonusMinor?: Stat
+  bonusFlaw?: Stat
   tournamentHistory: TournamentResult[]
   log: string[]
 }
@@ -137,10 +141,11 @@ export function trainingProfileFor(species: Species): TrainingProfile {
   return { major: ordered[0], minor: ordered[1], flaw: ordered[STATS.length - 1] }
 }
 
-// Stat training bonus: major +20%, minor +10%, flaw -20%
+// Stat training bonus: major +20%, minor +10%, flaw -20%. Fusion species carry
+// a SECOND major (major2, also +20%) — their dual-major training identity.
 export function statTrainingBonus(species: Species, stat: Stat): number {
   const prof = trainingProfileFor(species)
-  if (stat === prof.major) return 1.2
+  if (stat === prof.major || stat === prof.major2) return 1.2
   if (stat === prof.minor) return 1.1
   if (stat === prof.flaw) return 0.8
   return 1
@@ -211,8 +216,11 @@ function rollDrillGain(rng: RNG, base: number, happiness: number): number {
 // line, up to +25%. Heritage stat (bred children): +10% on parent B's major.
 // One shared multiplier so applyWeek and the preview can never drift.
 export type GearTiers = Partial<Record<Stat, number>>
-export function gearHeritageMult(c: { heritageStat?: Stat }, gear: GearTiers, stat: Stat): number {
-  return (1 + 0.05 * (gear[stat] ?? 0)) * (c.heritageStat === stat ? 1.1 : 1)
+export function gearHeritageMult(c: { heritageStat?: Stat; bonusMinor?: Stat; bonusFlaw?: Stat }, gear: GearTiers, stat: Stat): number {
+  return (1 + 0.05 * (gear[stat] ?? 0)) // peddler training gear (+5%/tier)
+    * (c.heritageStat === stat ? 1.1 : 1) // bred child heritage (+10%)
+    * (c.bonusMinor === stat ? 1.1 : 1) // fusion per-monster minor (+10%)
+    * (c.bonusFlaw === stat ? 0.9 : 1) // fusion per-monster flaw (−10%)
 }
 
 export function previewWeekEffects(c: Career, activity: string, food: Food | '', forage = false, gear: GearTiers = {}): WeekPreview {
@@ -291,8 +299,15 @@ export interface NewCareerOpts {
 // monster's bloodline potential (LOOP_DESIGN Phase 5). Wild-caught monsters
 // (potential absent) get the plain league cap, so nothing changes for them —
 // and generation/battle never consult this, only career training does.
-export function statCapFor(c: { licenseIndex: number; potential?: number }): number {
-  return Math.round(LEAGUES[c.licenseIndex].cap * (c.potential ?? 1))
+export const PLATINUM_CAP = LEAGUES[7].cap // 800 — the gen-1 fusion ceiling
+export function statCapFor(c: { licenseIndex: number; potential?: number; species?: Species; generation?: number }): number {
+  const base = LEAGUES[c.licenseIndex].cap * (c.potential ?? 1)
+  // Gen-1 fusion monsters are hard-capped at Platinum until bred (FUSION_DESIGN.md):
+  // fusion CREATES a bloodline capped at Platinum; breeding (gen 2+) lifts the wall.
+  if (c.species && isFusionBody(c.species.body) && (c.generation ?? 1) <= 1) {
+    return Math.round(Math.min(base, PLATINUM_CAP))
+  }
+  return Math.round(base)
 }
 
 // Create a raising Career. Stats/species/name come from `seed`; `opts.id` lets the

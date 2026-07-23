@@ -167,6 +167,26 @@ export const SPRITES: Record<BodyType, string[]> = {
     '................',
     '................',
   ],
+  // Saurian (fusion) — structural placeholder (reuses the Reptilian silhouette)
+  // until real fusion-species art is generated. See FUSION_DESIGN.md.
+  Saurian: [
+    '................',
+    '................',
+    '.....XXXX.......',
+    '....XBBBBX..A...',
+    '....XBEPBX.AA...',
+    '.....XBBBXAA....',
+    '....XXBBBBXX....',
+    '..XXBBBBBBBBXX..',
+    '.XBBBBLLLLBBBBX.',
+    '.XBBBBLLLLBBBBXA',
+    '.XBBBBBBBBBBBXAA',
+    '..XBBXXXXXXBBXA.',
+    '..XX........XX..',
+    '..XX........XX..',
+    '................',
+    '................',
+  ],
 }
 
 export function palette(hue: number): Record<string, string> {

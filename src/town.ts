@@ -1,9 +1,10 @@
 // Shared game state + the Town hub economy (§13). One gold wallet and one stable
 // span all areas; the Ranch (src/game.ts) raises the active monster week by week.
 import {
-  ClassRole, Food, GAMEPLANS, INNATE_SECONDARY_LEVEL, LEAGUES, MAX_HAPPINESS, Monster, Rival, RivalPersonality, Sex, Species, Stat, STATS, Stats, Tactics, TeamGameplan, classForStats, foodDiscountGroup, hashString,
+  BodyType, ClassRole, Food, GAMEPLANS, INNATE_SECONDARY_LEVEL, LEAGUES, MAX_HAPPINESS, Monster, Rival, RivalPersonality, Sex, Species, Stat, STATS, Stats, Tactics, TeamGameplan, classForStats, foodDiscountGroup, hashString,
   mulberry32, roleOfClass,
 } from './core'
+import { SPECIES } from './species'
 import { generateMonster, maxHp, maxMana } from './monster'
 import { BattleResult, simulateTeamBattle } from './battle'
 import {
@@ -426,7 +427,6 @@ export function visibleLeagueCount(g: GameState): number {
 // --- Economy constants (§13.3) ---
 export const RENTAL_PER_FROZEN = 5 // weekly upkeep per frozen genome (8→5 in v0.6; lab-tech loan lowers to 3)
 export const MARKET_BASE = 150 // base monster price; fluctuates ±60%
-export const FUSION_COST = 500 // huge, one-off
 export const PANTRY_CONTRACT_COST = 400 // Ranch Shop: 20% off normal foods
 export const GRAND_LARDER_COST = 1500 // Ranch Shop: 20% off premium foods — a serious late-game investment
 // Per-food discount given the player's owned contracts (2026-07-25): normal
@@ -604,6 +604,77 @@ export function breed(g: GameState, aId: string, bId: string): GameState {
     gold: g.gold - BREED_COST,
     stable: [...g.stable, baby],
     frozen: g.frozen.map((x) => (x.id === aId || x.id === bId ? { ...x, breedCount: (x.breedCount ?? 0) + 1 } : x)),
+    nextId: g.nextId + 1,
+  }
+}
+
+// --- FUSION (v0.7, FUSION_DESIGN.md) — the counterpart to breeding ------------
+// Fuse two frozen legacies of the right BODY-TYPE pair into a brand-new fusion
+// species: both legacies are CONSUMED, the result is a Tin-strength, gen-1
+// monster capped at Platinum (statCapFor) until you breed the line to the top.
+// Which of the class's 5 species you get is decided by the parents' combined
+// stats; the +10% minor / −10% flaw is rolled per monster.
+export const FUSION_COST = 1000
+export const FUSION_START_FRACTION = 0.5 // start ≈ Tin-strength (parents' avg × this, clamped to Tin cap)
+const TIN_CAP = LEAGUES[2].cap // 300
+// Recipe = an unordered pair of parent body types → the fusion class's species pool.
+export const FUSION_RECIPES: { bodies: [BodyType, BodyType]; classLabel: string; pool: string[] }[] = [
+  { bodies: ['Mammal', 'Reptilian'], classLabel: 'Saurian', pool: ['grendscale', 'vipramane', 'thornhide', 'runewyrm', 'basilroar'] },
+]
+export function fusionRecipeFor(a: BodyType, b: BodyType) {
+  return FUSION_RECIPES.find((r) => (r.bodies[0] === a && r.bodies[1] === b) || (r.bodies[0] === b && r.bodies[1] === a)) ?? null
+}
+// Deterministic tiebreak priority so the same parents always yield the same species.
+const STAT_PRIORITY: Stat[] = ['STR', 'CON', 'DEX', 'WIS', 'INT', 'CHA']
+// Pick the class species whose two role-majors best match the parents' combined stats.
+export function pickFusionSpecies(pool: string[], combined: Stats): Species {
+  const scored = pool.map((id) => {
+    const sp = SPECIES.find((s) => s.id === id)!
+    const prof = sp.trainingProfile!
+    const score = (combined[prof.major!] ?? 0) + (combined[prof.major2!] ?? 0)
+    return { sp, score }
+  })
+  scored.sort((x, y) => y.score - x.score
+    || STAT_PRIORITY.indexOf(x.sp.trainingProfile!.major!) - STAT_PRIORITY.indexOf(y.sp.trainingProfile!.major!))
+  return scored[0].sp
+}
+export function fusionPreview(g: GameState, aId: string, bId: string): { species: Species; recipe: NonNullable<ReturnType<typeof fusionRecipeFor>> } | null {
+  const a = g.frozen.find((x) => x.id === aId)
+  const b = g.frozen.find((x) => x.id === bId)
+  if (!a || !b || a.id === b.id) return null
+  const recipe = fusionRecipeFor(a.species.body, b.species.body)
+  if (!recipe) return null
+  const combined = {} as Stats
+  for (const s of STATS) combined[s] = a.stats[s] + b.stats[s]
+  return { species: pickFusionSpecies(recipe.pool, combined), recipe }
+}
+export function fuse(g: GameState, aId: string, bId: string): GameState {
+  if (aId === bId || g.gold < FUSION_COST || !g.specialLicense || g.stable.length >= effectiveBarnCap(g)) return g
+  const a = g.frozen.find((x) => x.id === aId)
+  const b = g.frozen.find((x) => x.id === bId)
+  const prev = fusionPreview(g, aId, bId)
+  if (!a || !b || !prev) return g
+  const rng = mulberry32(hashString('fuse:' + a.id + '+' + b.id + ':' + g.nextId))
+  const babySeed = 'fuse-' + a.id + '+' + b.id + ':' + g.nextId
+  const baby = newCareer(babySeed, { id: 'own-fuse-' + g.nextId + '-' + babySeed, ageWeeks: WEEKS_PER_YEAR, licenseIndex: g.licenseIndex })
+  baby.species = prev.species
+  baby.generation = 1 // a fresh fusion FOUNDS a bloodline (gen-1, Platinum-capped until bred)
+  // Start ≈ Tin-strength: parents' averaged stats × fraction, clamped to the Tin cap.
+  for (const s of STATS) baby.stats[s] = Math.max(1, Math.min(TIN_CAP, Math.round(FUSION_START_FRACTION * ((a.stats[s] + b.stats[s]) / 2))))
+  baby.hp = maxHp(baby.stats); baby.mp = maxMana(baby.stats)
+  // Per-monster minor(+10%)/flaw(−10%), rolled on stats OUTSIDE the two majors.
+  const majors = [prev.species.trainingProfile!.major, prev.species.trainingProfile!.major2]
+  const others = STATS.filter((s) => !majors.includes(s))
+  baby.bonusMinor = others[Math.floor(rng() * others.length)]
+  const flawPool = others.filter((s) => s !== baby.bonusMinor)
+  baby.bonusFlaw = flawPool[Math.floor(rng() * flawPool.length)]
+  baby.comfortWeeks = comfortWeeksFor(g)
+  baby.log = [`${baby.name} the ${prev.species.name} is forged from ${a.name} & ${b.name} — a ${prev.recipe.classLabel} (aptitude +${baby.bonusMinor}, −${baby.bonusFlaw}). Capped at Platinum until its bloodline is bred onward.`]
+  return {
+    ...g,
+    gold: g.gold - FUSION_COST,
+    stable: [...g.stable, baby],
+    frozen: g.frozen.filter((x) => x.id !== aId && x.id !== bId), // both legacies CONSUMED
     nextId: g.nextId + 1,
   }
 }
@@ -1929,32 +2000,6 @@ export function thaw(g: GameState, fid: string): GameState {
 }
 
 export const fusionRoom = (g: GameState): boolean => g.stable.length < effectiveBarnCap(g)
-
-export function fuse(g: GameState, aId: string, bId: string): GameState {
-  if (aId === bId || g.gold < FUSION_COST || !fusionRoom(g)) return g
-  const a = g.frozen.find((x) => x.id === aId)
-  const b = g.frozen.find((x) => x.id === bId)
-  if (!a || !b) return g
-  // Bloodline breeding (LOOP_DESIGN Phase 5): a baby doesn't inherit its
-  // parents' trained muscle — it inherits their POTENTIAL. It hatches as a fresh
-  // Wood-league monster of the base parent's species, but with a star rating
-  // that climbs each generation (avg of the parents + a breeding bonus). Train
-  // it up and its ceiling sits ABOVE any wild-caught monster's — that upward
-  // trajectory is the reason to breed.
-  const potential = breedPotential(a.potential, b.potential)
-  const babySeed = 'fuse-' + a.id + '+' + b.id
-  const baby = newCareer(babySeed, { id: 'own-fuse-' + g.nextId + '-' + babySeed, ageWeeks: 0, licenseIndex: g.licenseIndex, potential })
-  baby.species = a.species // base parent supplies the frame (§10.1)
-  const stars = '★'.repeat(Math.round((potential - 1) / BREEDING_BONUS))
-  baby.log = [`${baby.name}, a child of ${a.name} and ${b.name}, hatches — bloodline potential ×${potential.toFixed(2)} ${stars} (unlicensed).`]
-  return {
-    ...g,
-    gold: g.gold - FUSION_COST,
-    stable: [...g.stable, baby],
-    frozen: g.frozen.filter((x) => x.id !== aId && x.id !== bId),
-    nextId: g.nextId + 1,
-  }
-}
 
 function careerFromFrozen(fr: Frozen, id: string): Career {
   // Restore a raising shell from a banked genome, preserving stats + league. The
