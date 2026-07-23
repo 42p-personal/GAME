@@ -560,7 +560,7 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
             </button>
             <button className="hubbtn" onClick={() => setArea('lab')}>
               <span className="hubicon">🧪</span><b>Lab</b>
-              <span className="dim">fusion research</span>
+              <span className="dim">freeze &amp; fuse monsters</span>
             </button>
           </div>
 
@@ -2758,8 +2758,8 @@ function AlphaDisclaimer({ onContinue }: { onContinue: () => void }) {
           missing pieces as the game keeps growing.
         </p>
         <p>
-          In particular: <b>breeding (fusion)</b> and much of the <b>Lab</b> are placeholders for
-          now and don't do much yet — they're planned features, not finished ones.
+          The full loop is playable — raise monsters, win cups, rank up, then breed dynasties at the
+          <b> Breeding Ranch</b> or fuse two frozen monsters into a brand-new species at the <b>Lab</b>.
         </p>
         <button className="titlebtn primary" onClick={onContinue}>Got it, let's go!</button>
       </div>
