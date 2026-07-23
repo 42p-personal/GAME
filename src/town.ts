@@ -964,7 +964,7 @@ function runRivalChallenge(g: GameState, careerId?: string): GameState {
   const rival = g.rivals[0]
   if (!c || !rival) return g
   const playerMon = careerMonster(c)
-  const budget = LEAGUES[rival.licenseIndex].cap * RIVAL_BUDGET_MULT * 0.85
+  const budget = LEAGUES[rival.licenseIndex].cap * rivalBudgetMult(rival.licenseIndex) * 0.85
   const rivalMon = generateRivalMonster(g.seed + ':' + g.week + ':rivalmon', budget, false)
   const res = simulateTeamBattle(
     [{ ...playerMon, hp: maxHp(playerMon.stats), mp: maxMana(playerMon.stats) }],
@@ -1658,6 +1658,18 @@ export const RIVAL_BAND_MAX = 1.0
 // near cap), so a dedicated player is genuinely competitive at-league.
 export const RIVAL_BUDGET_MULT = 1.8
 
+// Difficulty escalation (v0.75): the flat 1.8 was a CONSTANT ratio of the league
+// cap, but the player's power compounds (economy + breeding buffs + longer life)
+// faster than a fixed ratio, so late leagues became walkovers. rivalBudgetMult()
+// nudges the ratio up gently by league so difficulty keeps pace with the player's
+// growth — constant challenge across the whole ladder. Deliberately SHALLOW per the
+// "small increments, sim-validated" rule: Wood 1.8 → Tamer Elite ~1.98 (no extreme
+// Masters spike). Tune the step from the long-haul sim, not by feel.
+export const RIVAL_BUDGET_STEP = 0.02
+export function rivalBudgetMult(leagueIndex: number): number {
+  return RIVAL_BUDGET_MULT + Math.max(0, leagueIndex) * RIVAL_BUDGET_STEP
+}
+
 // Rival team composition (user spec 2026-07-21): "a mixture of support and
 // damage dealing classes, with more damage dealing classes in the case of an
 // odd number" — even sizes split 50/50, odd sizes lean damage.
@@ -1748,7 +1760,7 @@ export function generateRivalTeamsForTournament(g: GameState, t: Tournament): Mo
   const teamSize = teamSizeForLeague(t.league)
   const rivalCount = rivalTeamCountForLeague(t.league)
   const allowExclusive = leagueIndexOf(t.league) >= leagueIndexOf('Silver')
-  const leagueBudget = LEAGUES[leagueIndexOf(t.league)].cap * RIVAL_BUDGET_MULT
+  const leagueBudget = LEAGUES[leagueIndexOf(t.league)].cap * rivalBudgetMult(leagueIndexOf(t.league))
   const seated = seatedRivalTeamIndex(g, t)
   return Array.from({ length: rivalCount }, (_, r) => {
     const bandRng = mulberry32(hashString(g.seed + ':' + g.week + ':' + t.id + ':band:r' + r))
@@ -1958,7 +1970,7 @@ function resolveTrial(g: GameState, stable: Career[]): { lastBattle: LastBattle;
     const m = careerMonster(c)
     return { ...m, hp: maxHp(m.stats), mp: maxMana(m.stats) } // trials start fresh, same as cup matches
   })
-  const champBudget = LEAGUES[g.licenseIndex].cap * RIVAL_BUDGET_MULT * TRIAL_CHAMPION_MULT
+  const champBudget = LEAGUES[g.licenseIndex].cap * rivalBudgetMult(g.licenseIndex) * TRIAL_CHAMPION_MULT
   const champRaw = generateRivalTeam(g.seed + ':' + g.week + ':trial:' + g.licenseIndex, teamSize, champBudget, g.licenseIndex >= leagueIndexOf('Silver'))
   const champTeam = applyGameplan(champRaw, gameplanForRivalTeam(g.seed, g.week, 'trial-' + g.licenseIndex, 0))
   const result = simulateTeamBattle(playerTeam, champTeam, playerCareers.map((c) => c.happiness), champTeam.map(() => 5))

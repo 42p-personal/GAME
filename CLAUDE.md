@@ -1,5 +1,13 @@
 # Monster Tamer — Development Guide
 
+## Balancing principle (standing rule)
+
+**All balancing is iterative: small increments, validated against the long-haul sim,
+until we find the right balance.** Never make a big sweeping tuning change in one step —
+nudge a value gently, sim it, read the result, adjust again. The sim is the arbiter. See
+`docs/BALANCING.md` for the working ledger. This applies to every economy/difficulty/
+progression number, always.
+
 ## Current state (v0.7)
 
 **v0.7 — Fusion system + 15 fusion species (2026-07-23):** the 🧪 Lab is now a real

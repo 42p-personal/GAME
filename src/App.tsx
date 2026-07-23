@@ -16,7 +16,7 @@ import {
   dateLabel, foodName, FORAGE_STAMINA_COST, FORAGE_HAPPINESS_COST, previewWeekEffects, stageInfo, trainingProfileFor,
 } from './game'
 import {
-  PANTRY_CONTRACT_COST, GRAND_LARDER_COST, ELITE_LICENSE_COST, EventMatch, EventStanding, GameState, PendingEvent, RIVAL_BAND_MIN, RIVAL_BUDGET_MULT, SPECIAL_LICENSE_COST,
+  PANTRY_CONTRACT_COST, GRAND_LARDER_COST, ELITE_LICENSE_COST, EventMatch, EventStanding, GameState, PendingEvent, RIVAL_BAND_MIN, rivalBudgetMult, SPECIAL_LICENSE_COST,
   COMFORT_ITEMS, EXTREME_MANUAL_COST, BREED_COST, BREED_MAX_CHILDREN, STUD_SLOTS_BASE, applyStudBook, breed, breedPotentialV2, buyComfortItem, buyExtremeManual, expandStud, studExpandCost, labUpkeepPerFrozen, pensionFor, studIncome, useTonic,
   WeekPlanEntry, advanceWeek, barnCost, buyPantryContract, buyGrandLarder, buyEliteLicense, buyMonster, foodDiscountFor, resolveEvent,
   buySpecialLicense, cancelSignUp, cupLore, eligibleForTournament, freeze, fusionRoom, gameplanForRivalTeam, generateRivalTeamsForTournament, goto, healAtInfirmary, infirmaryFee, leagueIndexOf, monthOfWeek,
@@ -1996,7 +1996,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
                 // WELL-ROUNDED monsters at ~cap×1.8×1.25 total — one maxed stat
                 // is not enough beyond Wood (sim: 1-stat builds win <10%, 3-stat
                 // ~70%). Compare the picked team's totals against that target.
-                const champTarget = league.cap * RIVAL_BUDGET_MULT * TRIAL_CHAMPION_MULT
+                const champTarget = league.cap * rivalBudgetMult(game.licenseIndex) * TRIAL_CHAMPION_MULT
                 const picked = trialPick.map((id) => pool.find((c) => c.id === id)!).filter(Boolean)
                 const teamAvg = picked.length ? picked.reduce((s, c) => s + STATS.reduce((t, k) => t + c.stats[k], 0), 0) / picked.length : 0
                 const ratio = teamAvg / champTarget
@@ -2171,7 +2171,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
                 // Underpowered warning (v0.5): with per-player licensing a fresh
                 // recruit can legally enter any league you hold — flag a team that
                 // sits below the league's rival band rather than silently feeding it in.
-                const leagueFloor = LEAGUES[tIdx].cap * RIVAL_BUDGET_MULT * RIVAL_BAND_MIN
+                const leagueFloor = LEAGUES[tIdx].cap * rivalBudgetMult(tIdx) * RIVAL_BAND_MIN
                 const underpowered = pickedCareers.filter((c) => STATS.reduce((s, k) => s + c.stats[k], 0) < leagueFloor * 0.8)
                 const fatigued = pickedCareers.filter((c) => staminaDamageMult(c.stamina) < 1)
                 const injured = pickedCareers.filter(isInjured)
@@ -2797,6 +2797,34 @@ function TutorialBanner({ onDismiss }: { onDismiss: () => void }) {
 
 type Screen = 'title' | 'slots' | 'setup' | 'disclaimer' | 'playing'
 
+const THEME_KEY = 'mt-theme'
+type Theme = 'dark' | 'light'
+// Read the saved theme once, before first paint, so there's no flash of the
+// wrong palette on reload. Dark is the default (the app's established look).
+function initialTheme(): Theme {
+  try { return localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark' } catch { return 'dark' }
+}
+// Persistent day/night switch — fixed top-right, mounted once so it rides above
+// every screen. Writes data-theme on <html>, which flips the CSS token palette.
+function ThemeToggle() {
+  const [theme, setTheme] = useState<Theme>(initialTheme)
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    try { localStorage.setItem(THEME_KEY, theme) } catch { /* private mode — non-fatal */ }
+  }, [theme])
+  const next = theme === 'dark' ? 'light' : 'dark'
+  return (
+    <button
+      className="theme-toggle"
+      onClick={() => setTheme(next)}
+      title={`Switch to ${next} mode`}
+      aria-label={`Switch to ${next} mode`}
+    >
+      {theme === 'dark' ? '☀️ Day' : '🌙 Night'}
+    </button>
+  )
+}
+
 export function App() {
   const [screen, setScreen] = useState<Screen>('title')
   const [slotMode, setSlotMode] = useState<'new' | 'continue'>('continue')
@@ -2838,10 +2866,14 @@ export function App() {
     />
   )
 
-  if (screen === 'title') return titleScreen
+  // Each screen renders inside this wrapper so the theme toggle is mounted once
+  // and rides above every screen (title, slots, setup, disclaimer, playing).
+  const withChrome = (content: JSX.Element) => (<><ThemeToggle />{content}</>)
+
+  if (screen === 'title') return withChrome(titleScreen)
 
   if (screen === 'slots') {
-    return (
+    return withChrome(
       <SlotPicker
         mode={slotMode}
         onBack={() => setScreen('title')}
@@ -2852,15 +2884,15 @@ export function App() {
           if (slotMode === 'continue') enterSlot(slot)
           else { setPendingSlot(slot); setScreen('setup') }
         }}
-      />
+      />,
     )
   }
 
-  if (screen === 'setup') return <NewGameSetup onBack={() => setScreen('slots')} onStart={startNewGame} />
-  if (screen === 'disclaimer') return <AlphaDisclaimer onContinue={() => setScreen('playing')} />
-  if (!game) return titleScreen // structurally unreachable — 'playing' only sets once game is loaded
+  if (screen === 'setup') return withChrome(<NewGameSetup onBack={() => setScreen('slots')} onStart={startNewGame} />)
+  if (screen === 'disclaimer') return withChrome(<AlphaDisclaimer onContinue={() => setScreen('playing')} />)
+  if (!game) return withChrome(titleScreen) // structurally unreachable — 'playing' only sets once game is loaded
 
-  return (
+  return withChrome(
     <div className="app">
       <h1>Monster Tamer <span className="tag">/ prototype</span> <span className="version">v{APP_VERSION}</span></h1>
       <div className="tabs">
@@ -2876,6 +2908,6 @@ export function App() {
       {!(view === 'game' && battleScreen) && (
         <Bestiary specialLicense={game.specialLicense} eliteLicense={game.eliteLicense} />
       )}
-    </div>
+    </div>,
   )
 }

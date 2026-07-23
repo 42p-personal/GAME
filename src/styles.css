@@ -8,11 +8,40 @@
   --accent2: #f0a860;
   --line: #313650;
   --str: #e06c6c; --dex: #6cd08a; --con: #d0b04c; --wis: #6ca8e0; --int: #a97be0; --cha: #e07bb8;
+  --btn-ink: #0c1a13; /* text colour that sits on the accent-filled buttons */
   font-family: ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Day mode (v0.76): a light palette toggled from the top-right theme switch.
+   Dark stays the default so the established look is untouched; light overrides
+   only the tokens, and every component reads through the tokens. Stat/accent
+   hues are deepened so they keep enough contrast on a pale ground. */
+:root[data-theme="light"] {
+  --bg: #f3f5fa;
+  --panel: #ffffff;
+  --panel2: #eaedf5;
+  --ink: #1a1d29;
+  --muted: #5b6178;
+  --accent: #0fb488;
+  --accent2: #d97706;
+  --line: #d3d8e6;
+  --str: #cf4640; --dex: #2f9e5b; --con: #a5842c; --wis: #3f7fca; --int: #8a4fd0; --cha: #c94f9a;
+  --btn-ink: #ffffff;
 }
 
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--ink); }
+
+/* Persistent theme toggle — fixed top-right, present on every screen. */
+.theme-toggle {
+  position: fixed; top: 12px; right: 12px; z-index: 9000;
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--panel2); color: var(--ink); border: 1px solid var(--line);
+  border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 700;
+  box-shadow: 0 2px 8px rgba(0,0,0,.18);
+}
+.theme-toggle:hover { filter: brightness(1.06); }
+@media (max-width: 560px) { .theme-toggle { padding: 6px 9px; font-size: 12px; } }
 .app { max-width: 1040px; margin: 0 auto; padding: 24px 20px 60px; }
 h1 { font-size: 24px; margin: 0 0 2px; }
 h1 .tag { color: var(--accent); }
@@ -28,7 +57,7 @@ h1 .version { font-size: 12px; font-weight: 700; color: var(--muted); background
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
 .controls { display: flex; gap: 8px; margin-bottom: 12px; }
 .controls input[type=text] { flex: 1; min-width: 0; background: var(--panel2); border: 1px solid var(--line); color: var(--ink); border-radius: 8px; padding: 8px 10px; }
-button { background: var(--accent); color: #0c1a13; border: 0; border-radius: 8px; padding: 8px 14px; font-weight: 700; cursor: pointer; }
+button { background: var(--accent); color: var(--btn-ink); border: 0; border-radius: 8px; padding: 8px 14px; font-weight: 700; cursor: pointer; }
 button.ghost { background: var(--panel2); color: var(--ink); border: 1px solid var(--line); }
 button:hover { filter: brightness(1.08); }
 
@@ -122,7 +151,7 @@ input[type=range] { width: 100%; }
 
 .tabs { display: flex; gap: 8px; margin: 4px 0 18px; }
 .tab { background: var(--panel2); color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 8px 16px; font-weight: 700; }
-.tab.on { background: var(--accent); color: #0c1a13; border-color: var(--accent); }
+.tab.on { background: var(--accent); color: var(--btn-ink); border-color: var(--accent); }
 
 .career { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
 .careerbar { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 13px; font-weight: 700; margin-bottom: 10px; }
@@ -196,7 +225,7 @@ input[type=range] { width: 100%; }
 .calgrid-cell { height: 32px; display: flex; align-items: center; justify-content: center; gap: 2px; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; }
 .calgrid-cell.now { border-color: var(--accent); }
 .calicon { width: 28px; height: 28px; padding: 0; border-radius: 6px; font-size: 14px; line-height: 1; background: var(--panel2); border: 1px solid var(--line); color: var(--ink); }
-.calicon.open { background: var(--accent); color: #0c1a13; border-color: var(--accent); animation: calPulse 1.6s ease-in-out infinite; }
+.calicon.open { background: var(--accent); color: var(--btn-ink); border-color: var(--accent); animation: calPulse 1.6s ease-in-out infinite; }
 .calicon.selected { outline: 2px solid var(--accent2); outline-offset: 1px; }
 .calicon.trial { width: auto; height: auto; background: none; border: none; font-size: 13px; cursor: help; }
 @keyframes calPulse { 50% { filter: brightness(1.15); } }
@@ -266,14 +295,14 @@ input[type=range] { width: 100%; }
 .feedhead { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
 .feedhead .name { font-size: 18px; font-weight: 800; }
 .feedhead .meta { font-size: 12px; color: var(--muted); }
-button.signup { background: var(--accent); color: #0c1a13; font-weight: 700; padding: 8px 16px; }
+button.signup { background: var(--accent); color: var(--btn-ink); font-weight: 700; padding: 8px 16px; }
 button.signup:disabled { opacity: .4; cursor: not-allowed; }
 .arena-transcript { padding: 6px 12px 10px; border-top: 1px solid var(--line); }
 .arena-transcript summary { cursor: pointer; font-size: 12px; }
 
 .rail { display: flex; flex-direction: column; gap: 8px; position: sticky; top: 12px; }
 .railbtn { background: var(--panel2); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 10px 2px; font-weight: 700; font-size: 10px; line-height: 1.4; cursor: pointer; }
-.railbtn.primary { background: var(--accent); color: #0c1a13; border-color: var(--accent); }
+.railbtn.primary { background: var(--accent); color: var(--btn-ink); border-color: var(--accent); }
 .railbtn.on { border-color: var(--accent2); color: var(--accent2); }
 .abilityeditor { background: var(--panel); }
 .abilityslots { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin: 8px 0; }
@@ -281,7 +310,7 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 .abilityslot.selected { border-color: var(--accent2); box-shadow: inset 0 0 0 1px var(--accent2); }
 .abilitychips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
 .abilitychip { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--panel2); color: var(--ink); border: 1px solid var(--line); cursor: pointer; }
-.abilitychip.on { background: var(--accent); color: #0c1a13; border-color: var(--accent); }
+.abilitychip.on { background: var(--accent); color: var(--btn-ink); border-color: var(--accent); }
 .abilitypool { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; max-height: 300px; overflow-y: auto; }
 .abilitypool .move { cursor: pointer; }
 .abilitypool .move.dim-eq { opacity: .4; cursor: default; }
@@ -469,7 +498,7 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 .titlebtns { display: flex; flex-direction: column; gap: 14px; margin-top: 8px; }
 .titlebtn { width: 100%; padding: 14px 16px; font-size: 15px; background: var(--panel2); color: var(--ink); border: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; gap: 3px; }
 .titlebtn .btnsub { font-size: 12px; font-weight: 400; opacity: .7; }
-.titlebtn.primary { background: var(--accent); color: #0c1a13; border-color: var(--accent); }
+.titlebtn.primary { background: var(--accent); color: var(--btn-ink); border-color: var(--accent); }
 .titlebtn.back { background: transparent; color: var(--muted); border: 1px solid var(--line); margin-top: 18px; }
 .titlebtn:disabled { opacity: .45; cursor: not-allowed; }
 .titlever { color: var(--muted); font-size: 11px; margin: 22px 0 0; }

@@ -44,7 +44,8 @@ breeding/fusion actually fire are the headline metrics.
 ### Progression / combat gates
 - **League caps** (per-stat): Wood 100, Copper 200, Tin 300, Bronze 400, Iron 500, Silver 600, Gold 700, Platinum 800, Masters 900, Tamer Elite 1000.
 - **Team size:** Wood/Copper 1 · Tin 2 · Bronze/Iron 3 · Silver/Gold 4 · Platinum 5 · Masters/TE 6.
-- **Trial to rank up:** beat a champion team scaled to `leagueCap × RIVAL_BUDGET_MULT(1.8) × TRIAL_CHAMPION_MULT(1.25)`.
+- **Trial to rank up:** beat a champion team scaled to `leagueCap × rivalBudgetMult(leagueIdx) × TRIAL_CHAMPION_MULT(1.25)`.
+- **Rival budget escalation (v0.75):** `rivalBudgetMult(i) = 1.8 + i × 0.02` (Wood 1.8 → Tamer Elite 1.98). Was a flat 1.8 — a constant ratio the player's compounding power outgrew, making late leagues walkovers. The gentle per-league ramp keeps difficulty pacing the player. Applies to cup rivals, challenge skirmishes, and rank-up champions. **Deliberately shallow** (first increment — tune the step up from the sim if the top is still a coast).
 - **`statCapFor = leagueCap × potential`** (gen-1 fusion hard-capped at Platinum = 800).
 - **Career span** ~6 years base; **+2yr pedigree bonus (`PEDIGREE_SPAN_BONUS`, v0.73)** for fusion / prestige (Draconic/Abyssal/Mythical) / bred (gen≥2) monsters — wild base monsters unchanged.
 
@@ -99,3 +100,4 @@ gated by:
 - **v0.72** — cup gold ↑ + trainer gold stipend + excursion nudge. Peak Bronze → Gold/Platinum; breeding now fires.
 - **v0.74** — fuse-from-stable (removed the freeze hoop) + fusion potential 1.075→1.15. Mechanic verified firing in the sim; fusion now a 1-click stable action.
 - **v0.73** — pedigree span +2yr (fusion/prestige/bred) + bred head-start 0.35→0.45. **Peak Gold → Masters/Tamer Elite** (1 seed reached TE @ yr 12.7); top is now reachable via breeding, still challenging (12–19yr). Fusion still unused by the bot.
+- **v0.75** — difficulty escalation: flat `RIVAL_BUDGET_MULT 1.8` → `rivalBudgetMult(i) = 1.8 + i×0.02` (Wood 1.8 → TE 1.98). **A/B (25yr × 3 seeds, rebuilt bot):** flat → Gold/Gold/Bronze; escalating → Gold/**Silver**/Bronze — one seed held back a league, win-rates dipped slightly, no collapse. Gentle friction confirmed, first increment. ⚠️ **Instrument caveat:** the rebuilt bot trains only basic drills / 3-stat builds and peaks at **Gold** — much weaker than the prior Masters/TE bot, so it can't reproduce the skilled-human "easy run to Masters" the change targets. Money is a non-constraint at every peak (48k–121k surplus). Next: either strengthen the bot (intensive/extreme drills, comfort/tonic, timed breeding) to test the top directly, or nudge the step up (0.02 → ~0.03) and re-A/B.
