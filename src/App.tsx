@@ -608,7 +608,7 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
         <div className="townmap">
           <div className="card loc">
             <div className="loc-h"><span>🏡 Retirement Ranch</span>{pensionTotal > 0 && <span className="up">+{pensionTotal}g/wk</span>}</div>
-            <div className="dim" style={{ marginBottom: 6 }}>Champions who've hung up their competing careers earn a weekly pension — richer the more decorated they were. Send one to the Breeding Ranch to found a dynasty instead.</div>
+            <div className="dim" style={{ marginBottom: 6 }}>Retired champions earn a weekly pension. Send one to the Breeding Ranch to breed a dynasty instead.</div>
             {retirees.length === 0 && <div className="dim">No pensioners yet — monsters retire when their career span ends.</div>}
             {retirees.map((c) => {
               const podiums = c.tournamentHistory.filter((h) => h.placement <= 3).length
@@ -685,9 +685,9 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
               const a = game.frozen.find((f) => f.id === fuseA)!
               const b = game.frozen.find((f) => f.id === fuseB)!
               const pot = breedPotentialV2(a, b)
-              return <div className="hint">Child: {a.species.name} frame · Gen {Math.max(a.generation ?? 1, b.generation ?? 1) + 1} · potential ×{pot.toFixed(2)} {'★'.repeat(Math.max(0, Math.round((pot - 1) / 0.05)))} · ~35% stat head start · trains {b.name}'s best stat +10% faster</div>
+              return <div className="hint">Child: {a.species.name} · Gen {Math.max(a.generation ?? 1, b.generation ?? 1) + 1} · potential ×{pot.toFixed(2)} {'★'.repeat(Math.max(0, Math.round((pot - 1) / 0.05)))}</div>
             })()}
-            <div className="hint">Parents are preserved (each stud can parent {BREED_MAX_CHILDREN} children). Championship-decorated parents pass on extra <b>potential</b> — the stat ceiling that lets a bloodline climb past wild limits.</div>
+            <div className="hint">Each stud can parent {BREED_MAX_CHILDREN} children. Decorated parents pass on higher <b>potential</b>.</div>
           </div>
         </div>
       )}
@@ -703,8 +703,7 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
           <div className="card loc">
             <div className="loc-h"><span>🧪 Lab · Freezer</span><span className="dim">{frozen.length}/{game.labSlots} slots</span></div>
             <div className="dim" style={{ marginBottom: 6 }}>
-              Freeze a monster into <b>stasis</b> (aging paused) — park one until you can afford an Elder
-              Tonic, or <b>fuse</b> two into a brand-new species. Separate from the Breeding Ranch.
+              Freeze a monster to pause its aging, or <b>fuse</b> two into a brand-new species.
             </div>
             {/* Freeze an active monster in */}
             <div className="section-title">Freeze into stasis</div>
@@ -742,9 +741,7 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
             {/* Fusion */}
             <div className="section-title">⚗️ Fuse (two frozen → a new species)</div>
             <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>
-              Combine two frozen monsters of a valid body pair. Stats start at 100; the result inherits
-              each parent's training major (+20%) plus a rolled +10%/−10%; a spinning wheel decides which
-              of the class's species you get. 1½★ bloodline, Platinum-capped until bred onward.
+              Combine two frozen monsters into a brand-new fusion species.
             </div>
             <div className="fuserow">
               <select value={fuseA} onChange={(e) => setFuseA(e.target.value)}>
@@ -763,7 +760,7 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
             </div>
             {fuseA && fuseB && fuseA !== fuseB && (
               validPair
-                ? <div className="hint">⚗️ {bodyOf(fuseA)} + {bodyOf(fuseB)} → a <b>{spin?.classLabel}</b> (the wheel decides which of the {spin?.pool.length}).</div>
+                ? <div className="hint">⚗️ {bodyOf(fuseA)} + {bodyOf(fuseB)} → a <b>{spin?.classLabel}</b>.</div>
                 : <div className="neg" style={{ fontSize: 12 }}>🚫 No known fusion for {bodyOf(fuseA)} + {bodyOf(fuseB)}. Valid recipe: Mammal + Reptilian → Saurian.</div>
             )}
             {frozen.length < 2 && <div className="hint">Freeze at least two monsters to fuse.</div>}
@@ -1104,7 +1101,7 @@ function AbilitySelector({ m, name, onSetLoadout, onSetInnate, onSetTactics, onC
       </div>
       <details className="editor-section" open>
         <summary className="editor-summary">⚔ Moves &amp; loadout</summary>
-      <div className="hint">Pick one of the three equipped slots, then click a move from the pool to put it there.</div>
+      <div className="hint">Pick a slot, then click a move to equip it.</div>
       <div className="abilityslots">
         {[0, 1, 2].map((i) => {
           const mv = loadout[i]
@@ -1145,7 +1142,7 @@ function AbilitySelector({ m, name, onSetLoadout, onSetInnate, onSetTactics, onC
 
       <details className="editor-section">
         <summary className="editor-summary">✦ Innate passive</summary>
-      <div className="hint">The 2nd choice is an alternative, not an upgrade — click to switch.</div>
+      <div className="hint">The 2nd choice is an alternative, not an upgrade.</div>
       <div className="abilitypool">
         {m.species.innate.map((a, i) => {
           const locked = i === 1 && !m.innateUnlocked
@@ -1194,7 +1191,7 @@ function AbilitySelector({ m, name, onSetLoadout, onSetInnate, onSetTactics, onC
         return (
           <details className="editor-section">
             <summary className="editor-summary">🎯 Tactics — battle orders</summary>
-            <div className="hint">Standing orders {name} follows in every battle — adjust after scouting a field.</div>
+            <div className="hint">Standing orders {name} follows in every battle.</div>
             <div className="tacticgroups">
               <div className="tacticgroup">
                 <div className="tacticgroup-h">Temperament</div>
@@ -1291,8 +1288,7 @@ function TeamPicker({ pool, teamSize, monsterIds, onChange }: {
     <div className="teampicker">
       <div className="hint">
         Pick {teamSize} monsters — click a slot, then a monster below. <b>Slot order is your formation</b>:
-        the first {frontRowCount(teamSize)} fight in the ⚔ front line (melee can only reach the front while it
-        stands); the rest shoot from the 🏹 back line.
+        the first {frontRowCount(teamSize)} fight in the ⚔ front line, the rest in the 🏹 back line.
       </div>
       <div className="abilityslots">
         {Array.from({ length: teamSize }, (_, i) => {
@@ -2004,7 +2000,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
                 return (
                   <div className="trial-panel">
                     <div className="section-title">🎖 Rank-up Trial — the {league.name} Champion</div>
-                    <div className="dim">Beat a champion-grade {size}v{size} team to unlock the {next.name} license ({nextLicenseCost(game)}g). The Champion fields well-rounded monsters (~{Math.round(champTarget)} total stats each) — one maxed stat won't carry you. The fight takes the week; win or lose, your team comes home needing rest.</div>
+                    <div className="dim">Beat a champion-grade {size}v{size} team to unlock the {next.name} license ({nextLicenseCost(game)}g). The fight takes the week; win or lose, your team comes home needing rest.</div>
                     {picked.length === size && (
                       <div className={ratio >= 0.85 ? 'up' : ratio >= 0.6 ? 'dim' : 'neg'} style={{ fontSize: 12 }}>
                         {ratio >= 0.85 ? `⚔ Your team (~${Math.round(teamAvg)} avg total) stands toe-to-toe with the Champion — a real shot.`
@@ -2092,7 +2088,6 @@ function RanchView({ game, setGame, onBattleScreen }: {
                   })()}
                 </div>
               </div>
-              <div className="hint">Rolls skew toward the top of the range as happiness rises · always some random variation.</div>
             </>
           )}
 
@@ -2109,7 +2104,6 @@ function RanchView({ game, setGame, onBattleScreen }: {
               </div>
               <div className="hint">
                 Tournaments this month: {visibleTournamentsThisMonth.length}. Click a 🏆 for entry details.
-                Competing takes the monster's week — no training that week.
               </div>
 
               {/* True calendar grid: one row per VISIBLE league (leagues unlock
