@@ -166,6 +166,43 @@ export const SPECIES: Species[] = [
   { id: 'basilroar', name: 'Basilroar', body: 'Saurian', naturalClass: 'Orator', base: s(22, 18, 20, 26, 12, 34), lifespan: 6, flavour: 'Maned basilisk whose bellow rattles a battlefield.',
     trainingProfile: {},
     innate: [{ name: 'Dread Bellow', desc: 'Enemies: -5% accuracy.' }, { name: 'Rally Cry', desc: 'Team: +5% damage.' }] },
+
+  // --- Tempestine (5) — FUSION class: Avian + Aquatic. Feather-and-fin storm
+  // creatures. Aptitude-neutral shells (trainingProfile {}) — training is
+  // inherited per-monster at fusion. See FUSION_DESIGN.md.
+  { id: 'thunderoc', name: 'Thunderoc', body: 'Tempestine', naturalClass: 'Ranger', base: s(24, 38, 16, 12, 26, 10), lifespan: 6, flavour: 'A finned thunderbird, wings edged with fins and crackling feathers.',
+    trainingProfile: {},
+    innate: [{ name: 'Chain Lightning', desc: '8% chance to Stun on every hit.' }, { name: 'Storm Dive', desc: '+35% damage on its first hit.' }] },
+  { id: 'galewing', name: 'Galewing', body: 'Tempestine', naturalClass: 'Rogue', base: s(30, 36, 18, 14, 14, 14), lifespan: 6, flavour: 'A scaled sky-ray banking on the gusts.',
+    trainingProfile: {},
+    innate: [{ name: 'Wind Veil', desc: '+8% dodge chance.' }, { name: 'Squall', desc: 'Enemies: -3% accuracy.' }] },
+  { id: 'tidecaller', name: 'Tidecaller', body: 'Tempestine', naturalClass: 'Spellshield', base: s(16, 16, 34, 30, 18, 14), lifespan: 6, flavour: 'A monsoon heron-guardian robed in rain.',
+    trainingProfile: {},
+    innate: [{ name: 'Tidal Grace', desc: 'Team: +2 HP regen/turn.' }, { name: 'Deluge', desc: 'Team: +1 mana regen/turn.' }] },
+  { id: 'maelstrom', name: 'Maelstrom', body: 'Tempestine', naturalClass: 'Wizard', base: s(14, 20, 16, 30, 38, 10), lifespan: 6, flavour: 'A coiling sky-serpent wreathed in a spiralling squall.',
+    trainingProfile: {},
+    innate: [{ name: 'Overcharge', desc: '+7% damage.' }, { name: 'Static Field', desc: '6% chance to cast a skill twice.' }] },
+  { id: 'brinehowl', name: 'Brinehowl', body: 'Tempestine', naturalClass: 'Orator', base: s(22, 16, 20, 26, 12, 32), lifespan: 6, flavour: 'A crested storm-petrel serpent whose shriek summons squalls.',
+    trainingProfile: {},
+    innate: [{ name: 'Gale Cry', desc: 'Enemies: -5% accuracy.' }, { name: 'Rally Squall', desc: 'Team: +5% damage.' }] },
+
+  // --- Broodkin (5) — FUSION class: Marsupial + Insectoid. Pouch-and-chitin
+  // brood-carriers. Aptitude-neutral shells; training inherited at fusion.
+  { id: 'chitinhop', name: 'Chitinhop', body: 'Broodkin', naturalClass: 'Tank', base: s(30, 14, 42, 12, 14, 12), lifespan: 6, flavour: 'A heavy kangaroo-shape sheathed in beetle-plate.',
+    trainingProfile: {},
+    innate: [{ name: 'Carapace', desc: 'Reduces damage taken by 3 per hit.' }, { name: 'Dig In', desc: 'Enters battle with a 14-point protective ward.' }] },
+  { id: 'broodmother', name: 'Broodmother', body: 'Broodkin', naturalClass: 'Sage', base: s(14, 14, 22, 34, 32, 14), lifespan: 6, flavour: 'A rounded matron with a chitinous brood-pouch aglow with eggs.',
+    trainingProfile: {},
+    innate: [{ name: 'Brood Tend', desc: 'Team: +2 HP regen/turn.' }, { name: 'Hive Mind', desc: 'Team: +1 mana regen/turn.' }] },
+  { id: 'mantiskin', name: 'Mantiskin', body: 'Broodkin', naturalClass: 'Rogue', base: s(32, 36, 18, 12, 16, 10), lifespan: 6, flavour: 'An upright mantis-marsupial, scythe-arms folded over a brood-pouch.',
+    trainingProfile: {},
+    innate: [{ name: 'Ambush Fold', desc: '+40% damage on its first hit.' }, { name: 'Blade Arms', desc: '+5% critical hit chance.' }] },
+  { id: 'resinback', name: 'Resinback', body: 'Broodkin', naturalClass: 'Spellshield', base: s(24, 12, 38, 26, 14, 12), lifespan: 6, flavour: 'A burly digger caked in amber resin-armor.',
+    trainingProfile: {},
+    innate: [{ name: 'Resin Plate', desc: 'Reduces damage taken by 2 per hit.' }, { name: 'Amber Set', desc: 'Incoming debuffs are 15% weaker.' }] },
+  { id: 'swarmherd', name: 'Swarmherd', body: 'Broodkin', naturalClass: 'Bard', base: s(18, 26, 20, 14, 22, 28), lifespan: 6, flavour: 'A lean herald flanked by a drifting cloud of hatchlings.',
+    trainingProfile: {},
+    innate: [{ name: 'Command Swarm', desc: 'Team: +4% damage.' }, { name: 'Disorient', desc: 'Enemies: -4% dodge chance.' }] },
 ]
 
 // --- Body-type average stat profiles (§8.4) ---

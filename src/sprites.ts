@@ -167,25 +167,24 @@ export const SPRITES: Record<BodyType, string[]> = {
     '................',
     '................',
   ],
-  // Saurian (fusion) — structural placeholder (reuses the Reptilian silhouette)
-  // until real fusion-species art is generated. See FUSION_DESIGN.md.
+  // Fusion classes (v0.7) — structural placeholders until real art is generated.
   Saurian: [
-    '................',
-    '................',
-    '.....XXXX.......',
-    '....XBBBBX..A...',
-    '....XBEPBX.AA...',
-    '.....XBBBXAA....',
-    '....XXBBBBXX....',
-    '..XXBBBBBBBBXX..',
-    '.XBBBBLLLLBBBBX.',
-    '.XBBBBLLLLBBBBXA',
-    '.XBBBBBBBBBBBXAA',
-    '..XBBXXXXXXBBXA.',
-    '..XX........XX..',
-    '..XX........XX..',
-    '................',
-    '................',
+    '................', '................', '.....XXXX.......', '....XBBBBX..A...',
+    '....XBEPBX.AA...', '.....XBBBXAA....', '....XXBBBBXX....', '..XXBBBBBBBBXX..',
+    '.XBBBBLLLLBBBBX.', '.XBBBBLLLLBBBBXA', '.XBBBBBBBBBBBXAA', '..XBBXXXXXXBBXA.',
+    '..XX........XX..', '..XX........XX..', '................', '................',
+  ],
+  Tempestine: [ // reuses the Avian silhouette
+    '................', '.....XXXX.......', '....XBBBBXX.....', '...XBBBBBBBX....',
+    '..XBBBEPBBBBXA..', '..XBBBBBBBBBXAA.', '..XBLLBBBBBBXA..', '..XBLLLBBBBBX...',
+    '...XBBBBBBBBX...', '....XBBBBBBX....', '.....XXXXXX.....', '.....X..X.......',
+    '.....X..X.......', '....XX..XX......', '................', '................',
+  ],
+  Broodkin: [ // reuses the Insectoid silhouette
+    '................', '..A..........A..', '...A........A...', '....XXXXXXXX....',
+    '...XBBBAABBBX...', '..XBBBBAABBBBX..', '..XBEPBAABBBBX..', '..XBBBBAABBBBX..',
+    '..XBLLBAABLLBX..', '..XBBBBAABBBBX..', '...XBBBAABBBX...', '....XXXXXXXX....',
+    '..XX..XX..XX....', '.XX..XX..XX.....', '................', '................',
   ],
 }
 

@@ -205,6 +205,30 @@ export const INNATE_EFFECTS: Record<string, InnateEffect> = {
   'Petrifying Gaze': { statusOnHit: { kind: 'stun', chance: 8, duration: 1 } }, // the basilisk look
   'Dread Bellow': { enemyAccDebuff: 5 }, // foes flinch and swing wide
   'Rally Cry': { auraDmgMult: 1.05 }, // the war-bellow lifts the whole line
+
+  // --- Tempestine (fusion class) — Avian+Aquatic storm creatures ---
+  'Chain Lightning': { statusOnHit: { kind: 'stun', chance: 8, duration: 1 } },
+  'Storm Dive': { firstHitMult: 1.35 },
+  'Wind Veil': { dodge: 8 },
+  Squall: { enemyAccDebuff: 3 },
+  'Tidal Grace': { auraHpRegen: 2 },
+  Deluge: { auraRegen: 1 },
+  Overcharge: { dmgMult: 1.07 },
+  'Static Field': { echo: 6 },
+  'Gale Cry': { enemyAccDebuff: 5 },
+  'Rally Squall': { auraDmgMult: 1.05 },
+
+  // --- Broodkin (fusion class) — Marsupial+Insectoid brood-carriers ---
+  Carapace: { flatDR: 3 },
+  'Dig In': { startWard: 14 },
+  'Brood Tend': { auraHpRegen: 2 },
+  'Hive Mind': { auraRegen: 1 },
+  'Ambush Fold': { firstHitMult: 1.4 },
+  'Blade Arms': { crit: 5 },
+  'Resin Plate': { flatDR: 2 },
+  'Amber Set': { debuffResist: 15 },
+  'Command Swarm': { auraDmgMult: 1.04 },
+  Disorient: { enemyDodgeDebuff: 4 },
 }
 
 // A species' two innates are ALTERNATIVES, not a stacked pair (user spec

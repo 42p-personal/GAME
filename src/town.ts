@@ -658,6 +658,8 @@ export const FUSION_START_STAT = 100 // every fused monster starts at 100 across
 export const FUSION_POTENTIAL = 1.075 // 1½ stars — a superior bloodline from birth
 export const FUSION_RECIPES: { bodies: [BodyType, BodyType]; classLabel: string; pool: string[] }[] = [
   { bodies: ['Mammal', 'Reptilian'], classLabel: 'Saurian', pool: ['grendscale', 'vipramane', 'thornhide', 'runewyrm', 'basilroar'] },
+  { bodies: ['Avian', 'Aquatic'], classLabel: 'Tempestine', pool: ['thunderoc', 'galewing', 'tidecaller', 'maelstrom', 'brinehowl'] },
+  { bodies: ['Marsupial', 'Insectoid'], classLabel: 'Broodkin', pool: ['chitinhop', 'broodmother', 'mantiskin', 'resinback', 'swarmherd'] },
 ]
 export function fusionRecipeFor(a: BodyType, b: BodyType) {
   return FUSION_RECIPES.find((r) => (r.bodies[0] === a && r.bodies[1] === b) || (r.bodies[0] === b && r.bodies[1] === a)) ?? null

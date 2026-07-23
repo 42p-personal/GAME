@@ -14,12 +14,12 @@ export const STAT_NAMES: Record<Stat, string> = {
 export type Stats = Record<Stat, number>
 
 export type BodyType = 'Mammal' | 'Avian' | 'Marsupial' | 'Aquatic' | 'Insectoid' | 'Reptilian' | 'Draconic' | 'Abyssal' | 'Mythical'
-  | 'Saurian' // fusion class: Mammal + Reptilian (FUSION_DESIGN.md)
+  | 'Saurian' | 'Tempestine' | 'Broodkin' // fusion classes (FUSION_DESIGN.md)
 
 // Fusion classes (v0.7): body types that only exist as the RESULT of fusion —
 // never wild, never in the market. Drives the gen-1 Platinum stat cap and the
-// per-monster (not per-species) minor/flaw roll. See FUSION_DESIGN.md.
-export const FUSION_BODIES: BodyType[] = ['Saurian']
+// per-monster (not per-species) inherited majors + rolled minor/flaw. See FUSION_DESIGN.md.
+export const FUSION_BODIES: BodyType[] = ['Saurian', 'Tempestine', 'Broodkin']
 export const isFusionBody = (b: BodyType): boolean => FUSION_BODIES.includes(b)
 export type Sex = 'M' | 'F'
 
@@ -323,6 +323,8 @@ export const BODY_ELEMENT: Record<BodyType, { resist: Element; weak: Element }> 
   Abyssal: { resist: 'water', weak: 'fire' }, // crushing depths; surface heat is lethal
   Mythical: { resist: 'air', weak: 'earth' }, // celestial beings; the ground rejects them
   Saurian: { resist: 'earth', weak: 'air' }, // fusion (Mammal+Reptilian): grounded stone-scaled titans, unsettled by wind
+  Tempestine: { resist: 'air', weak: 'fire' }, // fusion (Avian+Aquatic): storm creatures at home in the gale, scattered by flame
+  Broodkin: { resist: 'water', weak: 'earth' }, // fusion (Marsupial+Insectoid): brood-carriers; chitin cracks under tremors
 }
 export const RESIST_MULT = 0.7
 export const WEAK_MULT = 1.3
