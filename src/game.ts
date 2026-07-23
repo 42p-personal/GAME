@@ -162,17 +162,15 @@ export function statMalusMultiplier(species: Species, stat: Stat): number {
   return stat === trainingProfileFor(species).flaw ? 1.5 : 1
 }
 
-// League gold reward ceiling — must track town.ts's CIRCUIT_REWARDS /
-// PRESTIGE_EVENTS gold-at-1st-place per league. Excursions cap at ~1/3 of
-// that (user spec 2026-07-22: "ensure the highest reward for an excursion is
-// capped at roughly 1/3rd of whatever first place is at its highest... we
-// don't want this to be hugely profitable") so downtime income never rivals
-// real tournament competition.
+// Excursion gold ceiling per league. Deliberately kept BELOW cup 1st-place gold
+// (which was raised further in v0.71) so downtime income never rivals real
+// competition — this table is now tuned independently of the cup rewards, and
+// nudged up slightly per league (v0.71) as part of the small economy pass.
 export const LEAGUE_TOP_GOLD: Record<string, number> = {
-  Wood: 100, Copper: 150, Tin: 200, Bronze: 250, Iron: 300,
-  Silver: 500, Gold: 550, Platinum: 600, Masters: 650, 'Tamer Elite': 700,
+  Wood: 110, Copper: 165, Tin: 220, Bronze: 280, Iron: 340,
+  Silver: 520, Gold: 580, Platinum: 640, Masters: 700, 'Tamer Elite': 760,
 }
-const EXCURSION_CAP_FRACTION = 1 / 3
+const EXCURSION_CAP_FRACTION = 0.4 // 1/3 → 0.4 (v0.71): a very slight downtime-income bump
 
 // Excursion purse: scales by the monster's current league, skewed toward the
 // bottom of its range (squared roll — "more likely to give the bottom end",

@@ -21,7 +21,7 @@ import {
   WeekPlanEntry, advanceWeek, barnCost, buyPantryContract, buyGrandLarder, buyEliteLicense, buyMonster, foodDiscountFor, resolveEvent,
   buySpecialLicense, cancelSignUp, cupLore, eligibleForTournament, freeze, fusionRoom, gameplanForRivalTeam, generateRivalTeamsForTournament, goto, healAtInfirmary, infirmaryFee, leagueIndexOf, monthOfWeek,
   entryFee, placementLabel, scoutFee, teamSizeForLeague, seatedRivalTeamIndex,
-  trainerXpProgress, trainerBarnBonus, effectiveBarnCap, BREEDING_BONUS,
+  trainerXpProgress, trainerBarnBonus, trainerStipend, effectiveBarnCap, BREEDING_BONUS,
   buyLicense, cancelTrial, nextLicenseCost, startTrial, trialStatus, TRIAL_CHAMPION_MULT, RIVAL_PERSONALITY_GAMEPLAN,
   fuse, fusionSpin, fusionRecipeFor, freezeToLab, thawFromLab, expandLab, labExpandCost, LAB_SLOTS_BASE, FUSION_COST,
   firstTeamLeagueIndex, generateRival, newGame, offerMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, setMarkTarget, setProtectTarget, setTactics, signUp, teamTacticsUnlocked, thaw,
@@ -573,7 +573,7 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
                 <div className="loc-h"><span>🎓 Trainer — {game.trainerName}</span><span className="dim">Level {p.level}</span></div>
                 <div className="xpbar"><div className="xpfill" style={{ width: `${Math.round((p.into / p.need) * 100)}%` }} /></div>
                 <div className="dim" style={{ marginTop: 4 }}>
-                  {p.into}/{p.need} XP to level {p.level + 1} · earn XP from cup podiums &amp; raising monsters to retirement
+                  {p.into}/{p.need} XP to level {p.level + 1} · <b className="up">+{trainerStipend(game)}g/wk stipend</b>
                   {barn > 0 && <> · <b className="up">+{barn} barn slot{barn > 1 ? 's' : ''}</b></>}
                 </div>
               </div>

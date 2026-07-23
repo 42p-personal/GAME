@@ -44,11 +44,13 @@ export interface Tournament {
 // onto whichever leagues happen to have one. A monster may also enter BELOW
 // its league at reduced rewards (§rewardMultiplier).
 export const CIRCUIT_REWARDS: Record<string, { gold: number; exp: number }> = {
-  Wood: { gold: 100, exp: 50 },
-  Copper: { gold: 150, exp: 75 },
-  Tin: { gold: 200, exp: 100 },
-  Bronze: { gold: 250, exp: 125 },
-  Iron: { gold: 300, exp: 150 },
+  // Economy iteration (v0.71): cup gold nudged up, steepening at higher leagues
+  // where the roster (and food bill) is bigger. Tuned against the long-haul sim.
+  Wood: { gold: 120, exp: 60 },
+  Copper: { gold: 180, exp: 90 },
+  Tin: { gold: 250, exp: 125 },
+  Bronze: { gold: 330, exp: 165 },
+  Iron: { gold: 420, exp: 210 },
 }
 
 // The "regular" (non-marquee) cup reward for the 5 leagues that ALSO run one
@@ -57,11 +59,11 @@ export const CIRCUIT_REWARDS: Record<string, { gold: number; exp: number }> = {
 // the circuit ladder rather than a discontinuity. The marquee's own reward
 // (PRESTIGE_EVENTS below) is deliberately bigger, so it still feels special.
 export const PRESTIGE_POOL_REWARDS: Record<string, { gold: number; exp: number }> = {
-  Silver: { gold: 350, exp: 175 },
-  Gold: { gold: 400, exp: 200 },
-  Platinum: { gold: 450, exp: 225 },
-  Masters: { gold: 500, exp: 250 },
-  'Tamer Elite': { gold: 550, exp: 275 },
+  Silver: { gold: 500, exp: 250 },
+  Gold: { gold: 590, exp: 295 },
+  Platinum: { gold: 690, exp: 345 },
+  Masters: { gold: 800, exp: 400 },
+  'Tamer Elite': { gold: 920, exp: 460 },
 }
 
 // Event names (user spec 2026-07-20): never named after a month, unique within
@@ -93,11 +95,11 @@ const PRESTIGE_POOL_NAMES: Record<string, string[]> = {
 // a Silver pool cup and the Silver Crescent would pay identically, and the
 // "marquee" framing (hand-authored lore, once-a-year) would feel hollow.
 export const PRESTIGE_EVENTS: Omit<Tournament, 'id'>[] = [
-  { name: 'The Silver Crescent', month: 6, week: 2, league: 'Silver', rewards: { gold: 500, exp: 250 } },
-  { name: 'The Gilded Crown', month: 7, week: 2, league: 'Gold', rewards: { gold: 550, exp: 275 } },
-  { name: 'The Radiant Throne', month: 8, week: 2, league: 'Platinum', rewards: { gold: 600, exp: 300 } },
-  { name: "The Grandmasters' Summit", month: 9, week: 2, league: 'Masters', rewards: { gold: 650, exp: 325 } },
-  { name: 'The Apex Invitational', month: 10, week: 2, league: 'Tamer Elite', rewards: { gold: 700, exp: 350 } },
+  { name: 'The Silver Crescent', month: 6, week: 2, league: 'Silver', rewards: { gold: 650, exp: 325 } },
+  { name: 'The Gilded Crown', month: 7, week: 2, league: 'Gold', rewards: { gold: 760, exp: 380 } },
+  { name: 'The Radiant Throne', month: 8, week: 2, league: 'Platinum', rewards: { gold: 880, exp: 440 } },
+  { name: "The Grandmasters' Summit", month: 9, week: 2, league: 'Masters', rewards: { gold: 1010, exp: 505 } },
+  { name: 'The Apex Invitational', month: 10, week: 2, league: 'Tamer Elite', rewards: { gold: 1150, exp: 575 } },
 ]
 
 // Cup lore (user spec 2026-07-22): a pre-cup preamble (prize money + a line of
@@ -781,6 +783,10 @@ export function trainerXpProgress(g: GameState): { level: number; into: number; 
 }
 // Perk: +1 barn slot every 2 trainer levels, on top of the shop-bought capacity.
 export const trainerBarnBonus = (g: GameState): number => Math.floor((trainerLevel(g) - 1) / 2)
+// Perk (v0.71): a weekly gold stipend that scales with trainer level — reputation
+// pays. 5g per level per week (Lv1 = 5g/wk, Lv5 = 25g/wk, Lv10 = 50g/wk).
+export const TRAINER_STIPEND_PER_LEVEL = 5
+export const trainerStipend = (g: GameState): number => trainerLevel(g) * TRAINER_STIPEND_PER_LEVEL
 export const effectiveBarnCap = (g: GameState): number => g.barnCapacity + trainerBarnBonus(g)
 // XP for a cup finish (podium only) — bigger for higher placement and league.
 export function cupTrainerXp(placement: number, leagueIndex: number): number {
@@ -1342,7 +1348,11 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
   // Stud Book turns a frozen champion's record into uncapped weekly fees.
   const pensionGold = g.stable.reduce((s, c) => s + pensionFor(c), 0)
   const studGold = g.frozen.reduce((s, fr) => s + studIncome(fr), 0)
-  gold += pensionGold + studGold
+  // Trainer stipend (v0.71): a weekly sponsorship that grows with the trainer's
+  // level — a steady income the whole account earns. Achievements (planned) will
+  // grant trainer XP, so unlocking them raises this stipend directly.
+  const stipendGold = trainerStipend(g)
+  gold += pensionGold + studGold + stipendGold
 
   // Snapshot post-activity, PRE-tournament state so the digest below can
   // attribute changes honestly (2026-07-25 playtest fix): tournament injuries
@@ -1428,8 +1438,8 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
       if (changed) lastWeek.push(`  ↳ ${after.name} comes home at ${after.hp}/${maxHp(after.stats)} HP · ${after.mp}/${maxMana(after.stats)} MP — rest to recover`)
     }
   }
-  if (pensionGold + studGold > 0) {
-    const bits = [pensionGold > 0 ? `pensions +${pensionGold}g` : '', studGold > 0 ? `stud fees +${studGold}g` : ''].filter(Boolean)
+  if (pensionGold + studGold + stipendGold > 0) {
+    const bits = [stipendGold > 0 ? `stipend +${stipendGold}g` : '', pensionGold > 0 ? `pensions +${pensionGold}g` : '', studGold > 0 ? `stud fees +${studGold}g` : ''].filter(Boolean)
     lastWeek.push(`🏛 Ranch income: ${bits.join(' · ')}`)
   }
 

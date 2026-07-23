@@ -152,14 +152,15 @@ export function designProblems(): string[] {
     prevSize = size
   }
 
-  // game.ts:LEAGUE_TOP_GOLD is hand-kept in sync with the tournament reward
-  // tables (it caps excursion income at ~1/3 of a league's 1st-place gold) —
-  // assert the sync instead of trusting the comment.
+  // game.ts:LEAGUE_TOP_GOLD is the excursion-gold ceiling per league. Since v0.71
+  // it's tuned independently of the cup rewards, but the design intent is that
+  // downtime income never rivals competing — so it must stay AT OR BELOW each
+  // league's cup 1st-place gold. Assert that bound instead of exact equality.
   for (const [league, r] of Object.entries(CIRCUIT_REWARDS)) {
-    if (LEAGUE_TOP_GOLD[league] !== r.gold) problems.push(`ECONOMY: LEAGUE_TOP_GOLD.${league} (${LEAGUE_TOP_GOLD[league]}) != CIRCUIT_REWARDS gold (${r.gold}).`)
+    if ((LEAGUE_TOP_GOLD[league] ?? 0) > r.gold) problems.push(`ECONOMY: LEAGUE_TOP_GOLD.${league} (${LEAGUE_TOP_GOLD[league]}) exceeds CIRCUIT_REWARDS gold (${r.gold}) — excursion must stay below cup gold.`)
   }
   for (const p of PRESTIGE_EVENTS) {
-    if (LEAGUE_TOP_GOLD[p.league] !== p.rewards.gold) problems.push(`ECONOMY: LEAGUE_TOP_GOLD.${p.league} (${LEAGUE_TOP_GOLD[p.league]}) != ${p.name}'s gold (${p.rewards.gold}).`)
+    if ((LEAGUE_TOP_GOLD[p.league] ?? 0) > p.rewards.gold) problems.push(`ECONOMY: LEAGUE_TOP_GOLD.${p.league} (${LEAGUE_TOP_GOLD[p.league]}) exceeds ${p.name}'s gold (${p.rewards.gold}).`)
   }
   for (const l of LEAGUES) {
     if (LEAGUE_TOP_GOLD[l.name] === undefined) problems.push(`ECONOMY: LEAGUE_TOP_GOLD has no entry for ${l.name}.`)
