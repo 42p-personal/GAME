@@ -1,7 +1,7 @@
 {
   "name": "monster-tamer",
   "private": true,
-  "version": "0.62.0",
+  "version": "0.7.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

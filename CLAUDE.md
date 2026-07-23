@@ -1,6 +1,27 @@
 # Monster Tamer — Development Guide
 
-## Current state (v0.62)
+## Current state (v0.7)
+
+**v0.7 — Fusion system + 15 fusion species (2026-07-23):** the 🧪 Lab is now a real
+**stasis freezer** (`labFrozen`/`labSlots`, expandable from the Ranch Shop), SEPARATE
+from the Breeding Ranch stud farm (the old `labCapacity` was renamed `studSlots`).
+Freeze any active monster to pause its aging (e.g. until you can afford an Elder Tonic,
+which now works on frozen monsters); **fuse** two lab-frozen monsters of a valid
+BODY-TYPE pair into a brand-new **fusion species**. Fusion: 1000g, both consumed, all
+stats start at **100**; aptitude is INHERITED per-monster (+20% on each parent's
+training major) plus a rolled +10% minor / −10% flaw; the species (which of the class's
+5) is a **spinning wheel**; potential **×1.075 (1½★)**, gen-1 **Platinum-capped** then
+fully breedable (gen-2 ≈3★ → Tamer Elite). **15 new fusion species across 3 classes**
+(`docs/FUSION_DESIGN.md`): **Saurian** (Mammal+Reptilian, earth/air), **Tempestine**
+(Avian+Aquatic, air/fire), **Broodkin** (Marsupial+Insectoid, water/earth) — each 5
+species, aptitude-neutral shells (`trainingProfile {}`), 30 unique innates, real
+generated sprite art (via Codex image-gen, `image-gen-codex` skill). Fusion bodies are
+excluded from wild/market generation (`generateMonster`), keeping goldens byte-exact.
+**Roster: 60 species.**
+
+---
+
+## Prior state (v0.62)
 
 **v0.62 — economy pass + Town hub (2026-07-23):** the big economy rebalance plus a
 Town navigation restructure. Economy (see `docs/ECONOMY_FINDINGS.md` for the sim
