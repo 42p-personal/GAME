@@ -695,8 +695,11 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
       {/* ---- LAB: freezer (stasis) + fusion (v0.7) ---- */}
       {area === 'lab' && (() => {
         const frozen = game.labFrozen ?? []
+        // Fusion can pull from the active stable OR the freezer (v0.73).
+        const fusable = [...game.stable.filter((c) => !c.retired), ...frozen]
+        const frozenIds = new Set(frozen.map((f) => f.id))
         const spin = fuseA && fuseB && fuseA !== fuseB ? fusionSpin(game, fuseA, fuseB) : null
-        const bodyOf = (id: string) => frozen.find((f) => f.id === id)?.species.body
+        const bodyOf = (id: string) => fusable.find((m) => m.id === id)?.species.body
         const validPair = fuseA && fuseB && fuseA !== fuseB && !!fusionRecipeFor(bodyOf(fuseA)!, bodyOf(fuseB)!)
         return (
         <div className="townmap">
@@ -738,22 +741,22 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
               <button className="ghost" disabled={game.gold < (labExpandCost(game) ?? Infinity)}
                 onClick={() => setGame((g) => expandLab(g))}>➕ Expand freezer · {labExpandCost(game)}g ({game.labSlots} → {game.labSlots + 1})</button>
             )}
-            {/* Fusion */}
-            <div className="section-title">⚗️ Fuse (two frozen → a new species)</div>
+            {/* Fusion — pull from the stable or the freezer */}
+            <div className="section-title">⚗️ Fuse (two monsters → a new species)</div>
             <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>
-              Combine two frozen monsters into a brand-new fusion species.
+              Combine two monsters — from your stable or the freezer — into a brand-new fusion species.
             </div>
             <div className="fuserow">
               <select value={fuseA} onChange={(e) => setFuseA(e.target.value)}>
                 <option value="">— monster A —</option>
-                {frozen.map((f) => <option key={f.id} value={f.id}>{f.name} ({f.species.body})</option>)}
+                {fusable.map((m) => <option key={m.id} value={m.id}>{frozenIds.has(m.id) ? '🧊 ' : ''}{m.name} ({m.species.body})</option>)}
               </select>
               <select value={fuseB} onChange={(e) => setFuseB(e.target.value)}>
                 <option value="">— monster B —</option>
-                {frozen.map((f) => <option key={f.id} value={f.id}>{f.name} ({f.species.body})</option>)}
+                {fusable.map((m) => <option key={m.id} value={m.id}>{frozenIds.has(m.id) ? '🧊 ' : ''}{m.name} ({m.species.body})</option>)}
               </select>
               <button className="rankup"
-                disabled={!spin || game.gold < FUSION_COST || !fusionRoom(game)}
+                disabled={!spin || game.gold < FUSION_COST}
                 onClick={() => { if (spin) setWheel({ result: spin.speciesId, pool: spin.pool, a: fuseA, b: fuseB }) }}>
                 Fuse · {FUSION_COST}g
               </button>
@@ -763,7 +766,7 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
                 ? <div className="hint">⚗️ {bodyOf(fuseA)} + {bodyOf(fuseB)} → a <b>{spin?.classLabel}</b>.</div>
                 : <div className="neg" style={{ fontSize: 12 }}>🚫 No known fusion for {bodyOf(fuseA)} + {bodyOf(fuseB)}. Valid recipe: Mammal + Reptilian → Saurian.</div>
             )}
-            {frozen.length < 2 && <div className="hint">Freeze at least two monsters to fuse.</div>}
+            {fusable.length < 2 && <div className="hint">You need at least two monsters to fuse.</div>}
           </div>
         </div>
         )

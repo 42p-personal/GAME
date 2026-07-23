@@ -1,7 +1,7 @@
 # Balancing — findings & working reference
 
 Living doc for the economy/progression balance effort. Condensed from the
-2026-07-23 balancing sessions. Numbers are current as of **v0.73**.
+2026-07-23 balancing sessions. Numbers are current as of **v0.74**.
 
 ## Design principles (from the user)
 - **Challenging but possible.** The top (Masters / Tamer Elite) should be hard-won, not gated shut.
@@ -50,7 +50,7 @@ breeding/fusion actually fire are the headline metrics.
 
 ### Breeding & fusion
 - **Potential:** wild = 1.0; **+0.10 / generation** + up to **+0.08** champion-parent bonus; **cap `MAX_POTENTIAL = 1.5`** (~4–5 generations to reach). Breed cost 300, ≤2 children per stud, heritage stat +10%, **head-start `BREED_HEAD_START = 0.45`** (child hatches at 45% of parents' averaged stats — v0.73).
-- **Fusion:** 1000g, consumes two lab-frozen monsters; result = **all stats 100**, **+20% on each parent's major** + rolled +10%/−10%, species by spinning wheel, **potential 1.075 (1½★)**, gen-1 **Platinum-capped**, then fully breedable (gen-2 ≈ 3★ → Tamer Elite).
+- **Fusion:** 1000g, consumes two monsters **from the stable OR the freezer (v0.74 — no freeze step)**; result = **all stats 100**, **+20% on each parent's major** + rolled +10%/−10%, species by spinning wheel, **potential 1.15 (3★, v0.74)**, gen-1 **Platinum-capped**, then fully breedable (gen-2 ≈ 3★ → Tamer Elite).
 
 ## Sim findings
 
@@ -77,8 +77,8 @@ gated by:
 ## Open levers (candidate next iterations — NOT yet done)
 
 ### Encourage fusion (ranked by impact)
-1. **Potential edge** — gen-1 fusion 1.075 → ~1.15–1.2, so fusing *seeds a high-potential bloodline instantly* (a shortcut vs breeding up from wild).
-2. **Cut friction** — allow fuse straight from the stable (drop the freeze-to-Lab hoop) and/or lower the 1000g cost.
+1. ✅ **DONE (v0.74)** Potential edge — gen-1 fusion 1.075 → **1.15** (seeds a high-potential bloodline).
+2. ✅ **DONE (v0.74)** Cut friction — fuse straight from the stable (no freeze step). (Cost still 1000g.)
 3. **Signature skills** (task #112) — an exclusive strong move per fusion species = the combat draw.
 4. **Longer career span for fusion monsters** — more training years for the "burn-bright" specialists.
 5. Keep the **gen-1 Platinum cap** so none of this is an instant-win.
@@ -97,4 +97,5 @@ gated by:
 ## Ledger of changes made
 - **v0.62** — economy pass #1 (stipend/pension/comfort/peddler/breeding/soft-lock).
 - **v0.72** — cup gold ↑ + trainer gold stipend + excursion nudge. Peak Bronze → Gold/Platinum; breeding now fires.
+- **v0.74** — fuse-from-stable (removed the freeze hoop) + fusion potential 1.075→1.15. Mechanic verified firing in the sim; fusion now a 1-click stable action.
 - **v0.73** — pedigree span +2yr (fusion/prestige/bred) + bred head-start 0.35→0.45. **Peak Gold → Masters/Tamer Elite** (1 seed reached TE @ yr 12.7); top is now reachable via breeding, still challenging (12–19yr). Fusion still unused by the bot.

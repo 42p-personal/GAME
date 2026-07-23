@@ -657,7 +657,7 @@ export function thawFromLab(g: GameState, id: string): GameState {
 // nothing to do with breeding legacies.
 export const FUSION_COST = 1000
 export const FUSION_START_STAT = 100 // every fused monster starts at 100 across the board
-export const FUSION_POTENTIAL = 1.075 // 1½ stars — a superior bloodline from birth
+export const FUSION_POTENTIAL = 1.15 // 3★ (v0.73): a strong bloodline from birth — fusing is a shortcut to a high-potential line
 export const FUSION_RECIPES: { bodies: [BodyType, BodyType]; classLabel: string; pool: string[] }[] = [
   { bodies: ['Mammal', 'Reptilian'], classLabel: 'Saurian', pool: ['grendscale', 'vipramane', 'thornhide', 'runewyrm', 'basilroar'] },
   { bodies: ['Avian', 'Aquatic'], classLabel: 'Tempestine', pool: ['thunderoc', 'galewing', 'tidecaller', 'maelstrom', 'brinehowl'] },
@@ -671,11 +671,15 @@ export function fusionRecipeFor(a: BodyType, b: BodyType) {
 function parentMajor(c: Career): Stat {
   return c.bonusMajor1 ?? trainingProfileFor(c.species).major ?? ([...STATS].sort((x, y) => c.stats[y] - c.stats[x])[0])
 }
+// A fusion parent may be pulled from the ACTIVE stable OR the Lab freezer (v0.73:
+// fuse straight from the stable — no need to freeze first).
+const fusionParent = (g: GameState, id: string): Career | undefined =>
+  g.stable.find((x) => !x.retired && x.id === id) ?? g.labFrozen?.find((x) => x.id === id)
 // The spinning wheel: which of the class's 5 species this fusion lands on
 // (deterministic per pairing+nextId, so the UI can animate to the real result).
 export function fusionSpin(g: GameState, aId: string, bId: string): { speciesId: string; classLabel: string; pool: string[] } | null {
-  const a = g.labFrozen?.find((x) => x.id === aId)
-  const b = g.labFrozen?.find((x) => x.id === bId)
+  const a = fusionParent(g, aId)
+  const b = fusionParent(g, bId)
   if (!a || !b || a.id === b.id) return null
   const recipe = fusionRecipeFor(a.species.body, b.species.body)
   if (!recipe) return null
@@ -683,11 +687,14 @@ export function fusionSpin(g: GameState, aId: string, bId: string): { speciesId:
   return { speciesId: recipe.pool[Math.floor(rng() * recipe.pool.length)], classLabel: recipe.classLabel, pool: recipe.pool }
 }
 export function fuse(g: GameState, aId: string, bId: string): GameState {
-  if (aId === bId || g.gold < FUSION_COST || g.stable.length >= effectiveBarnCap(g)) return g
-  const a = g.labFrozen?.find((x) => x.id === aId)
-  const b = g.labFrozen?.find((x) => x.id === bId)
+  if (aId === bId || g.gold < FUSION_COST) return g
+  const a = fusionParent(g, aId)
+  const b = fusionParent(g, bId)
   const spin = fusionSpin(g, aId, bId)
   if (!a || !b || !spin) return g
+  // Barn room: consuming stable parents frees slots; only labFrozen parents add net.
+  const fromStable = [aId, bId].filter((id) => g.stable.some((x) => x.id === id)).length
+  if (g.stable.length - fromStable + 1 > effectiveBarnCap(g)) return g
   const species = SPECIES.find((s) => s.id === spin.speciesId)!
   const rng = mulberry32(hashString('fuse:' + a.id + '+' + b.id + ':' + g.nextId))
   const babySeed = 'fuse-' + a.id + '+' + b.id + ':' + g.nextId
@@ -711,12 +718,14 @@ export function fuse(g: GameState, aId: string, bId: string): GameState {
   const flawPool = others.filter((s) => s !== baby.bonusMinor)
   baby.bonusFlaw = flawPool[Math.floor(rng() * flawPool.length)]
   baby.comfortWeeks = comfortWeeksFor(g)
-  baby.log = [`${baby.name} the ${species.name} is forged — a ${spin.classLabel}. Training aptitude: +20% ${baby.bonusMajor1} & +20% ${baby.bonusMajor2}, +10% ${baby.bonusMinor}, −10% ${baby.bonusFlaw}. 1½★ bloodline, Platinum-capped until bred onward.`]
+  const stars = '★'.repeat(Math.round((FUSION_POTENTIAL - 1) / 0.05))
+  baby.log = [`${baby.name} the ${species.name} is forged — a ${spin.classLabel}. Training aptitude: +20% ${baby.bonusMajor1} & +20% ${baby.bonusMajor2}, +10% ${baby.bonusMinor}, −10% ${baby.bonusFlaw}. ${stars} bloodline, Platinum-capped until bred onward.`]
   return {
     ...g,
     gold: g.gold - FUSION_COST,
-    stable: [...g.stable, baby],
-    labFrozen: g.labFrozen.filter((x) => x.id !== aId && x.id !== bId), // both CONSUMED
+    stable: [...g.stable.filter((x) => x.id !== aId && x.id !== bId), baby], // stable parents CONSUMED
+    labFrozen: (g.labFrozen ?? []).filter((x) => x.id !== aId && x.id !== bId), // frozen parents CONSUMED
+    activeId: (g.activeId === aId || g.activeId === bId) ? baby.id : g.activeId,
     nextId: g.nextId + 1,
   }
 }
