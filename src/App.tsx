@@ -2964,7 +2964,8 @@ function ThemeToggle() {
       title={`Switch to ${next} mode`}
       aria-label={`Switch to ${next} mode`}
     >
-      {theme === 'dark' ? '☀️ Day' : '🌙 Night'}
+      <span>{theme === 'dark' ? '☀️' : '🌙'}</span>
+      <span className="tt-label">{theme === 'dark' ? 'Day' : 'Night'}</span>
     </button>
   )
 }

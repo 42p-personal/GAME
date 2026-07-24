@@ -43,7 +43,11 @@ body { margin: 0; background: var(--bg); color: var(--ink); }
   box-shadow: 0 2px 8px rgba(0,0,0,.18);
 }
 .theme-toggle:hover { filter: brightness(1.06); }
-@media (max-width: 560px) { .theme-toggle { padding: 6px 9px; font-size: 12px; } }
+@media (max-width: 560px) {
+  .theme-toggle { padding: 6px 9px; font-size: 14px; }
+  .theme-toggle .tt-label { display: none; } /* icon-only — the word overlapped the header */
+  .app h1 { padding-right: 44px; } /* clear the fixed toggle */
+}
 .app { max-width: 1040px; margin: 0 auto; padding: 24px 20px 60px; position: relative; z-index: 1; }
 h1 { font-size: 24px; margin: 0 0 2px; }
 h1 .tag { color: var(--accent); }
@@ -177,6 +181,12 @@ input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 
 .careerlog { max-height: 220px; }
 .retired { background: var(--panel2); border: 1px solid var(--accent2); border-radius: 8px; padding: 12px; font-size: 13px; line-height: 1.5; }
 @media (max-width: 720px) { .career { grid-template-columns: 1fr; } }
+/* Sandbox builder: the two team columns need ~640px of intrinsic width — stack
+   them on phones instead of forcing the whole page to side-scroll. */
+@media (max-width: 720px) {
+  .arena { grid-template-columns: 1fr; }
+  .vs { padding-top: 0; text-align: center; justify-self: center; }
+}
 
 .battlebar { display: flex; justify-content: center; gap: 12px; margin: 22px 0 10px; }
 .log { background: #0c0e15; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; font-family: ui-monospace, 'Cascadia Code', monospace; font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; max-height: 420px; overflow: auto; }
@@ -332,7 +342,7 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 .innatepick.active .md { color: var(--accent); }
 .innatepick.locked { opacity: .45; cursor: not-allowed; }
 @media (max-width: 820px) {
-  .stablescreen { grid-template-columns: 1fr; padding-bottom: 64px; }
+  .stablescreen { grid-template-columns: 1fr; padding-bottom: 88px; } /* clear the fixed bottom rail incl. its padding */
   /* Sticky bottom action bar on small screens — Advance Week shouldn't need a
      full-page scroll. */
   .rail { flex-direction: row; position: fixed; left: 0; right: 0; bottom: 0; top: auto; z-index: 20;
