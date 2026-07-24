@@ -167,12 +167,16 @@ export interface Monster {
 export type Temperament = 'aggressive' | 'balanced' | 'cautious'
 export type TargetPriority = 'weakest' | 'casters' | 'tanks' | 'focus'
 export type ManaPolicy = 'normal' | 'conserve' | 'burst'
+export type Preserve = 'off' | 'cautious' | 'defensive'
 export interface Tactics {
   temperament: Temperament
   targetPriority: TargetPriority
   manaPolicy?: ManaPolicy // absent = 'normal' (inert)
   comboDiscipline?: boolean // hold bonusVsStatus payoffs until their setup status is on the target
-  openerId?: string // scripted first action — an equipped move id; ignored if no longer equipped
+  openerId?: string // LEGACY single scripted first action — superseded by openerIds; still read as a fallback
+  openerIds?: string[] // scripted opening SEQUENCE (v0.81): up to 2 equipped move ids, played in order on the first actions
+  preserve?: Preserve // absent = 'off' — below the threshold, play to survive (block, drop self-harm moves)
+  ccPriority?: boolean // lead with a hard control status (stun/sleep/silence/…) before committing to damage
 }
 export const DEFAULT_TACTICS: Tactics = { temperament: 'balanced', targetPriority: 'weakest' }
 
@@ -230,6 +234,19 @@ export const MANA_POLICY_INFO: { id: ManaPolicy; icon: string; name: string; des
 export const COMBO_INFO: { id: boolean; icon: string; name: string; desc: string }[] = [
   { id: false, icon: '🎲', name: 'Free play', desc: 'Casts whatever ranks best each turn.' },
   { id: true, icon: '🔗', name: 'Work the combo', desc: 'Holds a payoff move until its setup status is on the target, and sets up first.' },
+]
+// Preserve (v0.81): a survival floor — below the threshold, guard a real
+// incoming hit instead of trading to the death, and stop throwing self-harm
+// (recoil) moves. 'off' is inert (golden-safe).
+export const PRESERVE_INFO: { id: Preserve; icon: string; name: string; desc: string }[] = [
+  { id: 'off', icon: '🔥', name: 'To the end', desc: 'Never plays safe — fights at full aggression down to 1 HP.' },
+  { id: 'cautious', icon: '🛡', name: 'Guard at 40%', desc: 'Below 40% HP: blocks incoming hits and avoids self-harm moves.' },
+  { id: 'defensive', icon: '🐢', name: 'Guard at 25%', desc: 'Below 25% HP: turtles up hard to survive.' },
+]
+// CC priority (v0.81): lead with a hard control status before damage.
+export const CC_INFO: { id: boolean; icon: string; name: string; desc: string }[] = [
+  { id: false, icon: '🎲', name: 'Off', desc: 'Weighs control moves alongside everything else.' },
+  { id: true, icon: '🕸', name: 'Control first', desc: 'Opens by landing a stun / sleep / silence / fear etc. before committing to damage.' },
 ]
 
 // --- Rival team gameplans (LOOP_DESIGN.md Phase 3) ---

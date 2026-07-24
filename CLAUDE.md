@@ -27,6 +27,15 @@ genuinely decide the outcome. `finalizeCup`/`finalizeTrial` (called from the UI 
 last match ends) score standings, rewards, injury, exp, trainer XP, the seated-rival
 head-to-head, and license unlock — the tail of the old resolvers, moved out of the tick.
 
+**Expanded tactic set (same v0.81 cycle):** three new coach-level orders on
+`TacticsControls`, all opt-in and golden-safe (default off): **opening sequence**
+(`Tactics.openerIds` — up to 2 scripted first plays, replacing the single
+`openerId`; the engine tracks an `openerQueue`), **survival** (`Tactics.preserve`
+— below 40%/25% HP the monster guards incoming hits and drops self-harm/recoil
+moves), and **control-first** (`Tactics.ccPriority` — leads with a hard CC status
+(stun/sleep/silence/…) before committing to damage; gated on having a control
+move equipped). Each verified to change the battle log in a differential sim.
+
 **Why goldens don't move:** `simulateTeamBattle` seeds its RNG purely from monster seeds
 (`battle.ts`), so a matchup is a pure function of (monsters + their tactics) — the engine
 is untouched, and a scratch sim confirmed two different `MatchOrders` for the same matchup

@@ -1,6 +1,6 @@
 import { Dispatch, ReactNode, SetStateAction, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  BODY_ELEMENT, BODY_MINOR, BodyType, isFusionBody, COMBO_INFO, DEFAULT_TACTICS, Element, FOODS, FoodDef, FoodTier, GAMEPLANS, INNATE_SECONDARY_LEVEL, LEAGUES, MANA_POLICY_INFO, MatchOrders, Monster, Move, STATS, Stat,
+  BODY_ELEMENT, BODY_MINOR, BodyType, isFusionBody, CC_INFO, COMBO_INFO, DEFAULT_TACTICS, Element, FOODS, FoodDef, FoodTier, GAMEPLANS, INNATE_SECONDARY_LEVEL, LEAGUES, MANA_POLICY_INFO, MatchOrders, Monster, Move, PRESERVE_INFO, STATS, Stat,
   TARGET_PRIORITY_INFO, TEMPERAMENT_INFO, Tactics, classForStats,
   feedDelta, frontRowCount, happinessMultiplier, hashString, mulberry32, roleOfClass, rowOfSlot,
 } from './core'
@@ -1223,16 +1223,28 @@ function TacticsControls({ value, onChange, loadout, teamPlay }: {
   const prio = TARGET_PRIORITY_INFO.find((o) => o.id === cur.targetPriority)!
   const mana = MANA_POLICY_INFO.find((o) => o.id === (cur.manaPolicy ?? 'normal'))!
   const combo = COMBO_INFO.find((o) => o.id === (cur.comboDiscipline ?? false))!
-  const openerMove = cur.openerId ? loadout.find((mv) => mv.id === cur.openerId) : undefined
+  const preserve = PRESERVE_INFO.find((o) => o.id === (cur.preserve ?? 'off'))!
+  const cc = CC_INFO.find((o) => o.id === (cur.ccPriority ?? false))!
+  // Opening SEQUENCE (v0.81): ordered list of up to 2 move ids (legacy single
+  // openerId read as a one-item list). Click a move to add/remove it.
+  const openerIds = cur.openerIds ?? (cur.openerId ? [cur.openerId] : [])
+  const openerMoves = openerIds.map((id) => loadout.find((mv) => mv.id === id)).filter((mv): mv is Move => !!mv)
+  const setOpeners = (ids: string[]) => onChange({ ...cur, openerIds: ids.length ? ids : undefined, openerId: undefined })
+  const toggleOpener = (id: string) => setOpeners(openerIds.includes(id) ? openerIds.filter((x) => x !== id)
+    : openerIds.length >= 2 ? openerIds : [...openerIds, id])
   const comboReady = loadout.some((p) => p.effects?.bonusVsStatus
     && loadout.some((s) => s.status?.kind === p.effects!.bonusVsStatus!.kind))
+  const CC_KINDS_UI = ['stun', 'sleep', 'fear', 'confusion', 'silence', 'charm', 'knockback', 'blind']
+  const ccReady = loadout.some((mv) => (mv.target === 'enemy' || mv.target === 'allEnemies') && mv.status && CC_KINDS_UI.includes(mv.status.kind))
   const summary = [
     { icon: temp.icon, name: temp.name, desc: temp.desc },
-    { icon: openerMove ? (openerMove.element ? ELEMENT_ICON[openerMove.element] : '▶') : '🎲',
-      name: openerMove ? `Open with ${openerMove.name}` : 'Instinct opener',
-      desc: openerMove ? 'Always throws this move first when it can.' : 'The class picks its own first play.' },
+    openerMoves.length
+      ? { icon: '▶', name: `Open: ${openerMoves.map((mv) => mv.name).join(' → ')}`, desc: openerMoves.length > 1 ? 'Scripts the first two plays in order.' : 'Always throws this move first when it can.' }
+      : { icon: '🎲', name: 'Instinct opener', desc: 'The class picks its own first play.' },
     { icon: mana.icon, name: mana.name, desc: mana.desc },
     { icon: combo.icon, name: combo.name, desc: comboReady ? combo.desc : 'No setup→payoff pair equipped yet — no effect.' },
+    ...(cur.preserve && cur.preserve !== 'off' ? [{ icon: preserve.icon, name: preserve.name, desc: preserve.desc }] : []),
+    ...(cur.ccPriority ? [{ icon: cc.icon, name: cc.name, desc: ccReady ? cc.desc : 'No control move equipped yet — no effect.' }] : []),
     ...(teamPlay ? [{ icon: prio.icon, name: prio.name, desc: prio.desc }] : []),
   ]
   return (
@@ -1246,15 +1258,18 @@ function TacticsControls({ value, onChange, loadout, teamPlay }: {
           ))}
         </div>
         <div className="tacticgroup">
-          <div className="tacticgroup-h">Opening move</div>
-          <button className={'tacticopt' + (!openerMove ? ' on' : '')}
-            onClick={() => onChange({ ...cur, openerId: undefined })}>🎲 Instinct</button>
-          {loadout.map((mv) => (
-            <button key={mv.id} className={'tacticopt' + (cur.openerId === mv.id ? ' on' : '')}
-              onClick={() => onChange({ ...cur, openerId: mv.id })}>
-              {mv.element ? ELEMENT_ICON[mv.element] + ' ' : '▶ '}{mv.name}
-            </button>
-          ))}
+          <div className="tacticgroup-h">Opening sequence <span className="dim">· up to 2, in order</span></div>
+          <button className={'tacticopt' + (openerMoves.length === 0 ? ' on' : '')}
+            onClick={() => setOpeners([])}>🎲 Instinct</button>
+          {loadout.map((mv) => {
+            const pos = openerIds.indexOf(mv.id)
+            return (
+              <button key={mv.id} className={'tacticopt' + (pos >= 0 ? ' on' : '')}
+                onClick={() => toggleOpener(mv.id)}>
+                {pos >= 0 ? `${pos + 1}. ` : (mv.element ? ELEMENT_ICON[mv.element] + ' ' : '▶ ')}{mv.name}
+              </button>
+            )
+          })}
         </div>
         <div className="tacticgroup">
           <div className="tacticgroup-h">Mana policy</div>
@@ -1262,6 +1277,25 @@ function TacticsControls({ value, onChange, loadout, teamPlay }: {
             <button key={o.id} className={'tacticopt' + ((cur.manaPolicy ?? 'normal') === o.id ? ' on' : '')}
               onClick={() => onChange({ ...cur, manaPolicy: o.id })}>{o.icon} {o.name}</button>
           ))}
+        </div>
+        <div className="tacticgroup">
+          <div className="tacticgroup-h">Survival</div>
+          {PRESERVE_INFO.map((o) => (
+            <button key={o.id} className={'tacticopt' + ((cur.preserve ?? 'off') === o.id ? ' on' : '')}
+              onClick={() => onChange({ ...cur, preserve: o.id })}>{o.icon} {o.name}</button>
+          ))}
+        </div>
+        <div className="tacticgroup">
+          <div className="tacticgroup-h">Control first{ccReady ? '' : ' 🔒'}</div>
+          {CC_INFO.map((o) => {
+            const disabled = o.id === true && !ccReady
+            return (
+              <button key={String(o.id)} disabled={disabled}
+                className={'tacticopt' + ((cur.ccPriority ?? false) === o.id ? ' on' : '') + (disabled ? ' lockedopt' : '')}
+                onClick={() => !disabled && onChange({ ...cur, ccPriority: o.id })}>{o.icon} {o.name}</button>
+            )
+          })}
+          {!ccReady && <div className="hint">🕸 Equip a control move (stun, sleep, silence…) to use this.</div>}
         </div>
         <div className="tacticgroup">
           <div className="tacticgroup-h">Combo play{comboReady ? '' : ' 🔒'}</div>

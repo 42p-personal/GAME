@@ -311,7 +311,7 @@ interface Combatant {
   side: BattleSide
   slot: number // 0-based position within its own team's roster array
   row: 'front' | 'back' // formation (wave 2): from roster order via rowOfSlot — melee can only reach the front line while it stands
-  openerPending: boolean // scripted opening move (tactics.openerId) not yet attempted — spent on this monster's first action either way
+  openerQueue: string[] // scripted opening SEQUENCE (tactics.openerIds) — the front id is tried on each of the monster's first actions; one is spent per action, cast or not
   hp: number
   maxHp: number
   mana: number
@@ -411,7 +411,9 @@ function makeCombatant(m: Monster, happiness: number, side: BattleSide, slot: nu
     side,
     slot,
     row: rowOfSlot(slot, teamSize), // formation (wave 2): roster order IS the formation
-    openerPending: !!m.tactics?.openerId,
+    // Opening sequence: prefer the new openerIds list, fall back to the legacy
+    // single openerId. Up to 2 ids play in order on the first actions.
+    openerQueue: (m.tactics?.openerIds?.length ? m.tactics.openerIds : (m.tactics?.openerId ? [m.tactics.openerId] : [])).slice(0, 2),
     // injuries persist: a monster fights from its CURRENT HP/MP when tracked
     hp: Math.min(m.hp ?? maxHp(m.stats), maxHp(m.stats)),
     maxHp: maxHp(m.stats),
@@ -526,6 +528,13 @@ const isDebuffMove = (mv: Move) => {
 }
 
 const hasStatus = (c: Combatant, k: StatusKind) => c.statuses.some((s) => s.kind === k)
+
+// Hard-control statuses (v0.81 CC-priority tactic): the ones that disrupt a
+// target's actions, as opposed to damage-over-time (poison/burn/bleed) or pure
+// modifiers (vulnerable/haste/doom/healblock).
+const CC_KINDS = new Set<StatusKind>(['stun', 'sleep', 'fear', 'confusion', 'silence', 'charm', 'knockback', 'blind'])
+// Preserve tactic → the HP fraction below which a monster plays to survive.
+const PRESERVE_AT: Record<string, number> = { cautious: 0.4, defensive: 0.25 }
 
 // Haste is the one BENEFICIAL status — cleanses scrub ailments, never gifts.
 const BENEFICIAL_STATUSES = new Set<StatusKind>(['haste'])
@@ -723,12 +732,13 @@ function chooseAction(self: Combatant, foe: Combatant, rng: RNG, allies: Combata
     return { kind: 'attack' }
   }
   const ready = self.m.loadout.filter((mv) => (self.cooldowns[mv.id] ?? 0) <= 0 && moveCost(mv) <= self.mana)
-  // Scripted opener (wave 2): the designated first play. Fires on this
-  // monster's first real action if the move is still equipped and castable —
-  // otherwise the script is simply dropped (openerPending clears either way
-  // in takeTurn). No rng consumed; monsters without an opener are untouched.
-  if (self.openerPending) {
-    const opener = ready.find((mv) => mv.id === self.m.tactics?.openerId)
+  // Scripted opening sequence (wave 2 → v0.81): up to two designated first
+  // plays, tried in order on the monster's first actions. Fires the front of
+  // the queue if it's still equipped and castable — otherwise that step is
+  // simply dropped (the queue advances one per action in takeTurn). No rng
+  // consumed; monsters without an opener are untouched.
+  if (self.openerQueue.length) {
+    const opener = ready.find((mv) => mv.id === self.openerQueue[0])
     if (opener) return { kind: 'skill', move: opener }
   }
   // Strongest heal first (2026-07-25 review fix: `heals[0]` used to be loadout
@@ -760,6 +770,23 @@ function chooseAction(self: Combatant, foe: Combatant, rng: RNG, allies: Combata
   // Hurt with a real hit incoming → guard up (how often is personality).
   if (hpFrac < p.healAt && threat >= 20 && chance(rng, p.blockWhenHurt)) return { kind: 'block' }
 
+  // Preserve order (v0.81): below the survive threshold, guard a real incoming
+  // hit rather than trade blows to the death (heals already fired above if it
+  // had one). Self-harm (recoil) moves are dropped from the damage pool below.
+  // 'off' → preserveAt 0 → never triggers, so goldens are unmoved.
+  const preserveAt = PRESERVE_AT[self.m.tactics?.preserve ?? 'off'] ?? 0
+  const preserving = preserveAt > 0 && hpFrac < preserveAt
+  if (preserving && threat >= 12 && chance(rng, Math.max(p.blockWhenHurt, 65))) return { kind: 'block' }
+
+  // CC-priority order (v0.81): lead with a hard control status — land a
+  // stun/sleep/silence/etc. on a threatening foe before committing to damage,
+  // as long as the foe isn't already under it.
+  if (self.m.tactics?.ccPriority && threat >= 12) {
+    const cc = ready.find((mv) => (mv.target === 'enemy' || mv.target === 'allEnemies')
+      && mv.status && CC_KINDS.has(mv.status.kind) && !hasStatus(foe, mv.status.kind))
+    if (cc) return { kind: 'skill', move: cc }
+  }
+
   // Protect order (2026-07-25 tactics): a designated protect target is in
   // real trouble → a guardian with a taunt ready throws it NOW, pulling the
   // enemy's single-target attacks onto itself, ahead of its usual buff/debuff
@@ -781,14 +808,17 @@ function chooseAction(self: Combatant, foe: Combatant, rng: RNG, allies: Combata
   // -> cast a setup for an equipped payoff, and HOLD the payoff itself out of
   // the generic ranking below (raw power made Bloodletter fire on cooldown
   // instead of waiting — the exact failure documented in the item -25 sims).
+  // Preserving monsters stop throwing self-harm (recoil) moves — unless that
+  // would leave them with no damage option at all.
   let dmgPool = dmgs
+  if (preserving) { const safe = dmgs.filter((mv) => !mv.effects?.recoil); if (safe.length) dmgPool = safe }
   if (self.m.tactics?.comboDiscipline) {
-    const livePayoff = dmgs.find((mv) => mv.effects?.bonusVsStatus && hasStatus(foe, mv.effects.bonusVsStatus.kind))
+    const livePayoff = dmgPool.find((mv) => mv.effects?.bonusVsStatus && hasStatus(foe, mv.effects.bonusVsStatus.kind))
     if (livePayoff) return { kind: 'skill', move: livePayoff }
     const payoffKinds = new Set(self.m.loadout.filter((mv) => mv.effects?.bonusVsStatus).map((mv) => mv.effects!.bonusVsStatus!.kind))
     const setup = ready.find((mv) => mv.status && payoffKinds.has(mv.status.kind) && !hasStatus(foe, mv.status.kind))
     if (setup) return { kind: 'skill', move: setup }
-    dmgPool = dmgs.filter((mv) => !(mv.effects?.bonusVsStatus && payoffKinds.has(mv.effects.bonusVsStatus.kind)))
+    dmgPool = dmgPool.filter((mv) => !(mv.effects?.bonusVsStatus && payoffKinds.has(mv.effects.bonusVsStatus.kind)))
   }
 
   // A damage skill is worth its MP if it clearly out-hits a basic Attack, or if
@@ -1255,7 +1285,7 @@ function takeTurn(attacker: Combatant, ctx: BattleContext, rng: RNG, log: string
   const action = (tameness !== undefined && chance(rng, 100 - tameness))
     ? wildAction(attacker, rng)
     : chooseAction(attacker, primaryFoe, rng, alliesOf(ctx, attacker))
-  attacker.openerPending = false // the scripted opener rides on the FIRST action only, cast or not
+  if (attacker.openerQueue.length) attacker.openerQueue.shift() // spend one opener step per action, cast or not
   if (action.kind === 'block') {
     attacker.blockAvoid = blockValue(attacker)
     log.push(`  🛡 ${attacker.m.name} braces to block (+${attacker.blockAvoid}% avoid).`)
