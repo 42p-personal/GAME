@@ -96,6 +96,9 @@ export interface Career {
   // monster can COMPETE (nothing dies — retirees live on at the ranch).
   comfortWeeks?: number // stable-wide comfort-set bonus, SYNCED from GameState purchases (+8wk per owned item, like licenseIndex)
   wildCap?: number // gen-1 training ceiling, SYNCED stable-wide from the Market Coach (800 → 900 → 1000)
+  // Preservation bookkeeping (v0.77) — set while this career sits in the Lab freezer.
+  breedCount?: number // children parented so far (max BREED_MAX_CHILDREN)
+  studBook?: boolean // a Stud Book is assigned — its record pays weekly fees
   tonicWeeks?: number // Elder Tonic uses on THIS monster (+8wk each, unlimited)
   heritageStat?: Stat // bred child: parent B's major — trains +10% faster
   generation?: number // dynasty depth: absent/1 = wild-caught; children = max(parents)+1

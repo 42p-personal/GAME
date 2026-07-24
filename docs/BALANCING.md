@@ -153,6 +153,43 @@ All lines converge at `MAX_POTENTIAL 1.5`; fusion + champion parents is the fast
 gold — it's needing two *spare* monsters forming a valid body pair (Mammal+Reptilian /
 Avian+Aquatic / Marsupial+Insectoid). A roster/recipe friction, not an economy one.
 
+## v0.78 — freeze-to-breed (the Lab is the only preservation route)
+
+**Problem.** Breeding stock could only be banked *after* retirement (`freeze()` required
+`c.retired`), and lab-frozen monsters were breeding-ineligible. So the intended plan —
+"freeze the ones you want to breed" — was impossible, and the incentives ran the other way:
+retirement preserves stats and the Hall of Fame is unlimited, so waiting was strictly better.
+Dynasties stalled at **gen 2** in every sim ever run.
+
+**Change.** One preservation store: `labFrozen`. Breeding and fusion both read it.
+`freezeToLab()` refuses retired monsters. Stud farm (`frozen`, `studSlots`, `freeze`, `thaw`,
+`expandStud`) deleted; saves migrate. Hall of Fame = honours only.
+
+**Reprice** (the Lab was costed as an optional parking bay, not core infrastructure):
+| | was | now |
+|---|--|--|
+| `LAB_SLOTS_BASE` | 2 | **3** |
+| Expansions | 400 / 800 / 1600 | **250 / 500 / 900** |
+| Upkeep per monster | 5g/wk | **3g/wk** (loan 3 → **2**) |
+
+**Results, 25y × 3 seeds (good player)**
+| | Old retire→stud | Freeze-only, untuned | Freeze-only, tuned |
+|---|---|---|---|
+| Peak | TE / Masters / TE | Masters / Gold / Platinum | **TE / Platinum / Gold** |
+| Best stat | 1000 / 930 / 1000 | 886 / 692 / 800 | 975 / 801 / 679 |
+| Breeds | 4 | 4 | **6** |
+| Generation | 2 | 2 (one seed 3) | **2 / 3 / 3** |
+
+Gen 3 on two of three seeds is the deepest any sim has reached. The untuned row shows why the
+reprice was needed: freezing removes a monster from the roster mid-career, and at 2 slots /
+400g / 5g-wk it competed directly with the Market Coach (the thing that actually lifts your
+stat ceiling) — one seed never afforded the Coach at all.
+
+⚠️ **Open:** more variable than the old path (one seed stalled at Gold, 679 — eleven points
+short of the 690 needed to rank into Platinum). Also the "average player" bot is modelled as
+*always* missing the freeze window, so it ends gen 1 with no breeding and 30–40k unspent gold;
+that is probably harsher than a real casual player and overstates the skill gap.
+
 ## Ledger of changes made
 - **v0.62** — economy pass #1 (stipend/pension/comfort/peddler/breeding/soft-lock).
 - **v0.72** — cup gold ↑ + trainer gold stipend + excursion nudge. Peak Bronze → Gold/Platinum; breeding now fires.

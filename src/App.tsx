@@ -20,14 +20,14 @@ import {
   canBuySpecialLicense, canBuyEliteLicense, COACH_CAP_LIFT, wildCapFor,
   MARKET_BASE_SLOTS, MARKET_SLOTS_MAX, SCOUT_CHANCE, COACH_SURCHARGE, marketSlotCost, scoutCost, coachCost, coachLeague,
   buyMarketSlot, buyMarketScout, buyMarketCoach, setScoutPick, canBuyMarketCoach, coachVisible, speciesLicensed,
-  COMFORT_ITEMS, EXTREME_MANUAL_COST, BREED_COST, BREED_MAX_CHILDREN, STUD_SLOTS_BASE, applyStudBook, breed, breedPotentialV2, buyComfortItem, buyExtremeManual, expandStud, studExpandCost, labUpkeepPerFrozen, studIncome, useTonic,
+  COMFORT_ITEMS, EXTREME_MANUAL_COST, Frozen, careerFromFrozen, BREED_COST, BREED_MAX_CHILDREN, applyStudBook, breed, breedPotentialV2, buyComfortItem, buyExtremeManual, studIncome, podiumsOf, champsOf, useTonic,
   WeekPlanEntry, advanceWeek, barnCost, buyPantryContract, buyGrandLarder, buyEliteLicense, buyMonster, foodDiscountFor, resolveEvent,
-  buySpecialLicense, cancelSignUp, cupLore, eligibleForTournament, freeze, fusionRoom, gameplanForRivalTeam, generateRivalTeamsForTournament, goto, healAtInfirmary, infirmaryFee, leagueIndexOf, monthOfWeek,
+  buySpecialLicense, cancelSignUp, cupLore, eligibleForTournament, fusionRoom, gameplanForRivalTeam, generateRivalTeamsForTournament, goto, healAtInfirmary, infirmaryFee, leagueIndexOf, monthOfWeek,
   entryFee, placementLabel, scoutFee, teamSizeForLeague, seatedRivalTeamIndex,
   trainerXpProgress, trainerBarnBonus, trainerStipend, effectiveBarnCap, barnFull as barnFullOf, BREEDING_BONUS,
   buyLicense, cancelTrial, nextLicenseCost, startTrial, trialStatus, TRIAL_CHAMPION_MULT, RIVAL_PERSONALITY_GAMEPLAN,
   fuse, fusionSpin, fusionRecipeFor, freezeToLab, thawFromLab, expandLab, labExpandCost, LAB_SLOTS_BASE, FUSION_COST,
-  firstTeamLeagueIndex, generateRival, newGame, offerMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, setMarkTarget, setProtectTarget, setTactics, signUp, teamTacticsUnlocked, thaw,
+  firstTeamLeagueIndex, generateRival, newGame, offerMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, setMarkTarget, setProtectTarget, setTactics, signUp, teamTacticsUnlocked,
   tournamentCalendarFor, upgradeBarn, visibleLeagueCount, weekOfMonth, yearOfWeek,
 } from './town'
 import { APP_VERSION } from './version'
@@ -560,7 +560,10 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
   const barnFull = barnFullOf(game) // retirees live in the Hall of Fame, not the barn
   const active = game.stable.filter((c) => !c.retired)
   const retirees = game.stable.filter((c) => c.retired)
-  const studTotal = game.frozen.reduce((s, f) => s + studIncome(f), 0)
+  // v0.77: the Lab freezer is the single preservation store — breeding AND fusion
+  // both draw from it. The old stud farm (game.frozen) is migrated away on load.
+  const frozenPool = game.labFrozen ?? []
+  const studTotal = frozenPool.reduce((s, f) => s + studIncome(f), 0)
 
   return (
     <>
@@ -570,7 +573,7 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
       <div className="townbar">
         <span>🪙 {game.gold}g</span>
         <span>🏠 Stable {active.length}/{effectiveBarnCap(game)}</span>
-        <span>❄️ Studs {game.frozen.length}/{game.studSlots}</span>
+        <span>🧊 Preserved {frozenPool.length}/{game.labSlots ?? 2}</span>
         {game.pantryContract && <span className="up">🧺 Pantry</span>}
         {game.grandLarder && <span className="up">🏰 Larder</span>}
       </div>
@@ -599,7 +602,7 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
             </button>
             <button className="hubbtn" onClick={() => setArea('breeding')}>
               <span className="hubicon">🐎</span><b>Breeding Ranch</b>
-              <span className="dim">{game.frozen.length} stud{game.frozen.length === 1 ? '' : 's'}{studTotal > 0 ? ` · +${studTotal}g/wk` : ' · breed a dynasty'}</span>
+              <span className="dim">{frozenPool.length === 0 ? 'freeze a monster to breed it' : `${frozenPool.length} preserved`}{studTotal > 0 ? ` · +${studTotal}g/wk` : ''}</span>
             </button>
             <button className="hubbtn" onClick={() => setArea('retirement')}>
               <span className="hubicon">🏛</span><b>Hall of Fame</b>
@@ -673,9 +676,7 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
                         <div className="dim">🏅 {podiums} podium{podiums === 1 ? '' : 's'} · 🏆 {champs} · peak {best}</div>
                       </div>
                     </div>
-                    <button className="ghost" disabled={game.frozen.length >= game.studSlots}
-                      title={game.frozen.length >= game.studSlots ? 'The stud farm is full — expand it at the Breeding Ranch' : 'Move to the Breeding Ranch as breeding stock'}
-                      onClick={() => setGame((g) => freeze(g, c.id))}>🐎 To Stud</button>
+                    <span className="dim" style={{ fontSize: 11 }}>honoured</span>
                   </div>
                 )
               })}
@@ -687,42 +688,35 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
       {area === 'breeding' && (
         <div className="townmap">
           <div className="card loc">
-            <div className="loc-h"><span>🐎 Breeding Ranch</span><span className="dim">{game.frozen.length}/{game.studSlots} studs · upkeep {labUpkeepPerFrozen(game)}g/wk each{game.labTechLoan ? ' (at cost 🤝)' : ''}</span></div>
+            <div className="loc-h"><span>🐎 Breeding Ranch</span><span className="dim">{frozenPool.length} preserved at the Lab</span></div>
+            <div className="hint">Breeding stock lives in the 🧪 Lab freezer. Freeze a monster BEFORE its career ends — once it retires to the Hall of Fame the line is closed.</div>
             <div className="section-title">Breeding stock</div>
             <div className="labrows">
-              {game.frozen.length === 0 && <div className="dim">No studs yet — send a decorated monster here from the Hall of Fame.</div>}
-              {game.frozen.map((f) => (
+              {frozenPool.length === 0 && <div className="dim">Nothing preserved — freeze a monster at the Lab while it is still competing.</div>}
+              {frozenPool.map((f) => (
                 <div className="labrow" key={f.id}>
                   <Sprite species={f.species} size={28} stage="Retiree" />
                   <span className="bn">{f.name}{f.studBook ? ' 📕' : ''}</span>
                   <span className="dim">
-                    {f.species.name} · 🏅{f.podiums ?? 0} 🏆{f.champs ?? 0} · {BREED_MAX_CHILDREN - (f.breedCount ?? 0)} breed{BREED_MAX_CHILDREN - (f.breedCount ?? 0) === 1 ? '' : 's'} left
+                    {f.species.name} · 🏅{podiumsOf(f)} 🏆{champsOf(f)} · {BREED_MAX_CHILDREN - (f.breedCount ?? 0)} breed{BREED_MAX_CHILDREN - (f.breedCount ?? 0) === 1 ? '' : 's'} left
                     {f.studBook ? ` · stud +${studIncome(f)}g/wk` : ''}
                   </span>
                   {(game.studBooks ?? 0) > 0 && !f.studBook && (
-                    <button className="ghost" title="Assign a Stud Book — uncapped weekly fees from this legacy's record"
+                    <button className="ghost" title="Assign a Stud Book — weekly fees from this legacy's record"
                       onClick={() => setGame((g) => applyStudBook(g, f.id))}>📕 Stud</button>
                   )}
-                  <button className="ghost" title="Return to the Hall of Fame (ends its breeding run)"
-                    onClick={() => setGame((g) => thaw(g, f.id))}>Recall</button>
                 </div>
               ))}
             </div>
-            {studExpandCost(game) !== null && (
-              <button className="ghost" disabled={game.gold < (studExpandCost(game) ?? Infinity)}
-                onClick={() => setGame((g) => expandStud(g))}>
-                ➕ Expand stud farm · {studExpandCost(game)}g ({game.studSlots} → {game.studSlots + 1} slots)
-              </button>
-            )}
-            <div className="section-title">Breed (two studs parent a child)</div>
+            <div className="section-title">Breed (two preserved monsters parent a child)</div>
             <div className="fuserow">
               <select value={fuseA} onChange={(e) => setFuseA(e.target.value)}>
                 <option value="">— parent A (frame) —</option>
-                {game.frozen.filter((f) => (f.breedCount ?? 0) < BREED_MAX_CHILDREN).map((f) => <option key={f.id} value={f.id}>{f.name} ({f.species.name})</option>)}
+                {frozenPool.filter((f) => (f.breedCount ?? 0) < BREED_MAX_CHILDREN).map((f) => <option key={f.id} value={f.id}>{f.name} ({f.species.name})</option>)}
               </select>
               <select value={fuseB} onChange={(e) => setFuseB(e.target.value)}>
                 <option value="">— parent B (heritage) —</option>
-                {game.frozen.filter((f) => (f.breedCount ?? 0) < BREED_MAX_CHILDREN).map((f) => <option key={f.id} value={f.id}>{f.name} ({f.species.name})</option>)}
+                {frozenPool.filter((f) => (f.breedCount ?? 0) < BREED_MAX_CHILDREN).map((f) => <option key={f.id} value={f.id}>{f.name} ({f.species.name})</option>)}
               </select>
               <button
                 className="rankup"
@@ -733,12 +727,12 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
               </button>
             </div>
             {fuseA && fuseB && fuseA !== fuseB && (() => {
-              const a = game.frozen.find((f) => f.id === fuseA)!
-              const b = game.frozen.find((f) => f.id === fuseB)!
+              const a = frozenPool.find((f) => f.id === fuseA)!
+              const b = frozenPool.find((f) => f.id === fuseB)!
               const pot = breedPotentialV2(a, b)
               return <div className="hint">Child: {a.species.name} · Gen {Math.max(a.generation ?? 1, b.generation ?? 1) + 1} · potential ×{pot.toFixed(2)} {'★'.repeat(Math.max(0, Math.round((pot - 1) / 0.05)))}</div>
             })()}
-            <div className="hint">Each stud can parent {BREED_MAX_CHILDREN} children. Decorated parents pass on higher <b>potential</b>.</div>
+            <div className="hint">Each preserved monster can parent {BREED_MAX_CHILDREN} children. Decorated parents pass on higher <b>potential</b>.</div>
           </div>
         </div>
       )}
@@ -757,7 +751,12 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
           <div className="card loc">
             <div className="loc-h"><span>🧪 Lab · Freezer</span><span className="dim">{frozen.length}/{game.labSlots} slots</span></div>
             <div className="dim" style={{ marginBottom: 6 }}>
-              Freeze a monster to pause its aging, or <b>fuse</b> two into a brand-new species.
+              The freezer preserves a monster's genome — it is the <b>only</b> route to breeding
+              and fusion. Freeze it while it is still competing: once a career ends it retires to
+              the Hall of Fame and the line is closed.
+            </div>
+            <div className="hint">
+              ⚗️ Fusion pairs: Mammal + Reptilian → Saurian · Avian + Aquatic → Tempestine · Marsupial + Insectoid → Broodkin
             </div>
             {/* Freeze an active monster in */}
             <div className="section-title">Freeze into stasis</div>
@@ -2605,8 +2604,17 @@ function sanitizeAndMigrate(raw: string): GameState | null {
     if (typeof g.trainingGear !== 'object' || !g.trainingGear) g.trainingGear = {}
     if (typeof g.tonics !== 'number') g.tonics = 0
     if (typeof g.studBooks !== 'number') g.studBooks = 0
-    // v0.7: the breeding stud-farm capacity was renamed labCapacity → studSlots
-    if (typeof g.studSlots !== 'number') g.studSlots = (g as { labCapacity?: number }).labCapacity ?? Math.max(STUD_SLOTS_BASE, Array.isArray(g.frozen) ? g.frozen.length : 0)
+    // v0.77: the stud farm is gone — the Lab freezer is the single preservation
+    // store. Fold any banked studs into it (keeping breedCount/studBook) and give
+    // the Lab enough slots to hold them, so no save loses a bloodline.
+    if (Array.isArray(g.frozen) && g.frozen.length) {
+      const migrated = g.frozen.map((f: Frozen) => ({
+        ...careerFromFrozen(f, f.id), retired: true, breedCount: f.breedCount ?? 0, studBook: !!f.studBook,
+      }))
+      g.labFrozen = [...(Array.isArray(g.labFrozen) ? g.labFrozen : []), ...migrated]
+      g.labSlots = Math.max(g.labSlots ?? 2, g.labFrozen.length)
+      g.frozen = []
+    }
     if (typeof g.labTechLoan !== 'boolean') g.labTechLoan = false
     if (typeof g.extremeUnlocked !== 'boolean') g.extremeUnlocked = false
     // v0.7 Lab freezer (separate from the stud farm)
@@ -2641,7 +2649,7 @@ function migrateLegacySave() {
 }
 
 function slotSummary(g: GameState) {
-  const highestLeagueIdx = Math.max(0, ...g.stable.map((c) => c.licenseIndex), ...g.frozen.map((f) => f.licenseIndex))
+  const highestLeagueIdx = Math.max(0, ...g.stable.map((c) => c.licenseIndex), ...(g.labFrozen ?? []).map((f) => f.licenseIndex))
   return {
     trainerName: g.trainerName || 'Tamer',
     date: dateLabel(g.week),

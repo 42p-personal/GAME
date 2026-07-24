@@ -8,7 +8,27 @@ nudge a value gently, sim it, read the result, adjust again. The sim is the arbi
 `docs/BALANCING.md` for the working ledger. This applies to every economy/difficulty/
 progression number, always.
 
-## Current state (v0.77)
+## Current state (v0.78)
+
+**v0.78 — the Lab freezer is the single preservation mechanism.** The stud farm is
+**gone**. `breed()` and `fuse()` both draw from `labFrozen`, and `freezeToLab()` now
+**refuses retired monsters** — you must commit a monster to the freezer *before* its career
+ends. Let it age out and it retires to the Hall of Fame (honours only) and the line is
+closed. That is the core dynasty decision now: **freeze early** (bank the genome at peak,
+sacrifice the remaining competing years, occupy a limited Lab slot) **vs compete to the end**
+(full career, cups, trainer XP — but no bloodline). Stud Book moved onto lab-frozen monsters;
+`Career` gained `breedCount`/`studBook`. Old saves migrate their banked studs into the
+freezer with `labSlots` widened to fit, so no bloodline is lost.
+**Lab repriced** from luxury to core infrastructure: `LAB_SLOTS_BASE` 2→**3**, expansions
+400/800/1600→**250/500/900**, upkeep 5→**3g/wk** (lab-tech loan 3→2). The Lab UI now also
+lists the fusion pairs, which were previously invisible.
+**Result (25y × 3 seeds):** good player TE/Platinum/Gold, **6 breeds**, and **generation 3 on
+two of three seeds** — the deepest dynasties any sim has produced (previously always gen 2).
+More variable than the old retire→stud path; see `docs/BALANCING.md`.
+
+---
+
+## Prior state (v0.77)
 
 **v0.77 — economy correction + market systems + gen-1 caps.** The retiree **pension is
 gone** (it was 45% of all income, perpetual and cumulative); the Retirement Ranch is now the

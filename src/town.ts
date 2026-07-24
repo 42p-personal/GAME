@@ -386,7 +386,7 @@ export interface GameState {
   week: number // the global calendar — one clock for market, tournaments, and stable
   stable: Career[]
   activeId: string
-  frozen: Frozen[]
+  frozen?: Frozen[] // LEGACY (pre-v0.77 stud farm) — migrated into labFrozen on load
   barnCapacity: number
   pantryContract: boolean // Ranch Shop: 20% off NORMAL foods
   grandLarder: boolean // Ranch Shop: 20% off PREMIUM foods (training + fruits + truffle)
@@ -429,7 +429,7 @@ export interface GameState {
   trainingGear: Partial<Record<Stat, number>> // peddler gear tier owned per stat (0-5, +5% training each)
   tonics: number // Elder Tonics in inventory (use on a monster: +2mo career span)
   studBooks: number // Stud Books in inventory (assign to a frozen legacy: uncapped stud income)
-  studSlots: number // Breeding Ranch stud-farm slots (base 2, expandable)
+  studSlots?: number // LEGACY (pre-v0.77) — the Lab's labSlots is now the only capacity
   labTechLoan: boolean // lab-tech loan event taken → freeze upkeep 5→3g/wk
   extremeUnlocked: boolean // Extreme Training Manual bought → extreme drill row open
   // Lab freezer (v0.7, FUSION_DESIGN.md) — SEPARATE from the breeding stud farm.
@@ -477,7 +477,11 @@ export function visibleLeagueCount(g: GameState): number {
 }
 
 // --- Economy constants (§13.3) ---
-export const RENTAL_PER_FROZEN = 5 // weekly upkeep per frozen genome (8→5 in v0.6; lab-tech loan lowers to 3)
+// Weekly upkeep per preserved monster. 8→5 (v0.6) →3 (v0.77): the Lab stopped
+// being a luxury parking bay and became the ONLY route to breeding and fusion,
+// so it can no longer be priced like an optional extra. The lab-tech loan takes
+// it to 2.
+export const RENTAL_PER_FROZEN = 3
 export const MARKET_BASE = 150 // base monster price; fluctuates ±60%
 export const PANTRY_CONTRACT_COST = 400 // Ranch Shop: 20% off normal foods
 export const GRAND_LARDER_COST = 1500 // Ranch Shop: 20% off premium foods — a serious late-game investment
@@ -500,7 +504,6 @@ export function newGame(seed = 'start', opts?: { trainerName?: string; tutorialE
     week: 0,
     stable: [],
     activeId: '',
-    frozen: [],
     barnCapacity: START_BARN,
     pantryContract: false,
     grandLarder: false,
@@ -532,7 +535,6 @@ export function newGame(seed = 'start', opts?: { trainerName?: string; tutorialE
     trainingGear: {},
     tonics: 0,
     studBooks: 0,
-    studSlots: STUD_SLOTS_BASE,
     labTechLoan: false,
     extremeUnlocked: false,
     labFrozen: [],
@@ -609,12 +611,18 @@ export function useTonic(g: GameState, careerId: string): GameState {
 export const STUDBOOK_COST = 750
 export function applyStudBook(g: GameState, frozenId: string): GameState {
   if ((g.studBooks ?? 0) < 1) return g
-  const fr = g.frozen.find((x) => x.id === frozenId)
+  const fr = (g.labFrozen ?? []).find((x) => x.id === frozenId)
   if (!fr || fr.studBook) return g
-  return { ...g, studBooks: g.studBooks - 1, frozen: g.frozen.map((x) => (x.id === frozenId ? { ...x, studBook: true } : x)) }
+  return { ...g, studBooks: g.studBooks - 1, labFrozen: g.labFrozen.map((x) => (x.id === frozenId ? { ...x, studBook: true } : x)) }
 }
-export const studIncome = (fr: { podiums?: number; champs?: number; studBook?: boolean }): number =>
-  fr.studBook ? (fr.podiums ?? 0) * 1 + (fr.champs ?? 0) * 3 : 0
+// Podium/championship record, read straight off a preserved career.
+export const podiumsOf = (c: Career): number => c.tournamentHistory.filter((h) => h.placement <= 3).length
+export const champsOf = (c: Career): number => c.tournamentHistory.filter((h) => h.placement === 1).length
+export const studIncome = (c: { studBook?: boolean; tournamentHistory?: { placement: number }[] }): number => {
+  if (!c.studBook || !c.tournamentHistory) return 0
+  const h = c.tournamentHistory
+  return h.filter((x) => x.placement <= 3).length + h.filter((x) => x.placement === 1).length * 3
+}
 // v0.77: the retiree PENSION is gone. It was the single largest income in the
 // game — a perpetual, uncapped, per-retiree weekly payment that only ever grew
 // (retirees never leave), worth ~45% of a 25-year run's gross gold while cup
@@ -625,33 +633,29 @@ export const studIncome = (fr: { podiums?: number; champs?: number; studBook?: b
 export const EXTREME_MANUAL_COST = 1200
 export const buyExtremeManual = (g: GameState): GameState =>
   g.extremeUnlocked || g.gold < EXTREME_MANUAL_COST ? g : { ...g, gold: g.gold - EXTREME_MANUAL_COST, extremeUnlocked: true }
-// Lab: limited genome slots (curation, not hoarding) + expandable.
-export const STUD_SLOTS_BASE = 2
-export const STUD_EXPAND_COSTS = [400, 800, 1600]
-export const studExpandCost = (g: GameState): number | null => STUD_EXPAND_COSTS[g.studSlots - STUD_SLOTS_BASE] ?? null
-export function expandStud(g: GameState): GameState {
-  const cost = studExpandCost(g)
-  if (cost === null || g.gold < cost) return g
-  return { ...g, gold: g.gold - cost, studSlots: g.studSlots + 1 }
-}
-export const labUpkeepPerFrozen = (g: GameState): number => (g.labTechLoan ? 3 : RENTAL_PER_FROZEN)
-// Breeding (v0.6, SEPARATE from fusion): two frozen legacies parent a child —
-// parents preserved, each legacy good for at most 2 children. The child gets
-// potential (avg +10% + championship-bloodline bonus, cap 1.5), a ~20% stat
-// head start, parent B's major as a heritage stat (+10% train speed), and a
-// generation tag. Fusion (chunk B) will be transformation, not lineage.
+export const LAB_LOAN_UPKEEP = 2
+export const labUpkeepPerFrozen = (g: GameState): number => (g.labTechLoan ? LAB_LOAN_UPKEEP : RENTAL_PER_FROZEN)
+// Breeding (v0.6, SEPARATE from fusion): two PRESERVED monsters parent a child —
+// parents preserved, each good for at most 2 children. The child gets potential
+// (avg +10% + championship-bloodline bonus, cap 1.5), a stat head start, parent
+// B's major as a heritage stat (+10% train speed), and a generation tag.
+//
+// v0.77: breeding stock now comes from the LAB FREEZER, not a separate stud farm.
+// The Lab is the single preservation mechanism — you must FREEZE a monster you
+// intend to breed (or fuse) BEFORE it ages out. Let it retire and the genome is
+// gone: the Hall of Fame is honours only. That's the real cost of a dynasty.
 export const BREED_COST = 300
 export const BREED_MAX_CHILDREN = 2
 export const BREED_POTENTIAL_STEP = 0.10
 export const BREED_HEAD_START = 0.45 // fraction of parents' avg stats a child hatches with (0.35→0.45 v0.72: stronger bred monsters, shorter climb per generation)
-export function breedPotentialV2(a: Frozen, b: Frozen): number {
-  const champBonus = Math.min(0.08, Math.floor(((a.champs ?? 0) + (b.champs ?? 0)) / 2) * 0.01)
+export function breedPotentialV2(a: Career, b: Career): number {
+  const champBonus = Math.min(0.08, Math.floor((champsOf(a) + champsOf(b)) / 2) * 0.01)
   return Math.min(MAX_POTENTIAL, Math.round((((a.potential ?? 1) + (b.potential ?? 1)) / 2 + BREED_POTENTIAL_STEP + champBonus) * 100) / 100)
 }
 export function breed(g: GameState, aId: string, bId: string): GameState {
   if (aId === bId || g.gold < BREED_COST || barnFull(g)) return g
-  const a = g.frozen.find((x) => x.id === aId)
-  const b = g.frozen.find((x) => x.id === bId)
+  const a = (g.labFrozen ?? []).find((x) => x.id === aId)
+  const b = (g.labFrozen ?? []).find((x) => x.id === bId)
   if (!a || !b || (a.breedCount ?? 0) >= BREED_MAX_CHILDREN || (b.breedCount ?? 0) >= BREED_MAX_CHILDREN) return g
   const potential = breedPotentialV2(a, b)
   const generation = Math.max(a.generation ?? 1, b.generation ?? 1) + 1
@@ -672,7 +676,7 @@ export function breed(g: GameState, aId: string, bId: string): GameState {
     ...g,
     gold: g.gold - BREED_COST,
     stable: [...g.stable, baby],
-    frozen: g.frozen.map((x) => (x.id === aId || x.id === bId ? { ...x, breedCount: (x.breedCount ?? 0) + 1 } : x)),
+    labFrozen: g.labFrozen.map((x) => (x.id === aId || x.id === bId ? { ...x, breedCount: (x.breedCount ?? 0) + 1 } : x)),
     nextId: g.nextId + 1,
   }
 }
@@ -680,8 +684,10 @@ export function breed(g: GameState, aId: string, bId: string): GameState {
 // --- LAB FREEZER (v0.7, FUSION_DESIGN.md) — separate from the breeding stud farm.
 // A stasis freezer: park a monster (aging paused) until you can afford an Elder
 // Tonic, or FUSE two into a brand-new fusion species. Slots expand from the shop.
-export const LAB_SLOTS_BASE = 2
-export const LAB_EXPAND_COSTS = [400, 800, 1600]
+// 2→3 (v0.77): two slots is exactly one breeding pair, so a second bloodline
+// used to demand a 400g expansion immediately. Three lets a dynasty breathe.
+export const LAB_SLOTS_BASE = 3
+export const LAB_EXPAND_COSTS = [250, 500, 900] // was 400/800/1600 — this is the dynasty bottleneck now
 export const labExpandCost = (g: GameState): number | null => LAB_EXPAND_COSTS[(g.labSlots ?? LAB_SLOTS_BASE) - LAB_SLOTS_BASE] ?? null
 export function expandLab(g: GameState): GameState {
   const cost = labExpandCost(g)
@@ -691,7 +697,9 @@ export function expandLab(g: GameState): GameState {
 // Freeze an ACTIVE monster into stasis (removed from the stable; ages paused).
 export function freezeToLab(g: GameState, id: string): GameState {
   const c = g.stable.find((x) => x.id === id)
-  if (!c || (g.labFrozen?.length ?? 0) >= (g.labSlots ?? LAB_SLOTS_BASE)) return g
+  // v0.77: a RETIRED monster can no longer be preserved — the window closes when
+  // its career ends. Commit before it ages out, or it is honours only.
+  if (!c || c.retired || (g.labFrozen?.length ?? 0) >= (g.labSlots ?? LAB_SLOTS_BASE)) return g
   const stable = g.stable.filter((x) => x.id !== id)
   const activeId = g.activeId === id ? stable.find((x) => !x.retired)?.id ?? stable[0]?.id ?? '' : g.activeId
   return { ...g, stable, labFrozen: [...(g.labFrozen ?? []), { ...c, log: [...c.log, '🧊 Frozen in stasis at the Lab.'] }], activeId }
@@ -1360,13 +1368,13 @@ export const EVENTS: GameEvent[] = [
     // Lab tech loan: once per save, needs a frozen genome — cheaper upkeep forever.
     id: 'labtech',
     scope: 'global',
-    weight: (g) => (g.frozen.length >= 1 && !g.labTechLoan ? 2 : 0),
+    weight: (g) => ((g.labFrozen?.length ?? 0) >= 1 && !g.labTechLoan ? 2 : 0),
     title: '🧬 The Lab Tech’s Favour',
     body: () => 'The lab technician looks sheepish. "Cash-flow trouble. Lend me 300g and I’ll keep your freezers running at cost — permanently."',
     choices: [
       {
         label: 'Lend the 300g',
-        note: () => `freeze upkeep ${RENTAL_PER_FROZEN}g → 3g/wk, forever`,
+        note: () => `freeze upkeep ${RENTAL_PER_FROZEN}g → ${LAB_LOAN_UPKEEP}g/wk, forever`,
         cost: () => 300,
         apply: (g) => ({ ...g, gold: g.gold - 300, labTechLoan: true }),
       },
@@ -1496,7 +1504,7 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
   // regardless of what the stored plan says (the UI locks it too).
   const competing = new Set([...(g.pendingTournament?.monsterIds ?? []), ...(g.pendingTrial?.monsterIds ?? [])])
   let gold = g.gold
-  let rentalDue = g.frozen.length * labUpkeepPerFrozen(g)
+  let rentalDue = (g.labFrozen?.length ?? 0) * labUpkeepPerFrozen(g)
   const stable = g.stable.map((c) => {
     if (c.retired) return ageOneWeek(c)
     // A monster with NO plan rests by default — this is what the UI has always
@@ -1530,7 +1538,7 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
   // Stud income (v0.6): a Stud Book turns a frozen champion's record into
   // weekly fees. (The retiree pension was removed in v0.77 — see pensionFor's
   // former home above.)
-  const studGold = g.frozen.reduce((s, fr) => s + studIncome(fr), 0)
+  const studGold = (g.labFrozen ?? []).reduce((s, fr) => s + studIncome(fr), 0)
   // Trainer stipend (v0.71, capped v0.77): a small weekly sponsorship that grows
   // with the trainer's level and then FLATTENS — it's a floor under a bad run,
   // not a career income.
@@ -2205,47 +2213,12 @@ export function healAtInfirmary(g: GameState, id: string): GameState {
 // competing years end before its genome enters the bank. Capacity-limited
 // (the bank is a curated collection). Decoration is captured for stud income
 // and championship-bloodline breeding bonuses.
-export function freeze(g: GameState, id: string): GameState {
-  const c = g.stable.find((x) => x.id === id)
-  if (!c || !c.retired) return g
-  if (g.frozen.length >= (g.studSlots ?? STUD_SLOTS_BASE)) return g
-  const fr: Frozen = {
-    id: c.id, name: c.name, species: c.species, sex: c.sex,
-    stats: { ...c.stats }, favouriteFood: c.favouriteFood, hatedFood: c.hatedFood,
-    licenseIndex: c.licenseIndex, potential: c.potential,
-    podiums: c.tournamentHistory.filter((h) => h.placement <= 3).length,
-    champs: c.tournamentHistory.filter((h) => h.placement === 1).length,
-    breedCount: 0, generation: c.generation ?? 1,
-  }
-  const stable = g.stable.filter((x) => x.id !== id)
-  const activeId = g.activeId === id ? stable[0]?.id ?? '' : g.activeId
-  return { ...g, stable, frozen: [...g.frozen, fr], activeId }
-}
 
-export function thaw(g: GameState, fid: string): GameState {
-  // Returns as a RETIREE — the Hall of Fame is unlimited, so no barn check.
-  const fr = g.frozen.find((x) => x.id === fid)
-  if (!fr) return g
-  // v0.6: freeze holds FINISHED careers, so thaw un-banks the retiree as a
-  // retiree — not a rejuvenated Teen (that was the old mid-career freeze model,
-  // now an exploit). They return to the Hall of Fame as plain retirees (breeding
-  // decoration stays in the Frozen record until thawed).
-  const c = {
-    ...careerFromFrozen(fr, fr.id), licenseIndex: g.licenseIndex,
-    retired: true, ageWeeks: fr.species.lifespan * WEEKS_PER_YEAR,
-    comfortWeeks: comfortWeeksFor(g), wildCap: wildCapFor(g), generation: fr.generation ?? 1,
-  }
-  return {
-    ...g,
-    stable: [...g.stable, c],
-    frozen: g.frozen.filter((x) => x.id !== fid),
-    activeId: g.activeId || c.id,
-  }
-}
 
 export const fusionRoom = (g: GameState): boolean => !barnFull(g)
 
-function careerFromFrozen(fr: Frozen, id: string): Career {
+// Kept for the v0.77 save migration: rebuild a Career from a legacy stud record.
+export function careerFromFrozen(fr: Frozen, id: string): Career {
   // Restore a raising shell from a banked genome, preserving stats + league. The
   // monster returns at Teen age (its prior calendar position isn't banked).
   const c = newCareer(fr.id, { id, stats: fr.stats, licenseIndex: fr.licenseIndex, potential: fr.potential })
