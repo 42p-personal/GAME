@@ -7,7 +7,7 @@
 // log for the detailed narration either way.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { BattleEvent, BattleResult, BattleSide } from './battle'
-import { Channel, Element, Monster, StatusKind, frontRowCount } from './core'
+import { Channel, Element, Monster, Move, StatusKind, frontRowCount } from './core'
 import { maxHp, maxMana } from './monster'
 import { analyzeBattle } from './battleReport'
 import { Sprite } from './Sprite'
@@ -46,11 +46,57 @@ type Bars = Record<string, BarState> // keyed by `${side}${slot}`
 // Element always wins over channel when a move has one (INT's elemental
 // kit, plus the handful of STR/DEX moves with an element), since the
 // element is the more specific, more recognizable identity.
-type FxKind = 'claw' | 'arrow' | 'fireball' | 'waterbolt' | 'earthspike' | 'lightning' | 'sonic' | 'psychic' | 'arcane'
+// Base motions. The first nine are the original channel/element kit; the rest
+// (v0.80) are BESPOKE motions hand-assigned to distinctive moves via BESPOKE_KIND
+// below — the "hybrid" the design calls for: shared bases for moves that
+// legitimately look alike (every fireball, every arrow), bespoke motions for the
+// ones that deserve a signature.
+type FxKind =
+  | 'claw' | 'arrow' | 'fireball' | 'waterbolt' | 'earthspike' | 'lightning' | 'sonic' | 'psychic' | 'arcane'
+  | 'slam' | 'guillotine' | 'flurry' | 'beam' | 'volley' | 'chain' | 'cage' | 'firewall' | 'notes'
 type FxStruct = 'lunge' | 'proj' | 'burst' | 'stance'
+// Composite overlays — layered on top of ANY base so the effect a move HAS reads
+// at a glance, on moves that otherwise share a base. Driven off the resolved
+// Move's effects + the event, so no per-move authoring.
+type Overlay =
+  | 'exec' | 'tether' | 'manaburn' | 'crater'
+  | 'shield' | 'thorns' | 'heal' | 'cleanse'
+  | 'aura-atk' | 'aura-def' | 'aura-dodge' | 'aura-regen'
 interface Fx {
   id: number; side: BattleSide; slot: number; struct: FxStruct; kind?: FxKind; color?: string
   targetSide?: BattleSide; targetSlot?: number; crit?: boolean
+  overlays?: Overlay[]; status?: StatusKind
+}
+
+// Bespoke base motion per move NAME (the acting Move is resolved from the
+// monster's loadout, so names are unique within a fight). Moves not listed fall
+// through to the channel/element base in fxFor — that's the hybrid.
+const BESPOKE_KIND: Record<string, FxKind> = {
+  // Heavy overhead impacts — crater + screen shake.
+  'Power Strike': 'slam', 'Reckless Slam': 'slam', 'Titanfall': 'slam', 'Shell Slam': 'slam',
+  'Body Slam': 'slam', 'Colossus Crash': 'slam', 'Earthshaker': 'slam', 'World Ender': 'slam',
+  // Decisive finishing drop.
+  'Executioner': 'guillotine', 'Showstopper': 'guillotine',
+  // Rapid repeated strikes.
+  'Flurry of Blows': 'flurry', 'Bloodletter': 'flurry', 'Twin Fangs': 'flurry', 'Shadow Barrage': 'flurry',
+  // Instant piercing line.
+  'Snipe': 'beam', 'Deadeye': 'beam', 'Pin Down': 'beam', 'Stone Spear': 'beam', 'Void Lance': 'beam',
+  // Arced rain of many projectiles.
+  'Rain of Arrows': 'volley', 'Needle Storm': 'volley',
+  // Arcing bolt that jumps.
+  'Static Chain': 'chain',
+  // Encasing prison.
+  'Glacial Prison': 'cage', 'Deep Freeze': 'cage',
+  // Engulfing flame.
+  'Inferno': 'firewall',
+  // Musical notes (song buffs).
+  'Rallying Song': 'notes', 'Battle Hymn': 'notes', 'Standing Ovation': 'notes',
+  'Lullaby': 'notes', 'Crescendo': 'notes',
+}
+// Which struct a bespoke kind travels with.
+const KIND_STRUCT: Partial<Record<FxKind, FxStruct>> = {
+  slam: 'lunge', guillotine: 'burst', flurry: 'lunge', beam: 'burst', volley: 'burst',
+  chain: 'burst', cage: 'burst', firewall: 'burst', notes: 'stance',
 }
 
 function fxFor(channel: Channel, element?: Element): { struct: FxStruct; kind: FxKind; color: string } {
@@ -65,6 +111,40 @@ function fxFor(channel: Channel, element?: Element): { struct: FxStruct; kind: F
   return { struct: 'proj', kind: 'arcane', color: CHANNEL_COLOR.magic } // INT's non-elemental kit (Void Lance, Mana Leech, Arcane Overload)
 }
 
+// The full visual for a damaging move: bespoke base if one is assigned (its own
+// struct), else the channel/element base; plus overlays derived from the move
+// and the event.
+function fxForMove(
+  move: Move | undefined, channel: Channel, element: Element | undefined,
+  e: { execute?: boolean; lifesteal?: number; manaBurn?: number; crit?: boolean },
+): { struct: FxStruct; kind: FxKind; color: string; overlays: Overlay[] } {
+  const base = fxFor(channel, element)
+  const bespoke = move && BESPOKE_KIND[move.name]
+  const kind = bespoke ?? base.kind
+  const struct = bespoke ? (KIND_STRUCT[bespoke] ?? base.struct) : base.struct
+  const overlays: Overlay[] = []
+  if (e.execute) overlays.push('exec')
+  if ((e.lifesteal ?? 0) > 0) overlays.push('tether')
+  if ((e.manaBurn ?? 0) > 0) overlays.push('manaburn')
+  if (kind === 'slam' || e.crit) overlays.push('crater')
+  return { struct, kind, color: base.color, overlays }
+}
+
+// The visual for a non-damaging (buff/debuff) move — an aura on the caster or a
+// tell on the target, from the move's effects.
+function utilityFx(move: Move | undefined): { overlays: Overlay[]; color: string } {
+  const fx = move?.effects
+  const overlays: Overlay[] = []
+  if (fx?.ward || fx?.guard || fx?.defBuff) overlays.push('shield')
+  if (fx?.thorns) overlays.push('thorns')
+  if (fx?.cleanse) overlays.push('cleanse')
+  if (fx?.atkBuff) overlays.push('aura-atk')
+  if (fx?.dodgeBuff) overlays.push('aura-dodge')
+  if (fx?.regenBuff || fx?.hpRegenBuff) overlays.push('aura-regen')
+  if (!overlays.length) overlays.push('aura-def') // generic self-buff glow
+  return { overlays, color: CHANNEL_COLOR.support }
+}
+
 const barKey = (side: BattleSide, slot: number) => `${side}${slot}`
 // Fixed 1v1 stage coordinates: the target position an effect travels to /
 // erupts at, given which side is attacking (mirrors projA/projB's endpoints).
@@ -75,40 +155,108 @@ const targetX1v1 = (attackerSide: BattleSide) => (attackerSide === 'A' ? { left:
 // directly on the target as the attacker bumps in; 'burst' kinds appear at
 // the target with no travel time at all (a spike erupting from the ground
 // reads wrong if it "flies" there).
+// A claw rake used by both `claw` and the bespoke `flurry` (flurry just repeats
+// faster + more strokes, driven by a CSS class).
+function ClawFx({ fx, extra }: { fx: Fx; extra?: string }) {
+  return (
+    <div key={fx.id} className={`claw-fx ${extra ?? ''}`} style={targetX1v1(fx.side)}>
+      <svg viewBox="0 0 64 64">
+        <path className="claw-slash claw-1" d="M10 16 L42 48" />
+        <path className="claw-slash claw-2" d="M18 8 L50 40" />
+        <path className="claw-slash claw-3" d="M26 2 L58 34" />
+      </svg>
+    </div>
+  )
+}
+
+// The self/target overlays that ride on top of a base motion. `self` overlays
+// (auras, shields) anchor on the caster; target overlays (exec flash, mana
+// burn, tether) anchor over the target.
+function Overlays({ fx }: { fx: Fx }) {
+  if (!fx.overlays?.length) return null
+  const selfPos = targetX1v1(fx.side === 'A' ? 'B' : 'A') // caster is the "other" end of the target axis
+  const tgtPos = targetX1v1(fx.side)
+  return (
+    <>
+      {fx.overlays.map((o, i) => {
+        switch (o) {
+          case 'crater': return <div key={i} className="ov-crater" style={tgtPos} />
+          case 'exec': return <div key={i} className="ov-exec" style={tgtPos} />
+          case 'manaburn': return <div key={i} className="ov-manaburn" style={tgtPos} />
+          case 'tether': return <div key={i} className={`ov-tether ${fx.side === 'A' ? 'tetherA' : 'tetherB'}`} />
+          case 'shield': return <div key={i} className="ov-shield" style={selfPos} />
+          case 'thorns': return <div key={i} className="ov-thorns" style={selfPos} />
+          case 'heal': return <div key={i} className="ov-heal" style={selfPos} />
+          case 'cleanse': return <div key={i} className="ov-cleanse" style={selfPos} />
+          case 'aura-atk': return <div key={i} className="ov-aura ov-aura-atk" style={selfPos} />
+          case 'aura-def': return <div key={i} className="ov-aura ov-aura-def" style={selfPos} />
+          case 'aura-dodge': return <div key={i} className="ov-aura ov-aura-dodge" style={selfPos} />
+          case 'aura-regen': return <div key={i} className="ov-aura ov-aura-regen" style={selfPos} />
+          default: return null
+        }
+      })}
+    </>
+  )
+}
+
 function MoveFx({ fx }: { fx: Fx }) {
-  if (fx.struct === 'proj') {
-    return <i key={fx.id} className={`proj proj-${fx.kind} ${fx.side === 'A' ? 'projA' : 'projB'}`} style={{ background: fx.color, color: fx.color }} />
-  }
   const pos = targetX1v1(fx.side)
-  if (fx.struct === 'lunge' && fx.kind === 'claw') {
-    return (
-      <div key={fx.id} className="claw-fx" style={pos}>
-        <svg viewBox="0 0 64 64">
-          <path className="claw-slash claw-1" d="M10 16 L42 48" />
-          <path className="claw-slash claw-2" d="M18 8 L50 40" />
-          <path className="claw-slash claw-3" d="M26 2 L58 34" />
+  // Status landing — a themed icon puff over the afflicted monster.
+  if (fx.struct === 'burst' && fx.status) {
+    return <div key={fx.id} className="status-puff" style={pos}>{STATUS_ICON[fx.status]}</div>
+  }
+
+  let base: JSX.Element | null = null
+  if (fx.struct === 'proj') {
+    base = <i key={fx.id} className={`proj proj-${fx.kind} ${fx.side === 'A' ? 'projA' : 'projB'}`} style={{ background: fx.color, color: fx.color }} />
+  } else if (fx.kind === 'claw') {
+    base = <ClawFx fx={fx} />
+  } else if (fx.kind === 'flurry') {
+    base = <ClawFx fx={fx} extra="claw-flurry" />
+  } else if (fx.kind === 'slam') {
+    base = <div key={fx.id} className="slam-fx" style={pos}><div className="slam-mark" /></div>
+  } else if (fx.kind === 'guillotine') {
+    base = <div key={fx.id} className="guillotine-fx" style={pos}><div className="guillotine-blade" /></div>
+  } else if (fx.kind === 'beam') {
+    base = <div key={fx.id} className={`beam-fx ${fx.side === 'A' ? 'beamA' : 'beamB'}`} style={{ background: fx.color, color: fx.color }} />
+  } else if (fx.kind === 'volley') {
+    base = <div key={fx.id} className="volley-fx" style={pos}>{[0, 1, 2, 3, 4].map((n) => <i key={n} className="volley-arrow" style={{ animationDelay: `${n * 60}ms` }} />)}</div>
+  } else if (fx.kind === 'chain') {
+    base = (
+      <div key={fx.id} className="lightning-fx chain-fx" style={pos}>
+        <svg viewBox="0 0 20 200" className="lightning-bolt" preserveAspectRatio="none">
+          <polyline points="10,0 4,80 12,90 2,170 10,200 6,140 14,130 8,50 16,40" fill="none" stroke="#b3e5fc" strokeWidth="3" />
         </svg>
       </div>
     )
-  }
-  if (fx.struct === 'burst') {
-    if (fx.kind === 'earthspike') return <div key={fx.id} className="burst-fx" style={pos}><div className="earthspike-fx" /></div>
-    if (fx.kind === 'lightning') return (
+  } else if (fx.kind === 'cage') {
+    base = <div key={fx.id} className="cage-fx" style={pos}>{[0, 1, 2, 3].map((n) => <i key={n} className="cage-bar" style={{ left: `${12 + n * 22}%` }} />)}</div>
+  } else if (fx.kind === 'firewall') {
+    base = <div key={fx.id} className="firewall-fx" style={pos} />
+  } else if (fx.kind === 'notes') {
+    base = <div key={fx.id} className="notes-fx" style={targetX1v1(fx.side === 'A' ? 'B' : 'A')}>{['♪', '♫', '♩'].map((c, n) => <span key={n} className="note" style={{ animationDelay: `${n * 120}ms` }}>{c}</span>)}</div>
+  } else if (fx.kind === 'earthspike') {
+    base = <div key={fx.id} className="burst-fx" style={pos}><div className="earthspike-fx" /></div>
+  } else if (fx.kind === 'lightning') {
+    base = (
       <div key={fx.id} className="lightning-fx" style={pos}>
         <svg viewBox="0 0 20 200" className="lightning-bolt" preserveAspectRatio="none">
           <polyline points="10,0 4,80 12,90 2,170 10,200 6,140 14,130 8,50 16,40" fill="none" stroke="#fff59d" strokeWidth="3" />
         </svg>
       </div>
     )
-    if (fx.kind === 'sonic') return (
+  } else if (fx.kind === 'sonic') {
+    base = (
       <div key={fx.id} className="sonic-anchor" style={pos}>
         <div className="sonic-fx sonic-ring1" />
         <div className="sonic-fx sonic-ring2" />
       </div>
     )
-    if (fx.kind === 'psychic') return <div key={fx.id} className="psychic-fx" style={pos} />
+  } else if (fx.kind === 'psychic') {
+    base = <div key={fx.id} className="psychic-fx" style={pos} />
   }
-  return null
+
+  return <>{base}<Overlays fx={fx} /></>
 }
 
 export function ArenaBattle({ teamA, teamB, result, league, playerSide, onDone }: { teamA: Monster[]; teamB: Monster[]; result: BattleResult; league?: string; playerSide?: BattleSide; onDone?: () => void }) {
@@ -134,6 +282,11 @@ export function ArenaBattle({ teamA, teamB, result, league, playerSide, onDone }
   const done = idx >= events.length
   const teamOf = (side: BattleSide) => (side === 'A' ? teamA : teamB)
   const nameOf = (side: BattleSide, slot: number) => teamOf(side)[slot]?.name ?? '?'
+  // The acting Move, recovered from the caster's loadout by name (names are
+  // unique within one monster's loadout) — gives the full effects/element so
+  // animations can be move-specific without the event carrying the move object.
+  const moveOf = (side: BattleSide, slot: number, name: string): Move | undefined =>
+    teamOf(side)[slot]?.loadout.find((m) => m.name === name)
 
   // Turn-by-turn log: every event's caption accumulates below the fight as it
   // plays (skip fills in the rest), so the replay never spoils itself.
@@ -200,8 +353,9 @@ export function ArenaBattle({ teamA, teamB, result, league, playerSide, onDone }
         return 30
       case 'hit': {
         const id = ++counter.current
-        const { struct, kind, color } = fxFor(e.channel, e.element)
-        setFx({ id, side: e.side, slot: e.slot, struct, kind, color, targetSide: e.targetSide, targetSlot: e.targetSlot, crit: e.crit })
+        const mv = moveOf(e.side, e.slot, e.move)
+        const { struct, kind, color, overlays } = fxForMove(mv, e.channel, e.element, e)
+        setFx({ id, side: e.side, slot: e.slot, struct, kind, color, overlays, targetSide: e.targetSide, targetSlot: e.targetSlot, crit: e.crit })
         addFloat(e.targetSide, e.targetSlot, `-${e.dmg}`, 'dmg')
         if (e.warded > 0) addFloat(e.targetSide, e.targetSlot, `🛡 ${e.warded}`, 'info')
         if (e.lifesteal > 0) addFloat(e.side, e.slot, `+${e.lifesteal}`, 'heal')
@@ -221,11 +375,23 @@ export function ArenaBattle({ teamA, teamB, result, league, playerSide, onDone }
         setFx({ id: ++counter.current, side: e.side, slot: e.slot, struct: 'stance' })
         addFloat(e.side, e.slot, '🛡', 'info')
         return 550
-      case 'utility':
+      case 'utility': {
+        const mv = moveOf(e.side, e.slot, e.move)
+        const bespoke = mv && BESPOKE_KIND[mv.name] // e.g. song buffs → floating notes
+        if (bespoke) {
+          setFx({ id: ++counter.current, side: e.side, slot: e.slot, struct: KIND_STRUCT[bespoke] ?? 'stance', kind: bespoke, color: CHANNEL_COLOR.support })
+        } else {
+          const { overlays } = utilityFx(mv)
+          setFx({ id: ++counter.current, side: e.side, slot: e.slot, struct: 'stance', overlays: e.heal > 0 ? ['heal'] : overlays, targetSide: e.targetSide, targetSlot: e.targetSlot })
+        }
         if (e.heal > 0) addFloat(e.targetSide, e.targetSlot, `+${e.heal}`, 'heal')
         else addFloat(e.side, e.slot, `✨ ${e.move}`, 'info')
         return 620
+      }
       case 'status':
+        // side is the OPPOSITE of the afflicted monster so targetX1v1() places
+        // the puff over the afflicted one (targetX1v1 returns the DEFENDER's spot).
+        setFx({ id: ++counter.current, side: e.side === 'A' ? 'B' : 'A', slot: e.slot, struct: 'burst', status: e.status })
         addFloat(e.side, e.slot, `${STATUS_ICON[e.status]} ${e.status}`, 'info')
         return 520
       case 'dot':

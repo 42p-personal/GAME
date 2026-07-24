@@ -760,3 +760,92 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
   background: linear-gradient(180deg, rgba(243,245,250,.82) 0%, rgba(243,245,250,.90) 55%, rgba(243,245,250,.95) 100%);
 }
 @media (prefers-reduced-motion: reduce) { .areabg { transition: none; } }
+
+/* ============================================================================
+   Per-move animation kit (v0.80) — bespoke base motions + composite overlays.
+   Anchored on the 1v1 stage; `left` comes from targetX1v1() inline, these
+   supply position/size/keyframes. z tiers: base 2-5, overlays 6, status puff 7.
+   ============================================================================ */
+
+/* slam — heavy overhead crash on the target, with a shock ring. */
+.slam-fx { position: absolute; top: 50%; width: 80px; height: 80px; margin: -40px 0 0 -40px; z-index: 5; pointer-events: none; }
+.slam-mark { position: absolute; inset: 0; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,241,176,.95) 0%, rgba(239,83,80,.5) 45%, transparent 70%);
+  animation: slamHit .5s cubic-bezier(.2,.9,.3,1) forwards; }
+@keyframes slamHit { 0% { transform: scale(.2); opacity: 0; } 25% { opacity: 1; } 55% { transform: scale(1.25); } 100% { transform: scale(1.5); opacity: 0; } }
+
+/* guillotine — a blade drops decisively through the target. */
+.guillotine-fx { position: absolute; top: 50%; width: 60px; height: 96px; margin: -70px 0 0 -30px; z-index: 5; pointer-events: none; }
+.guillotine-blade { position: absolute; left: 50%; top: 0; width: 8px; height: 60px; margin-left: -4px;
+  background: linear-gradient(180deg, #eceff1, #90a4ae); box-shadow: 0 0 8px #fff, 0 0 3px #b0bec5;
+  clip-path: polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%); transform-origin: top center; animation: guillotineDrop .45s cubic-bezier(.7,0,.9,.2) forwards; }
+@keyframes guillotineDrop { 0% { transform: translateY(-30px) scaleY(.6); opacity: 0; } 30% { opacity: 1; transform: translateY(-30px) scaleY(1); } 60% { transform: translateY(40px) scaleY(1.1); } 100% { transform: translateY(40px); opacity: 0; } }
+
+/* beam — an instant piercing line from caster to target. */
+.beam-fx { position: absolute; top: 50%; height: 4px; margin-top: -2px; z-index: 4; pointer-events: none; border-radius: 2px; box-shadow: 0 0 8px 2px currentColor; }
+.beam-fx.beamA { left: 17%; width: 61%; transform-origin: left center; animation: beamZap .4s ease-out forwards; }
+.beam-fx.beamB { right: 17%; width: 61%; transform-origin: right center; animation: beamZap .4s ease-out forwards; }
+@keyframes beamZap { 0% { transform: scaleX(0); opacity: .2; } 25% { transform: scaleX(1); opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; } }
+
+/* volley — a fan of arrows arcing down onto the target. */
+.volley-fx { position: absolute; top: 50%; width: 70px; height: 90px; margin: -80px 0 0 -35px; z-index: 4; pointer-events: none; }
+.volley-arrow { position: absolute; left: 50%; top: 0; width: 18px; height: 4px; border-radius: 2px 5px 5px 2px; background: #cfd8dc; box-shadow: 0 0 4px #eee; opacity: 0; animation: volleyDrop .5s ease-in forwards; }
+@keyframes volleyDrop { 0% { transform: translate(-16px,-10px) rotate(60deg); opacity: 0; } 20% { opacity: 1; } 100% { transform: translate(6px,84px) rotate(80deg); opacity: 0; } }
+
+/* chain — the bolt SVG, re-tinted blue; reuses .lightning keyframes. */
+.chain-fx .lightning-bolt { filter: drop-shadow(0 0 6px #4fc3f7) drop-shadow(0 0 16px #0288d1); }
+
+/* cage — bars slam down around the target, hold, then fade. */
+.cage-fx { position: absolute; top: 50%; width: 70px; height: 84px; margin: -42px 0 0 -35px; z-index: 4; pointer-events: none; }
+.cage-bar { position: absolute; top: 0; width: 5px; height: 100%; background: linear-gradient(180deg, #e1f5fe, #4fc3f7); box-shadow: 0 0 6px #81d4fa; transform: scaleY(0); transform-origin: top; animation: cageClose .6s cubic-bezier(.3,1.4,.5,1) forwards; }
+@keyframes cageClose { 0% { transform: scaleY(0); opacity: 0; } 40% { transform: scaleY(1.05); opacity: 1; } 75% { transform: scaleY(1); opacity: 1; } 100% { opacity: 0; } }
+
+/* firewall — a sheet of flame erupts across the target. */
+.firewall-fx { position: absolute; top: 50%; width: 90px; height: 84px; margin: -42px 0 0 -45px; z-index: 4; pointer-events: none; border-radius: 40% 40% 20% 20%;
+  background: radial-gradient(ellipse at 50% 90%, #fff3b0 0%, #ff7043 40%, #b71c1c 70%, transparent 85%); animation: fireRise .6s ease-out forwards; }
+@keyframes fireRise { 0% { transform: scaleY(.2) translateY(30px); opacity: 0; } 30% { opacity: 1; } 55% { transform: scaleY(1.1) translateY(0); } 100% { transform: scaleY(1) translateY(0); opacity: 0; } }
+
+/* notes — musical notes float up from the singer (song buffs). */
+.notes-fx { position: absolute; top: 50%; width: 60px; height: 70px; margin: -55px 0 0 -30px; z-index: 6; pointer-events: none; }
+.notes-fx .note { position: absolute; bottom: 0; left: 40%; font-size: 22px; color: #ffd54f; text-shadow: 0 0 6px #ffb300; opacity: 0; animation: noteFloat 1s ease-out forwards; }
+.notes-fx .note:nth-child(2) { left: 20%; }
+.notes-fx .note:nth-child(3) { left: 60%; }
+@keyframes noteFloat { 0% { transform: translateY(0) rotate(-8deg); opacity: 0; } 25% { opacity: 1; } 100% { transform: translateY(-48px) rotate(10deg); opacity: 0; } }
+
+/* flurry — the claw rake, faster and repeated (multi-hit melee/ranged). */
+.claw-flurry .claw-slash { animation-duration: .22s; animation-iteration-count: 2; }
+
+/* --- Composite overlays (ride on top of a base motion) -------------------- */
+.ov-crater { position: absolute; bottom: 22px; width: 70px; height: 20px; margin-left: -35px; z-index: 3; pointer-events: none; border: 2px solid rgba(255,224,130,.7); border-radius: 50%; transform: scale(.3); opacity: 0; animation: craterRing .5s ease-out forwards; }
+@keyframes craterRing { 0% { transform: scale(.3); opacity: 0; } 30% { opacity: .9; } 100% { transform: scale(1.4); opacity: 0; } }
+.ov-exec { position: absolute; top: 50%; width: 70px; height: 70px; margin: -35px 0 0 -35px; z-index: 6; pointer-events: none; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,.95), transparent 65%); opacity: 0; animation: execFlash .4s ease-out forwards; }
+@keyframes execFlash { 0% { opacity: 0; transform: scale(.5); } 20% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.2); } }
+.ov-manaburn { position: absolute; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; z-index: 6; pointer-events: none; border-radius: 50%; background: radial-gradient(circle, rgba(66,165,245,.7), transparent 65%); animation: manaBurnPuff .5s ease forwards; }
+@keyframes manaBurnPuff { 0% { transform: scale(.4); opacity: 0; } 40% { opacity: 1; } 100% { transform: scale(1.3) translateY(-14px); opacity: 0; } }
+.ov-tether { position: absolute; top: 50%; height: 3px; margin-top: -1.5px; z-index: 6; pointer-events: none; border-radius: 2px; background: linear-gradient(90deg, #ef5350, #ff8a80); box-shadow: 0 0 6px #ef5350; opacity: 0; animation: tetherPull .5s ease-out forwards; }
+.ov-tether.tetherA { left: 22%; width: 56%; }
+.ov-tether.tetherB { right: 22%; width: 56%; }
+@keyframes tetherPull { 0% { opacity: 0; } 30% { opacity: .9; } 100% { opacity: 0; } }
+.ov-shield { position: absolute; top: 50%; width: 76px; height: 84px; margin: -42px 0 0 -38px; z-index: 6; pointer-events: none; background: radial-gradient(ellipse, rgba(100,181,246,.35), transparent 68%); border: 2px solid rgba(129,212,250,.8); border-radius: 46%; transform: scale(.6); opacity: 0; animation: shieldUp .6s ease-out forwards; }
+@keyframes shieldUp { 0% { transform: scale(.6); opacity: 0; } 35% { transform: scale(1.05); opacity: 1; } 70% { transform: scale(1); opacity: .9; } 100% { opacity: 0; } }
+.ov-thorns { position: absolute; top: 50%; width: 84px; height: 84px; margin: -42px 0 0 -42px; z-index: 6; pointer-events: none; border-radius: 50%; background: conic-gradient(from 0deg, transparent 0 8%, rgba(124,179,66,.8) 8% 10%, transparent 10% 18%, rgba(124,179,66,.8) 18% 20%, transparent 20%); transform: scale(.5); opacity: 0; animation: thornsOut .55s ease-out forwards; }
+@keyframes thornsOut { 0% { transform: scale(.5) rotate(0); opacity: 0; } 40% { opacity: 1; } 100% { transform: scale(1.2) rotate(30deg); opacity: 0; } }
+.ov-heal { position: absolute; top: 50%; width: 60px; height: 70px; margin: -50px 0 0 -30px; z-index: 6; pointer-events: none; background: radial-gradient(circle at 50% 80%, rgba(129,199,132,.7), transparent 60%); animation: healRise .7s ease-out forwards; }
+@keyframes healRise { 0% { transform: translateY(20px); opacity: 0; } 30% { opacity: 1; } 100% { transform: translateY(-14px); opacity: 0; } }
+.ov-cleanse { position: absolute; top: 50%; width: 80px; height: 80px; margin: -40px 0 0 -40px; z-index: 6; pointer-events: none; border-radius: 50%; border: 2px solid rgba(255,255,255,.85); transform: scale(.3); opacity: 0; animation: cleanseRing .55s ease-out forwards; }
+@keyframes cleanseRing { 0% { transform: scale(.3); opacity: 0; } 30% { opacity: 1; } 100% { transform: scale(1.4); opacity: 0; } }
+.ov-aura { position: absolute; top: 50%; width: 78px; height: 90px; margin: -48px 0 0 -39px; z-index: 3; pointer-events: none; border-radius: 46%; transform: scale(.7); opacity: 0; animation: auraPulse .65s ease-out forwards; }
+.ov-aura-atk { background: radial-gradient(ellipse, rgba(239,83,80,.4), transparent 66%); }
+.ov-aura-def { background: radial-gradient(ellipse, rgba(120,144,156,.4), transparent 66%); }
+.ov-aura-dodge { background: radial-gradient(ellipse, rgba(77,208,225,.4), transparent 66%); }
+.ov-aura-regen { background: radial-gradient(ellipse, rgba(129,199,132,.4), transparent 66%); }
+@keyframes auraPulse { 0% { transform: scale(.7); opacity: 0; } 40% { transform: scale(1.05); opacity: 1; } 100% { transform: scale(1.15); opacity: 0; } }
+
+/* status landing — a themed icon puff over the newly afflicted monster. */
+.status-puff { position: absolute; top: 38%; margin-left: -14px; z-index: 7; pointer-events: none; font-size: 26px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); transform: scale(.4); opacity: 0; animation: statusPuff .8s cubic-bezier(.2,1.4,.4,1) forwards; }
+@keyframes statusPuff { 0% { transform: scale(.4) translateY(6px); opacity: 0; } 30% { transform: scale(1.15) translateY(0); opacity: 1; } 70% { transform: scale(1) translateY(-4px); opacity: 1; } 100% { transform: scale(1) translateY(-16px); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .slam-mark, .guillotine-blade, .beam-fx, .volley-arrow, .cage-bar, .firewall-fx, .notes-fx .note,
+  .ov-crater, .ov-exec, .ov-manaburn, .ov-tether, .ov-shield, .ov-thorns, .ov-heal, .ov-cleanse, .ov-aura, .status-puff { animation-duration: .01ms !important; }
+}

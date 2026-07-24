@@ -8,7 +8,31 @@ nudge a value gently, sim it, read the result, adjust again. The sim is the arbi
 `docs/BALANCING.md` for the working ledger. This applies to every economy/difficulty/
 progression number, always.
 
-## Current state (v0.79)
+## Current state (v0.80)
+
+**v0.80 — per-move battle animations (hybrid) + Bastion rename.** The 1v1 arena
+(`arena.tsx`, shown in Sandbox + Wood/Copper) now animates each ability distinctly.
+The design is a **hybrid**: shared base motions for moves that legitimately look alike
+(every fireball, every arrow) + **bespoke motions** hand-assigned to ~28 distinctive
+moves via `BESPOKE_KIND` (keyed by move NAME — the acting Move is recovered from the
+caster's loadout by name, since names are unique within a loadout): `slam` (heavy
+crash — Titanfall/Colossus Crash/World Ender/…), `guillotine` (Executioner/Showstopper),
+`flurry` (rapid multi-slash), `beam` (pierce line — Snipe/Deadeye/Void Lance/…), `volley`
+(Rain of Arrows/Needle Storm), `chain` (Static Chain), `cage` (Glacial Prison/Deep
+Freeze), `firewall` (Inferno), `notes` (song buffs). On TOP of the base, a **composite
+overlay layer** (`fxForMove`/`utilityFx`) adds a per-effect tell driven off the Move's
+fields — `exec` flash, lifesteal `tether`, `manaburn`, `crater`, `shield`/`thorns`/`heal`/
+`cleanse`, buff `aura-*` — plus a themed **status puff** (the STATUS_ICON emoji) over the
+afflicted monster on every `status` event. All presentation-only: goldens unmoved. The
+team-battle (>1) compact tile presentation is unchanged. Every new class verified bound to
+a real keyframe. `respects prefers-reduced-motion`.
+Also: the self-ward CON move **`Bulwark` → `Bastion`** (distinct from `Bulwark's Challenge`
+the mass-taunt, and the `bulwark` rival GAMEPLAN which is unrelated and stays). Move ids
+are positional (`CON-6`), not name-derived, so loadouts/goldens were unaffected.
+
+---
+
+## Prior state (v0.79)
 
 **v0.79 — painted area backdrops.** Eight new full-bleed scene paintings, one per
 screen: **Town** (village square at dusk), **Market** (beast bazaar), **Ranch Shop**

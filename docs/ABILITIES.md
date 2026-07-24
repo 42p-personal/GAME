@@ -85,7 +85,7 @@ not a duration effect — guard/ward/heal/cleanse resolve instantly or as a reso
 | Barbed Carapace | 120 | 12 | 5 | 3 | 100% | – | Self | Hardened, spiked hide: +4 mitigation and reflects 6 damage per hit for 3 rounds. |
 | Body Slam | 160 | 18 | 2 | 2 | 90% | 20 | Enemy | Throws its bulk into the target; 40% chance to send it reeling — knocked back, it acts last. |
 | Steady Vigil | 200 | 16 | 4 | 3 | 100% | 20 | Self | Knit flesh: solid heal, then +5 HP regen/turn for 3 rounds. |
-| Bulwark | 240 | 12 | 4 | – | 100% | – | Self | Raise a 25 HP absorb shield. |
+| Bastion | 240 | 12 | 4 | – | 100% | – | Self | Raise a 25 HP absorb shield. |
 | Purge | 330 | 12 | 4 | – | 100% | 10 | Self | Shrug off ailments and mend a little. |
 | Shell Slam | 380 | 24 | 3 | – | 85% | 26 | Enemy | Full-body crash; slight recoil. |
 | Fortify | 430 | 12 | 5 | – | 100% | – | Self | Raise a 40 HP absorb shield. |
