@@ -1752,7 +1752,15 @@ function RanchView({ game, setGame, onBattleScreen }: {
               </div>
             )}
             <div className="carerow" style={{ justifyContent: 'center', marginTop: 8 }}>
-              <button className="enter" onClick={() => { setMatchTactics(neutralMatchOrders(playerCareers)); setBattleSub('tactics') }}>Set Battle Orders →</button>
+              <button className="enter" onClick={() => {
+                // Carry the previous fight's orders forward (v0.81): start from the
+                // last match's committed orders, only clearing the focus target
+                // since the opponent is different. Keep in-progress edits if the
+                // player already opened this match's orders and went Back.
+                const prev = ac.matchOrders[matchIdx - 1]
+                setMatchTactics((mt) => mt ?? (prev ? { ...prev, mark: undefined } : neutralMatchOrders(playerCareers)))
+                setBattleSub('tactics')
+              }}>Set Battle Orders →</button>
             </div>
           </div>
         </>
