@@ -23,18 +23,14 @@ export function Sprite({ species, size = 96, stage, bare }: { species: Species; 
   const genericPal = useMemo(() => palette(hashString(species.id) % 360), [species.id])
   const art = SPECIES_ART[species.id]
   const isElder = stage === 'Elder' || stage === 'Retiree'
+  void bare // legacy prop, kept so arena call sites need no churn
 
-  // `bare` (2026-07-25, arena use): skip the dark card background/border —
-  // the arena now has its own painted league backdrop behind every sprite,
-  // and the old solid boxed-card look (built for a shared dark UI panel)
-  // clashed with it instead of letting the sprite float over the scene.
-  const wrapperStyle: CSSProperties = bare
-    ? { width: size, height: size, filter: isElder ? AGING_FILTER : undefined }
-    : {
-      width: size, height: size,
-      background: '#0c0e15', borderRadius: 8, border: '1px solid var(--line)',
-      filter: isElder ? AGING_FILTER : undefined,
-    }
+  // v0.79: sprites render TRANSPARENT everywhere — the same treatment the
+  // battle screens always had. The old solid dark box (built for a flat dark
+  // UI panel) became a damaged-looking cut-out tile once every screen gained
+  // a painted area backdrop; the 320x320 RGBA PNGs are transparent by design,
+  // so nothing should paint behind them.
+  const wrapperStyle: CSSProperties = { width: size, height: size, filter: isElder ? AGING_FILTER : undefined }
 
   if (art) {
     return (
