@@ -1761,11 +1761,19 @@ function RanchView({ game, setGame, onBattleScreen }: {
     )
   }
 
-  const currentCareer = game.stable[decisionIdx]
+  // The feeding walkthrough covers ACTIVE monsters only (v0.79 fix): Hall of
+  // Fame retirees don't eat, and with unlimited retirees the queue would
+  // otherwise grow a pointless click (and food bill) per honouree, every week.
+  const feedIdxs = game.stable.map((c, i) => (c.retired ? -1 : i)).filter((i) => i >= 0)
+  // Snap a stale index (e.g. the monster at this slot just retired) onto the queue.
+  const currentCareer = game.stable[decisionIdx]?.retired || !game.stable[decisionIdx]
+    ? game.stable[feedIdxs[0] ?? 0]
+    : game.stable[decisionIdx]
   const currentPlan: WeekPlanEntry = weekPlan[currentCareer.id] || { activity: 'rest', food: '' }
-
+  const nextFeedIdx = feedIdxs.find((i) => i > decisionIdx)
+  const prevFeedIdx = [...feedIdxs].reverse().find((i) => i < decisionIdx)
   const advanceFeeding = () => {
-    if (decisionIdx < game.stable.length - 1) setDecisionIdx((i) => i + 1)
+    if (nextFeedIdx !== undefined) setDecisionIdx(nextFeedIdx)
     else {
       setPhase('stable')
       setSelectedMonsterId(game.stable.find((c) => !c.retired)?.id ?? game.stable[0].id)
@@ -1787,8 +1795,8 @@ function RanchView({ game, setGame, onBattleScreen }: {
           <button className="ghost" onClick={() => setGame((g) => goto(g, 'town'))}>← 🏛 Town</button>
           <span>📅 {dateLabel(game.week)}</span>
           <span>🪙 {game.gold}g</span>
-          <span>Feeding {decisionIdx + 1}/{game.stable.length}</span>
-          {decisionIdx > 0 && <button className="ghost" onClick={() => setDecisionIdx((i) => i - 1)}>← Previous</button>}
+          <span>Feeding {feedIdxs.indexOf(decisionIdx) + 1}/{feedIdxs.length}</span>
+          {prevFeedIdx !== undefined && <button className="ghost" onClick={() => setDecisionIdx(prevFeedIdx)}>← Previous</button>}
         </div>
         <p className="sub">Feed {currentCareer.name} for the week.</p>
 
@@ -1880,7 +1888,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
                 title={!currentCareer.retired && !currentPlan.food && !currentPlan.forage ? 'Pick a food (or forage) for this monster first' : undefined}
                 onClick={advanceFeeding}
               >
-                {decisionIdx < game.stable.length - 1 ? 'Next Monster →' : 'Continue to Stable →'}
+                {nextFeedIdx !== undefined ? 'Next Monster →' : 'Continue to Stable →'}
               </button>
             </div>
           </div>

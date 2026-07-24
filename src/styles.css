@@ -26,7 +26,9 @@
   --accent2: #d97706;
   --line: #d3d8e6;
   --str: #cf4640; --dex: #2f9e5b; --con: #a5842c; --wis: #3f7fca; --int: #8a4fd0; --cha: #c94f9a;
-  --btn-ink: #ffffff;
+  /* Dark ink, same as night mode: white on #0fb488 is only 2.7:1 (fails AA);
+     near-black on it is ~6.6:1 and matches the dark theme's accent-button look. */
+  --btn-ink: #0c1a13;
 }
 
 * { box-sizing: border-box; }
@@ -182,7 +184,10 @@ input[type=range] { width: 100%; }
 /* Town hub (v0.62): a map of location buttons. */
 .townback { margin-bottom: 12px; }
 .townhub { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
-.hubbtn { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left; padding: 16px 18px; background: var(--panel2); border: 1px solid var(--line); border-radius: 12px; cursor: pointer; transition: border-color .12s ease, transform .12s ease; }
+/* color MUST be set here: the global `button` rule uses --btn-ink (text-on-accent),
+   which is near-invisible on the panel background this button uses instead. */
+.hubbtn { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left; padding: 16px 18px; background: var(--panel2); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; cursor: pointer; transition: border-color .12s ease, transform .12s ease; }
+.hubbtn .dim { color: var(--muted); }
 .hubbtn:hover:not(:disabled) { border-color: var(--accent); transform: translateY(-2px); }
 .hubbtn:disabled { opacity: .5; cursor: default; }
 .hubbtn b { font-size: 16px; }
@@ -560,7 +565,8 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
    trade-off underneath the label so the decision is legible at a glance. */
 .ev-body { margin: 0; }
 .ev-actions { flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 8px; }
-.ev-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 9px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--chip, rgba(255,255,255,.03)); }
+/* color required: the global button rule uses --btn-ink (text-on-accent), invisible on this panel-tinted bg. */
+.ev-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 9px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--chip, rgba(255,255,255,.03)); color: var(--ink); }
 .ev-choice:not(:disabled):hover { border-color: var(--accent); }
 .ev-choice:disabled { opacity: .45; }
 .ev-label { font-weight: 700; font-size: 13px; }
@@ -599,7 +605,7 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 .license-ready { outline: 1px solid var(--con, #5bd47a); border-radius: 8px; }
 
 /* Forage fallback (feeding screen, shown only when the player can't afford food). */
-.forage-option { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; margin-top: 8px; padding: 9px 12px; border: 1px dashed var(--con, #5bd47a); border-radius: 9px; background: rgba(91,212,122,.06); text-align: left; }
+.forage-option { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; margin-top: 8px; padding: 9px 12px; border: 1px dashed var(--con, #5bd47a); border-radius: 9px; background: rgba(91,212,122,.06); color: var(--ink); text-align: left; }
 .forage-option.selected { border-style: solid; background: rgba(91,212,122,.14); }
 .forage-top { font-weight: 700; font-size: 13px; }
 .forage-sub { font-size: 11px; color: var(--muted); }
