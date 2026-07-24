@@ -3,7 +3,7 @@
 // "you won BECAUSE…" — the payoff that makes pre-battle tactics feel causal.
 // No engine changes: everything is read from data the sim already emits.
 import { BattleEvent, BattleResult } from './battle'
-import { GAMEPLANS, Monster, TeamGameplan } from './core'
+import { GAMEPLANS, Monster, STATS, TeamGameplan } from './core'
 import { maxHp } from './monster'
 import { ALL_MOVES } from './moves'
 
@@ -74,7 +74,7 @@ export function analyzeBattle(
     }
     // Scripted opener: did the designated first move actually fire?
     for (let i = 0; i < mine.length; i++) {
-      const openerId = mine[i].tactics?.openerId
+      const openerId = mine[i].tactics?.openerIds?.[0] ?? mine[i].tactics?.openerId
       if (!openerId) continue
       const openerName = moveNameById.get(openerId)
       const firstAct = events.find((e) => (e.kind === 'hit' || e.kind === 'miss' || e.kind === 'utility') && e.side === playerSide && e.slot === i) as Extract<BattleEvent, { move: string }> | undefined
@@ -109,4 +109,25 @@ export function analyzeBattle(
   }
 
   return { turningPoint, tacticOutcomes, keyMoments, counterRead }
+}
+
+// Battle Analyst (v0.84): turns a report + the matchup into 1-3 concrete pieces
+// of advice for the NEXT fight. A paid-tier layer on top of analyzeBattle.
+export function battleAdvice(report: BattleReport, teamA: Monster[], teamB: Monster[], result: BattleResult, playerSide: Side): string[] {
+  const mine = playerSide === 'A' ? teamA : teamB
+  const theirs = playerSide === 'A' ? teamB : teamA
+  const total = (ms: Monster[]) => ms.reduce((s, m) => s + STATS.reduce((t, k) => t + m.stats[k], 0), 0)
+  const won = result.winner === playerSide
+  const oppCaster = Math.max(0, ...theirs.map((m) => m.stats.INT + m.stats.WIS))
+  const failed = (re: RegExp) => report.tacticOutcomes.some((o) => !o.ok && re.test(o.text))
+  const tips: string[] = []
+  if (report.counterRead && oppCaster >= 380) tips.push("Their casters carried it — set Target priority to 'Hunt the casters', or lead a monster with Control-first to silence/stun them.")
+  if (failed(/kill order/)) tips.push('Your focus target survived — mark a squishier threat (their lowest-CON monster), or bring more single-target damage.')
+  if (failed(/protect/)) tips.push("Your guarded monster still fell — front-line a tankier body and set it to 'Guard at 40%' survival.")
+  if (failed(/opener/)) tips.push('Your scripted opener never fired — pick a cheaper first move so it lands on turn 1.')
+  if (!won && total(mine) < total(theirs) * 0.95) tips.push('You were out-powered on paper — train two focused stats higher before the rematch.')
+  if (!tips.length) tips.push(won
+    ? 'A clean win — keep the same orders unless the next opponent looks different.'
+    : 'It was close — a tighter opener or a Control-first lead could flip it next time.')
+  return tips.slice(0, 3)
 }

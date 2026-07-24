@@ -464,6 +464,7 @@ export interface GameState {
   studSlots?: number // LEGACY (pre-v0.77) — the Lab's labSlots is now the only capacity
   labTechLoan: boolean // lab-tech loan event taken → freeze upkeep 5→3g/wk
   extremeUnlocked: boolean // Extreme Training Manual bought → extreme drill row open
+  battleAnalyst: boolean // Ranch Shop: unlocks the deep post-fight read (gameplan + advice)
   // Lab freezer (v0.7, FUSION_DESIGN.md) — SEPARATE from the breeding stud farm.
   // Monsters frozen here are in stasis (aging paused): preserve one until you can
   // afford an Elder Tonic, or fuse two into a new fusion species.
@@ -570,6 +571,7 @@ export function newGame(seed = 'start', opts?: { trainerName?: string; tutorialE
     studBooks: 0,
     labTechLoan: false,
     extremeUnlocked: false,
+    battleAnalyst: false,
     labFrozen: [],
     labSlots: LAB_SLOTS_BASE,
   }
@@ -666,6 +668,12 @@ export const studIncome = (c: { studBook?: boolean; tournamentHistory?: { placem
 export const EXTREME_MANUAL_COST = 1200
 export const buyExtremeManual = (g: GameState): GameState =>
   g.extremeUnlocked || g.gold < EXTREME_MANUAL_COST ? g : { ...g, gold: g.gold - EXTREME_MANUAL_COST, extremeUnlocked: true }
+
+// Battle Analyst (v0.84): a one-time hire that deepens the post-fight report —
+// reads the opponent's gameplan and turns the match into concrete advice.
+export const BATTLE_ANALYST_COST = 500
+export const buyBattleAnalyst = (g: GameState): GameState =>
+  g.battleAnalyst || g.gold < BATTLE_ANALYST_COST ? g : { ...g, gold: g.gold - BATTLE_ANALYST_COST, battleAnalyst: true }
 export const LAB_LOAN_UPKEEP = 2
 export const labUpkeepPerFrozen = (g: GameState): number => (g.labTechLoan ? LAB_LOAN_UPKEEP : RENTAL_PER_FROZEN)
 // Breeding (v0.6, SEPARATE from fusion): two PRESERVED monsters parent a child —

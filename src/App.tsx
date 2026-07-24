@@ -6,6 +6,7 @@ import {
 } from './core'
 import { generateMonster, manaCost, maxHp, maxMana, staminaDamageMult } from './monster'
 import { BattleResult, simulateTeamBattle } from './battle'
+import { analyzeBattle, battleAdvice } from './battleReport'
 import { ArenaBattle } from './arena'
 import { Sprite } from './Sprite'
 import { SPECIES } from './species'
@@ -20,7 +21,7 @@ import {
   canBuySpecialLicense, canBuyEliteLicense, COACH_CAP_LIFT, wildCapFor,
   MARKET_BASE_SLOTS, MARKET_SLOTS_MAX, SCOUT_CHANCE, COACH_SURCHARGE, marketSlotCost, scoutCost, coachCost, coachLeague,
   buyMarketSlot, buyMarketScout, buyMarketCoach, setScoutPick, canBuyMarketCoach, coachVisible, speciesLicensed,
-  COMFORT_ITEMS, EXTREME_MANUAL_COST, Frozen, careerFromFrozen, BREED_COST, BREED_MAX_CHILDREN, applyStudBook, breed, breedPotentialV2, buyComfortItem, buyExtremeManual, studIncome, podiumsOf, champsOf, useTonic,
+  COMFORT_ITEMS, EXTREME_MANUAL_COST, BATTLE_ANALYST_COST, buyBattleAnalyst, Frozen, careerFromFrozen, BREED_COST, BREED_MAX_CHILDREN, applyStudBook, breed, breedPotentialV2, buyComfortItem, buyExtremeManual, studIncome, podiumsOf, champsOf, useTonic,
   WeekPlanEntry, advanceWeek, barnCost, buyPantryContract, buyGrandLarder, buyEliteLicense, buyMonster, foodDiscountFor, resolveEvent,
   buySpecialLicense, cancelSignUp, cupLore, eligibleForTournament, fusionRoom, gameplanForRivalTeam, generateRivalTeamsForTournament, goto, healAtInfirmary, infirmaryFee, leagueIndexOf, monthOfWeek,
   placementLabel, scoutFee, teamSizeForLeague, seatedRivalTeamIndex,
@@ -1024,6 +1025,16 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
               ? <button disabled>✓</button>
               : <button disabled={game.gold < EXTREME_MANUAL_COST} onClick={() => setGame((g) => buyExtremeManual(g))}>Buy · {EXTREME_MANUAL_COST}g</button>}
           </div>
+          {/* Battle Analyst (v0.84): deepens the post-fight match analysis. */}
+          <div className="shoprow">
+            <div>
+              <b>🔎 Battle Analyst</b>
+              <div className="dim">{game.battleAnalyst ? 'Hired — reads the opponent’s gameplan and advises after every fight.' : 'Post-fight: reveals the opponent’s gameplan and gives tactical advice for your next match.'}</div>
+            </div>
+            {game.battleAnalyst
+              ? <button disabled>✓ Hired</button>
+              : <button disabled={game.gold < BATTLE_ANALYST_COST} onClick={() => setGame((g) => buyBattleAnalyst(g))}>Hire · {BATTLE_ANALYST_COST}g</button>}
+          </div>
           <div className="shoprow">
             <div>
               <b>🧺 Pantry Contract</b>
@@ -1570,6 +1581,34 @@ function BracketGrid({ standings, allMatches, revealed }: { standings: EventStan
   )
 }
 
+// Post-fight causal analysis (v0.84), shown on the between-match hub and the
+// results screen. Free tier: what happened (turning point, tactic ✓/✗, moments).
+// Battle Analyst tier (Ranch Shop): the opponent's gameplan + concrete advice.
+function MatchAnalysis({ fought, analyst }: { fought: { teamA: Monster[]; teamB: Monster[]; result: BattleResult }; analyst: boolean }) {
+  const rep = useMemo(() => analyzeBattle(fought.result.events, fought.teamA, fought.teamB, fought.result, 'A'), [fought])
+  const advice = useMemo(() => (analyst ? battleAdvice(rep, fought.teamA, fought.teamB, fought.result, 'A') : []), [rep, fought, analyst])
+  if (!rep.turningPoint && rep.tacticOutcomes.length === 0 && rep.keyMoments.length === 0) return null
+  return (
+    <div className="card" style={{ marginBottom: 10 }}>
+      <div className="section-title">📋 Match analysis</div>
+      {rep.turningPoint && <div className="br-turn">{rep.turningPoint}</div>}
+      {rep.tacticOutcomes.map((o, i) => <div key={i} className={'br-tactic ' + (o.ok ? 'ok' : 'no')}>{o.ok ? '✓' : '✗'} {o.text}</div>)}
+      {rep.keyMoments.map((m, i) => <div key={i} className="br-moment">• {m}</div>)}
+      {analyst ? (
+        <>
+          {rep.counterRead && <div className="br-counter">🧠 {rep.counterRead}</div>}
+          <div className="analyst-advice">
+            <div className="analyst-h">💡 Analyst's read</div>
+            {advice.map((a, i) => <div key={i} className="br-advice">→ {a}</div>)}
+          </div>
+        </>
+      ) : (
+        <div className="hint">🔒 Hire a Battle Analyst (Ranch Shop) to read the opponent's gameplan and get tactical advice for your next fight.</div>
+      )}
+    </div>
+  )
+}
+
 function RanchView({ game, setGame, onBattleScreen }: {
   game: GameState; setGame: Dispatch<SetStateAction<GameState>>; onBattleScreen: (v: boolean) => void
 }) {
@@ -1599,6 +1638,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
   // built+simulated current match, and the player's running win/loss strip.
   const [matchTactics, setMatchTactics] = useState<MatchOrders | null>(null)
   const [liveMatch, setLiveMatch] = useState<{ teamA: Monster[]; teamB: Monster[]; result: BattleResult } | null>(null)
+  const [lastFought, setLastFought] = useState<{ teamA: Monster[]; teamB: Monster[]; result: BattleResult } | null>(null)
   const [fightOutcomes, setFightOutcomes] = useState<('win' | 'loss' | 'draw')[]>([])
   // Which of the player's upcoming matches have been paid-scouted, and at
   // what tier — keyed by matchIdx, reset each new tournament event.
@@ -1671,6 +1711,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
                 : `You finished ${placementLabel(lb.playerPlacement)} of ${lb.fieldSize} — no reward this time. Train harder and try again.`}
           </div>
         </div>
+        {lastFought && <MatchAnalysis fought={lastFought} analyst={game.battleAnalyst} />}
         <div className="carerow" style={{ justifyContent: 'center' }}>
           <button className="enter" onClick={() => setPhase('feeding')}>Continue →</button>
         </div>
@@ -1815,6 +1856,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
           {header}
           <p className="sub">{tournamentName} — {league} league{isTrial ? '' : `, ${fieldSize} teams, round robin`}. Match {matchIdx + 1} of {nPlayerMatches}.</p>
           {progress}
+          {lastFought && <MatchAnalysis fought={lastFought} analyst={game.battleAnalyst} />}
           {bracketCard}
           <div className="card">
             <div className="section-title">Next up: {opponentLabel}</div>
@@ -1930,6 +1972,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
               <button className="enter" onClick={() => {
                 const w = liveMatch.result.winner
                 setFightOutcomes((o) => [...o, w === 'A' ? 'win' : w === 'B' ? 'loss' : 'draw'])
+                setLastFought(liveMatch) // keep it for the between-match / results analysis
                 setBattleOver(false); setLiveMatch(null); setMatchTactics(null); setMatchIdx((i) => i + 1)
                 // Last fight → finalize and jump STRAIGHT to the results screen
                 // (no intermediate "See Results" page). Otherwise on to the next
@@ -2129,6 +2172,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
     setScouted({})
     setFightOutcomes([])
     setLiveMatch(null)
+    setLastFought(null)
     setMatchTactics(null)
     setSelectedMonsterId(next.stable.find((c) => !c.retired)?.id ?? next.stable[0]?.id ?? '')
     setPhase(next.activeCup ? 'battle' : 'feeding')
@@ -2835,6 +2879,7 @@ function sanitizeAndMigrate(raw: string): GameState | null {
     }
     if (typeof g.labTechLoan !== 'boolean') g.labTechLoan = false
     if (typeof g.extremeUnlocked !== 'boolean') g.extremeUnlocked = false
+    if (typeof g.battleAnalyst !== 'boolean') g.battleAnalyst = false
     // v0.7 Lab freezer (separate from the stud farm)
     if (!Array.isArray(g.labFrozen)) g.labFrozen = []
     if (typeof g.labSlots !== 'number') g.labSlots = LAB_SLOTS_BASE

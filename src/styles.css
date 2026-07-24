@@ -604,6 +604,10 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 .br-tactic.ok { color: var(--con, #5bd47a); }
 .br-tactic.no { color: var(--str, #e0685f); }
 .br-moment { font-size: 12px; color: var(--muted); }
+/* Battle Analyst advice block (v0.84) */
+.analyst-advice { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; }
+.analyst-h { font-weight: 700; font-size: 13px; }
+.br-advice { font-size: 12px; color: var(--ink); line-height: 1.45; }
 
 /* Trainer XP bar + bloodline potential badge (LOOP_DESIGN Phase 5). */
 .xpbar { height: 7px; border-radius: 4px; background: rgba(255,255,255,.08); overflow: hidden; }
