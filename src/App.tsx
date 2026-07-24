@@ -1930,7 +1930,12 @@ function RanchView({ game, setGame, onBattleScreen }: {
               <button className="enter" onClick={() => {
                 const w = liveMatch.result.winner
                 setFightOutcomes((o) => [...o, w === 'A' ? 'win' : w === 'B' ? 'loss' : 'draw'])
-                setBattleOver(false); setLiveMatch(null); setMatchTactics(null); setMatchIdx((i) => i + 1); setBattleSub('bracket')
+                setBattleOver(false); setLiveMatch(null); setMatchTactics(null); setMatchIdx((i) => i + 1)
+                // Last fight → finalize and jump STRAIGHT to the results screen
+                // (no intermediate "See Results" page). Otherwise on to the next
+                // match's hub.
+                if (matchIdx + 1 >= nPlayerMatches) { setGame((g) => (ac.kind === 'trial' ? finalizeTrial(g).game : finalizeCup(g))); setBattleSub('announce') }
+                else setBattleSub('bracket')
               }}>{matchIdx + 1 >= nPlayerMatches ? 'See Results →' : '→ Next Match'}</button>
             </div>
           )}
