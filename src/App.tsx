@@ -23,7 +23,7 @@ import {
   COMFORT_ITEMS, EXTREME_MANUAL_COST, Frozen, careerFromFrozen, BREED_COST, BREED_MAX_CHILDREN, applyStudBook, breed, breedPotentialV2, buyComfortItem, buyExtremeManual, studIncome, podiumsOf, champsOf, useTonic,
   WeekPlanEntry, advanceWeek, barnCost, buyPantryContract, buyGrandLarder, buyEliteLicense, buyMonster, foodDiscountFor, resolveEvent,
   buySpecialLicense, cancelSignUp, cupLore, eligibleForTournament, fusionRoom, gameplanForRivalTeam, generateRivalTeamsForTournament, goto, healAtInfirmary, infirmaryFee, leagueIndexOf, monthOfWeek,
-  entryFee, placementLabel, scoutFee, teamSizeForLeague, seatedRivalTeamIndex,
+  placementLabel, scoutFee, teamSizeForLeague, seatedRivalTeamIndex,
   trainerXpProgress, trainerBarnBonus, trainerStipend, effectiveBarnCap, barnFull as barnFullOf, BREEDING_BONUS,
   buyLicense, cancelTrial, nextLicenseCost, startTrial, trialStatus, TRIAL_CHAMPION_MULT, RIVAL_PERSONALITY_GAMEPLAN,
   fuse, fusionSpin, fusionRecipeFor, freezeToLab, thawFromLab, expandLab, labExpandCost, LAB_SLOTS_BASE, FUSION_COST,
@@ -1664,7 +1664,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
           <div className="battle-summary">
             {lb.isTrial
               ? lb.playerPlacement === 1
-                ? `🎫 VICTORY! The ${LEAGUES[Math.min(leagueIndexOf(lb.league) + 1, LEAGUES.length - 1)].name} license is now available in the Ranch Shop.`
+                ? `🎫 VICTORY!${lb.goldReward > 0 ? ` +${lb.goldReward}g —` : ''} the ${LEAGUES[Math.min(leagueIndexOf(lb.league) + 1, LEAGUES.length - 1)].name} license is now available in the Ranch Shop.`
                 : `Defeated. The Champion holds the gate — recover, train, and challenge again in a few weeks.`
               : lb.goldReward > 0
                 ? `You finished ${placementLabel(lb.playerPlacement)} of ${lb.fieldSize}! +${lb.goldReward}g${lb.expNote ? ` · training bonus: ${lb.expNote}` : ''}`
@@ -2538,12 +2538,9 @@ function RanchView({ game, setGame, onBattleScreen }: {
                       <button className="ghost" onClick={() => setSelectedTournamentId(null)}>✕</button>
                     </div>
                     <div className="dim">
-                      Entry: {entryFee(t.league)}g (refunded if you cancel) · Rewards: {t.rewards.gold}g + training exp,
+                      Free to enter · Rewards: {t.rewards.gold}g + training exp,
                       scaled by final placement (round-robin vs the rest of the field)
                     </div>
-                    {game.gold < entryFee(t.league) && !signedHere && !alreadyEntered && (
-                      <div className="neg" style={{ fontSize: 12 }}>Not enough gold for the {entryFee(t.league)}g entry fee.</div>
-                    )}
                     {isOpenWeek && !alreadyEntered && (
                       <TipBanner game={game} setGame={setGame} id="signup">
                         Your team fights every rival once, round robin — scout the field below, then pick

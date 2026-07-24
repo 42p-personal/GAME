@@ -114,6 +114,11 @@ export function designProblems(): string[] {
           }
         }
       }
+      // Every month must offer at least 2 cups (user spec 2026-07-XX).
+      for (let month = 1; month <= 12; month++) {
+        const inMonth = cal.filter((t) => t.month === month).length
+        if (inMonth < 2) problems.push(`CALENDAR(${seed}/y${year}): Month ${month} has only ${inMonth} cup(s) (need ≥2).`)
+      }
     }
   }
 

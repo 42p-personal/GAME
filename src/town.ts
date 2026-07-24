@@ -276,6 +276,35 @@ export function tournamentCalendarFor(seed: string, year: number): Tournament[] 
       }
     }
   }
+  // Guarantee ≥2 cups EVERY month (user spec 2026-07-XX) — top up any sparse
+  // month with filler cups, while keeping each league ≤2 cups per quarter and
+  // half-density leagues (Masters / Tamer Elite) out of their inactive quarters
+  // (the validate.ts invariants). Deterministic per (seed, year, quarter).
+  const allLeagues = Object.keys(POOL_REWARDS)
+  const usedNames = new Set(out.map((t) => t.name))
+  const fillerName = (league: string): string => {
+    let name = POOL_NAMES[league].find((n) => !usedNames.has(n)) ?? `The ${league} Contest`
+    for (let k = 2; usedNames.has(name); k++) name = `The ${league} Contest ${k}`
+    usedNames.add(name)
+    return name
+  }
+  for (let q = 0; q < 4; q++) {
+    const frng = mulberry32(hashString(seed + ':monthfill:' + year + ':q' + q))
+    for (const month of [q * 3 + 1, q * 3 + 2, q * 3 + 3]) {
+      while (out.filter((t) => t.month === month).length < 2) {
+        const inMonth = new Set(out.filter((t) => t.month === month).map((t) => t.league))
+        const candidates = allLeagues.filter((l) => activeQuartersFor(l).includes(q) // half-density only in its active quarters
+          && !inMonth.has(l) // one cup per league per month keeps ids unique
+          && out.filter((t) => t.league === l && Math.floor((t.month - 1) / 3) === q).length < 2) // ≤2/quarter
+        if (!candidates.length) break // no room without breaking an invariant (never happens with 8 full-density leagues)
+        const league = candidates[Math.floor(frng() * candidates.length)]
+        out.push({
+          id: `${league.toLowerCase().replace(' ', '-')}-y${year}-m${month}`,
+          name: fillerName(league), month, week: 1 + Math.floor(frng() * WEEKS_PER_MONTH), league, rewards: POOL_REWARDS[league],
+        })
+      }
+    }
+  }
   return out.sort((a, b) => a.month - b.month || a.week - b.week || leagueIndexOf(a.league) - leagueIndexOf(b.league))
 }
 
@@ -324,10 +353,8 @@ export interface MarketOffer {
   scouted?: boolean // display only: this slot came from a scout pick
 }
 
-// Tournament entry fee (user-approved economy sink 2026-07-21): paid at
-// sign-up, refunded on cancel, kept once the event resolves. Scales by league
-// so punching down for easy gold has a real cost-benefit.
-export const entryFee = (league: string): number => (leagueIndexOf(league) + 1) * 10
+// (Tournament entry fee removed 2026-07-XX — cups are free; the weekly compete
+// action is the real cost.)
 
 // A tournament entry locked in for this week; resolved during advanceWeek.
 // `monsterIds` length must equal teamSizeForLeague(tournament's league).
@@ -1750,17 +1777,16 @@ export function signUp(g: GameState, tournamentId: string, monsterIds: string[])
   })
   if (!ok) return g
   if (g.pendingTrial) return g // one arena event per week (v0.5) — cancel the trial first
-  const fee = entryFee(t.league)
-  if (g.gold < fee) return g
-  // Competing IS the weekly action (v0.5): entered monsters' plans lock to
-  // 'compete' (advanceWeek enforces it at the data layer regardless).
+  // Cups are FREE to enter (entry fee removed 2026-07-XX) — the weekly action is
+  // the real cost. Competing IS the weekly action (v0.5): entered monsters' plans
+  // lock to 'compete' (advanceWeek enforces it at the data layer regardless).
   const weekPlans = { ...(g.weekPlans ?? {}) }
   for (const id of monsterIds) weekPlans[id] = { ...(weekPlans[id] ?? { activity: 'rest', food: '' as const }), activity: 'compete' }
-  return { ...g, gold: g.gold - fee, weekPlans, pendingTournament: { tournamentId, monsterIds, feePaid: fee } }
+  return { ...g, weekPlans, pendingTournament: { tournamentId, monsterIds, feePaid: 0 } }
 }
 
-// Cancelling before the weekly tick refunds the entry fee in full (and frees
-// the entered monsters' locked 'compete' week back to rest).
+// Cancelling before the weekly tick frees the entered monsters' locked 'compete'
+// week back to rest (cups are free, so there's no fee to refund).
 export function cancelSignUp(g: GameState): GameState {
   const weekPlans = { ...(g.weekPlans ?? {}) }
   for (const id of g.pendingTournament?.monsterIds ?? []) {
@@ -2182,13 +2208,16 @@ export function finalizeTrial(g: GameState): { game: GameState; won: boolean } {
     return nc
   })
   updated.forEach((nc, k) => { stable[idxs[k]] = nc })
+  // Beating the champion pays a purse worth HALF of a cup's 1st-place gold at
+  // this league (a rank-up trial is de-calendarized, so this is its reward).
+  const goldReward = won ? Math.round((POOL_REWARDS[league]?.gold ?? 0) * 0.5) : 0
   const lastBattle: LastBattle = {
     tournamentId: 'trial-' + g.licenseIndex, tournamentName: `Rank-up Trial — the ${league} Champion`, league, teamSize,
     matches: [{ aLabel: 'Your Team', bLabel: 'League Champion', teamA: playerTeam, teamB: champTeam, result, involvesPlayer: true }],
-    standings, playerPlacement: won ? 1 : 2, fieldSize: 2, goldReward: 0, expNote: '', isTrial: true,
+    standings, playerPlacement: won ? 1 : 2, fieldSize: 2, goldReward, expNote: '', isTrial: true,
   }
   const game: GameState = {
-    ...g, stable, activeCup: null, lastBattle,
+    ...g, stable, activeCup: null, lastBattle, gold: g.gold + goldReward,
     licenseEarned: won ? g.licenseIndex + 1 : g.licenseEarned,
     // g.week is already the post-tick week here (finalize runs after advanceWeek),
     // so this matches the old `g.week + 1 + COOLDOWN` computed pre-increment.

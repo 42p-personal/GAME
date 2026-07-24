@@ -14,7 +14,7 @@
 // MatchOrders → finalizeCup/finalizeTrial, exactly like the UI.
 
 import {
-  GameState, advanceWeek, buyLicense, buyMonster, eligibleForTournament, entryFee, finalizeCup, finalizeTrial,
+  GameState, advanceWeek, buyLicense, buyMonster, eligibleForTournament, finalizeCup, finalizeTrial,
   freezeToLab, breed, leagueIndexOf, monthOfWeek, newGame, nextLicenseCost, resolveEvent as resolveWeeklyEvent,
   roundRobinSchedule, signUp, startTrial, teamSizeForLeague, tournamentCalendarFor, trialStatus, weekOfMonth, yearOfWeek, WeekPlanEntry,
 } from '../src/town'
@@ -123,7 +123,7 @@ function playGame(seed: string, years: number, DRILLS: { id: string; gains: Part
     for (const t of cups) {
       const size = teamSizeForLeague(t.league)
       const elig = eligibleForTournament(g, t).filter(healthy)
-      if (elig.length >= size && g.gold >= entryFee(t.league) && !(g.enteredThisMonth ?? []).includes(t.id)) {
+      if (elig.length >= size && !(g.enteredThisMonth ?? []).includes(t.id)) {
         const before = g.pendingTournament
         g = signUp(g, t.id, elig.slice(0, size).map((c) => c.id))
         if (g.pendingTournament && g.pendingTournament !== before) { cupsEntered++; break }
