@@ -667,11 +667,11 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
         <div className="townmap">
           <div className="card loc">
             <TipBanner game={game} setGame={setGame} id="hof">
-              🏛 Retired careers rest here with their records — honours only. A retiree can no longer
-              be frozen, bred, or fused, so preserve the ones you want <b>before</b> they age out.
+              🏛 Retired careers rest here for their records only — preserve a monster at the Lab
+              <b> before</b> it ages out, or its bloodline is closed for good.
             </TipBanner>
             <div className="loc-h"><span>🏛 Hall of Fame</span><span className="dim">{retirees.length} honoured · unlimited room</span></div>
-            <div className="dim" style={{ marginBottom: 6 }}>Every monster who finished a career rests here, record intact. To breed one, send it to the Breeding Ranch as stud.</div>
+            <div className="dim" style={{ marginBottom: 6 }}>Every monster who finished a career rests here with its record — honours only, no further breeding.</div>
             {retirees.length === 0 && <div className="dim">Empty — monsters are honoured here when their career span ends.</div>}
             {[...retirees]
               .sort((a, b) => b.tournamentHistory.filter((h) => h.placement === 1).length - a.tournamentHistory.filter((h) => h.placement === 1).length
@@ -702,11 +702,11 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
         <div className="townmap">
           <div className="card loc">
             <TipBanner game={game} setGame={setGame} id="breeding">
-              🐎 Two preserved monsters parent a child with a stat head start and higher <b>potential</b> —
-              each generation raises the training ceiling. Champion parents pass on more.
+              🐎 Breed two preserved monsters for a child with a stat head start and a higher training
+              ceiling than either parent.
             </TipBanner>
             <div className="loc-h"><span>🐎 Breeding Ranch</span><span className="dim">{frozenPool.length} preserved at the Lab</span></div>
-            <div className="hint">Breeding stock lives in the 🧪 Lab freezer. Freeze a monster BEFORE its career ends — once it retires to the Hall of Fame the line is closed.</div>
+            <div className="hint">Breeding stock lives in the 🧪 Lab freezer — freeze a monster before its career ends, or its line is closed.</div>
             <div className="section-title">Breeding stock</div>
             <div className="labrows">
               {frozenPool.length === 0 && <div className="dim">Nothing preserved — freeze a monster at the Lab while it is still competing.</div>}
@@ -767,8 +767,8 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
         <div className="townmap">
           <div className="card loc">
             <TipBanner game={game} setGame={setGame} id="lab">
-              🧪 The freezer is the only route to breeding and fusion. Freeze a monster while it is
-              still competing — aging pauses, and its genome is banked. Slots are limited; expand below.
+              🧪 Freeze a monster while it's still competing to pause its aging and bank its genome for
+              breeding or fusion.
             </TipBanner>
             <div className="loc-h"><span>🧪 Lab · Freezer</span><span className="dim">{frozen.length}/{game.labSlots} slots</span></div>
             <div className="dim" style={{ marginBottom: 6 }}>
@@ -854,9 +854,7 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
         {/* Market */}
         <div className="card loc">
           <TipBanner game={game} setGame={setGame} id="market">
-            🛒 Buy your first monster here — cheap is fine, training matters more than the roll.
-            Stock refreshes monthly; the Ranch Shop later sells extra slots, a Scout to hunt a
-            species, and a Coach for stronger stock.
+            🛒 Buy your first monster here — cheap is fine, training matters far more than the roll.
           </TipBanner>
           <div className="loc-h"><span>🛒 Market</span>{game.marketCoach > 0 && (
             <span className="dim">🎓 stock trained to {LEAGUES[game.marketCoach === 2 ? 4 : 2].name}</span>
@@ -1819,8 +1817,8 @@ function RanchView({ game, setGame, onBattleScreen }: {
 
         {isInjured(currentCareer) && (
           <TipBanner game={game} setGame={setGame} id="injury">
-            {currentCareer.name} is hurt. Injuries only mend by <b>Resting</b> for a week or paying the
-            Town <b>Infirmary</b> — training won't fix HP, and an injured monster fights badly.
+            {currentCareer.name} is hurt — only a week's <b>Rest</b> or the Town <b>Infirmary</b> heals HP,
+            and injured monsters fight badly.
           </TipBanner>
         )}
         {decisionIdx === 0 && (game.lastWeek?.length ?? 0) > 0 && (
@@ -1973,8 +1971,8 @@ function RanchView({ game, setGame, onBattleScreen }: {
       <div className="feedok">✓ feeding complete for this week — plan training below, or check the calendar</div>
       {trialGate.ok && !game.pendingTrial && (
         <TipBanner game={game} setGame={setGame} id="rankup">
-          🎖 A monster can now challenge the {LEAGUES[game.licenseIndex].name} Champion (rank-up trial, below
-          the stable). Champions punish one-trick builds — train two or three stats before you take the fight.
+          🎖 A monster can now attempt the {LEAGUES[game.licenseIndex].name} rank-up trial — train two or
+          three stats first, as champions punish one-trick builds.
         </TipBanner>
       )}
       {/* Freeze-window warning: the single most punishing rule in the game — a
@@ -1985,8 +1983,8 @@ function RanchView({ game, setGame, onBattleScreen }: {
         const room = (game.labFrozen ?? []).length < (game.labSlots ?? LAB_SLOTS_BASE)
         return elder && room && (
           <TipBanner game={game} setGame={setGame} id="freezewindow">
-            ⏳ {elder.name} is in its final career year. To breed or fuse it later, freeze it at the
-            🧪 Lab <b>before it retires</b> — the Hall of Fame keeps honours, not bloodlines.
+            ⏳ {elder.name} is in its final career year — freeze it at the 🧪 Lab <b>before it retires</b>
+            if you ever want to breed or fuse it.
           </TipBanner>
         )
       })()}
@@ -2003,9 +2001,8 @@ function RanchView({ game, setGame, onBattleScreen }: {
         })
         return walled && (
           <TipBanner game={game} setGame={setGame} id="gen1cap">
-            🧱 {walled.name} is nearing its training ceiling ({statCapFor(walled)}) — wild monsters stop
-            there. Bred and fused monsters climb higher, and the Ranch Shop's Market Coach raises the
-            ceiling for everything you own.
+            🧱 {walled.name} is nearing the wild training ceiling ({statCapFor(walled)}) — bred, fused, and
+            Market Coach–raised monsters climb higher.
           </TipBanner>
         )
       })()}
@@ -2088,7 +2085,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
                 </div>
               )}
               {selectedCareer.retired && (
-                <div className="dim" style={{ fontSize: 11 }}>🏛 Retired to the Hall of Fame — send it to the Breeding Ranch as stud to continue the line.</div>
+                <div className="dim" style={{ fontSize: 11 }}>🏛 Retired to the Hall of Fame — its career is over and its line is closed.</div>
               )}
               {showHistoryFor === selectedCareer.id && (
                 <div className="tour-history">
@@ -2370,9 +2367,8 @@ function RanchView({ game, setGame, onBattleScreen }: {
                     )}
                     {isOpenWeek && !alreadyEntered && (
                       <TipBanner game={game} setGame={setGame} id="signup">
-                        Your team fights every other team once, round robin. Rivals fight at the league's own fixed
-                        standard — scout the field below, then pick monsters and loadouts to match. Win or lose,
-                        everyone comes home needing rest.
+                        Your team fights every rival once, round robin — scout the field below, then pick
+                        monsters and loadouts to match.
                       </TipBanner>
                     )}
                     {isOpenWeek && !alreadyEntered && (() => {
