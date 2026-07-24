@@ -585,7 +585,9 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 .ev-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 9px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--chip, rgba(255,255,255,.03)); color: var(--ink); }
 .ev-choice:not(:disabled):hover { border-color: var(--accent); }
 .ev-choice:disabled { opacity: .45; }
-.ev-label { font-weight: 700; font-size: 13px; }
+.ev-label { font-weight: 700; font-size: 13px; display: flex; width: 100%; align-items: baseline; justify-content: space-between; gap: 10px; }
+.ev-price { flex-shrink: 0; font-weight: 800; color: var(--gold, #e9b949); white-space: nowrap; }
+.ev-price.cant { color: var(--bad, #e06c6c); }
 .ev-note { font-size: 11px; color: var(--muted); }
 
 /* Rival gameplan reveal (LOOP_DESIGN Phase 3) in the scout panel. */

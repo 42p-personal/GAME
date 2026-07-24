@@ -1614,7 +1614,6 @@ function RanchView({ game, setGame, onBattleScreen }: {
   const [abilityEditorFor, setAbilityEditorFor] = useState<string | null>(null)
   const [showHistoryFor, setShowHistoryFor] = useState<string | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
-  const [showCalendar, setShowCalendar] = useState(false)
 
   // Tell App when the battle screen is up, so it can hide the Bestiary footer.
   const onBattleScreenNow = phase === 'battle' && (!!game.activeCup || !!game.lastBattle)
@@ -1624,13 +1623,8 @@ function RanchView({ game, setGame, onBattleScreen }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onBattleScreenNow])
 
-  // The calendar (and a clicked tournament's entry panel) render BELOW the tall
-  // training grid — without these scrolls, toggling "Tournaments" looked like
-  // it did nothing at all.
-  const calendarRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (showCalendar) calendarRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [showCalendar])
+  // A clicked tournament's entry panel renders BELOW the tall training grid —
+  // scroll it into view so clicking a 🏆 doesn't look like it did nothing.
   const entryRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (selectedTournamentId) entryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
@@ -2445,9 +2439,9 @@ function RanchView({ game, setGame, onBattleScreen }: {
             </>
           )}
 
-          {/* Tournament calendar (toggled from the rail) */}
-          {showCalendar && (
-            <div className="card loc" style={{ marginTop: 12 }} ref={calendarRef}>
+          {/* Tournament calendar — always visible on the stable screen (v0.84) */}
+          {(
+            <div className="card loc" style={{ marginTop: 12 }}>
               <div className="loc-h">
                 <span>📅 Tournament Calendar</span>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -2731,7 +2725,6 @@ function RanchView({ game, setGame, onBattleScreen }: {
             )
           })()}
           <button className="railbtn" onClick={() => setGame((g) => goto(g, 'town'))}>🏛<br />Back to<br />Town</button>
-          <button className={'railbtn' + (showCalendar ? ' on' : '')} onClick={() => setShowCalendar((v) => !v)}>📅<br />Tournaments</button>
         </div>
       </div>
     </>
@@ -2934,7 +2927,10 @@ function EventModal({ pe, gold, onChoose }: { pe: PendingEvent; gold: number; on
             return (
               <button key={i} className="ev-choice" disabled={cant} onClick={() => onChoose(i)}
                 title={cant ? 'Not enough gold' : undefined}>
-                <span className="ev-label">{ch.label}</span>
+                <span className="ev-label">
+                  <span>{ch.label}</span>
+                  {ch.cost != null && ch.cost > 0 && <span className={'ev-price' + (cant ? ' cant' : '')}>🪙 {ch.cost}g</span>}
+                </span>
                 {ch.note && <span className="ev-note">{ch.note}</span>}
               </button>
             )
