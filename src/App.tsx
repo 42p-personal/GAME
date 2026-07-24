@@ -1747,12 +1747,62 @@ function RanchView({ game, setGame, onBattleScreen }: {
     }
 
     if (battleSub === 'bracket') {
+      // Live round-robin standings (v0.84): the field is a pure function of the
+      // teams + the player's committed orders, so we can rebuild every match and
+      // reveal it round by round — the player sees how everyone's fared so far,
+      // updating after each of their fights. Consistent with finalizeCup, which
+      // scores the identical matches at the end.
+      const bracketCard = (isTrial || rivalTeams.length < 2) ? null : (() => {
+        const parts = rivalTeams.length + 1
+        const labelOf = (p: number) => (p === 0 ? 'Your Team' : `Rival Team ${p}`)
+        const all: EventMatch[] = []
+        const revealed: EventMatch[] = []
+        let pk = -1
+        let lastPlayerPos = -1
+        roundRobinSchedule(parts).forEach(([i, j]) => {
+          const involvesPlayer = i === 0 || j === 0
+          let m: EventMatch
+          if (involvesPlayer) {
+            pk++
+            const orders = ac.matchOrders[pk]
+            const built = buildEventPlayerTeam(playerCareers, orders)
+            const opp = applyMarkToOpponent(rivalTeams[(i === 0 ? j : i) - 1], orders?.mark)
+            // Player is participant 0 = the low index i, hence always side A.
+            m = { aLabel: labelOf(i), bLabel: labelOf(j), teamA: built.team, teamB: opp, result: simulateTeamBattle(built.team, opp, built.happiness, opp.map(() => 5)), involvesPlayer: true }
+            if (orders && pk < matchIdx) { revealed.push(m); lastPlayerPos = all.length }
+          } else {
+            const a = rivalTeams[i - 1], b = rivalTeams[j - 1]
+            m = { aLabel: labelOf(i), bLabel: labelOf(j), teamA: a, teamB: b, result: simulateTeamBattle(a, b, a.map(() => 5), b.map(() => 5)), involvesPlayer: false }
+          }
+          all.push(m)
+        })
+        // Reveal rival-vs-rival results up to the player's last completed match,
+        // so parallel results surface as the tournament progresses.
+        all.forEach((m, idx) => { if (!m.involvesPlayer && idx <= lastPlayerPos) revealed.push(m) })
+        const rows = Array.from({ length: parts }, (_, p) => ({ label: labelOf(p), isPlayer: p === 0, wins: 0, draws: 0, losses: 0, hpFracSum: 0 }))
+        const idxOf = (l: string) => rows.findIndex((r) => r.label === l)
+        const frac = (m: EventMatch, side: 'A' | 'B', team: Monster[]) => m.result.finals.filter((f) => f.side === side).reduce((s, f) => s + f.hp / maxHp(team[f.slot].stats), 0) / team.length
+        for (const m of revealed) {
+          const ai = idxOf(m.aLabel), bi = idxOf(m.bLabel)
+          if (m.result.winner === 'A') { rows[ai].wins++; rows[bi].losses++ } else if (m.result.winner === 'B') { rows[bi].wins++; rows[ai].losses++ } else { rows[ai].draws++; rows[bi].draws++ }
+          rows[ai].hpFracSum += frac(m, 'A', m.teamA); rows[bi].hpFracSum += frac(m, 'B', m.teamB)
+        }
+        const standings: EventStanding[] = [...rows].sort((a, b) => b.wins - a.wins || b.hpFracSum - a.hpFracSum).map((s, i) => ({ ...s, placement: i + 1 }))
+        return (
+          <div className="card" style={{ marginBottom: 10 }}>
+            <div className="section-title">Standings</div>
+            <BracketGrid standings={standings} allMatches={all} revealed={revealed} />
+            {revealed.length === 0 && <div className="hint">Results fill in as each match is played.</div>}
+          </div>
+        )
+      })()
       // All player matches fought → finalize and show the announce screen.
       if (matchIdx >= nPlayerMatches || !opponentTeam) {
         return (
           <>
             {header}
             {progress}
+            {bracketCard}
             <div className="carerow" style={{ justifyContent: 'center' }}>
               <button className="enter" onClick={() => { setGame((g) => (ac.kind === 'trial' ? finalizeTrial(g).game : finalizeCup(g))); setBattleSub('announce') }}>See Results →</button>
             </div>
@@ -1771,6 +1821,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
           {header}
           <p className="sub">{tournamentName} — {league} league{isTrial ? '' : `, ${fieldSize} teams, round robin`}. Match {matchIdx + 1} of {nPlayerMatches}.</p>
           {progress}
+          {bracketCard}
           <div className="card">
             <div className="section-title">Next up: {opponentLabel}</div>
             <div className="scout-report">
