@@ -149,7 +149,13 @@ button:hover { filter: brightness(1.08); }
 
 .slider { margin: 10px 0 4px; }
 .slider label { font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; }
-input[type=range] { width: 100%; }
+/* Range sliders: a 24px minimum hit area (WCAG 2.5.8) with a styled track +
+   thumb — the default 16px control was the one flagged target in the UX audit. */
+input[type=range] { width: 100%; height: 24px; -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer; }
+input[type=range]::-webkit-slider-runnable-track { height: 8px; border-radius: 6px; background: var(--panel2); border: 1px solid var(--line); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; margin-top: -7px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); }
+input[type=range]::-moz-range-track { height: 8px; border-radius: 6px; background: var(--panel2); border: 1px solid var(--line); }
+input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); }
 
 .tabs { display: flex; gap: 8px; margin: 4px 0 18px; }
 .tab { background: var(--panel2); color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 8px 16px; font-weight: 700; }
