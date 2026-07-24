@@ -10,10 +10,18 @@ Living doc for the economy/progression balance effort. Condensed from the
 
 ## How we measure — the long-haul sim
 A competent-player bot plays the full game (economy + cups + trials + licenses +
-breeding + fusion) for ~19 game-years × 3 seeds, reporting **peak league, end
-gold, dynasty generation, breeds/fusions, cup record**. Recreate from the pattern
-in git history (bot was scratch, deleted after each run). Peak league + whether
-breeding/fusion actually fire are the headline metrics.
+breeding) reporting **peak league, end gold, dynasty generation, cup record**.
+As of v0.81 it is **committed** (no longer scratch): `sim/bot.ts`, run with
+`npx tsx sim/bot.ts [years] [seeds]` (default 15×3). It's outside the app build
+(`tsconfig` includes only `src`) and drives the real exported game functions —
+including the v0.81 deferred flow (stage → per-fight `MatchOrders` → finalize)
+via a "coach AI" (`coachOrders`) that uses **every** tactics lever (temperament,
+scouting-informed target priority, mana policy, opening sequence, survival,
+control-first, combo, formation, protect, focus/mark). Keep it in sync when
+mechanics change. Peak league + whether breeding fires are the headline metrics.
+**v0.81 baseline (15y × 4 seeds):** Silver ×4, gen-2 ×4, ~210 cups/seed,
+~55–75% cup wins, 24k–33k end gold — a stable competent-but-unoptimised floor
+(a skilled human should still outrun it, per the design principles above).
 
 ## Current numbers
 
