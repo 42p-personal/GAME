@@ -8,7 +8,26 @@ nudge a value gently, sim it, read the result, adjust again. The sim is the arbi
 `docs/BALANCING.md` for the working ledger. This applies to every economy/difficulty/
 progression number, always.
 
-## Current state (v0.78)
+## Current state (v0.79)
+
+**v0.79 — painted area backdrops.** Eight new full-bleed scene paintings, one per
+screen: **Town** (village square at dusk), **Market** (beast bazaar), **Ranch Shop**
+(tack-and-tonics store interior), **Stables** (training yard), **Breeding Ranch**
+(paddocks + hatchery), **Hall of Fame** (marble gallery of champion statues), **Lab**
+(cryo-stasis chamber), **Title** (tamer + dragon overlooking the valley). Same
+painterly matte-painting look, 1400×788 JPEG, as the 10 league arena backdrops —
+`src/areaArt.ts` mirrors `leagueArt.ts`. Distinct palettes double as navigation: the
+Lab's icy cyan vs the Breeding Ranch's pastoral green tells you instantly which
+preservation screen you're on.
+**Legibility:** these sit behind dense admin UI, so `.areabg` is a `position: fixed`
+layer under a **theme-aware scrim** (night `rgba(18,20,28,.80→.95)`, day
+`rgba(243,245,250,.82→.95)`); cards stay fully opaque. Each view mounts its own
+backdrop (fixed positioning means no state lifting); the arena stands down during
+battles since it paints its own league backdrop. Art total 3.4MB.
+
+---
+
+## Prior state (v0.78)
 
 **v0.78 — the Lab freezer is the single preservation mechanism.** The stud farm is
 **gone**. `breed()` and `fuse()` both draw from `labFrozen`, and `freezeToLab()` now

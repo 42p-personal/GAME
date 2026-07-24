@@ -30,6 +30,7 @@ import {
   firstTeamLeagueIndex, generateRival, newGame, offerMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, setMarkTarget, setProtectTarget, setTactics, signUp, teamTacticsUnlocked,
   tournamentCalendarFor, upgradeBarn, visibleLeagueCount, weekOfMonth, yearOfWeek,
 } from './town'
+import { AREA_BACKGROUND, AreaArtKey, TOWN_AREA_ART } from './areaArt'
 import { APP_VERSION } from './version'
 
 const STAT_COLOR: Record<Stat, string> = {
@@ -502,6 +503,13 @@ function FusionWheel({ pool, result, onDone }: { pool: string[]; result: string;
   )
 }
 
+// Full-bleed painted backdrop for a screen. `position: fixed` means it can be
+// rendered from anywhere in the tree and still cover the viewport, so each view
+// owns its own scene without lifting state up to App.
+function AreaBackdrop({ scene }: { scene: AreaArtKey }) {
+  return <div className="areabg" style={{ backgroundImage: `url(${AREA_BACKGROUND[scene]})` }} aria-hidden="true" />
+}
+
 // ============================ Town hub (§13) ============================
 type TownArea = 'hub' | 'market' | 'shop' | 'breeding' | 'retirement' | 'lab'
 
@@ -567,6 +575,7 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
 
   return (
     <>
+      <AreaBackdrop scene={TOWN_AREA_ART[area] ?? 'town'} />
       {game.tutorialEnabled && !game.tutorialDismissed && (
         <TutorialBanner onDismiss={() => setGame((g) => ({ ...g, tutorialDismissed: true }))} />
       )}
@@ -2663,6 +2672,7 @@ function slotSummary(g: GameState) {
 function TitleScreen({ onNewGame, onContinue }: { onNewGame: () => void; onContinue: () => void }) {
   return (
     <div className="titlescreen">
+      <AreaBackdrop scene="title" />
       <div className="titlecard">
         <h1 className="titlelogo">Monster Tamer</h1>
         <p className="titletag">Raise it. Train it. Enter the circuit.</p>
@@ -3029,7 +3039,11 @@ export function App() {
       {view === 'game'
         ? (game.area === 'town'
           ? <TownView game={game} setGame={setGame as Dispatch<SetStateAction<GameState>>} />
-          : <RanchView game={game} setGame={setGame as Dispatch<SetStateAction<GameState>>} onBattleScreen={setBattleScreen} />)
+          : <>
+            {/* The arena paints its own league backdrop, so stand down during a battle. */}
+            {!battleScreen && <AreaBackdrop scene="stables" />}
+            <RanchView game={game} setGame={setGame as Dispatch<SetStateAction<GameState>>} onBattleScreen={setBattleScreen} />
+          </>)
         : <SandboxView />}
       {!(view === 'game' && battleScreen) && (
         <Bestiary specialLicense={game.specialLicense} eliteLicense={game.eliteLicense} />
