@@ -2,10 +2,10 @@
 // weekly actions (train drill / rest / feed / excursion), stamina, gold, aging.
 import {
   BODY_MINOR, FOODS, Food, INNATE_SECONDARY_LEVEL, LEAGUES, MAX_HAPPINESS, Monster, Move, RNG, STATS, Sex, Species, Stats, Stat, Tactics, TrainingProfile,
-  classForStats, feedDelta, foodDef, hashString, isFusionBody, mulberry32,
+  classForStats, feedDelta, foodDef, hashString, isFusionBody, isPrestigeBody, mulberry32,
 } from './core'
 import { ALL_DRILLS } from './drills'
-import { chooseLoadout, generateMonster, learnedMoves, maxHp, maxMana } from './monster'
+import { GenOptions, chooseLoadout, generateMonster, learnedMoves, maxHp, maxMana } from './monster'
 
 export const WEEKS_PER_MONTH = 4
 export const MONTHS_PER_YEAR = 12
@@ -28,9 +28,8 @@ export type Stage = 'Baby' | 'Teen' | 'Fully Grown' | 'Elder' | 'Retiree'
 // the runway to reach champion level before aging out. Wild base monsters get
 // nothing here, so the baseline difficulty is unchanged. Flat, not additive.
 export const PEDIGREE_SPAN_BONUS = 2 // years
-const PRESTIGE_BODIES = ['Draconic', 'Abyssal', 'Mythical']
 export function pedigreeSpanBonus(c: { species: { body: string }; generation?: number }): number {
-  if (isFusionBody(c.species.body as never) || PRESTIGE_BODIES.includes(c.species.body) || (c.generation ?? 1) >= 2) return PEDIGREE_SPAN_BONUS
+  if (isFusionBody(c.species.body as never) || isPrestigeBody(c.species.body as never) || (c.generation ?? 1) >= 2) return PEDIGREE_SPAN_BONUS
   return 0
 }
 
@@ -96,6 +95,7 @@ export interface Career {
   // Career span extensions (v0.6 economy pass). "Career span" is the years a
   // monster can COMPETE (nothing dies — retirees live on at the ranch).
   comfortWeeks?: number // stable-wide comfort-set bonus, SYNCED from GameState purchases (+8wk per owned item, like licenseIndex)
+  wildCap?: number // gen-1 training ceiling, SYNCED stable-wide from the Market Coach (800 → 900 → 1000)
   tonicWeeks?: number // Elder Tonic uses on THIS monster (+8wk each, unlimited)
   heritageStat?: Stat // bred child: parent B's major — trains +10% faster
   generation?: number // dynasty depth: absent/1 = wild-caught; children = max(parents)+1
@@ -308,20 +308,26 @@ export interface NewCareerOpts {
   licenseIndex?: number
   happiness?: number
   potential?: number // bloodline star rating (bred monsters inherit + climb it)
+  gen?: GenOptions // generation overrides (market scout/coach, prestige-free strays)
 }
 
 // The effective stat ceiling for a career: the league cap, lifted by the
 // monster's bloodline potential (LOOP_DESIGN Phase 5). Wild-caught monsters
 // (potential absent) get the plain league cap, so nothing changes for them —
 // and generation/battle never consult this, only career training does.
-export const PLATINUM_CAP = LEAGUES[7].cap // 800 — the gen-1 fusion ceiling
-export function statCapFor(c: { licenseIndex: number; potential?: number; species?: Species; generation?: number }): number {
+// v0.77 gen-1 ceilings. A monster you did not BREED is walled; breeding (gen 2+)
+// is the only way past, and its potential then sets the ceiling.
+//   wild / market  → 800, lifted to 900 / 1000 by the Market Coach tiers
+//   fusion (gen 1) → 1000 flat
+// So a fused monster out-ceilings uncoached market stock by 200 from day one —
+// that's the draw that makes fusion worth the 1000g and the two monsters.
+export const FUSION_GEN1_CAP = 1000
+export const WILD_GEN1_CAP = 800
+export function statCapFor(c: { licenseIndex: number; potential?: number; species?: Species; generation?: number; wildCap?: number }): number {
   const base = LEAGUES[c.licenseIndex].cap * (c.potential ?? 1)
-  // Gen-1 fusion monsters are hard-capped at Platinum until bred (FUSION_DESIGN.md):
-  // fusion CREATES a bloodline capped at Platinum; breeding (gen 2+) lifts the wall.
-  if (c.species && isFusionBody(c.species.body) && (c.generation ?? 1) <= 1) {
-    return Math.round(Math.min(base, PLATINUM_CAP))
-  }
+  const gen1 = (c.generation ?? 1) <= 1
+  if (gen1 && c.species && isFusionBody(c.species.body)) return Math.round(Math.min(base, FUSION_GEN1_CAP))
+  if (gen1) return Math.round(Math.min(base, c.wildCap ?? WILD_GEN1_CAP))
   return Math.round(base)
 }
 
@@ -329,7 +335,7 @@ export function statCapFor(c: { licenseIndex: number; potential?: number; specie
 // Market give a bought monster a stable-unique id while keeping the previewed
 // monster (same seed). Fusion passes ageWeeks:0 + averaged stats for a baby.
 export function newCareer(seed: string, opts: NewCareerOpts = {}): Career {
-  const m = generateMonster(seed, { train: 0 })
+  const m = generateMonster(seed, { train: 0, ...opts.gen })
   const id = opts.id ?? seed
   return {
     id,

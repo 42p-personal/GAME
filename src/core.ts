@@ -21,6 +21,10 @@ export type BodyType = 'Mammal' | 'Avian' | 'Marsupial' | 'Aquatic' | 'Insectoid
 // per-monster (not per-species) inherited majors + rolled minor/flaw. See FUSION_DESIGN.md.
 export const FUSION_BODIES: BodyType[] = ['Saurian', 'Tempestine', 'Broodkin']
 export const isFusionBody = (b: BodyType): boolean => FUSION_BODIES.includes(b)
+// The licence-gated "prestige" bodies (Special → Draconic/Abyssal, Elite →
+// Mythical). Lives here so both generation and career code share one list.
+export const PRESTIGE_BODIES: BodyType[] = ['Draconic', 'Abyssal', 'Mythical']
+export const isPrestigeBody = (b: BodyType): boolean => PRESTIGE_BODIES.includes(b)
 export type Sex = 'M' | 'F'
 
 // Training aptitude (user spec 2026-07-23): `minor` is body-type-derived

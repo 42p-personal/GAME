@@ -2,23 +2,56 @@
 // span all areas; the Ranch (src/game.ts) raises the active monster week by week.
 import {
   BodyType, ClassRole, Food, GAMEPLANS, INNATE_SECONDARY_LEVEL, LEAGUES, MAX_HAPPINESS, Monster, Rival, RivalPersonality, Sex, Species, Stat, STATS, Stats, Tactics, TeamGameplan, classForStats, foodDiscountGroup, hashString,
-  mulberry32, roleOfClass,
+  isFusionBody, mulberry32, roleOfClass,
 } from './core'
 import { SPECIES } from './species'
-import { generateMonster, maxHp, maxMana } from './monster'
+import { GenOptions, generateMonster, maxHp, maxMana } from './monster'
 import { BattleResult, simulateTeamBattle } from './battle'
 import {
   Career, MAX_STAMINA, START_GOLD, WEEKS_PER_MONTH, WEEKS_PER_YEAR, WeeklyAction, ageOneWeek, applyWeek, buyFood,
-  careerMonster, careerSpanYears, forageFeed, newCareer, rollMarket, statCapFor, trainingProfileFor,
+  WILD_GEN1_CAP, careerMonster, careerSpanYears, forageFeed, newCareer, rollMarket, statCapFor, trainingProfileFor,
 } from './game'
 import { ALL_DRILLS } from './drills'
 import { learnedMoves } from './monster'
 
 export type Area = 'town' | 'ranch'
 
-// Licensing costs for exclusive monster types
-export const SPECIAL_LICENSE_COST = 800 // Silver rank: Draconic + Abyssal
-export const ELITE_LICENSE_COST = 2000 // Masters rank: Mythical
+// Licensing for exclusive monster types. v0.77: the league requirement was
+// previously only COPY — the shop said "Requires Silver league" but nothing
+// checked it, so a Wood player with the gold walked straight into Draconics.
+// Now the rank gate is real and the price is correspondingly low: reaching the
+// league IS the cost, gold is just the receipt.
+export const SPECIAL_LICENSE_COST = 200 // Draconic + Abyssal
+export const ELITE_LICENSE_COST = 600 // Mythical
+export const SPECIAL_LICENSE_LEAGUE = 4 // Iron
+export const ELITE_LICENSE_LEAGUE = 7 // Platinum
+
+// --- Monster-market upgrades (v0.77) ---------------------------------------
+// Three independent levers on the SAME market: slots = more shots per month,
+// scout = aim those shots at a species you want, coach = raise the floor of
+// what turns up. All applied when the market restocks (start of each month).
+export const MARKET_SLOT_COSTS = [50, 100, 150] // 3 buys → base 3 offers becomes 6
+export const MARKET_SLOTS_MAX = MARKET_SLOT_COSTS.length
+export const marketSlotCost = (g: GameState): number | null => MARKET_SLOT_COSTS[g.marketSlots ?? 0] ?? null
+
+export const MARKET_SCOUT_COSTS = [350, 500] // buy, then upgrade
+export const SCOUT_CHANCE = [0, 0.15, 0.25] // per slot, by scout tier
+export const scoutCost = (g: GameState): number | null => MARKET_SCOUT_COSTS[g.marketScout ?? 0] ?? null
+
+// Market Coach: stock arrives already trained into a league BAND rather than
+// wild. Gated on rank (Gold, then Platinum) so it can't front-run progression,
+// and each tier adds a flat surcharge to the rolled price — you pay for the
+// months of drills you're skipping.
+export const MARKET_COACH_COSTS = [300, 750]
+export const MARKET_COACH_LEAGUES = [6, 7] // Gold to buy, Platinum to upgrade
+export const COACH_SURCHARGE = [0, 100, 250] // added to the rolled price, by tier
+// Top-stat band each tier lands in. Tin = 200-300, Iron = 400-500 (leagueForStat
+// bands); the low inset sits just inside the boundary and the draw is
+// bottom-skewed, so the typical coached monster is a LOW Tin / LOW Iron
+// prospect with plenty of training headroom left.
+export const COACH_BANDS: [number, number][] = [[0, 0], [205, 295], [405, 495]] // [0] unused — no coach, no override
+export const coachCost = (g: GameState): number | null => MARKET_COACH_COSTS[g.marketCoach ?? 0] ?? null
+export const coachLeague = (g: GameState): number | null => MARKET_COACH_LEAGUES[g.marketCoach ?? 0] ?? null
 
 export interface Tournament {
   id: string
@@ -46,11 +79,11 @@ export interface Tournament {
 export const CIRCUIT_REWARDS: Record<string, { gold: number; exp: number }> = {
   // Economy iteration (v0.71): cup gold nudged up, steepening at higher leagues
   // where the roster (and food bill) is bigger. Tuned against the long-haul sim.
-  Wood: { gold: 120, exp: 60 },
-  Copper: { gold: 180, exp: 90 },
-  Tin: { gold: 250, exp: 125 },
-  Bronze: { gold: 330, exp: 165 },
-  Iron: { gold: 420, exp: 210 },
+  Wood: { gold: 130, exp: 65 },
+  Copper: { gold: 195, exp: 98 },
+  Tin: { gold: 270, exp: 135 },
+  Bronze: { gold: 356, exp: 178 },
+  Iron: { gold: 454, exp: 227 },
 }
 
 // The "regular" (non-marquee) cup reward for the 5 leagues that ALSO run one
@@ -59,11 +92,11 @@ export const CIRCUIT_REWARDS: Record<string, { gold: number; exp: number }> = {
 // the circuit ladder rather than a discontinuity. The marquee's own reward
 // (PRESTIGE_EVENTS below) is deliberately bigger, so it still feels special.
 export const PRESTIGE_POOL_REWARDS: Record<string, { gold: number; exp: number }> = {
-  Silver: { gold: 500, exp: 250 },
-  Gold: { gold: 590, exp: 295 },
-  Platinum: { gold: 690, exp: 345 },
-  Masters: { gold: 800, exp: 400 },
-  'Tamer Elite': { gold: 920, exp: 460 },
+  Silver: { gold: 540, exp: 270 },
+  Gold: { gold: 637, exp: 319 },
+  Platinum: { gold: 745, exp: 373 },
+  Masters: { gold: 864, exp: 432 },
+  'Tamer Elite': { gold: 994, exp: 497 },
 }
 
 // Event names (user spec 2026-07-20): never named after a month, unique within
@@ -95,11 +128,11 @@ const PRESTIGE_POOL_NAMES: Record<string, string[]> = {
 // a Silver pool cup and the Silver Crescent would pay identically, and the
 // "marquee" framing (hand-authored lore, once-a-year) would feel hollow.
 export const PRESTIGE_EVENTS: Omit<Tournament, 'id'>[] = [
-  { name: 'The Silver Crescent', month: 6, week: 2, league: 'Silver', rewards: { gold: 650, exp: 325 } },
-  { name: 'The Gilded Crown', month: 7, week: 2, league: 'Gold', rewards: { gold: 760, exp: 380 } },
-  { name: 'The Radiant Throne', month: 8, week: 2, league: 'Platinum', rewards: { gold: 880, exp: 440 } },
-  { name: "The Grandmasters' Summit", month: 9, week: 2, league: 'Masters', rewards: { gold: 1010, exp: 505 } },
-  { name: 'The Apex Invitational', month: 10, week: 2, league: 'Tamer Elite', rewards: { gold: 1150, exp: 575 } },
+  { name: 'The Silver Crescent', month: 6, week: 2, league: 'Silver', rewards: { gold: 702, exp: 351 } },
+  { name: 'The Gilded Crown', month: 7, week: 2, league: 'Gold', rewards: { gold: 821, exp: 411 } },
+  { name: 'The Radiant Throne', month: 8, week: 2, league: 'Platinum', rewards: { gold: 950, exp: 475 } },
+  { name: "The Grandmasters' Summit", month: 9, week: 2, league: 'Masters', rewards: { gold: 1091, exp: 546 } },
+  { name: 'The Apex Invitational', month: 10, week: 2, league: 'Tamer Elite', rewards: { gold: 1242, exp: 621 } },
 ]
 
 // Cup lore (user spec 2026-07-22): a pre-cup preamble (prize money + a line of
@@ -283,6 +316,12 @@ export interface Frozen {
 export interface MarketOffer {
   seed: string
   price: number
+  // Generation overrides baked in at restock time (v0.77) so the card you see
+  // and the career you buy are generated from the SAME inputs — boostConstitution
+  // consumes rng conditionally, so differing opts would yield a different name.
+  speciesId?: string // Market Scout forced this slot to a species
+  targetTop?: number // Market Coach trained this slot into a league band
+  scouted?: boolean // display only: this slot came from a scout pick
 }
 
 // Tournament entry fee (user-approved economy sink 2026-07-21): paid at
@@ -351,8 +390,14 @@ export interface GameState {
   barnCapacity: number
   pantryContract: boolean // Ranch Shop: 20% off NORMAL foods
   grandLarder: boolean // Ranch Shop: 20% off PREMIUM foods (training + fruits + truffle)
-  specialLicense: boolean // Silver rank: unlock Draconic + Abyssal
-  eliteLicense: boolean // Masters rank: unlock Mythical
+  specialLicense: boolean // Iron rank: unlock Draconic + Abyssal
+  eliteLicense: boolean // Platinum rank: unlock Mythical
+  // --- Monster-market upgrades (v0.77) -------------------------------------
+  marketSlots: number // extra market offers bought, 0-3 (base 3 → up to 6)
+  marketScout: number // 0 none · 1 base (15%/slot) · 2 upgraded (25%/slot + a 2nd pick)
+  scoutPickA: string | null // species id the scout prioritises
+  scoutPickB: string | null // 2nd species id — upgraded scout only, may stay null
+  marketCoach: number // 0 none · 1 Tin-band stock · 2 Iron-band stock
   area: Area
   market: MarketOffer[] // monster market; restocks at the start of each month
   foodMarket: Record<Food, number> // this week's town food prices (shared by all monsters)
@@ -461,8 +506,13 @@ export function newGame(seed = 'start', opts?: { trainerName?: string; tutorialE
     grandLarder: false,
     specialLicense: false,
     eliteLicense: false,
+    marketSlots: 0,
+    marketScout: 0,
+    scoutPickA: null,
+    scoutPickB: null,
+    marketCoach: 0,
     area: 'town',
-    market: rollMarketOffers(seed, 0, false, false),
+    market: rollMarketOffers(seed, 0),
     foodMarket: rollMarket(seed, 0),
     nextId: 0,
     pendingTournament: null,
@@ -505,6 +555,13 @@ export const COMFORT_ITEMS = [
 export const COMFORT_WEEKS_PER_ITEM = 8
 export const comfortWeeksFor = (g: GameState): number => (g.comfortOwned?.length ?? 0) * COMFORT_WEEKS_PER_ITEM
 const syncComfort = (c: Career, g: GameState): Career => ({ ...c, comfortWeeks: comfortWeeksFor(g) })
+// Gen-1 training ceiling, stable-wide (v0.77). Wild/market monsters wall at 800;
+// each Market Coach tier lifts it, so the Coach is not just better STARTING
+// stats but a higher ROOF on everything you buy. Synced onto every career the
+// same way comfort and licences are.
+export const COACH_CAP_LIFT = [0, 100, 200] // by marketCoach tier → 800 / 900 / 1000
+export const wildCapFor = (g: GameState): number => WILD_GEN1_CAP + (COACH_CAP_LIFT[g.marketCoach ?? 0] ?? 0)
+export const syncWildCap = (c: Career, g: GameState): Career => ({ ...c, wildCap: wildCapFor(g) })
 export function buyComfortItem(g: GameState, id: string): GameState {
   const item = COMFORT_ITEMS.find((x) => x.id === id)
   if (!item || g.comfortOwned.includes(id) || g.gold < item.price) return g
@@ -558,17 +615,14 @@ export function applyStudBook(g: GameState, frozenId: string): GameState {
 }
 export const studIncome = (fr: { podiums?: number; champs?: number; studBook?: boolean }): number =>
   fr.studBook ? (fr.podiums ?? 0) * 1 + (fr.champs ?? 0) * 3 : 0
-// Retiree pension: decorated careers keep paying — 2g base + 1g/podium +
-// 2g/championship, capped. Competing all career long is an investment.
-export const PENSION_CAP = 10
-export const pensionFor = (c: Career): number => {
-  if (!c.retired) return 0
-  const podiums = c.tournamentHistory.filter((h) => h.placement <= 3).length
-  const champs = c.tournamentHistory.filter((h) => h.placement === 1).length
-  return Math.min(PENSION_CAP, 2 + podiums + champs * 2)
-}
+// v0.77: the retiree PENSION is gone. It was the single largest income in the
+// game — a perpetual, uncapped, per-retiree weekly payment that only ever grew
+// (retirees never leave), worth ~45% of a 25-year run's gross gold while cup
+// prizes were ~7%. The Retirement Ranch is now a HALL OF FAME: honours only, no
+// income, unlimited room. Breeding a retiree still means freezing it into the
+// (still limited) stud farm — that's the real cost of a dynasty now.
 // Extreme Training Manual (town store): unlocks the extreme drill row.
-export const EXTREME_MANUAL_COST = 1500
+export const EXTREME_MANUAL_COST = 1200
 export const buyExtremeManual = (g: GameState): GameState =>
   g.extremeUnlocked || g.gold < EXTREME_MANUAL_COST ? g : { ...g, gold: g.gold - EXTREME_MANUAL_COST, extremeUnlocked: true }
 // Lab: limited genome slots (curation, not hoarding) + expandable.
@@ -595,7 +649,7 @@ export function breedPotentialV2(a: Frozen, b: Frozen): number {
   return Math.min(MAX_POTENTIAL, Math.round((((a.potential ?? 1) + (b.potential ?? 1)) / 2 + BREED_POTENTIAL_STEP + champBonus) * 100) / 100)
 }
 export function breed(g: GameState, aId: string, bId: string): GameState {
-  if (aId === bId || g.gold < BREED_COST || g.stable.length >= effectiveBarnCap(g)) return g
+  if (aId === bId || g.gold < BREED_COST || barnFull(g)) return g
   const a = g.frozen.find((x) => x.id === aId)
   const b = g.frozen.find((x) => x.id === bId)
   if (!a || !b || (a.breedCount ?? 0) >= BREED_MAX_CHILDREN || (b.breedCount ?? 0) >= BREED_MAX_CHILDREN) return g
@@ -611,6 +665,7 @@ export function breed(g: GameState, aId: string, bId: string): GameState {
   baby.heritageStat = bProf ?? [...STATS].sort((x, y) => b.stats[y] - b.stats[x])[0]
   baby.generation = generation
   baby.comfortWeeks = comfortWeeksFor(g)
+  baby.wildCap = wildCapFor(g)
   const stars = '★'.repeat(Math.max(0, Math.round((potential - 1) / 0.05)))
   baby.log = [`${baby.name} is born — Gen ${generation} ${stars}, child of ${a.name} & ${b.name} (potential ×${potential.toFixed(2)}, heritage: ${baby.heritageStat}).`]
   return {
@@ -643,10 +698,10 @@ export function freezeToLab(g: GameState, id: string): GameState {
 }
 // Thaw a lab-frozen monster back into the active stable (resumes at the same age).
 export function thawFromLab(g: GameState, id: string): GameState {
-  if (g.stable.length >= effectiveBarnCap(g)) return g
+  if (barnFull(g)) return g
   const c = g.labFrozen?.find((x) => x.id === id)
   if (!c) return g
-  return { ...g, labFrozen: g.labFrozen.filter((x) => x.id !== id), stable: [...g.stable, { ...c, comfortWeeks: comfortWeeksFor(g) }], activeId: g.activeId || c.id }
+  return { ...g, labFrozen: g.labFrozen.filter((x) => x.id !== id), stable: [...g.stable, { ...c, comfortWeeks: comfortWeeksFor(g), wildCap: wildCapFor(g) }], activeId: g.activeId || c.id }
 }
 
 // --- FUSION (v0.7) — combine two LAB-FROZEN monsters into a new fusion species.
@@ -694,7 +749,7 @@ export function fuse(g: GameState, aId: string, bId: string): GameState {
   if (!a || !b || !spin) return g
   // Barn room: consuming stable parents frees slots; only labFrozen parents add net.
   const fromStable = [aId, bId].filter((id) => g.stable.some((x) => x.id === id)).length
-  if (g.stable.length - fromStable + 1 > effectiveBarnCap(g)) return g
+  if (activeStableCount(g) - fromStable + 1 > effectiveBarnCap(g)) return g
   const species = SPECIES.find((s) => s.id === spin.speciesId)!
   const rng = mulberry32(hashString('fuse:' + a.id + '+' + b.id + ':' + g.nextId))
   const babySeed = 'fuse-' + a.id + '+' + b.id + ':' + g.nextId
@@ -718,6 +773,7 @@ export function fuse(g: GameState, aId: string, bId: string): GameState {
   const flawPool = others.filter((s) => s !== baby.bonusMinor)
   baby.bonusFlaw = flawPool[Math.floor(rng() * flawPool.length)]
   baby.comfortWeeks = comfortWeeksFor(g)
+  baby.wildCap = wildCapFor(g)
   const stars = '★'.repeat(Math.round((FUSION_POTENTIAL - 1) / 0.05))
   baby.log = [`${baby.name} the ${species.name} is forged — a ${spin.classLabel}. Training aptitude: +20% ${baby.bonusMajor1} & +20% ${baby.bonusMajor2}, +10% ${baby.bonusMinor}, −10% ${baby.bonusFlaw}. ${stars} bloodline, Platinum-capped until bred onward.`]
   return {
@@ -794,9 +850,19 @@ export function trainerXpProgress(g: GameState): { level: number; into: number; 
 export const trainerBarnBonus = (g: GameState): number => Math.floor((trainerLevel(g) - 1) / 2)
 // Perk (v0.71): a weekly gold stipend that scales with trainer level — reputation
 // pays. 5g per level per week (Lv1 = 5g/wk, Lv5 = 25g/wk, Lv10 = 50g/wk).
-export const TRAINER_STIPEND_PER_LEVEL = 5
-export const trainerStipend = (g: GameState): number => trainerLevel(g) * TRAINER_STIPEND_PER_LEVEL
+// v0.77: was 5g/level UNCAPPED, which compounded to ~95g/wk by LV19 and ~40% of
+// a long run's gross gold. Now 1g per level, FLAT from level 15 — a modest floor
+// under a bad week, never a career income. Winning cups is the way you get rich.
+export const TRAINER_STIPEND_PER_LEVEL = 1
+export const TRAINER_STIPEND_CAP = 15 // reached at trainer level 15
+export const trainerStipend = (g: GameState): number =>
+  Math.min(TRAINER_STIPEND_CAP, trainerLevel(g) * TRAINER_STIPEND_PER_LEVEL)
 export const effectiveBarnCap = (g: GameState): number => g.barnCapacity + trainerBarnBonus(g)
+// v0.77: the barn houses COMPETITORS. Retirees moved to the Hall of Fame, which
+// has unlimited room — so they no longer occupy (and eventually clog) barn
+// slots. Every capacity check counts active monsters only.
+export const activeStableCount = (g: GameState): number => g.stable.filter((c) => !c.retired).length
+export const barnFull = (g: GameState): boolean => activeStableCount(g) >= effectiveBarnCap(g)
 // XP for a cup finish (podium only) — bigger for higher placement and league.
 export function cupTrainerXp(placement: number, leagueIndex: number): number {
   const base = placement === 1 ? 60 : placement === 2 ? 35 : placement === 3 ? 20 : 0
@@ -835,57 +901,162 @@ function rubberBandRivals(g: GameState): Rival[] {
   return g.rivals.map((rv) => (rv.licenseIndex < target ? { ...rv, licenseIndex: rv.licenseIndex + 1 } : rv))
 }
 
-// --- Market (§13.1) — 3 equal-weighted base monsters; price band wider than food. ---
-export function rollMarketOffers(seed: string, roll: number, hasSpecialLicense = false, hasEliteLicense = false): MarketOffer[] {
+// --- Market (§13.1) — equal-weighted base monsters; price band wider than food. ---
+// Is this species legal for the player to be offered / to scout for?
+export function speciesLicensed(s: Species, hasSpecial: boolean, hasElite: boolean): boolean {
+  if (s.body === 'Mythical') return hasElite
+  if (s.body === 'Draconic' || s.body === 'Abyssal') return hasSpecial
+  return true
+}
+
+export interface MarketConfig {
+  hasSpecialLicense?: boolean
+  hasEliteLicense?: boolean
+  slots?: number // extra bought slots on top of MARKET_BASE_SLOTS
+  scout?: number // 0 | 1 | 2
+  pickA?: string | null
+  pickB?: string | null
+  coach?: number // 0 | 1 | 2
+}
+export const MARKET_BASE_SLOTS = 3
+
+export function rollMarketOffers(seed: string, roll: number, cfg: MarketConfig = {}): MarketOffer[] {
+  const hasSpecial = !!cfg.hasSpecialLicense
+  const hasElite = !!cfg.hasEliteLicense
+  const scout = cfg.scout ?? 0
+  const coach = cfg.coach ?? 0
+  const want = MARKET_BASE_SLOTS + Math.max(0, Math.min(MARKET_SLOTS_MAX, cfg.slots ?? 0))
+
+  // A scout pick only counts if it's a real species the player may actually be
+  // offered — scouting a Draconic without the Special License must NOT smuggle
+  // one past the rank gate, so an unlicensed pick silently falls through to a
+  // random roll rather than being honoured.
+  const pickOf = (id: string | null | undefined): string | null => {
+    if (!id) return null
+    const sp = SPECIES.find((x) => x.id === id)
+    return sp && !isFusionBody(sp.body) && speciesLicensed(sp, hasSpecial, hasElite) ? sp.id : null
+  }
+  const pickA = scout >= 1 ? pickOf(cfg.pickA) : null
+  const pickB = scout >= 2 ? pickOf(cfg.pickB) : null
+  const chance = SCOUT_CHANCE[Math.max(0, Math.min(2, scout))] ?? 0
+
   const offers: MarketOffer[] = []
   let attemptIndex = 0
-  const maxAttempts = 100 // prevent infinite loops
+  const maxAttempts = 200 // prevent infinite loops
 
-  while (offers.length < 3 && attemptIndex < maxAttempts) {
+  while (offers.length < want && attemptIndex < maxAttempts) {
+    const slot = offers.length
     const s = 'mkt-' + hashString(seed + ':' + roll + ':' + attemptIndex).toString(36)
-    const monster = generateMonster(s)
-    const bodyType = monster.species.body
-
-    // Filter out exclusive creatures if player doesn't have licenses
-    const isExclusive = ['Draconic', 'Abyssal'].includes(bodyType)
-    const isMythical = bodyType === 'Mythical'
-
-    if (isExclusive && !hasSpecialLicense) {
-      attemptIndex++
-      continue
-    }
-    if (isMythical && !hasEliteLicense) {
-      attemptIndex++
-      continue
-    }
-
     const rng = mulberry32(hashString(seed + ':town:' + roll + ':' + attemptIndex))
     const price = Math.max(1, Math.round(MARKET_BASE * (0.4 + rng() * 1.2))) // ±60%
-    offers.push({ seed: s, price })
+
+    // Independent per-slot scout roll: pickA gets `chance`, pickB the next
+    // `chance` band, the remainder stays a genuine random roll.
+    const r = mulberry32(hashString(seed + ':scout:' + roll + ':' + slot))()
+    let speciesId: string | null = null
+    if (pickA && r < chance) speciesId = pickA
+    else if (pickB && r < chance * 2) speciesId = pickB
+
+    if (!speciesId) {
+      // Random slot — respect the licence gates by re-rolling the seed.
+      const monster = generateMonster(s)
+      if (!speciesLicensed(monster.species, hasSpecial, hasElite)) { attemptIndex++; continue }
+    }
+
+    // Market Coach: draw this slot's top-stat target from the tier's band, so
+    // every coached offer genuinely lands in the promised league. The draw is
+    // BOTTOM-SKEWED (rng², same shape the excursion payout uses): staying inside
+    // the league's rough stat budget is the promise, but the low end of it is
+    // the norm — the coach buys a head start, not a finished competitor, so the
+    // player's own training is still what makes the monster. Top-of-band happens,
+    // it's just rare.
+    const band = COACH_BANDS[Math.max(0, Math.min(2, coach))]
+    const cr = mulberry32(hashString(seed + ':coach:' + roll + ':' + slot))()
+    const targetTop = coach > 0
+      ? Math.round(band[0] + cr * cr * (band[1] - band[0]))
+      : undefined
+
+    offers.push({
+      seed: s,
+      price: price + (COACH_SURCHARGE[Math.max(0, Math.min(2, coach))] ?? 0),
+      ...(speciesId ? { speciesId, scouted: true } : {}),
+      ...(targetTop ? { targetTop } : {}),
+    })
     attemptIndex++
   }
 
   return offers
 }
 
-export const offerMonster = (o: MarketOffer) => generateMonster(o.seed, { train: 0 })
+// The generation overrides an offer was rolled with — the single source both
+// the market card and the purchase read, so they can never disagree.
+export const offerGenOpts = (o: MarketOffer): GenOptions =>
+  ({ train: 0, ...(o.speciesId ? { speciesId: o.speciesId } : {}), ...(o.targetTop ? { targetTop: o.targetTop } : {}) })
+
+export const marketConfigOf = (g: GameState): MarketConfig => ({
+  hasSpecialLicense: g.specialLicense,
+  hasEliteLicense: g.eliteLicense,
+  slots: g.marketSlots ?? 0,
+  scout: g.marketScout ?? 0,
+  pickA: g.scoutPickA ?? null,
+  pickB: g.scoutPickB ?? null,
+  coach: g.marketCoach ?? 0,
+})
+
+// --- Market upgrade purchases ----------------------------------------------
+// A bought slot takes effect IMMEDIATELY (you paid for stock now); the scout
+// and coach shape the NEXT restock, so changing a scout pick can never be used
+// to re-roll the current month's board on demand.
+export function buyMarketSlot(g: GameState): GameState {
+  const cost = marketSlotCost(g)
+  if (cost === null || g.gold < cost) return g
+  const slots = (g.marketSlots ?? 0) + 1
+  const ng = { ...g, gold: g.gold - cost, marketSlots: slots }
+  const extra = rollMarketOffers(g.seed + ':slot' + slots, Math.floor(g.week / WEEKS_PER_MONTH), { ...marketConfigOf(ng), slots: 0 })
+  return { ...ng, market: [...g.market, ...extra.slice(0, 1)] }
+}
+
+export function buyMarketScout(g: GameState): GameState {
+  const cost = scoutCost(g)
+  if (cost === null || g.gold < cost) return g
+  return { ...g, gold: g.gold - cost, marketScout: (g.marketScout ?? 0) + 1 }
+}
+
+export function setScoutPick(g: GameState, which: 'A' | 'B', speciesId: string | null): GameState {
+  if ((g.marketScout ?? 0) < (which === 'B' ? 2 : 1)) return g
+  return which === 'A' ? { ...g, scoutPickA: speciesId } : { ...g, scoutPickB: speciesId }
+}
+
+export function buyMarketCoach(g: GameState): GameState {
+  const cost = coachCost(g)
+  const need = coachLeague(g)
+  if (cost === null || need === null || g.licenseIndex < need || g.gold < cost) return g
+  const next = { ...g, gold: g.gold - cost, marketCoach: (g.marketCoach ?? 0) + 1 }
+  // The new roof applies to monsters you ALREADY own, not just future stock.
+  return { ...next, stable: next.stable.map((c) => syncWildCap(c, next)) }
+}
+export const canBuyMarketCoach = (g: GameState): boolean => {
+  const cost = coachCost(g); const need = coachLeague(g)
+  return cost !== null && need !== null && g.licenseIndex >= need && g.gold >= cost
+}
+// The coach row only APPEARS once the Gold license is held (user spec).
+export const coachVisible = (g: GameState): boolean =>
+  g.licenseIndex >= MARKET_COACH_LEAGUES[0] || (g.marketCoach ?? 0) > 0
+
+export const offerMonster = (o: MarketOffer) => generateMonster(o.seed, offerGenOpts(o))
 
 export function buyMonster(g: GameState, index: number): GameState {
   const o = g.market[index]
-  if (!o || g.gold < o.price || g.stable.length >= effectiveBarnCap(g)) return g
+  if (!o || g.gold < o.price || barnFull(g)) return g
 
-  const monster = generateMonster(o.seed, { train: 0 })
-  const bodyType = monster.species.body
+  const gen = offerGenOpts(o)
+  const monster = generateMonster(o.seed, gen)
+  if (!speciesLicensed(monster.species, g.specialLicense, g.eliteLicense)) return g
 
-  // Check licensing requirements for exclusive creatures
-  const isExclusive = ['Draconic', 'Abyssal'].includes(bodyType)
-  const isMythical = bodyType === 'Mythical'
-
-  if (isExclusive && !g.specialLicense) return g
-  if (isMythical && !g.eliteLicense) return g
-
-  const c = newCareer(o.seed, { id: 'own-' + g.nextId + '-' + o.seed, licenseIndex: g.licenseIndex }) // recruits join at the PLAYER's license (v0.5)
+  // Same gen opts as the card, so the monster bought IS the monster shown.
+  const c = newCareer(o.seed, { id: 'own-' + g.nextId + '-' + o.seed, licenseIndex: g.licenseIndex, gen }) // recruits join at the PLAYER's license (v0.5)
   c.comfortWeeks = comfortWeeksFor(g) // stable-wide comfort set applies to newcomers too (v0.6)
+  c.wildCap = wildCapFor(g)
   const market = g.market.filter((_, i) => i !== index)
   return { ...g, gold: g.gold - o.price, stable: [...g.stable, c], market, activeId: g.activeId || c.id, nextId: g.nextId + 1 }
 }
@@ -1215,8 +1386,11 @@ export const EVENTS: GameEvent[] = [
         label: 'Take it in',
         note: () => 'a free (unremarkable) recruit',
         apply: (g) => {
-          const c = newCareer('stray-' + g.week + '-' + g.nextId, { id: 'own-stray-' + g.nextId, licenseIndex: g.licenseIndex })
+          // Never a prestige body — the stray is a soft-lock backstop, not a
+          // free bypass of the Iron/Platinum licence gates.
+          const c = newCareer('stray-' + g.week + '-' + g.nextId, { id: 'own-stray-' + g.nextId, licenseIndex: g.licenseIndex, gen: { noPrestige: true } })
           c.comfortWeeks = comfortWeeksFor(g)
+          c.wildCap = wildCapFor(g)
           c.log = [`${c.name} the stray joins the ranch — scrappy, but willing.`]
           // deliberately ignores barn capacity: retirees may fill the barn, and
           // this event exists precisely to break that dead-end
@@ -1353,15 +1527,15 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
   })
   if (rentalDue > 0) gold = Math.max(0, gold - rentalDue) // no monster processed the charge (all retired) — never below zero
 
-  // Pensions + stud income (v0.6): decorated retirees keep earning, and a
-  // Stud Book turns a frozen champion's record into uncapped weekly fees.
-  const pensionGold = g.stable.reduce((s, c) => s + pensionFor(c), 0)
+  // Stud income (v0.6): a Stud Book turns a frozen champion's record into
+  // weekly fees. (The retiree pension was removed in v0.77 — see pensionFor's
+  // former home above.)
   const studGold = g.frozen.reduce((s, fr) => s + studIncome(fr), 0)
-  // Trainer stipend (v0.71): a weekly sponsorship that grows with the trainer's
-  // level — a steady income the whole account earns. Achievements (planned) will
-  // grant trainer XP, so unlocking them raises this stipend directly.
+  // Trainer stipend (v0.71, capped v0.77): a small weekly sponsorship that grows
+  // with the trainer's level and then FLATTENS — it's a floor under a bad run,
+  // not a career income.
   const stipendGold = trainerStipend(g)
-  gold += pensionGold + studGold + stipendGold
+  gold += studGold + stipendGold
 
   // Snapshot post-activity, PRE-tournament state so the digest below can
   // attribute changes honestly (2026-07-25 playtest fix): tournament injuries
@@ -1447,8 +1621,8 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
       if (changed) lastWeek.push(`  ↳ ${after.name} comes home at ${after.hp}/${maxHp(after.stats)} HP · ${after.mp}/${maxMana(after.stats)} MP — rest to recover`)
     }
   }
-  if (pensionGold + studGold + stipendGold > 0) {
-    const bits = [stipendGold > 0 ? `stipend +${stipendGold}g` : '', pensionGold > 0 ? `pensions +${pensionGold}g` : '', studGold > 0 ? `stud fees +${studGold}g` : ''].filter(Boolean)
+  if (studGold + stipendGold > 0) {
+    const bits = [stipendGold > 0 ? `stipend +${stipendGold}g` : '', studGold > 0 ? `stud fees +${studGold}g` : ''].filter(Boolean)
     lastWeek.push(`🏛 Ranch income: ${bits.join(' · ')}`)
   }
 
@@ -1487,7 +1661,7 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
     week,
     foodMarket: rollMarket(g.seed, week),
     market: monthTurned
-      ? rollMarketOffers(g.seed, week / WEEKS_PER_MONTH, g.specialLicense, g.eliteLicense)
+      ? rollMarketOffers(g.seed, week / WEEKS_PER_MONTH, marketConfigOf(g))
       : g.market,
     pendingTournament: null,
     pendingTrial: null,
@@ -2049,18 +2223,17 @@ export function freeze(g: GameState, id: string): GameState {
 }
 
 export function thaw(g: GameState, fid: string): GameState {
-  if (g.stable.length >= effectiveBarnCap(g)) return g
+  // Returns as a RETIREE — the Hall of Fame is unlimited, so no barn check.
   const fr = g.frozen.find((x) => x.id === fid)
   if (!fr) return g
   // v0.6: freeze holds FINISHED careers, so thaw un-banks the retiree as a
-  // retiree (pensioner) — not a rejuvenated Teen (that was the old mid-career
-  // freeze model, now an exploit). Their decoration is lost from the bank but
-  // lives on in tournamentHistory-less pension terms — they return as plain
-  // retirees (breeding decoration stays in the Frozen record until thawed).
+  // retiree — not a rejuvenated Teen (that was the old mid-career freeze model,
+  // now an exploit). They return to the Hall of Fame as plain retirees (breeding
+  // decoration stays in the Frozen record until thawed).
   const c = {
     ...careerFromFrozen(fr, fr.id), licenseIndex: g.licenseIndex,
     retired: true, ageWeeks: fr.species.lifespan * WEEKS_PER_YEAR,
-    comfortWeeks: comfortWeeksFor(g), generation: fr.generation ?? 1,
+    comfortWeeks: comfortWeeksFor(g), wildCap: wildCapFor(g), generation: fr.generation ?? 1,
   }
   return {
     ...g,
@@ -2070,7 +2243,7 @@ export function thaw(g: GameState, fid: string): GameState {
   }
 }
 
-export const fusionRoom = (g: GameState): boolean => g.stable.length < effectiveBarnCap(g)
+export const fusionRoom = (g: GameState): boolean => !barnFull(g)
 
 function careerFromFrozen(fr: Frozen, id: string): Career {
   // Restore a raising shell from a banked genome, preserving stats + league. The
@@ -2103,12 +2276,19 @@ export function buyGrandLarder(g: GameState): GameState {
   return { ...g, gold: g.gold - GRAND_LARDER_COST, grandLarder: true }
 }
 
+// Both gates are enforced HERE (the data layer), not just in the shop's
+// disabled state — the rank requirement is the real gate, gold is secondary.
+export const canBuySpecialLicense = (g: GameState): boolean =>
+  !g.specialLicense && g.licenseIndex >= SPECIAL_LICENSE_LEAGUE && g.gold >= SPECIAL_LICENSE_COST
+export const canBuyEliteLicense = (g: GameState): boolean =>
+  !g.eliteLicense && g.licenseIndex >= ELITE_LICENSE_LEAGUE && g.gold >= ELITE_LICENSE_COST
+
 export function buySpecialLicense(g: GameState): GameState {
-  if (g.specialLicense || g.gold < SPECIAL_LICENSE_COST) return g
+  if (!canBuySpecialLicense(g)) return g
   return { ...g, gold: g.gold - SPECIAL_LICENSE_COST, specialLicense: true }
 }
 
 export function buyEliteLicense(g: GameState): GameState {
-  if (g.eliteLicense || g.gold < ELITE_LICENSE_COST) return g
+  if (!canBuyEliteLicense(g)) return g
   return { ...g, gold: g.gold - ELITE_LICENSE_COST, eliteLicense: true }
 }

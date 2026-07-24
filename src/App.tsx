@@ -1,6 +1,6 @@
 import { Dispatch, ReactNode, SetStateAction, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  BODY_ELEMENT, BODY_MINOR, BodyType, COMBO_INFO, DEFAULT_TACTICS, Element, FOODS, FoodDef, FoodTier, GAMEPLANS, INNATE_SECONDARY_LEVEL, LEAGUES, MANA_POLICY_INFO, Monster, Move, STATS, Stat,
+  BODY_ELEMENT, BODY_MINOR, BodyType, isFusionBody, COMBO_INFO, DEFAULT_TACTICS, Element, FOODS, FoodDef, FoodTier, GAMEPLANS, INNATE_SECONDARY_LEVEL, LEAGUES, MANA_POLICY_INFO, Monster, Move, STATS, Stat,
   TARGET_PRIORITY_INFO, TEMPERAMENT_INFO, Tactics, classForStats,
   feedDelta, frontRowCount, happinessMultiplier, hashString, mulberry32, roleOfClass, rowOfSlot,
 } from './core'
@@ -13,15 +13,18 @@ import { BIOS } from './bestiary'
 import { BASIC_DRILLS, Drill, EXTREME_DRILLS, INTENSIVE_DRILLS } from './drills'
 import {
   BASIC_DRILL_STAMINA, Career, INTENSIVE_DRILL_STAMINA, EXTREME_DRILL_STAMINA, MAX_STAMINA, canRankUp, careerMonster, careerSpanYears,
-  dateLabel, foodName, FORAGE_STAMINA_COST, FORAGE_HAPPINESS_COST, previewWeekEffects, stageInfo, trainingProfileFor,
+  dateLabel, foodName, FORAGE_STAMINA_COST, FORAGE_HAPPINESS_COST, WILD_GEN1_CAP, previewWeekEffects, stageInfo, trainingProfileFor,
 } from './game'
 import {
-  PANTRY_CONTRACT_COST, GRAND_LARDER_COST, ELITE_LICENSE_COST, EventMatch, EventStanding, GameState, PendingEvent, RIVAL_BAND_MIN, rivalBudgetMult, SPECIAL_LICENSE_COST,
-  COMFORT_ITEMS, EXTREME_MANUAL_COST, BREED_COST, BREED_MAX_CHILDREN, STUD_SLOTS_BASE, applyStudBook, breed, breedPotentialV2, buyComfortItem, buyExtremeManual, expandStud, studExpandCost, labUpkeepPerFrozen, pensionFor, studIncome, useTonic,
+  PANTRY_CONTRACT_COST, GRAND_LARDER_COST, ELITE_LICENSE_COST, ELITE_LICENSE_LEAGUE, EventMatch, EventStanding, GameState, PendingEvent, RIVAL_BAND_MIN, rivalBudgetMult, SPECIAL_LICENSE_COST, SPECIAL_LICENSE_LEAGUE,
+  canBuySpecialLicense, canBuyEliteLicense, COACH_CAP_LIFT, wildCapFor,
+  MARKET_BASE_SLOTS, MARKET_SLOTS_MAX, SCOUT_CHANCE, COACH_SURCHARGE, marketSlotCost, scoutCost, coachCost, coachLeague,
+  buyMarketSlot, buyMarketScout, buyMarketCoach, setScoutPick, canBuyMarketCoach, coachVisible, speciesLicensed,
+  COMFORT_ITEMS, EXTREME_MANUAL_COST, BREED_COST, BREED_MAX_CHILDREN, STUD_SLOTS_BASE, applyStudBook, breed, breedPotentialV2, buyComfortItem, buyExtremeManual, expandStud, studExpandCost, labUpkeepPerFrozen, studIncome, useTonic,
   WeekPlanEntry, advanceWeek, barnCost, buyPantryContract, buyGrandLarder, buyEliteLicense, buyMonster, foodDiscountFor, resolveEvent,
   buySpecialLicense, cancelSignUp, cupLore, eligibleForTournament, freeze, fusionRoom, gameplanForRivalTeam, generateRivalTeamsForTournament, goto, healAtInfirmary, infirmaryFee, leagueIndexOf, monthOfWeek,
   entryFee, placementLabel, scoutFee, teamSizeForLeague, seatedRivalTeamIndex,
-  trainerXpProgress, trainerBarnBonus, trainerStipend, effectiveBarnCap, BREEDING_BONUS,
+  trainerXpProgress, trainerBarnBonus, trainerStipend, effectiveBarnCap, barnFull as barnFullOf, BREEDING_BONUS,
   buyLicense, cancelTrial, nextLicenseCost, startTrial, trialStatus, TRIAL_CHAMPION_MULT, RIVAL_PERSONALITY_GAMEPLAN,
   fuse, fusionSpin, fusionRecipeFor, freezeToLab, thawFromLab, expandLab, labExpandCost, LAB_SLOTS_BASE, FUSION_COST,
   firstTeamLeagueIndex, generateRival, newGame, offerMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, setMarkTarget, setProtectTarget, setTactics, signUp, teamTacticsUnlocked, thaw,
@@ -502,6 +505,51 @@ function FusionWheel({ pool, result, onDone }: { pool: string[]; result: string;
 // ============================ Town hub (§13) ============================
 type TownArea = 'hub' | 'market' | 'shop' | 'breeding' | 'retirement' | 'lab'
 
+// Market Scout (v0.77): pick a body type, then a species inside it, and each
+// market slot gets a per-tier chance to come up as that monster. The upgraded
+// scout opens a second pair, which may stay "Any" to put all the weight on the
+// first. Prestige body types only appear once their licence is held — the
+// engine also refuses an unlicensed pick, this just avoids dangling the bait.
+function ScoutPair({ game, setGame, which, label }: {
+  game: GameState; setGame: Dispatch<SetStateAction<GameState>>; which: 'A' | 'B'; label: string
+}) {
+  const picked = which === 'A' ? game.scoutPickA : game.scoutPickB
+  const pickedSp = picked ? SPECIES.find((s) => s.id === picked) : undefined
+  const [body, setBody] = useState<string>(pickedSp?.body ?? '')
+  // Derived from SPECIES so it can never drift from the real roster: every
+  // non-fusion body the player is actually licensed to be offered.
+  const bodies = [...new Set(SPECIES.filter((s) => !isFusionBody(s.body)
+    && speciesLicensed(s, game.specialLicense, game.eliteLicense)).map((s) => s.body))]
+  const inBody = SPECIES.filter((s) => s.body === body)
+  return (
+    <div className="scoutpair">
+      <span className="scoutpair-l">{label}</span>
+      <select value={body} onChange={(e) => { setBody(e.target.value); setGame((g) => setScoutPick(g, which, null)) }}>
+        <option value="">— any —</option>
+        {bodies.map((b) => <option key={b} value={b}>{b}</option>)}
+      </select>
+      <select value={picked ?? ''} disabled={!body} onChange={(e) => setGame((g) => setScoutPick(g, which, e.target.value || null))}>
+        <option value="">— any {body || 'monster'} —</option>
+        {inBody.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+      </select>
+    </div>
+  )
+}
+
+function ScoutPanel({ game, setGame }: { game: GameState; setGame: Dispatch<SetStateAction<GameState>> }) {
+  const tier = game.marketScout ?? 0
+  if (tier < 1) return null
+  const pct = Math.round(SCOUT_CHANCE[Math.min(2, tier)] * 100)
+  return (
+    <div className="scoutbox">
+      <div className="scoutbox-h">🔎 Market Scout <span className="dim">· {pct}% per slot</span></div>
+      <ScoutPair game={game} setGame={setGame} which="A" label="Looking for" />
+      {tier >= 2 && <ScoutPair game={game} setGame={setGame} which="B" label="…and also" />}
+      <div className="hint">Applies to next month's stock.</div>
+    </div>
+  )
+}
+
 function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetStateAction<GameState>> }) {
   const [fuseA, setFuseA] = useState('')
   const [fuseB, setFuseB] = useState('')
@@ -509,10 +557,9 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
   // The town is a navigable hub of locations. A fresh game (empty stable) opens
   // straight into the Market to buy a first monster; otherwise land on the hub.
   const [area, setArea] = useState<TownArea>(game.stable.length === 0 ? 'market' : 'hub')
-  const barnFull = game.stable.length >= effectiveBarnCap(game)
+  const barnFull = barnFullOf(game) // retirees live in the Hall of Fame, not the barn
   const active = game.stable.filter((c) => !c.retired)
   const retirees = game.stable.filter((c) => c.retired)
-  const pensionTotal = retirees.reduce((s, c) => s + pensionFor(c), 0)
   const studTotal = game.frozen.reduce((s, f) => s + studIncome(f), 0)
 
   return (
@@ -555,8 +602,8 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
               <span className="dim">{game.frozen.length} stud{game.frozen.length === 1 ? '' : 's'}{studTotal > 0 ? ` · +${studTotal}g/wk` : ' · breed a dynasty'}</span>
             </button>
             <button className="hubbtn" onClick={() => setArea('retirement')}>
-              <span className="hubicon">🏡</span><b>Retirement Ranch</b>
-              <span className="dim">{retirees.length} pensioner{retirees.length === 1 ? '' : 's'}{pensionTotal > 0 ? ` · +${pensionTotal}g/wk` : ''}</span>
+              <span className="hubicon">🏛</span><b>Hall of Fame</b>
+              <span className="dim">{retirees.length === 0 ? 'no honourees yet' : `${retirees.length} honoured`}</span>
             </button>
             <button className="hubbtn" onClick={() => setArea('lab')}>
               <span className="hubicon">🧪</span><b>Lab</b>
@@ -603,31 +650,35 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
         </>
       )}
 
-      {/* ---- RETIREMENT RANCH: pensioners earning passive gold ---- */}
+      {/* ---- HALL OF FAME: finished careers, honours only, unlimited room ---- */}
       {area === 'retirement' && (
         <div className="townmap">
           <div className="card loc">
-            <div className="loc-h"><span>🏡 Retirement Ranch</span>{pensionTotal > 0 && <span className="up">+{pensionTotal}g/wk</span>}</div>
-            <div className="dim" style={{ marginBottom: 6 }}>Retired champions earn a weekly pension. Send one to the Breeding Ranch to breed a dynasty instead.</div>
-            {retirees.length === 0 && <div className="dim">No pensioners yet — monsters retire when their career span ends.</div>}
-            {retirees.map((c) => {
-              const podiums = c.tournamentHistory.filter((h) => h.placement <= 3).length
-              const champs = c.tournamentHistory.filter((h) => h.placement === 1).length
-              return (
-                <div className="shoprow" key={c.id}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Sprite species={c.species} size={32} stage="Retiree" />
-                    <div>
-                      <b>{c.name}</b> <span className="dim">· {c.species.name}</span>
-                      <div className="dim">🏅 {podiums} podium{podiums === 1 ? '' : 's'} · 🏆 {champs} · 🏛 +{pensionFor(c)}g/wk</div>
+            <div className="loc-h"><span>🏛 Hall of Fame</span><span className="dim">{retirees.length} honoured · unlimited room</span></div>
+            <div className="dim" style={{ marginBottom: 6 }}>Every monster who finished a career rests here, record intact. To breed one, send it to the Breeding Ranch as stud.</div>
+            {retirees.length === 0 && <div className="dim">Empty — monsters are honoured here when their career span ends.</div>}
+            {[...retirees]
+              .sort((a, b) => b.tournamentHistory.filter((h) => h.placement === 1).length - a.tournamentHistory.filter((h) => h.placement === 1).length
+                || b.tournamentHistory.filter((h) => h.placement <= 3).length - a.tournamentHistory.filter((h) => h.placement <= 3).length)
+              .map((c) => {
+                const podiums = c.tournamentHistory.filter((h) => h.placement <= 3).length
+                const champs = c.tournamentHistory.filter((h) => h.placement === 1).length
+                const best = Math.max(...STATS.map((k) => c.stats[k]))
+                return (
+                  <div className="shoprow" key={c.id}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Sprite species={c.species} size={32} stage="Retiree" />
+                      <div>
+                        <b>{c.name}</b> <span className="dim">· {c.species.name} · {classForStats(c.stats)}</span>
+                        <div className="dim">🏅 {podiums} podium{podiums === 1 ? '' : 's'} · 🏆 {champs} · peak {best}</div>
+                      </div>
                     </div>
+                    <button className="ghost" disabled={game.frozen.length >= game.studSlots}
+                      title={game.frozen.length >= game.studSlots ? 'The stud farm is full — expand it at the Breeding Ranch' : 'Move to the Breeding Ranch as breeding stock'}
+                      onClick={() => setGame((g) => freeze(g, c.id))}>🐎 To Stud</button>
                   </div>
-                  <button className="ghost" disabled={game.frozen.length >= game.studSlots}
-                    title={game.frozen.length >= game.studSlots ? 'The stud farm is full — expand it at the Breeding Ranch' : 'Move to the Breeding Ranch as breeding stock (ends the pension)'}
-                    onClick={() => setGame((g) => freeze(g, c.id))}>🐎 To Stud</button>
-                </div>
-              )
-            })}
+                )
+              })}
           </div>
         </div>
       )}
@@ -639,7 +690,7 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
             <div className="loc-h"><span>🐎 Breeding Ranch</span><span className="dim">{game.frozen.length}/{game.studSlots} studs · upkeep {labUpkeepPerFrozen(game)}g/wk each{game.labTechLoan ? ' (at cost 🤝)' : ''}</span></div>
             <div className="section-title">Breeding stock</div>
             <div className="labrows">
-              {game.frozen.length === 0 && <div className="dim">No studs yet — send a decorated retiree here from the Retirement Ranch.</div>}
+              {game.frozen.length === 0 && <div className="dim">No studs yet — send a decorated monster here from the Hall of Fame.</div>}
               {game.frozen.map((f) => (
                 <div className="labrow" key={f.id}>
                   <Sprite species={f.species} size={28} stage="Retiree" />
@@ -652,7 +703,7 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
                     <button className="ghost" title="Assign a Stud Book — uncapped weekly fees from this legacy's record"
                       onClick={() => setGame((g) => applyStudBook(g, f.id))}>📕 Stud</button>
                   )}
-                  <button className="ghost" disabled={barnFull} title="Return to the stable as a pensioner"
+                  <button className="ghost" title="Return to the Hall of Fame (ends its breeding run)"
                     onClick={() => setGame((g) => thaw(g, f.id))}>Recall</button>
                 </div>
               ))}
@@ -782,8 +833,11 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
       <div className="townmap">
         {/* Market */}
         <div className="card loc">
-          <div className="loc-h"><span>🛒 Market</span></div>
+          <div className="loc-h"><span>🛒 Market</span>{game.marketCoach > 0 && (
+            <span className="dim">🎓 stock trained to {LEAGUES[game.marketCoach === 2 ? 4 : 2].name}</span>
+          )}</div>
           {barnFull && <div className="hint">🏠 Stable full — upgrade a barn to buy.</div>}
+          <ScoutPanel game={game} setGame={setGame} />
           <div className="offers">
             {game.market.length === 0 && <div className="dim">Sold out — market refreshes at the start of each month.</div>}
             {game.market.map((o, i) => {
@@ -798,7 +852,7 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
                     <summary className="offer-brief">
                       <Sprite species={m.species} size={44} />
                       <span className="offer-brief-text">
-                        <b>{m.name}</b> <span className="dim">· {m.species.name} · {m.className}</span>
+                        <b>{m.name}</b> {o.scouted && <span title="Found by your Market Scout">🔎</span>} <span className="dim">· {m.species.name} · {m.className}</span>
                         <span className="offer-brief-sub">
                           <AptMarks prof={prof} /> <span className="dim">· {m.species.lifespan}y</span>
                         </span>
@@ -872,6 +926,54 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
             </div>
             <button disabled={game.gold < barnCost(game)} onClick={() => setGame((g) => upgradeBarn(g))}>Buy · {barnCost(game)}g</button>
           </div>
+          {/* Monster-market upgrades (v0.77): more stock, aimed stock, better stock. */}
+          <div className="shoprow">
+            <div>
+              <b>Monster Market Slots</b>
+              <div className="dim">{marketSlotCost(game) === null
+                ? `✓ Maxed — ${MARKET_BASE_SLOTS + MARKET_SLOTS_MAX} monsters on offer`
+                : `One more monster on offer each month · ${MARKET_BASE_SLOTS + game.marketSlots} → ${MARKET_BASE_SLOTS + game.marketSlots + 1}`}</div>
+            </div>
+            <button
+              disabled={marketSlotCost(game) === null || game.gold < (marketSlotCost(game) ?? Infinity)}
+              onClick={() => setGame((g) => buyMarketSlot(g))}
+            >
+              {marketSlotCost(game) === null ? '✓ Maxed' : `Buy · ${marketSlotCost(game)}g`}
+            </button>
+          </div>
+          <div className="shoprow">
+            <div>
+              <b>Monster Market Scout</b>
+              <div className="dim">{game.marketScout === 0
+                ? 'Name a species to hunt for · 15% chance per market slot'
+                : game.marketScout === 1
+                  ? 'Upgrade: 25% per slot, and track a second species at once'
+                  : '✓ 25% per slot · two species tracked'}</div>
+            </div>
+            <button
+              disabled={scoutCost(game) === null || game.gold < (scoutCost(game) ?? Infinity)}
+              onClick={() => setGame((g) => buyMarketScout(g))}
+            >
+              {scoutCost(game) === null ? '✓ Owned' : `${game.marketScout === 0 ? 'Buy' : 'Upgrade'} · ${scoutCost(game)}g`}
+            </button>
+          </div>
+          {coachVisible(game) && (
+            <div className="shoprow">
+              <div>
+                <b>Market Coach</b>
+                <div className="dim">{game.marketCoach === 0
+                  ? `${LEAGUES[2].name}-league stock · raises every unbred monster's training cap ${WILD_GEN1_CAP} → ${WILD_GEN1_CAP + COACH_CAP_LIFT[1]} · +${COACH_SURCHARGE[1]}g each`
+                  : game.marketCoach === 1
+                    ? `Upgrade: ${LEAGUES[4].name}-league stock · cap ${WILD_GEN1_CAP + COACH_CAP_LIFT[1]} → ${WILD_GEN1_CAP + COACH_CAP_LIFT[2]} · +${COACH_SURCHARGE[2]}g each`
+                    : `✓ ${LEAGUES[4].name}-league stock · cap ${WILD_GEN1_CAP + COACH_CAP_LIFT[2]} · +${COACH_SURCHARGE[2]}g each`}</div>
+              </div>
+              <button disabled={!canBuyMarketCoach(game)} onClick={() => setGame((g) => buyMarketCoach(g))}>
+                {coachCost(game) === null ? '✓ Owned'
+                  : game.licenseIndex < (coachLeague(game) ?? 0) ? `🔒 ${LEAGUES[coachLeague(game) ?? 0].name}`
+                    : `${game.marketCoach === 0 ? 'Buy' : 'Upgrade'} · ${coachCost(game)}g`}
+              </button>
+            </div>
+          )}
           {/* Comfort set (v0.6): stable-wide permanent +2 months career span each. */}
           {COMFORT_ITEMS.map((it) => (
             <div className="shoprow" key={it.id}>
@@ -915,19 +1017,27 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
           <div className="shoprow">
             <div>
               <b>Special Breeding License</b>
-              <div className="dim">{game.specialLicense ? '✓ Unlocked Draconic & Abyssal' : 'Requires Silver league'}</div>
+              <div className="dim">{game.specialLicense
+                ? '✓ Unlocked Draconic & Abyssal'
+                : `Unlocks Draconic & Abyssal · requires ${LEAGUES[SPECIAL_LICENSE_LEAGUE].name} league`}</div>
             </div>
-            <button disabled={game.specialLicense || game.gold < SPECIAL_LICENSE_COST} onClick={() => setGame((g) => buySpecialLicense(g))}>
-              {game.specialLicense ? '✓ Owned' : `Buy · ${SPECIAL_LICENSE_COST}g`}
+            <button disabled={!canBuySpecialLicense(game)} onClick={() => setGame((g) => buySpecialLicense(g))}>
+              {game.specialLicense ? '✓ Owned'
+                : game.licenseIndex < SPECIAL_LICENSE_LEAGUE ? `🔒 ${LEAGUES[SPECIAL_LICENSE_LEAGUE].name}`
+                  : `Buy · ${SPECIAL_LICENSE_COST}g`}
             </button>
           </div>
           <div className="shoprow">
             <div>
               <b>Elite Breeding License</b>
-              <div className="dim">{game.eliteLicense ? '✓ Unlocked Mythical' : 'Requires Masters league'}</div>
+              <div className="dim">{game.eliteLicense
+                ? '✓ Unlocked Mythical'
+                : `Unlocks Mythical · requires ${LEAGUES[ELITE_LICENSE_LEAGUE].name} league`}</div>
             </div>
-            <button disabled={game.eliteLicense || game.gold < ELITE_LICENSE_COST} onClick={() => setGame((g) => buyEliteLicense(g))}>
-              {game.eliteLicense ? '✓ Owned' : `Buy · ${ELITE_LICENSE_COST}g`}
+            <button disabled={!canBuyEliteLicense(game)} onClick={() => setGame((g) => buyEliteLicense(g))}>
+              {game.eliteLicense ? '✓ Owned'
+                : game.licenseIndex < ELITE_LICENSE_LEAGUE ? `🔒 ${LEAGUES[ELITE_LICENSE_LEAGUE].name}`
+                  : `Buy · ${ELITE_LICENSE_COST}g`}
             </button>
           </div>
         </div>
@@ -1914,7 +2024,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
                 </div>
               )}
               {selectedCareer.retired && (
-                <div className="dim" style={{ fontSize: 11 }}>🏛 Pension: +{pensionFor(selectedCareer)}g/wk — or bank the legacy at the Lab for breeding.</div>
+                <div className="dim" style={{ fontSize: 11 }}>🏛 Retired to the Hall of Fame — send it to the Breeding Ranch as stud to continue the line.</div>
               )}
               {showHistoryFor === selectedCareer.id && (
                 <div className="tour-history">
@@ -2446,6 +2556,14 @@ function sanitizeAndMigrate(raw: string): GameState | null {
     if (g.pendingTournament && typeof g.pendingTournament.feePaid !== 'number') g.pendingTournament.feePaid = 0
     if (typeof g.weekPlans !== 'object' || g.weekPlans === null) g.weekPlans = {}
     if (!Array.isArray(g.lastWeek)) g.lastWeek = []
+    // migrate pre-v0.77 saves: monster-market upgrades default to "not bought".
+    if (typeof g.marketSlots !== 'number') g.marketSlots = 0
+    if (typeof g.marketScout !== 'number') g.marketScout = 0
+    if (typeof g.marketCoach !== 'number') g.marketCoach = 0
+    if (typeof g.scoutPickA !== 'string') g.scoutPickA = null
+    if (typeof g.scoutPickB !== 'string') g.scoutPickB = null
+    // v0.77 gen-1 ceiling: back-fill from whatever coach tier the save holds.
+    for (const c of g.stable) if (typeof c.wildCap !== 'number') c.wildCap = wildCapFor(g)
     // migrate pre-round-robin tournamentHistory: placement was 'champion'|'none'
     if (Array.isArray(g.stable)) for (const c of g.stable) {
       if (Array.isArray(c.tournamentHistory)) for (const h of c.tournamentHistory) {

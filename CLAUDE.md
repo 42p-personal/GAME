@@ -8,7 +8,26 @@ nudge a value gently, sim it, read the result, adjust again. The sim is the arbi
 `docs/BALANCING.md` for the working ledger. This applies to every economy/difficulty/
 progression number, always.
 
-## Current state (v0.7)
+## Current state (v0.77)
+
+**v0.77 — economy correction + market systems + gen-1 caps.** The retiree **pension is
+gone** (it was 45% of all income, perpetual and cumulative); the Retirement Ranch is now the
+**🏛 Hall of Fame** — honours only, **unlimited room**, and retirees no longer occupy barn
+slots. **Trainer stipend capped** at 1g/level, flat from LV15 (15g/wk). Cup gold +8%.
+Result: cups went from 7% → ~81% of a good player's income; an average player's end gold
+fell from ~180k to ~3–15k. **Gen-1 training ceilings**: wild/market **800** (→900/1000 via
+the two Market Coach tiers), **fusion gen-1 1000**, bred gen-2+ `leagueCap × potential`.
+**Monster-market upgrades**: Market Slots (50/100/150 → 3 to 6 offers), **Market Scout**
+(350g, 15%/slot; +500g → 25% and a 2nd species pick), **Market Coach** (Gold: 300g Tin-band
+stock +100g each; Platinum: 750g Iron-band +250g each). Prestige licences now **actually
+enforce rank** (Special 200g @ Iron, Elite 600g @ Platinum — previously the requirement was
+copy only); the stray event can no longer roll a prestige body. Rival budget escalates
+gently by league (`1.8 + i×0.02`). Day/night theme toggle on every screen. See
+`docs/BALANCING.md` for the full evidence.
+
+---
+
+## Prior state (v0.7)
 
 **v0.7 — Fusion system + 15 fusion species (2026-07-23):** the 🧪 Lab is now a real
 **stasis freezer** (`labFrozen`/`labSlots`, expandable from the Ranch Shop), SEPARATE

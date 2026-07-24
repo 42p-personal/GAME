@@ -1,7 +1,7 @@
 // Seed -> monster generator (§10.1 genome idea, simplified) plus derived values.
 import {
   CLASSES, NORMAL_FOODS, INNATE_SECONDARY_LEVEL, LEAGUES, Monster, Move, RNG, STATS, Stat, Stats, classForStats, hashString,
-  isFusionBody, leagueForStat, mulberry32, pick, randInt,
+  isFusionBody, isPrestigeBody, leagueForStat, mulberry32, pick, randInt,
 } from './core'
 import { ALL_MOVES } from './moves'
 import { SPECIES } from './species'
@@ -246,16 +246,39 @@ export function chooseLoadout(learned: Move[], stats?: Stats): Move[] {
   return out.slice(0, 3)
 }
 
-export interface GenOptions { train?: number }
+export interface GenOptions {
+  train?: number
+  // v0.77 market systems. All three default to off, so every existing caller
+  // (and every golden) generates byte-identically.
+  speciesId?: string // force an exact species — the Market Scout's pick
+  noPrestige?: boolean // exclude Draconic/Abyssal/Mythical — the stray event
+  targetTop?: number // normalise so the HIGHEST stat lands here — the Market Coach
+}
 
 // Fusion species are NEVER wild/market — they only exist as a fusion RESULT.
 // (Filtering them out also keeps the generation pool — and every golden — byte-
 // identical to before they were added, since they're appended at the array end.)
 const GENERATABLE = SPECIES.filter((s) => !isFusionBody(s.body))
+const NON_PRESTIGE = GENERATABLE.filter((s) => !isPrestigeBody(s.body))
+
+// Scale every stat so the top one lands on `top`, preserving the species' stat
+// SHAPE (and the per-monster training jitter baked in above). Used by the Market
+// Coach to guarantee an offer actually sits in the promised league band — a flat
+// training budget scatters far too wide to make that promise honestly.
+function normaliseTop(stats: Stats, top: number): Stats {
+  const cur = Math.max(...STATS.map((k) => stats[k]))
+  if (cur <= 0) return stats
+  const k = top / cur
+  const out = { ...stats }
+  for (const s of STATS) out[s] = Math.max(1, Math.min(1000, Math.round(stats[s] * k)))
+  return out
+}
 
 export function generateMonster(seed: string, opts: GenOptions = {}): Monster {
   const rng = mulberry32(hashString(seed || 'egg'))
-  const species = GENERATABLE[hashString(seed || 'egg') % GENERATABLE.length]
+  const pool = opts.noPrestige ? NON_PRESTIGE : GENERATABLE
+  const species = (opts.speciesId ? GENERATABLE.find((s) => s.id === opts.speciesId) : undefined)
+    ?? pool[hashString(seed || 'egg') % pool.length]
   const sex = rng() < 0.5 ? 'M' : 'F'
 
   // Individual variance (±5), order-preserving: jittered values are re-assigned
@@ -266,7 +289,8 @@ export function generateMonster(seed: string, opts: GenOptions = {}): Monster {
   const ranked = [...STATS].sort((a, b) => species.base[b] - species.base[a])
   ranked.forEach((k, i) => { base[k] = jittered[i] })
 
-  const stats = boostConstitution(applyTraining(base, opts.train ?? 0, rng), rng)
+  const trained = boostConstitution(applyTraining(base, opts.train ?? 0, rng), rng)
+  const stats = opts.targetTop ? normaliseTop(trained, opts.targetTop) : trained
   const learned = learnedMoves(stats)
   const loadout = chooseLoadout(learned, stats)
   const maxStat = Math.max(...STATS.map((k) => stats[k]))

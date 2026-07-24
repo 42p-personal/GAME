@@ -95,6 +95,64 @@ gated by:
 - Whether the v0.72 bump overshot (Bronze → Gold/Platinum is ~2–3 leagues; dial back top-league cup gold or stipend if too generous).
 - Food-cost relief for large rosters (bulk-feeding discount) — deferred lever.
 
+## v0.77 — the big economy correction
+
+**Diagnosis (measured, 25y × 3 seeds).** Income was inverted: retiree **pension 45%**,
+**trainer stipend 40%**, **cup prizes just 7%**. Both faucets were perpetual, uncapped and
+cumulative (retirees never leave; stipend grew forever), while every sink was a one-off.
+An average player finished on **~180,000g** with nothing to spend it on.
+
+**Fixes**
+- **Pension REMOVED.** Retirement Ranch → **🏛 Hall of Fame**: honours only, no income,
+  **unlimited room** (retirees no longer occupy barn slots — they used to clog it).
+  Breeding still requires freezing into the limited stud farm.
+- **Trainer stipend capped**: was `5g × level` uncapped (~95g/wk by LV19). Now **1g/level,
+  flat from level 15 = 15g/wk**. A LV53 trainer still earns 15g/wk.
+- **Cup gold +8%** and **Extreme Manual 1500 → 1200**, to re-open the advanced systems the
+  cut had priced out.
+
+**Result:** average end gold **180k → 2.8–15.4k**; cups became **~81%** of a good player's
+income. Gold is a real constraint again.
+
+### Gen-1 training ceilings (v0.77)
+A monster you did not BREED is walled. Breeding (gen 2+) is the only unconditional way past.
+| Kind | Ceiling |
+|---|---|
+| Wild / market, no coach | **800** |
+| Wild / market + Market Coach I | **900** |
+| Wild / market + Market Coach II | **1000** |
+| **Fusion (gen 1)** | **1000** |
+| Bred gen 2+ | `leagueCap × potential` (1100+ at TE) |
+
+Rank-up needs `leagueCap − 10`, so: **Masters** requires coach I / fusion / breeding;
+**Tamer Elite** requires coach II / fusion / breeding. The Coach's league gates (Gold, then
+Platinum) line up exactly with where the lift is needed. Fusion gen-1 now **out-ceilings
+uncoached market stock by 200** — that's the draw that pays for 1000g + two monsters.
+
+### Potential ladder (verified against `breedPotentialV2`)
+| Line | Gen 1 | Gen 2 | Gen 3 | Gen 4 | Gen 5 | Gen 6 |
+|---|--|--|--|--|--|--|
+| Bred, plain parents | 1.00 | 1.10 | 1.20 | 1.30 | 1.40 | **1.50** |
+| Bred, champion parents | 1.00 | 1.18 | 1.36 | **1.50** | — | — |
+| Fusion, plain parents | 1.15 | 1.25 | 1.35 | 1.45 | **1.50** | — |
+| Fusion, champion parents | 1.15 | 1.33 | **1.50** | — | — | — |
+
+All lines converge at `MAX_POTENTIAL 1.5`; fusion + champion parents is the fastest route
+(3 generations vs 4 or 6).
+
+### Two-profile sim (25y × 3 seeds, post-change)
+| | Good player | Average player |
+|---|---|---|
+| Peak | **Tamer Elite / Masters / Tamer Elite** | Iron / Bronze / Silver |
+| Best stat | 1000 / 930 / 1000 | 260 / 104 / 430 |
+| Cup wins | 90–106 | 25–33 |
+| End gold | 0.6–2.2k (fully invested) | 2.8–15.4k |
+| Coach bought | **2/2 every seed** | never |
+
+⚠️ **Known gap:** fusion still fires only ~1× per 25 years. The binding constraint is NOT
+gold — it's needing two *spare* monsters forming a valid body pair (Mammal+Reptilian /
+Avian+Aquatic / Marsupial+Insectoid). A roster/recipe friction, not an economy one.
+
 ## Ledger of changes made
 - **v0.62** — economy pass #1 (stipend/pension/comfort/peddler/breeding/soft-lock).
 - **v0.72** — cup gold ↑ + trainer gold stipend + excursion nudge. Peak Bronze → Gold/Platinum; breeding now fires.
