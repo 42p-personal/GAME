@@ -21,9 +21,30 @@ Lab's icy cyan vs the Breeding Ranch's pastoral green tells you instantly which
 preservation screen you're on.
 **Legibility:** these sit behind dense admin UI, so `.areabg` is a `position: fixed`
 layer under a **theme-aware scrim** (night `rgba(18,20,28,.80→.95)`, day
-`rgba(243,245,250,.82→.95)`); cards stay fully opaque. Each view mounts its own
-backdrop (fixed positioning means no state lifting); the arena stands down during
-battles since it paints its own league backdrop. Art total 3.4MB.
+`rgba(243,245,250,.82→.95)`); cards stay fully opaque — and it MUST be `z-index: -1`
+(at 0 a positioned element paints above all static content; the scrim buried every
+button on the live site, see the deploy section's verification note). Each view mounts
+its own backdrop (fixed positioning means no state lifting); the arena stands down
+during battles since it paints its own league backdrop. Art total 3.4MB.
+
+**Post-v0.79 fix passes (same day, shipped as fix commits):**
+- **Desktop UX audit** — `.hubbtn`/`.ev-choice`/`.forage-option` set their own panel
+  background but inherited `--btn-ink` (text-on-accent) → near-invisible labels; all set
+  `color: var(--ink)` explicitly now. Any new button style that overrides `background`
+  MUST also set `color`. Day-theme `--btn-ink` is near-black (white on `#0fb488` was
+  2.7:1, AA fail). Feeding queue now iterates ACTIVE monsters only (Hall of Fame
+  retirees were adding a weekly feeding click + food bill each, forever). Range sliders
+  styled with a 24px hit area.
+- **Mobile audit (375px)** — `.arena` stacks to one column ≤720px (the two sandbox team
+  cards forced 631px page width); theme toggle is icon-only ≤560px (`.tt-label` hidden)
+  with `h1` padding to clear it; `.stablescreen` bottom padding 88px so the fixed rail
+  can't cover the last row (tactics "Conserve" was unclickable).
+- **Tutorial rewrite** — welcome banner now teaches the real loop (weekly tick, cups +
+  rank-up licenses, freeze-before-retirement, gen-1 ceiling); five new one-shot
+  `TipBanner`s (ids: `market`, `lab`, `breeding`, `hof`, plus conditional `freezewindow`
+  — fires at first Elder with freezer room — and `gen1cap` — fires when a gen-1 monster
+  nears its `wildCap`, tested against the wall itself, NOT `wall < leagueCap`, which is
+  false at Platinum where they're equal). Tips gate on `tutorialEnabled` + `tipsSeen`.
 
 ---
 
@@ -172,12 +193,34 @@ dependable path to production.** Flow: commit to `preview` → verify → `git m
 ```bash
 CLOUDFLARE_API_TOKEN=<token> npx wrangler pages deploy dist --project-name game --branch main
 ```
+**⚠️ Wrangler misroutes the FIRST manual deploy to Preview** — 3 out of 3 times on
+2026-07-24, `--branch main` was ignored and the deploy landed as `Environment: Preview,
+Branch: preview` (tell-tale: the output prints "Deployment alias URL:
+https://preview.game-eoz.pages.dev"). The IDENTICAL command re-run immediately lands as
+Production. So the deploy ritual is ALWAYS: deploy → `npx wrangler pages deployment list
+--project-name game` → confirm the new hash says **Production / main** → if it says
+Preview, just deploy again and re-check. Never announce "shipped" from the deploy
+command's own success output.
+
 After a git push, `npx wrangler pages deployment list --project-name game` shows whether the
 auto-build failed. The apex domains (`tamergame.42p.uk` / `game-eoz.pages.dev`) can edge-cache a
 stale `index.html` for a while after a manual deploy — the deployment-specific
 `<hash>.game-eoz.pages.dev` URL is the source of truth for "did the new bundle actually ship".
 The real permanent fix (not yet done) is a package.json `overrides` forcing one esbuild version
 repo-wide — deferred because it needs its own test pass against vite/vitest.
+
+### ⚠️ Verifying visual changes without screenshots
+Screenshots are frequently unavailable (Browser pane not displayed → no compositing).
+Computed-style + hit-test audits are NOT sufficient for layering bugs: a
+`pointer-events: none` overlay that paints ON TOP of the UI passes every such check
+(clicks work, contrast reads fine) while the page looks empty — exactly how the v0.79
+`.areabg` z-index bug (backdrop scrim burying every button) shipped and was caught by
+the user's eyes. The reliable check is a **paint-order probe**: temporarily set the
+overlay's `pointer-events: auto`, read `document.elementsFromPoint()` at a few buttons'
+centres, and confirm the button (not the overlay) tops the stack; then restore. Run it
+after any change to fixed/absolutely-positioned layers, in both themes. Related audit
+false-positive to remember: children of a CLOSED `<details>` still report layout boxes
+in Chrome, so they flag as "covered" while being invisible by design.
 
 ---
 
