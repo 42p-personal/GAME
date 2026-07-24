@@ -742,7 +742,11 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
    art carries mood and location identity while the content stays fully legible.
    Cards remain opaque; only the page gutters really show the painting. */
 .areabg {
-  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  /* z-index MUST be negative: at 0 a positioned element paints ABOVE all the
+     static content in the same stacking context — the scrim buried every card
+     and button under an 80-95% veil (pointer-events:none meant clicks still
+     worked, which is why hit-test audits passed while the page looked empty). */
+  position: fixed; inset: 0; z-index: -1; pointer-events: none;
   background-size: cover; background-position: center; background-repeat: no-repeat;
   /* Cross-fade when moving between areas. */
   transition: background-image .25s ease-in-out;
