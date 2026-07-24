@@ -176,6 +176,32 @@ export interface Tactics {
 }
 export const DEFAULT_TACTICS: Tactics = { temperament: 'balanced', targetPriority: 'weakest' }
 
+// --- Per-fight orders (v0.81): tactics are chosen fresh before EACH battle the
+// player fights (like abilities are chosen before a tournament), not stored as a
+// monster's standing trait. One MatchOrders per player-match captures the whole
+// pre-fight screen: each member's Tactics (by monster id), the formation (member
+// row order), a protect order, and an optional kill-order mark (opponent slot).
+export interface MatchOrders {
+  tactics: Record<string, Tactics> // by player-monster id
+  formation: string[] // player-monster ids, in row order (first half = front line)
+  protectId?: string // the member ordered to guard its allies
+  mark?: number // opponent slot the whole team focuses first
+}
+
+// A tournament (or trial) that advanceWeek has STAGED but not resolved: the
+// player fights each of their matches interactively, picking MatchOrders before
+// each, and the event is finalized (rewards/injury/standings) only when the last
+// player match ends. Serializable so an in-flight event survives save/reload.
+export interface ActiveCup {
+  kind: 'cup' | 'trial'
+  tournamentId: string
+  week: number // the tournament's week (advanceWeek increments g.week, so this is stored for calendar/reward/injury lookups)
+  playerMonsterIds: string[] // the fielded team, fixed for the event
+  rivalTeams: Monster[][] // the field, generated once at stage time (with gameplans applied)
+  matchOrders: Record<number, MatchOrders> // by player-match index (0-based)
+  doneThrough: number // highest player-match index already fought (-1 = none yet)
+}
+
 // Formation (wave 2): roster ORDER is the formation — the first half of a
 // team fights in the front line, the rest in the back line. Single-target
 // MELEE attacks (including a melee-channel basic Attack) can only reach the

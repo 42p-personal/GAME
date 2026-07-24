@@ -8,7 +8,40 @@ nudge a value gently, sim it, read the result, adjust again. The sim is the arbi
 `docs/BALANCING.md` for the working ledger. This applies to every economy/difficulty/
 progression number, always.
 
-## Current state (v0.80)
+## Current state (v0.81)
+
+**v0.81 — per-fight tactics + deferred, interactive tournament resolution.**
+Tactics are no longer a monster's standing trait — they're chosen **fresh before each
+battle the player fights**, exactly like abilities are chosen before a tournament. The
+standing-orders `<details>` panel is **gone from the Stables** (`TacticsControls` was
+extracted and now lives only on the new pre-fight screen and the Sandbox lab editor).
+
+The enabling change is architectural: the whole tournament used to be simulated **up
+front** inside `advanceWeek` (`resolveTournament`/`resolveTrial`), and the battle screen
+merely **replayed** a finished `lastBattle`. Now `advanceWeek` only **stages** the event
+(`stageCup`/`stageTrial` → `GameState.activeCup`, a serializable in-flight event carrying
+the fielded ids + the generated rival teams). The `'battle'` phase fights it **match by
+match**: `preamble → bracket (scout) → tactics → fight (simulated live) → … → finalize`.
+Each player match is simulated at the moment its `MatchOrders` are committed, so tactics
+genuinely decide the outcome. `finalizeCup`/`finalizeTrial` (called from the UI when the
+last match ends) score standings, rewards, injury, exp, trainer XP, the seated-rival
+head-to-head, and license unlock — the tail of the old resolvers, moved out of the tick.
+
+**Why goldens don't move:** `simulateTeamBattle` seeds its RNG purely from monster seeds
+(`battle.ts`), so a matchup is a pure function of (monsters + their tactics) — the engine
+is untouched, and a scratch sim confirmed two different `MatchOrders` for the same matchup
+produce different battle logs (tactics bite). 12/12 tests still green. `MatchOrders`
+(per-member `Tactics` + formation row order + protect + mark) and `ActiveCup` live in
+`core.ts`; the old `setTactics`/`setProtectTarget`/`setMarkTarget` and the sign-up
+protect/mark pickers are removed (those orders are now picked per fight). Applies to **all
+player fights** — team cups, 1v1 cups, and rank-up trials. A staged event is persisted, so
+a reload mid-cup resumes (migration routes `activeCup` saves to the ranch). Browser-verified
+end-to-end: an Iron 3v3 cup fought match-by-match, finished 1st/4, +494g, `activeCup`
+cleared.
+
+---
+
+## Prior state (v0.80)
 
 **v0.80 — per-move battle animations (hybrid) + Bastion rename.** The 1v1 arena
 (`arena.tsx`, shown in Sandbox + Wood/Copper) now animates each ability distinctly.

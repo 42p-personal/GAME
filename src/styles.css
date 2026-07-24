@@ -720,6 +720,11 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 .tactic-summary-row .tsr-icon { flex-shrink: 0; width: 16px; text-align: center; }
 .tactic-summary-row b { color: var(--ink); font-weight: 700; }
 
+/* Pre-fight formation row (v0.81): the team line-up, reorderable before a fight. */
+.formationrow { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.formationchip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); font-size: 13px; }
+.formationchip button.small { padding: 0 6px; line-height: 1.4; }
+
 /* Formation (wave 2): team-mode roster split into front/back lines; the back
    line sits offset behind so the formation reads at a glance. */
 .roster { display: flex; flex-direction: column; gap: 8px; }

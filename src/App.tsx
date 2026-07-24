@@ -1,6 +1,6 @@
 import { Dispatch, ReactNode, SetStateAction, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  BODY_ELEMENT, BODY_MINOR, BodyType, isFusionBody, COMBO_INFO, DEFAULT_TACTICS, Element, FOODS, FoodDef, FoodTier, GAMEPLANS, INNATE_SECONDARY_LEVEL, LEAGUES, MANA_POLICY_INFO, Monster, Move, STATS, Stat,
+  BODY_ELEMENT, BODY_MINOR, BodyType, isFusionBody, COMBO_INFO, DEFAULT_TACTICS, Element, FOODS, FoodDef, FoodTier, GAMEPLANS, INNATE_SECONDARY_LEVEL, LEAGUES, MANA_POLICY_INFO, MatchOrders, Monster, Move, STATS, Stat,
   TARGET_PRIORITY_INFO, TEMPERAMENT_INFO, Tactics, classForStats,
   feedDelta, frontRowCount, happinessMultiplier, hashString, mulberry32, roleOfClass, rowOfSlot,
 } from './core'
@@ -27,7 +27,8 @@ import {
   trainerXpProgress, trainerBarnBonus, trainerStipend, effectiveBarnCap, barnFull as barnFullOf, BREEDING_BONUS,
   buyLicense, cancelTrial, nextLicenseCost, startTrial, trialStatus, TRIAL_CHAMPION_MULT, RIVAL_PERSONALITY_GAMEPLAN,
   fuse, fusionSpin, fusionRecipeFor, freezeToLab, thawFromLab, expandLab, labExpandCost, LAB_SLOTS_BASE, FUSION_COST,
-  firstTeamLeagueIndex, generateRival, newGame, offerMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, setMarkTarget, setProtectTarget, setTactics, signUp, teamTacticsUnlocked,
+  generateRival, newGame, offerMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, signUp,
+  applyMarkToOpponent, buildEventPlayerTeam, finalizeCup, finalizeTrial, roundRobinSchedule,
   tournamentCalendarFor, upgradeBarn, visibleLeagueCount, weekOfMonth, yearOfWeek,
 } from './town'
 import { AREA_BACKGROUND, AreaArtKey, TOWN_AREA_ART } from './areaArt'
@@ -410,6 +411,7 @@ function SandboxView() {
         onSetLoadout={(ids) => updateFighter(editing.side, editing.id, { loadout: ids.length ? ids : null })}
         onSetInnate={(index) => updateFighter(editing.side, editing.id, { activeInnate: index })}
         onSetTactics={(t) => updateFighter(editing.side, editing.id, { tactics: t })}
+        showTactics
         onClose={() => setEditing(null)}
       />
     )
@@ -1209,10 +1211,103 @@ function PlanBenefit({ career, plan, gear }: { career: Career; plan: WeekPlanEnt
 // The Ability Selection UI (§1b, mockup approved 2026-07-19): click a slot,
 // then a pool move to swap it in. Filter by stat; equipped moves show dimmed
 // in the pool. Changes apply immediately via onSetLoadout (no separate save
+// The reusable tactics control grid (v0.81): five order groups + a plain-language
+// summary. Used by the pre-fight tactics screen (once per fielded monster) and by
+// the Sandbox fighter editor. `teamPlay` enables the multi-combatant orders
+// (target priority) — off for a 1v1, on for a team fight.
+function TacticsControls({ value, onChange, loadout, teamPlay }: {
+  value: Tactics; onChange: (t: Tactics) => void; loadout: Move[]; teamPlay: boolean
+}) {
+  const cur = value
+  const temp = TEMPERAMENT_INFO.find((o) => o.id === cur.temperament)!
+  const prio = TARGET_PRIORITY_INFO.find((o) => o.id === cur.targetPriority)!
+  const mana = MANA_POLICY_INFO.find((o) => o.id === (cur.manaPolicy ?? 'normal'))!
+  const combo = COMBO_INFO.find((o) => o.id === (cur.comboDiscipline ?? false))!
+  const openerMove = cur.openerId ? loadout.find((mv) => mv.id === cur.openerId) : undefined
+  const comboReady = loadout.some((p) => p.effects?.bonusVsStatus
+    && loadout.some((s) => s.status?.kind === p.effects!.bonusVsStatus!.kind))
+  const summary = [
+    { icon: temp.icon, name: temp.name, desc: temp.desc },
+    { icon: openerMove ? (openerMove.element ? ELEMENT_ICON[openerMove.element] : '▶') : '🎲',
+      name: openerMove ? `Open with ${openerMove.name}` : 'Instinct opener',
+      desc: openerMove ? 'Always throws this move first when it can.' : 'The class picks its own first play.' },
+    { icon: mana.icon, name: mana.name, desc: mana.desc },
+    { icon: combo.icon, name: combo.name, desc: comboReady ? combo.desc : 'No setup→payoff pair equipped yet — no effect.' },
+    ...(teamPlay ? [{ icon: prio.icon, name: prio.name, desc: prio.desc }] : []),
+  ]
+  return (
+    <>
+      <div className="tacticgroups">
+        <div className="tacticgroup">
+          <div className="tacticgroup-h">Temperament</div>
+          {TEMPERAMENT_INFO.map((o) => (
+            <button key={o.id} className={'tacticopt' + (cur.temperament === o.id ? ' on' : '')}
+              onClick={() => onChange({ ...cur, temperament: o.id })}>{o.icon} {o.name}</button>
+          ))}
+        </div>
+        <div className="tacticgroup">
+          <div className="tacticgroup-h">Opening move</div>
+          <button className={'tacticopt' + (!openerMove ? ' on' : '')}
+            onClick={() => onChange({ ...cur, openerId: undefined })}>🎲 Instinct</button>
+          {loadout.map((mv) => (
+            <button key={mv.id} className={'tacticopt' + (cur.openerId === mv.id ? ' on' : '')}
+              onClick={() => onChange({ ...cur, openerId: mv.id })}>
+              {mv.element ? ELEMENT_ICON[mv.element] + ' ' : '▶ '}{mv.name}
+            </button>
+          ))}
+        </div>
+        <div className="tacticgroup">
+          <div className="tacticgroup-h">Mana policy</div>
+          {MANA_POLICY_INFO.map((o) => (
+            <button key={o.id} className={'tacticopt' + ((cur.manaPolicy ?? 'normal') === o.id ? ' on' : '')}
+              onClick={() => onChange({ ...cur, manaPolicy: o.id })}>{o.icon} {o.name}</button>
+          ))}
+        </div>
+        <div className="tacticgroup">
+          <div className="tacticgroup-h">Combo play{comboReady ? '' : ' 🔒'}</div>
+          {COMBO_INFO.map((o) => {
+            const disabled = o.id === true && !comboReady
+            return (
+              <button key={String(o.id)} disabled={disabled}
+                className={'tacticopt' + ((cur.comboDiscipline ?? false) === o.id ? ' on' : '') + (disabled ? ' lockedopt' : '')}
+                onClick={() => !disabled && onChange({ ...cur, comboDiscipline: o.id })}>{o.icon} {o.name}</button>
+            )
+          })}
+          {!comboReady && <div className="hint">🔗 Equip a setup move and its matching payoff to use this.</div>}
+        </div>
+        {teamPlay && (
+          <div className="tacticgroup">
+            <div className="tacticgroup-h">Target priority</div>
+            {TARGET_PRIORITY_INFO.map((o) => (
+              <button key={o.id} className={'tacticopt' + (cur.targetPriority === o.id ? ' on' : '')}
+                onClick={() => onChange({ ...cur, targetPriority: o.id })}>{o.icon} {o.name}</button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="tactic-summary">
+        {summary.map((s, i) => (
+          <div key={i} className="tactic-summary-row"><span className="tsr-icon">{s.icon}</span><span><b>{s.name}</b> — {s.desc}</span></div>
+        ))}
+      </div>
+    </>
+  )
+}
+
+// Neutral starting orders for a pre-fight tactics screen (v0.81): every member
+// on balanced defaults, formation = the given roster order, no protect/mark.
+function neutralMatchOrders(careers: Career[]): MatchOrders {
+  return {
+    tactics: Object.fromEntries(careers.map((c) => [c.id, { ...DEFAULT_TACTICS }])),
+    formation: careers.map((c) => c.id),
+  }
+}
+
 // step) — free any time except a monster's active tournament week.
-function AbilitySelector({ m, name, onSetLoadout, onSetInnate, onSetTactics, onClose, teamTacticsOpen = true }: {
+function AbilitySelector({ m, name, onSetLoadout, onSetInnate, onSetTactics, onClose, showTactics = false, teamTacticsOpen = true }: {
   m: Monster; name: string; onSetLoadout: (ids: string[]) => void
-  onSetInnate: (index: number) => void; onSetTactics: (t: Tactics) => void; onClose: () => void
+  onSetInnate: (index: number) => void; onSetTactics?: (t: Tactics) => void; onClose: () => void
+  showTactics?: boolean // the tactics editor is only shown in the Sandbox lab now (v0.81: real fights pick tactics pre-fight)
   teamTacticsOpen?: boolean // false until team battles are unlocked — locks the multi-combatant orders
 }) {
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null)
@@ -1294,114 +1389,13 @@ function AbilitySelector({ m, name, onSetLoadout, onSetInnate, onSetTactics, onC
       </div>
       </details>
 
-      {(() => {
-        // Tactics (2026-07-25): Teamfight-Manager-style standing orders — the
-        // player coaches how the auto-battler fights, one highlighted choice
-        // per group. Groups lead with the always-relevant Temperament and end
-        // with the niche/locked ones; every active choice is spelled out in the
-        // summary below so no tactic's meaning lives in a hover-only tooltip.
-        const cur = m.tactics ?? DEFAULT_TACTICS
-        const temp = TEMPERAMENT_INFO.find((o) => o.id === cur.temperament)!
-        const prio = TARGET_PRIORITY_INFO.find((o) => o.id === cur.targetPriority)!
-        const mana = MANA_POLICY_INFO.find((o) => o.id === (cur.manaPolicy ?? 'normal'))!
-        const combo = COMBO_INFO.find((o) => o.id === (cur.comboDiscipline ?? false))!
-        const openerMove = cur.openerId ? m.loadout.find((mv) => mv.id === cur.openerId) : undefined
-        // Combo discipline only does anything with BOTH halves of a pair
-        // equipped — a payoff (bonusVsStatus) and a move that sets its status.
-        // Gating the toggle stops it being a live-but-inert control (H5).
-        const comboReady = m.loadout.some((p) => p.effects?.bonusVsStatus
-          && m.loadout.some((s) => s.status?.kind === p.effects!.bonusVsStatus!.kind))
-
-        // Every group's ACTIVE choice, spelled out — the panel's single source
-        // of "what are my orders right now", replacing tooltip-only meaning.
-        const summary = [
-          { icon: temp.icon, name: temp.name, desc: temp.desc },
-          { icon: openerMove ? (openerMove.element ? ELEMENT_ICON[openerMove.element] : '▶') : '🎲',
-            name: openerMove ? `Open with ${openerMove.name}` : 'Instinct opener',
-            desc: openerMove ? 'Always throws this move first when it can.' : 'The class picks its own first play.' },
-          { icon: mana.icon, name: mana.name, desc: mana.desc },
-          { icon: combo.icon, name: combo.name, desc: comboReady ? combo.desc : 'No setup→payoff pair equipped yet — no effect.' },
-          { icon: prio.icon, name: prio.name, desc: teamTacticsOpen ? prio.desc : 'Locked until team battles unlock.' },
-        ]
-
-        return (
-          <details className="editor-section">
-            <summary className="editor-summary">🎯 Tactics — battle orders</summary>
-            <div className="hint">Standing orders {name} follows in every battle.</div>
-            <div className="tacticgroups">
-              <div className="tacticgroup">
-                <div className="tacticgroup-h">Temperament</div>
-                {TEMPERAMENT_INFO.map((o) => (
-                  <button key={o.id} className={'tacticopt' + (cur.temperament === o.id ? ' on' : '')}
-                    onClick={() => onSetTactics({ ...cur, temperament: o.id })}>
-                    {o.icon} {o.name}
-                  </button>
-                ))}
-              </div>
-              <div className="tacticgroup">
-                <div className="tacticgroup-h">Opening move</div>
-                <button className={'tacticopt' + (!openerMove ? ' on' : '')}
-                  onClick={() => onSetTactics({ ...cur, openerId: undefined })}>
-                  🎲 Instinct
-                </button>
-                {m.loadout.map((mv) => (
-                  <button key={mv.id} className={'tacticopt' + (cur.openerId === mv.id ? ' on' : '')}
-                    onClick={() => onSetTactics({ ...cur, openerId: mv.id })}>
-                    {mv.element ? ELEMENT_ICON[mv.element] + ' ' : '▶ '}{mv.name}
-                  </button>
-                ))}
-              </div>
-              <div className="tacticgroup">
-                <div className="tacticgroup-h">Mana policy</div>
-                {MANA_POLICY_INFO.map((o) => (
-                  <button key={o.id} className={'tacticopt' + ((cur.manaPolicy ?? 'normal') === o.id ? ' on' : '')}
-                    onClick={() => onSetTactics({ ...cur, manaPolicy: o.id })}>
-                    {o.icon} {o.name}
-                  </button>
-                ))}
-              </div>
-              <div className="tacticgroup">
-                <div className="tacticgroup-h">Combo play{comboReady ? '' : ' 🔒'}</div>
-                {COMBO_INFO.map((o) => {
-                  const disabled = o.id === true && !comboReady
-                  return (
-                    <button key={String(o.id)} disabled={disabled}
-                      className={'tacticopt' + ((cur.comboDiscipline ?? false) === o.id ? ' on' : '') + (disabled ? ' lockedopt' : '')}
-                      onClick={() => !disabled && onSetTactics({ ...cur, comboDiscipline: o.id })}>
-                      {o.icon} {o.name}
-                    </button>
-                  )
-                })}
-                {!comboReady && <div className="hint">🔗 Equip a setup move and its matching payoff to use this.</div>}
-              </div>
-              <div className="tacticgroup">
-                <div className="tacticgroup-h">Target priority{teamTacticsOpen ? '' : ' 🔒'}</div>
-                {TARGET_PRIORITY_INFO.map((o) => {
-                  // Priorities only matter with multiple combatants — locked
-                  // (except the default) until team battles are reachable.
-                  const locked = !teamTacticsOpen && o.id !== 'weakest'
-                  return (
-                    <button key={o.id} disabled={locked}
-                      className={'tacticopt' + (cur.targetPriority === o.id ? ' on' : '') + (locked ? ' lockedopt' : '')}
-                      onClick={() => !locked && onSetTactics({ ...cur, targetPriority: o.id })}>
-                      {o.icon} {o.name}
-                    </button>
-                  )
-                })}
-                {!teamTacticsOpen && (
-                  <div className="hint">🔒 Orders for team battles — unlock by earning the {LEAGUES[firstTeamLeagueIndex()].name} license
-                    ({teamSizeForLeague(LEAGUES[firstTeamLeagueIndex()].name)}v{teamSizeForLeague(LEAGUES[firstTeamLeagueIndex()].name)}).</div>
-                )}
-              </div>
-            </div>
-            <div className="tactic-summary">
-              {summary.map((s, i) => (
-                <div key={i} className="tactic-summary-row"><span className="tsr-icon">{s.icon}</span><span><b>{s.name}</b> — {s.desc}</span></div>
-              ))}
-            </div>
-          </details>
-        )
-      })()}
+      {showTactics && onSetTactics && (
+        <details className="editor-section">
+          <summary className="editor-summary">🎯 Tactics — battle orders</summary>
+          <div className="hint">Sandbox test orders for {name} — real fights pick tactics before each battle.</div>
+          <TacticsControls value={m.tactics ?? DEFAULT_TACTICS} onChange={onSetTactics} loadout={m.loadout} teamPlay={teamTacticsOpen} />
+        </details>
+      )}
     </div>
   )
 }
@@ -1480,10 +1474,6 @@ function teamRoster(label: string, matches: EventMatch[]): Monster[] | null {
   if (!m) return null
   return m.aLabel === label ? m.teamA : m.teamB
 }
-function teamName(label: string, matches: EventMatch[]): string {
-  const roster = teamRoster(label, matches)
-  return roster ? roster.map((m) => m.name).join(' & ') : label
-}
 
 // Round-robin results grid (user spec 2026-07-22, reference: Monster
 // Rancher's bracket screen) — rows/columns are the field in placement order;
@@ -1552,7 +1542,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
   // buy), start feeding at the first unfed monster rather than monster 1.
   const firstUnfedIdx = game.stable.findIndex((c) => !c.retired && !game.weekPlans?.[c.id]?.food)
   const [phase, setPhase] = useState<'feeding' | 'stable' | 'battle'>(() =>
-    game.stable.length > 0 && firstUnfedIdx === -1 ? 'stable' : 'feeding')
+    game.activeCup ? 'battle' : game.stable.length > 0 && firstUnfedIdx === -1 ? 'stable' : 'feeding')
   const [decisionIdx, setDecisionIdx] = useState(() => Math.max(0, firstUnfedIdx))
   // Week plans live in GameState (persisted) so they survive navigating to
   // Town and back, and reloads — this was a real papercut as component state.
@@ -1564,9 +1554,15 @@ function RanchView({ game, setGame, onBattleScreen }: {
   const [selectedTournamentId, setSelectedTournamentId] = useState<string | null>(null)
   const [battleOver, setBattleOver] = useState(false)
   const [matchIdx, setMatchIdx] = useState(0)
-  // Bracket hub sub-phase: pre-cup lore -> bracket standings (Fight from
-  // here) -> the match itself -> back to bracket -> post-cup announcement.
-  const [battleSub, setBattleSub] = useState<'preamble' | 'bracket' | 'fight' | 'announce'>('preamble')
+  // Bracket hub sub-phase (v0.81): pre-cup lore -> next-match hub (scout the
+  // opponent) -> pick tactics -> the fight (simulated live with those orders)
+  // -> back to the hub -> ... -> finalize -> post-cup announcement.
+  const [battleSub, setBattleSub] = useState<'preamble' | 'bracket' | 'tactics' | 'fight' | 'announce'>('preamble')
+  // In-progress per-fight orders (the pre-fight tactics screen edits this), the
+  // built+simulated current match, and the player's running win/loss strip.
+  const [matchTactics, setMatchTactics] = useState<MatchOrders | null>(null)
+  const [liveMatch, setLiveMatch] = useState<{ teamA: Monster[]; teamB: Monster[]; result: BattleResult } | null>(null)
+  const [fightOutcomes, setFightOutcomes] = useState<('win' | 'loss' | 'draw')[]>([])
   // Which of the player's upcoming matches have been paid-scouted, and at
   // what tier — keyed by matchIdx, reset each new tournament event.
   const [scouted, setScouted] = useState<Record<number, 'basic' | 'full'>>({})
@@ -1584,7 +1580,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
   const [showCalendar, setShowCalendar] = useState(false)
 
   // Tell App when the battle screen is up, so it can hide the Bestiary footer.
-  const onBattleScreenNow = phase === 'battle' && !!game.lastBattle
+  const onBattleScreenNow = phase === 'battle' && (!!game.activeCup || !!game.lastBattle)
   useEffect(() => {
     onBattleScreen(onBattleScreenNow)
     return () => onBattleScreen(false)
@@ -1619,142 +1615,17 @@ function RanchView({ game, setGame, onBattleScreen }: {
   // pre-cup lore -> bracket standings (pay to scout the next opponent, then
   // Fight) -> the match itself -> back to the bracket -> repeat -> a post-cup
   // announcement. Rival-vs-rival matches aren't replayed, only listed.
-  if (phase === 'battle' && game.lastBattle) {
+  // ---- Post-event ANNOUNCE screen (v0.81): finalize has run, activeCup is
+  // cleared and lastBattle holds the fully-scored event.
+  if (phase === 'battle' && !game.activeCup && game.lastBattle && battleSub === 'announce') {
     const lb = game.lastBattle
     const tourney = tournamentCalendarFor(game.seed, yearOfWeek(game.week)).find((t) => t.id === lb.tournamentId)
     const lore = tourney ? cupLore(tourney) : null
-    const playerMatches = lb.matches.filter((m) => m.involvesPlayer)
-    const currentMatch: EventMatch | undefined = playerMatches[matchIdx]
-    const allMatchesShown = matchIdx >= playerMatches.length
-    // The event is pre-simulated in one shot, but the bracket must not just
-    // dump every result at once (user spec 2026-07-22) — only matches "at or
-    // before" the player's last-completed match count as revealed. Starts
-    // empty (matchIdx 0 -> nothing revealed yet).
-    const revealedThroughIdx = matchIdx > 0 ? lb.matches.indexOf(playerMatches[matchIdx - 1]) : -1
-    const revealedMatches = lb.matches.slice(0, revealedThroughIdx + 1)
-    const otherMatches = revealedMatches.filter((m) => !m.involvesPlayer)
-    const header = (
-      <div className="ranchtop">
-        <span>🏟 {lb.tournamentName}</span>
-        <span>📅 {dateLabel(game.week)}</span>
-        <span>🪙 {game.gold}g</span>
-      </div>
-    )
-
-    if (battleSub === 'preamble') {
-      // Expectation-setting (2026-07-25 playtest addition): rivals fight at the
-      // league's own FIXED standard, so a young team's first cup is usually a
-      // hard field — say so up front instead of letting a sweep read as failure.
-      const playerRoster = teamRoster('Your Team', lb.matches)
-      const perMonsterBudget = (LEAGUES[leagueIndexOf(lb.league)]?.cap ?? 100) * 3.5
-      const avgTotal = playerRoster && playerRoster.length
-        ? playerRoster.reduce((s, m) => s + STATS.reduce((t, k) => t + m.stats[k], 0), 0) / playerRoster.length
-        : Infinity
-      const underdog = avgTotal < perMonsterBudget * RIVAL_BAND_MIN
-      return (
-        <>
-          {header}
-          <div className="card">
-            <div className="section-title">{lb.tournamentName} — {lb.league} League</div>
-            <p className="sub">{lb.isTrial
-              ? `The ${lb.league} Champion awaits. Win, and the ${LEAGUES[Math.min(leagueIndexOf(lb.league) + 1, LEAGUES.length - 1)].name} license opens in the Ranch Shop. Lose, and it's back to training.`
-              : lore?.intro ?? `${lb.tournamentName} is under way.`}</p>
-            {!lb.isTrial && <p className="dim">Prize on the line: up to {tourney?.rewards.gold ?? lb.goldReward}g for 1st place, {lb.fieldSize} teams competing round robin.</p>}
-            {underdog && (
-              <p className="dim">
-                ⚠ The field here fights at the {lb.league}-league standard, and your team looks young for it —
-                a rough day is normal. Every match is experience; champions grow into their first cups, not through them.
-              </p>
-            )}
-            <div className="carerow" style={{ justifyContent: 'center' }}>
-              <button className="enter" onClick={() => setBattleSub('bracket')}>Enter the Cup →</button>
-            </div>
-          </div>
-        </>
-      )
-    }
-
-    if (battleSub === 'bracket') {
-      const opponentIsA = currentMatch ? currentMatch.bLabel === 'Your Team' : false
-      const opponentTeam = currentMatch ? (opponentIsA ? currentMatch.teamA : currentMatch.teamB) : null
-      const opponentLabel = currentMatch ? (opponentIsA ? currentMatch.aLabel : currentMatch.bLabel) : null
-      const tier = scouted[matchIdx]
-      const buyScout = (t: 'basic' | 'full') => {
-        const fee = scoutFee(lb.league, t)
-        if (game.gold < fee) return
-        setGame((g) => ({ ...g, gold: g.gold - fee }))
-        setScouted((s) => ({ ...s, [matchIdx]: t }))
-      }
-      return (
-        <>
-          {header}
-          <p className="sub">{lb.tournamentName} — {lb.league} league, {lb.fieldSize} teams, round robin.</p>
-          <div className="card">
-            <div className="section-title">Bracket</div>
-            <BracketGrid standings={lb.standings} allMatches={lb.matches} revealed={revealedMatches} />
-          </div>
-          {otherMatches.length > 0 && (
-            <div className="card" style={{ marginBottom: 10 }}>
-              <div className="section-title">Other results</div>
-              {otherMatches.map((m, i) => (
-                <div key={i} className="dim" style={{ fontSize: 12, padding: '2px 0' }}>
-                  {teamName(m.aLabel, lb.matches)} vs {teamName(m.bLabel, lb.matches)} — {m.result.winner === 'draw' ? 'draw' : `${teamName(m.result.winner === 'A' ? m.aLabel : m.bLabel, lb.matches)} wins`}
-                </div>
-              ))}
-            </div>
-          )}
-          {!allMatchesShown && currentMatch && opponentTeam ? (
-            <div className="card">
-              <div className="section-title">Next up: {opponentLabel ? teamName(opponentLabel, lb.matches) : ''}</div>
-              <div className="scout-report">
-                {opponentTeam.map((m, i) => <ScoutReport key={i} m={m} tier={tier} />)}
-              </div>
-              {tier !== 'full' && (
-                <div className="carerow" style={{ marginTop: 8 }}>
-                  {!tier && (
-                    <button className="ghost" disabled={game.gold < scoutFee(lb.league, 'basic')} onClick={() => buyScout('basic')}>
-                      🔍 Scout class &amp; loadout — {scoutFee(lb.league, 'basic')}g
-                    </button>
-                  )}
-                  <button className="ghost" disabled={game.gold < scoutFee(lb.league, 'full')} onClick={() => buyScout('full')}>
-                    🔍 Full scouting report — {scoutFee(lb.league, 'full')}g
-                  </button>
-                </div>
-              )}
-              <div className="carerow" style={{ justifyContent: 'center', marginTop: 8 }}>
-                <button className="enter" onClick={() => setBattleSub('fight')}>Fight →</button>
-              </div>
-            </div>
-          ) : (
-            <div className="carerow" style={{ justifyContent: 'center' }}>
-              <button className="enter" onClick={() => setBattleSub('announce')}>See Results →</button>
-            </div>
-          )}
-        </>
-      )
-    }
-
-    if (battleSub === 'fight' && currentMatch) {
-      return (
-        <>
-          {header}
-          <p className="sub">Match {matchIdx + 1} of {playerMatches.length}: {teamName(currentMatch.aLabel, lb.matches)} vs {teamName(currentMatch.bLabel, lb.matches)}</p>
-          <ArenaBattle key={matchIdx} teamA={currentMatch.teamA} teamB={currentMatch.teamB} result={currentMatch.result} league={lb.league} playerSide={currentMatch.aLabel === 'Your Team' ? 'A' : 'B'} onDone={() => setBattleOver(true)} />
-          {battleOver && (
-            <div className="carerow" style={{ justifyContent: 'center' }}>
-              <button className="enter" onClick={() => { setBattleOver(false); setMatchIdx((i) => i + 1); setBattleSub('bracket') }}>
-                ← Back to Bracket
-              </button>
-            </div>
-          )}
-        </>
-      )
-    }
-
-    // battleSub === 'announce'
     return (
       <>
-        {header}
+        <div className="ranchtop">
+          <span>🏟 {lb.tournamentName}</span><span>📅 {dateLabel(game.week)}</span><span>🪙 {game.gold}g</span>
+        </div>
         <div className="card">
           <div className="section-title">🏆 {lb.tournamentName} — Final Results</div>
           <BracketGrid standings={lb.standings} allMatches={lb.matches} revealed={lb.matches} />
@@ -1771,6 +1642,218 @@ function RanchView({ game, setGame, onBattleScreen }: {
         </div>
         <div className="carerow" style={{ justifyContent: 'center' }}>
           <button className="enter" onClick={() => setPhase('feeding')}>Continue →</button>
+        </div>
+      </>
+    )
+  }
+
+  // ---- Interactive EVENT (v0.81): the staged cup/trial is fought match by
+  // match — scout the opponent, pick this fight's tactics, watch it resolve
+  // live, repeat — then finalize rewards. Each player match is simulated at the
+  // moment its orders are committed, so tactics genuinely decide the outcome.
+  if (phase === 'battle' && game.activeCup) {
+    const ac = game.activeCup
+    const isTrial = ac.kind === 'trial'
+    const playerCareers = ac.playerMonsterIds.map((id) => game.stable.find((c) => c.id === id)).filter((c): c is Career => !!c)
+    const teamSize = playerCareers.length
+    const tourney = isTrial ? null : tournamentCalendarFor(game.seed, yearOfWeek(ac.week)).find((t) => t.id === ac.tournamentId)
+    const league = isTrial ? LEAGUES[game.licenseIndex].name : (tourney?.league ?? LEAGUES[game.licenseIndex].name)
+    const lore = tourney ? cupLore(tourney) : null
+    const tournamentName = isTrial ? `Rank-up Trial — the ${league} Champion` : (tourney?.name ?? 'Cup')
+    const rivalTeams = ac.rivalTeams
+    const fieldSize = isTrial ? 2 : rivalTeams.length + 1
+    // Ordered opponents (player-match index -> rival-team index), matching the
+    // schedule finalizeCup scores against (player is participant 0, always the
+    // low index, hence always side A in its matches).
+    const oppOrder = isTrial ? [0]
+      : roundRobinSchedule(rivalTeams.length + 1).filter(([i, j]) => i === 0 || j === 0).map(([i, j]) => (i === 0 ? j : i) - 1)
+    const nPlayerMatches = oppOrder.length
+    const oppIdx = oppOrder[matchIdx]
+    const opponentTeam = oppIdx !== undefined ? rivalTeams[oppIdx] : null
+    const opponentLabel = isTrial ? 'League Champion' : `Rival Team ${(oppIdx ?? 0) + 1}`
+    const header = (
+      <div className="ranchtop">
+        <span>🏟 {tournamentName}</span><span>📅 {dateLabel(game.week)}</span><span>🪙 {game.gold}g</span>
+      </div>
+    )
+    const progress = (
+      <div className="dim" style={{ fontSize: 12, marginBottom: 6 }}>
+        {Array.from({ length: nPlayerMatches }, (_, i) => {
+          const o = fightOutcomes[i]
+          return <span key={i} style={{ marginRight: 6 }}>{o === 'win' ? '✅' : o === 'loss' ? '❌' : o === 'draw' ? '➖' : i === matchIdx ? '🔸' : '·'} M{i + 1}</span>
+        })}
+      </div>
+    )
+
+    if (battleSub === 'preamble') {
+      const perMonsterBudget = (LEAGUES[leagueIndexOf(league)]?.cap ?? 100) * 3.5
+      const avgTotal = teamSize ? playerCareers.reduce((s, c) => s + STATS.reduce((t, k) => t + c.stats[k], 0), 0) / teamSize : Infinity
+      const underdog = avgTotal < perMonsterBudget * RIVAL_BAND_MIN
+      return (
+        <>
+          {header}
+          <div className="card">
+            <div className="section-title">{tournamentName} — {league} League</div>
+            <p className="sub">{isTrial
+              ? `The ${league} Champion awaits. Win, and the ${LEAGUES[Math.min(leagueIndexOf(league) + 1, LEAGUES.length - 1)].name} license opens in the Ranch Shop. Lose, and it's back to training.`
+              : lore?.intro ?? `${tournamentName} is under way.`}</p>
+            {!isTrial && <p className="dim">Prize on the line: up to {tourney?.rewards.gold ?? 0}g for 1st place, {fieldSize} teams competing round robin. You set your battle orders before each fight.</p>}
+            {underdog && (
+              <p className="dim">⚠ The field here fights at the {league}-league standard, and your team looks young for it — a rough day is normal. Every match is experience.</p>
+            )}
+            <div className="carerow" style={{ justifyContent: 'center' }}>
+              <button className="enter" onClick={() => setBattleSub('bracket')}>{isTrial ? 'To the Trial →' : 'Enter the Cup →'}</button>
+            </div>
+          </div>
+        </>
+      )
+    }
+
+    if (battleSub === 'bracket') {
+      // All player matches fought → finalize and show the announce screen.
+      if (matchIdx >= nPlayerMatches || !opponentTeam) {
+        return (
+          <>
+            {header}
+            {progress}
+            <div className="carerow" style={{ justifyContent: 'center' }}>
+              <button className="enter" onClick={() => { setGame((g) => (ac.kind === 'trial' ? finalizeTrial(g).game : finalizeCup(g))); setBattleSub('announce') }}>See Results →</button>
+            </div>
+          </>
+        )
+      }
+      const tier = scouted[matchIdx]
+      const buyScout = (t: 'basic' | 'full') => {
+        const fee = scoutFee(league, t)
+        if (game.gold < fee) return
+        setGame((g) => ({ ...g, gold: g.gold - fee }))
+        setScouted((s) => ({ ...s, [matchIdx]: t }))
+      }
+      return (
+        <>
+          {header}
+          <p className="sub">{tournamentName} — {league} league{isTrial ? '' : `, ${fieldSize} teams, round robin`}. Match {matchIdx + 1} of {nPlayerMatches}.</p>
+          {progress}
+          <div className="card">
+            <div className="section-title">Next up: {opponentLabel}</div>
+            <div className="scout-report">
+              {opponentTeam.map((m, i) => <ScoutReport key={i} m={m} tier={tier} />)}
+            </div>
+            {tier !== 'full' && (
+              <div className="carerow" style={{ marginTop: 8 }}>
+                {!tier && (
+                  <button className="ghost" disabled={game.gold < scoutFee(league, 'basic')} onClick={() => buyScout('basic')}>
+                    🔍 Scout class &amp; loadout — {scoutFee(league, 'basic')}g
+                  </button>
+                )}
+                <button className="ghost" disabled={game.gold < scoutFee(league, 'full')} onClick={() => buyScout('full')}>
+                  🔍 Full scouting report — {scoutFee(league, 'full')}g
+                </button>
+              </div>
+            )}
+            <div className="carerow" style={{ justifyContent: 'center', marginTop: 8 }}>
+              <button className="enter" onClick={() => { setMatchTactics(neutralMatchOrders(playerCareers)); setBattleSub('tactics') }}>Set Battle Orders →</button>
+            </div>
+          </div>
+        </>
+      )
+    }
+
+    if (battleSub === 'tactics' && opponentTeam) {
+      const orders = matchTactics ?? neutralMatchOrders(playerCareers)
+      // Careers in the player's chosen formation order (front half = front line).
+      const ordered = orders.formation.map((id) => playerCareers.find((c) => c.id === id)).filter((c): c is Career => !!c)
+      const setOrders = (o: MatchOrders) => setMatchTactics(o)
+      const moveUp = (idx: number) => {
+        if (idx <= 0) return
+        const f = [...orders.formation];[f[idx - 1], f[idx]] = [f[idx], f[idx - 1]]
+        setOrders({ ...orders, formation: f })
+      }
+      const commit = () => {
+        const built = buildEventPlayerTeam(playerCareers, orders)
+        const opp = applyMarkToOpponent(opponentTeam, orders.mark)
+        const result = simulateTeamBattle(built.team, opp, built.happiness, opp.map(() => 5))
+        setGame((g) => (g.activeCup ? { ...g, activeCup: { ...g.activeCup, matchOrders: { ...g.activeCup.matchOrders, [matchIdx]: orders } } } : g))
+        setLiveMatch({ teamA: built.team, teamB: opp, result })
+        setBattleSub('fight')
+      }
+      return (
+        <>
+          {header}
+          <p className="sub">Battle orders vs {opponentLabel} — Match {matchIdx + 1} of {nPlayerMatches}.</p>
+          {teamSize > 1 && (
+            <div className="card" style={{ marginBottom: 10 }}>
+              <div className="section-title">Formation &amp; team orders</div>
+              <div className="hint">Order = the line-up. The front half shields the back; melee must break the front line first.</div>
+              <div className="formationrow">
+                {ordered.map((c, i) => (
+                  <div key={c.id} className="formationchip">
+                    <button className="ghost small" disabled={i === 0} onClick={() => moveUp(i)}>▲</button>
+                    <span>{i < frontRowCount(teamSize) ? '🛡' : '🏹'} {c.name}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="protectrow">
+                <span className="dim" title="The team guards this monster: taunts fire sooner for it, heals go to it first">🛡 Protect:</span>
+                <button className={'tacticopt small' + (!orders.protectId ? ' on' : '')} onClick={() => setOrders({ ...orders, protectId: undefined })}>Nobody</button>
+                {ordered.map((c) => (
+                  <button key={c.id} className={'tacticopt small' + (orders.protectId === c.id ? ' on' : '')} onClick={() => setOrders({ ...orders, protectId: c.id })}>{c.name}</button>
+                ))}
+              </div>
+              <div className="protectrow">
+                <span className="dim" title="Your whole team strikes the marked monster first while it can be reached">🎯 Focus:</span>
+                <button className={'tacticopt small' + (orders.mark === undefined ? ' on' : '')} onClick={() => setOrders({ ...orders, mark: undefined })}>Nobody</button>
+                {opponentTeam.map((m, i) => (
+                  <button key={i} className={'tacticopt small' + (orders.mark === i ? ' on' : '')} onClick={() => setOrders({ ...orders, mark: i })}>
+                    {m.name}{rowOfSlot(i, opponentTeam.length) === 'back' ? ' 🏹' : ''}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {ordered.map((c) => {
+            const cm = careerMonster(c)
+            return (
+              <details key={c.id} className="editor-section" open={teamSize === 1}>
+                <summary className="editor-summary">🎯 {c.name}'s orders</summary>
+                <TacticsControls value={orders.tactics[c.id] ?? DEFAULT_TACTICS} loadout={cm.loadout} teamPlay={teamSize > 1}
+                  onChange={(t) => setOrders({ ...orders, tactics: { ...orders.tactics, [c.id]: t } })} />
+              </details>
+            )
+          })}
+          <div className="carerow" style={{ justifyContent: 'center', marginTop: 8 }}>
+            <button className="ghost" onClick={() => setBattleSub('bracket')}>← Back</button>
+            <button className="enter" onClick={commit}>Fight →</button>
+          </div>
+        </>
+      )
+    }
+
+    if (battleSub === 'fight' && liveMatch) {
+      return (
+        <>
+          {header}
+          <p className="sub">Match {matchIdx + 1} of {nPlayerMatches}: Your Team vs {opponentLabel}</p>
+          <ArenaBattle key={matchIdx} teamA={liveMatch.teamA} teamB={liveMatch.teamB} result={liveMatch.result} league={league} playerSide="A" onDone={() => setBattleOver(true)} />
+          {battleOver && (
+            <div className="carerow" style={{ justifyContent: 'center' }}>
+              <button className="enter" onClick={() => {
+                const w = liveMatch.result.winner
+                setFightOutcomes((o) => [...o, w === 'A' ? 'win' : w === 'B' ? 'loss' : 'draw'])
+                setBattleOver(false); setLiveMatch(null); setMatchTactics(null); setMatchIdx((i) => i + 1); setBattleSub('bracket')
+              }}>{matchIdx + 1 >= nPlayerMatches ? 'See Results →' : '→ Next Match'}</button>
+            </div>
+          )}
+        </>
+      )
+    }
+
+    // Fallback (e.g. reloaded mid-event onto an unexpected sub) — restart the hub.
+    return (
+      <>
+        {header}
+        <div className="carerow" style={{ justifyContent: 'center' }}>
+          <button className="enter" onClick={() => setBattleSub('preamble')}>Continue the {isTrial ? 'Trial' : 'Cup'} →</button>
         </div>
       </>
     )
@@ -1949,8 +2032,11 @@ function RanchView({ game, setGame, onBattleScreen }: {
     setMatchIdx(0)
     setBattleSub('preamble')
     setScouted({})
+    setFightOutcomes([])
+    setLiveMatch(null)
+    setMatchTactics(null)
     setSelectedMonsterId(next.stable.find((c) => !c.retired)?.id ?? next.stable[0]?.id ?? '')
-    setPhase(next.lastBattle ? 'battle' : 'feeding')
+    setPhase(next.activeCup ? 'battle' : 'feeding')
   }
 
   // Signed-up event name for the status strip.
@@ -2208,9 +2294,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
               name={selectedCareer.name}
               onSetLoadout={(ids) => setGame((g) => setLoadout(g, selectedCareer.id, ids))}
               onSetInnate={(index) => setGame((g) => setActiveInnate(g, selectedCareer.id, index))}
-              onSetTactics={(t) => setGame((g) => setTactics(g, selectedCareer.id, t))}
               onClose={() => setAbilityEditorFor(null)}
-              teamTacticsOpen={teamTacticsUnlocked(game)}
             />
           ) : selectedCareer.retired ? (
             <div className="retired">🏁 {selectedCareer.name} has retired and can no longer train.</div>
@@ -2403,20 +2487,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
                                   <div className="gameplan locked"><div className="gp-h dim">🧠 Gameplan: ?? — scout to reveal</div></div>
                                 )}
                                 {team.map((m, i) => <ScoutReport key={i} m={m} tier={tier} />)}
-                                {/* Kill order (wave 2): only while signed up — the mark lives on the pending entry. */}
-                                {signedHere && team.length > 1 && (
-                                  <div className="protectrow">
-                                    <span className="dim" title="Your whole team strikes the marked monster first while it can be reached (melee must break the front line first)">🎯 Mark:</span>
-                                    <button className={'tacticopt small' + (game.pendingTournament?.marks?.[r] === undefined ? ' on' : '')}
-                                      onClick={() => setGame((g) => setMarkTarget(g, r, null))}>Nobody</button>
-                                    {team.map((m, i) => (
-                                      <button key={i} className={'tacticopt small' + (game.pendingTournament?.marks?.[r] === i ? ' on' : '')}
-                                        onClick={() => setGame((g) => setMarkTarget(g, r, i))}>
-                                        {m.name}{rowOfSlot(i, team.length) === 'back' ? ' 🏹' : ''}
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
+                                {/* Mark orders moved to the pre-fight tactics screen (v0.81). */}
                                 <div className="carerow">
                                   {!tier && (
                                     <button className="ghost" disabled={game.gold < basicFee}
@@ -2441,17 +2512,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
                       <div>
                         ✅ {signedMonsters.map((c) => c.name).join(', ') || '?'} compete{signedMonsters.length === 1 ? 's' : ''} this week{' '}
                         <button className="ghost" onClick={() => setGame((g) => cancelSignUp(g))}>Cancel</button>
-                        {signedMonsters.length > 1 && (
-                          <div className="protectrow">
-                            <span className="dim" title="The team guards this monster: taunts fire sooner for it, heals go to it first">🛡 Protect:</span>
-                            <button className={'tacticopt small' + (!game.pendingTournament?.protectId ? ' on' : '')}
-                              onClick={() => setGame((g) => setProtectTarget(g, null))}>Nobody</button>
-                            {signedMonsters.map((c) => (
-                              <button key={c.id} className={'tacticopt small' + (game.pendingTournament?.protectId === c.id ? ' on' : '')}
-                                onClick={() => setGame((g) => setProtectTarget(g, c.id))}>{c.name}</button>
-                            ))}
-                          </div>
-                        )}
+                        {signedMonsters.length > 1 && <div className="dim" style={{ marginTop: 4 }}>🎯 Formation, protect &amp; target orders are set before each fight.</div>}
                       </div>
                     ) : alreadyEntered ? (
                       <div className="dim">✔ Already competed this month.</div>
@@ -2660,6 +2721,11 @@ function sanitizeAndMigrate(raw: string): GameState | null {
     if (typeof g.licenseEarned !== 'number') g.licenseEarned = g.licenseIndex
     if (g.pendingTrial === undefined) g.pendingTrial = null
     if (typeof g.trialCooldownUntil !== 'number') g.trialCooldownUntil = 0
+    // v0.81: per-fight tactics — no event in flight for a pre-v0.81 save
+    if (g.activeCup === undefined) g.activeCup = null
+    // Resume: a save reloaded mid-event routes straight to the ranch, where the
+    // battle flow picks up the staged cup (RanchView inits phase to 'battle').
+    if (g.activeCup) g.area = 'ranch'
     // v0.6 economy-pass fields
     if (!Array.isArray(g.comfortOwned)) g.comfortOwned = []
     if (typeof g.trainingGear !== 'object' || !g.trainingGear) g.trainingGear = {}
