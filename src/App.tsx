@@ -578,7 +578,10 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
   return (
     <>
       <AreaBackdrop scene={TOWN_AREA_ART[area] ?? 'town'} />
-      {game.tutorialEnabled && !game.tutorialDismissed && (
+      {/* The welcome overview belongs on the town map only — repeating the whole
+          "how it works" block on every sub-area (Market/Shop/Lab/…) was just
+          clutter (v0.81 UI audit). */}
+      {area === 'hub' && game.tutorialEnabled && !game.tutorialDismissed && (
         <TutorialBanner onDismiss={() => setGame((g) => ({ ...g, tutorialDismissed: true }))} />
       )}
       <div className="townbar">
