@@ -1171,13 +1171,30 @@ const sponsorPurse = (c: Career) => 120 + 40 * c.licenseIndex
 // head-to-head record updated, and the outcome CHAINED as a follow-up
 // 'challenge-result' event (a single-OK modal with dynamic text) — resolveEvent
 // keeps a pending event the apply sets rather than clearing it.
+// The rival's challenge monster — generated deterministically for THIS week, so
+// the pre-fight odds estimate and the fight itself use the exact same opponent.
+function rivalChallengeMonster(g: GameState): Monster | null {
+  const rival = g.rivals[0]
+  if (!rival) return null
+  const budget = LEAGUES[rival.licenseIndex].cap * rivalBudgetMult(rival.licenseIndex) * 0.85
+  return generateRivalMonster(g.seed + ':' + g.week + ':rivalmon', budget, false)
+}
+// Rough pre-fight win chance (5-95%), from a stat-total logistic — a hint, not a
+// promise: it ignores moves/innates/elements the real sim resolves.
+function challengeWinChance(g: GameState, c: Career): number {
+  const rivalMon = rivalChallengeMonster(g)
+  if (!rivalMon) return 50
+  const p = STATS.reduce((s, k) => s + c.stats[k], 0)
+  const r = STATS.reduce((s, k) => s + rivalMon.stats[k], 0)
+  const chance = 1 / (1 + Math.pow(r / Math.max(1, p), 4))
+  return Math.min(95, Math.max(5, Math.round(chance * 20) * 5))
+}
 function runRivalChallenge(g: GameState, careerId?: string): GameState {
   const c = g.stable.find((x) => x.id === careerId)
   const rival = g.rivals[0]
-  if (!c || !rival) return g
+  const rivalMon = rivalChallengeMonster(g)
+  if (!c || !rival || !rivalMon) return g
   const playerMon = careerMonster(c)
-  const budget = LEAGUES[rival.licenseIndex].cap * rivalBudgetMult(rival.licenseIndex) * 0.85
-  const rivalMon = generateRivalMonster(g.seed + ':' + g.week + ':rivalmon', budget, false)
   const res = simulateTeamBattle(
     [{ ...playerMon, hp: maxHp(playerMon.stats), mp: maxMana(playerMon.stats) }],
     [rivalMon], [c.happiness], [5],
@@ -1208,11 +1225,11 @@ export const EVENTS: GameEvent[] = [
     scope: 'monster',
     weight: (g, c) => (g.rivals.length > 0 && c && !c.retired ? 3 : 0),
     title: '⚔️ Rival Challenge',
-    body: (g, c) => `${g.rivals[0]?.name} spots you in town and calls you out — a friendly bout, ${c!.name} against one of their monsters. Bragging rights on the line.`,
+    body: (g, c) => `${g.rivals[0]?.name} spots you in town and calls you out — a friendly bout, ${c!.name} against one of their monsters. Bragging rights on the line. Rough odds: ~${challengeWinChance(g, c!)}% for ${c!.name} to win.`,
     choices: [
       {
         label: 'Accept the challenge',
-        note: () => 'win: gold & pride · lose: bruised & sore',
+        note: (g, c) => `~${challengeWinChance(g, c!)}% to win · win: gold & pride · lose: bruised & sore`,
         apply: (g, id) => runRivalChallenge(g, id),
       },
       {
