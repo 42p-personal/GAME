@@ -12,7 +12,7 @@ import { SPECIES } from './species'
 import { BIOS } from './bestiary'
 import { BASIC_DRILLS, Drill, EXTREME_DRILLS, INTENSIVE_DRILLS } from './drills'
 import {
-  BASIC_DRILL_STAMINA, Career, INTENSIVE_DRILL_STAMINA, EXTREME_DRILL_STAMINA, MAX_STAMINA, canRankUp, careerMonster, careerSpanYears,
+  BASIC_DRILL_STAMINA, Career, INTENSIVE_DRILL_STAMINA, EXTREME_DRILL_STAMINA, MAX_STAMINA, canRankUp, careerMonster, careerSpanYears, statCapFor,
   dateLabel, foodName, FORAGE_STAMINA_COST, FORAGE_HAPPINESS_COST, WILD_GEN1_CAP, previewWeekEffects, stageInfo, trainingProfileFor,
 } from './game'
 import {
@@ -666,6 +666,10 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
       {area === 'retirement' && (
         <div className="townmap">
           <div className="card loc">
+            <TipBanner game={game} setGame={setGame} id="hof">
+              🏛 Retired careers rest here with their records — honours only. A retiree can no longer
+              be frozen, bred, or fused, so preserve the ones you want <b>before</b> they age out.
+            </TipBanner>
             <div className="loc-h"><span>🏛 Hall of Fame</span><span className="dim">{retirees.length} honoured · unlimited room</span></div>
             <div className="dim" style={{ marginBottom: 6 }}>Every monster who finished a career rests here, record intact. To breed one, send it to the Breeding Ranch as stud.</div>
             {retirees.length === 0 && <div className="dim">Empty — monsters are honoured here when their career span ends.</div>}
@@ -697,6 +701,10 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
       {area === 'breeding' && (
         <div className="townmap">
           <div className="card loc">
+            <TipBanner game={game} setGame={setGame} id="breeding">
+              🐎 Two preserved monsters parent a child with a stat head start and higher <b>potential</b> —
+              each generation raises the training ceiling. Champion parents pass on more.
+            </TipBanner>
             <div className="loc-h"><span>🐎 Breeding Ranch</span><span className="dim">{frozenPool.length} preserved at the Lab</span></div>
             <div className="hint">Breeding stock lives in the 🧪 Lab freezer. Freeze a monster BEFORE its career ends — once it retires to the Hall of Fame the line is closed.</div>
             <div className="section-title">Breeding stock</div>
@@ -758,6 +766,10 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
         return (
         <div className="townmap">
           <div className="card loc">
+            <TipBanner game={game} setGame={setGame} id="lab">
+              🧪 The freezer is the only route to breeding and fusion. Freeze a monster while it is
+              still competing — aging pauses, and its genome is banked. Slots are limited; expand below.
+            </TipBanner>
             <div className="loc-h"><span>🧪 Lab · Freezer</span><span className="dim">{frozen.length}/{game.labSlots} slots</span></div>
             <div className="dim" style={{ marginBottom: 6 }}>
               The freezer preserves a monster's genome — it is the <b>only</b> route to breeding
@@ -841,6 +853,11 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
       <div className="townmap">
         {/* Market */}
         <div className="card loc">
+          <TipBanner game={game} setGame={setGame} id="market">
+            🛒 Buy your first monster here — cheap is fine, training matters more than the roll.
+            Stock refreshes monthly; the Ranch Shop later sells extra slots, a Scout to hunt a
+            species, and a Coach for stronger stock.
+          </TipBanner>
           <div className="loc-h"><span>🛒 Market</span>{game.marketCoach > 0 && (
             <span className="dim">🎓 stock trained to {LEAGUES[game.marketCoach === 2 ? 4 : 2].name}</span>
           )}</div>
@@ -1956,11 +1973,42 @@ function RanchView({ game, setGame, onBattleScreen }: {
       <div className="feedok">✓ feeding complete for this week — plan training below, or check the calendar</div>
       {trialGate.ok && !game.pendingTrial && (
         <TipBanner game={game} setGame={setGame} id="rankup">
-          🎖 A monster can now CHALLENGE the {LEAGUES[game.licenseIndex].name} Champion (rank-up trial, below
-          the stable) — but champions punish one-trick builds. Train two or three stats before you take the
-          fight; the trial panel will tell you honestly where you stand.
+          🎖 A monster can now challenge the {LEAGUES[game.licenseIndex].name} Champion (rank-up trial, below
+          the stable). Champions punish one-trick builds — train two or three stats before you take the fight.
         </TipBanner>
       )}
+      {/* Freeze-window warning: the single most punishing rule in the game — a
+          retired monster can never be bred or fused. Fires once, at the first
+          Elder (final career year) with freezer room available. */}
+      {(() => {
+        const elder = game.stable.find((c) => !c.retired && stageInfo(c.ageWeeks, careerSpanYears(c)).stage === 'Elder')
+        const room = (game.labFrozen ?? []).length < (game.labSlots ?? LAB_SLOTS_BASE)
+        return elder && room && (
+          <TipBanner game={game} setGame={setGame} id="freezewindow">
+            ⏳ {elder.name} is in its final career year. To breed or fuse it later, freeze it at the
+            🧪 Lab <b>before it retires</b> — the Hall of Fame keeps honours, not bloodlines.
+          </TipBanner>
+        )
+      })()}
+      {/* Gen-1 ceiling: the wild-monster wall is invisible until you hit it. */}
+      {(() => {
+        const walled = game.stable.find((c) => {
+          if (c.retired || (c.generation ?? 1) > 1 || isFusionBody(c.species.body)) return false
+          // Fire against the gen-1 wild wall itself (wildCap, 800 by default) —
+          // at Platinum the league cap EQUALS the wall, and that is exactly
+          // where it blocks the Masters trial, so "wall < league cap" was the
+          // wrong test.
+          const wall = c.wildCap ?? WILD_GEN1_CAP
+          return Math.max(...STATS.map((k) => c.stats[k])) >= wall - 60
+        })
+        return walled && (
+          <TipBanner game={game} setGame={setGame} id="gen1cap">
+            🧱 {walled.name} is nearing its training ceiling ({statCapFor(walled)}) — wild monsters stop
+            there. Bred and fused monsters climb higher, and the Ranch Shop's Market Coach raises the
+            ceiling for everything you own.
+          </TipBanner>
+        )
+      })()}
 
       <div className="stablescreen">
         <div className="stablemain">
@@ -2899,8 +2947,8 @@ function AlphaDisclaimer({ onContinue }: { onContinue: () => void }) {
           missing pieces as the game keeps growing.
         </p>
         <p>
-          The full loop is playable — raise monsters, win cups, rank up, then breed dynasties at the
-          <b> Breeding Ranch</b> or fuse two frozen monsters into a brand-new species at the <b>Lab</b>.
+          The full loop is playable — raise monsters, win cups, and climb the leagues. Freeze your
+          champions at the <b>Lab</b> before they retire, then breed dynasties or fuse brand-new species.
         </p>
         <button className="titlebtn primary" onClick={onContinue}>Got it, let's go!</button>
       </div>
@@ -2927,11 +2975,12 @@ function TutorialBanner({ onDismiss }: { onDismiss: () => void }) {
   return (
     <div className="tutorial-banner">
       <div>
-        <b>👋 Welcome tips</b>
+        <b>👋 How Monster Tamer works</b>
         <ul>
-          <li>Each week: feed your monster, then pick a training drill, rest, or an excursion — then Advance Week.</li>
-          <li>Sign up for tournaments in Town once your monster is ready — matching or lower leagues are safest.</li>
-          <li>Breeding and the Lab's deeper features are still under construction — freeze/thaw works, but treat them as early previews.</li>
+          <li><b>Every week:</b> feed each monster, pick its activity (train, rest, or excursion), then Advance Week.</li>
+          <li><b>Earn gold in cups.</b> Enter tournaments at your league from the Stables. To move up a league, win the rank-up trial, then buy the license in the Ranch Shop.</li>
+          <li><b>Plan your dynasty.</b> Freeze a monster at the 🧪 Lab <b>before its career ends</b> to breed or fuse it later. Once it retires to the Hall of Fame, the bloodline is closed.</li>
+          <li><b>Raise the ceiling.</b> Wild monsters train to 800 at most — bred and fused monsters go higher, and the Market Coach upgrades your whole stable's limit.</li>
         </ul>
       </div>
       <button className="tutorial-dismiss" onClick={onDismiss}>✕</button>
