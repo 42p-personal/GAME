@@ -39,15 +39,22 @@ export function pedigreeSpanBonus(c: { species: { body: string }; generation?: n
 export const careerSpanYears = (c: { species: { lifespan: number; body: string }; generation?: number; comfortWeeks?: number; tonicWeeks?: number }): number =>
   c.species.lifespan + pedigreeSpanBonus(c) + ((c.comfortWeeks ?? 0) + (c.tonicWeeks ?? 0)) / 48
 
+// `lifespan` here is the effective career span in YEARS (careerSpanYears, a
+// float). Elder/Retiree boundaries are computed in WEEKS (v0.85) so the +8-week
+// comfort/tonic purchases delay aging smoothly by exactly their weeks — the old
+// `ageYears >= lifespan` integer compare rounded any fraction up to a whole
+// extra year, so 1 comfort item and 3 gave the same retirement. Baby/Teen stay
+// keyed to whole years (year 0 / year 1) — those bands are fixed, not extendable.
 export function stageInfo(ageWeeks: number, lifespan: number): { stage: Stage; trainMult: number; ageYears: number } {
   const ageYears = Math.floor(ageWeeks / WEEKS_PER_YEAR)
+  const spanWeeks = Math.round(lifespan * WEEKS_PER_YEAR)
   let stage: Stage
-  if (ageYears <= 0) stage = 'Baby'
-  else if (ageYears === 1) stage = 'Teen'
-  else if (ageYears >= lifespan) stage = 'Retiree'
-  else if (ageYears === lifespan - 1) stage = 'Elder'
+  if (ageWeeks < WEEKS_PER_YEAR) stage = 'Baby' // year 0
+  else if (ageWeeks < 2 * WEEKS_PER_YEAR) stage = 'Teen' // year 1
+  else if (ageWeeks >= spanWeeks) stage = 'Retiree'
+  else if (ageWeeks >= spanWeeks - WEEKS_PER_YEAR) stage = 'Elder' // final year before retirement
   else stage = 'Fully Grown'
-  const trainMult = stage === 'Baby' ? 0.5 : stage === 'Teen' ? 1 : stage === 'Fully Grown' ? 0.95 : stage === 'Elder' ? 0.8 : 0
+  const trainMult = stage === 'Baby' ? 0.5 : stage === 'Teen' ? 1.35 : stage === 'Fully Grown' ? 1.15 : stage === 'Elder' ? 0.8 : 0
   return { stage, trainMult, ageYears }
 }
 
@@ -161,11 +168,15 @@ export function trainingProfileFor(species: Species): TrainingProfile {
 
 // Stat training bonus: major +20%, minor +10%, flaw -20%. Fusion species carry
 // a SECOND major (major2, also +20%) — their dual-major training identity.
+// Prestige bodies (Draconic/Abyssal) get only a GENTLE -5% flaw (v0.85) — a
+// legendary creature has no true weak stat; Mythical carry no flaw at all
+// (authored with major only), so this branch never fires for them.
+export const PRESTIGE_FLAW_PENALTY = 0.95
 export function statTrainingBonus(species: Species, stat: Stat): number {
   const prof = trainingProfileFor(species)
   if (stat === prof.major) return 1.2
   if (stat === prof.minor) return 1.1
-  if (stat === prof.flaw) return 0.8
+  if (stat === prof.flaw) return isPrestigeBody(species.body) ? PRESTIGE_FLAW_PENALTY : 0.8
   return 1
 }
 
@@ -174,7 +185,8 @@ export function statTrainingBonus(species: Species, stat: Stat): number {
 // already train 20% slower, so losing one to a malus should sting more too,
 // not just gain less. Major/minor/neutral maluses are unaffected.
 export function statMalusMultiplier(species: Species, stat: Stat): number {
-  return stat === trainingProfileFor(species).flaw ? 1.5 : 1
+  if (stat !== trainingProfileFor(species).flaw) return 1
+  return isPrestigeBody(species.body) ? 1 : 1.5 // prestige flaws are gentle — no amplified malus
 }
 
 // Excursion gold ceiling per league. Deliberately kept BELOW cup 1st-place gold
@@ -320,16 +332,22 @@ export interface NewCareerOpts {
 // and generation/battle never consult this, only career training does.
 // v0.77 gen-1 ceilings. A monster you did not BREED is walled; breeding (gen 2+)
 // is the only way past, and its potential then sets the ceiling.
-//   wild / market  → 800, lifted to 900 / 1000 by the Market Coach tiers
-//   fusion (gen 1) → 1000 flat
-// So a fused monster out-ceilings uncoached market stock by 200 from day one —
-// that's the draw that makes fusion worth the 1000g and the two monsters.
+//   wild / market       → 800, lifted to 900 / 1000 by the Market Coach tiers
+//   fusion (gen 1)      → 1000 flat
+//   prestige (gen 1)    → 1000 flat (v0.85) — matches fusion
+// Prestige monsters used to hit the 800 wild wall despite the license + rank
+// gate, walling them BELOW a fusion at Masters/Tamer Elite (league cap 900/1000).
+// v0.85 lifts them to the fusion ceiling, so the license buys a real ceiling —
+// they now train to the full league cap (still gated by it, so they can't
+// out-scale the rivals a league's cup fields).
 export const FUSION_GEN1_CAP = 1000
 export const WILD_GEN1_CAP = 800
+export const PRESTIGE_GEN1_CAP = 1000
 export function statCapFor(c: { licenseIndex: number; potential?: number; species?: Species; generation?: number; wildCap?: number }): number {
   const base = LEAGUES[c.licenseIndex].cap * (c.potential ?? 1)
   const gen1 = (c.generation ?? 1) <= 1
   if (gen1 && c.species && isFusionBody(c.species.body)) return Math.round(Math.min(base, FUSION_GEN1_CAP))
+  if (gen1 && c.species && isPrestigeBody(c.species.body)) return Math.round(Math.min(base, PRESTIGE_GEN1_CAP))
   if (gen1) return Math.round(Math.min(base, c.wildCap ?? WILD_GEN1_CAP))
   return Math.round(base)
 }

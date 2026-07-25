@@ -1,6 +1,6 @@
 import { Dispatch, ReactNode, SetStateAction, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  BODY_ELEMENT, BODY_MINOR, BodyType, isFusionBody, CC_INFO, COMBO_INFO, DEFAULT_TACTICS, Element, FOODS, FoodDef, FoodTier, GAMEPLANS, INNATE_SECONDARY_LEVEL, LEAGUES, MANA_POLICY_INFO, MatchOrders, Monster, Move, PRESERVE_INFO, STATS, Stat,
+  BODY_ELEMENT, BODY_MINOR, BodyType, isFusionBody, isPrestigeBody, CC_INFO, COMBO_INFO, DEFAULT_TACTICS, Element, FOODS, FoodDef, FoodTier, GAMEPLANS, INNATE_SECONDARY_LEVEL, LEAGUES, MANA_POLICY_INFO, MatchOrders, Monster, Move, PRESERVE_INFO, STATS, Stat,
   TARGET_PRIORITY_INFO, TEMPERAMENT_INFO, Tactics, classForStats,
   feedDelta, frontRowCount, happinessMultiplier, hashString, mulberry32, roleOfClass, rowOfSlot,
 } from './core'
@@ -59,20 +59,22 @@ function StatBar({ stat, value, max }: { stat: Stat; value: number; max: number 
 // (small up — a weaker buff), flaw = ▼ (down). The magnitude/word lives in the
 // tooltip so the line stays a clean set of same-shaped, same-coloured marks.
 const APT_MARK = {
-  major: { glyph: '▲', label: 'major aptitude · trains +20% faster' },
-  minor: { glyph: '▴', label: 'minor aptitude · trains +10% faster' },
-  flaw: { glyph: '▼', label: 'training flaw · trains −20% slower' },
+  major: { glyph: '▲', cls: 'major', label: 'major aptitude · trains +20% faster' },
+  minor: { glyph: '▴', cls: 'minor', label: 'minor aptitude · trains +10% faster' },
+  flaw: { glyph: '▼', cls: 'flaw', label: 'training flaw · trains −20% slower' },
+  flawSoft: { glyph: '▽', cls: 'flaw', label: 'minor flaw · trains only −5% slower' },
 } as const
-function AptMark({ kind, stat }: { kind: 'major' | 'minor' | 'flaw'; stat: Stat }) {
+function AptMark({ kind, stat }: { kind: keyof typeof APT_MARK; stat: Stat }) {
   const a = APT_MARK[kind]
-  return <span className={'aptmark ' + kind} style={{ color: STAT_COLOR[stat] }} title={`${stat} — ${a.label}`}>{a.glyph}&nbsp;{stat}</span>
+  return <span className={'aptmark ' + a.cls} style={{ color: STAT_COLOR[stat] }} title={`${stat} — ${a.label}`}>{a.glyph}&nbsp;{stat}</span>
 }
-function AptMarks({ prof }: { prof: { major?: Stat; minor: Stat; flaw?: Stat } }) {
+// softFlaw: prestige bodies carry only a gentle −5% flaw (Mythical carry none).
+function AptMarks({ prof, softFlaw }: { prof: { major?: Stat; minor: Stat; flaw?: Stat }; softFlaw?: boolean }) {
   return (
     <span className="aptmarks">
       {prof.major && <AptMark kind="major" stat={prof.major} />}
-      <AptMark kind="minor" stat={prof.minor} />
-      {prof.flaw && <AptMark kind="flaw" stat={prof.flaw} />}
+      {prof.minor !== prof.major && <AptMark kind="minor" stat={prof.minor} />}
+      {prof.flaw && <AptMark kind={softFlaw ? 'flawSoft' : 'flaw'} stat={prof.flaw} />}
     </span>
   )
 }
@@ -82,7 +84,7 @@ function AptMarks({ prof }: { prof: { major?: Stat; minor: Stat; flaw?: Stat } }
 function Signature({ m }: { m: Monster }) {
   return (
     <div className="meta sig">
-      <AptMarks prof={trainingProfileFor(m.species)} />
+      <AptMarks prof={trainingProfileFor(m.species)} softFlaw={isPrestigeBody(m.species.body)} />
       <span className="dim">training aptitude</span>
     </div>
   )
@@ -318,7 +320,7 @@ function Bestiary({ specialLicense, eliteLicense }: { specialLicense: boolean; e
                     <Sprite species={s} size={36} />
                     <span className="bn">{s.name}</span>
                     <span className="dim">· {s.flavour}</span>
-                    <span className="bsmall"><AptMarks prof={prof} /></span>
+                    <span className="bsmall"><AptMarks prof={prof} softFlaw={isPrestigeBody(s.body)} /></span>
                   </summary>
                   <p className="bio">{BIOS[s.id] ?? s.flavour}</p>
                   <p className="dim bsmall">
@@ -883,7 +885,7 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
                       <span className="offer-brief-text">
                         <b>{m.name}</b> {o.scouted && <span title="Found by your Market Scout">🔎</span>} <span className="dim">· {m.species.name} · {m.className}</span>
                         <span className="offer-brief-sub">
-                          <AptMarks prof={prof} /> <span className="dim">· {m.species.lifespan}y</span>
+                          <AptMarks prof={prof} softFlaw={isPrestigeBody(m.species.body)} /> <span className="dim">· {m.species.lifespan}y</span>
                         </span>
                       </span>
                       <span className="offer-brief-more dim">details ▾</span>
@@ -2216,7 +2218,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
       {/* Gen-1 ceiling: the wild-monster wall is invisible until you hit it. */}
       {(() => {
         const walled = game.stable.find((c) => {
-          if (c.retired || (c.generation ?? 1) > 1 || isFusionBody(c.species.body)) return false
+          if (c.retired || (c.generation ?? 1) > 1 || isFusionBody(c.species.body) || isPrestigeBody(c.species.body)) return false
           // Fire against the gen-1 wild wall itself (wildCap, 800 by default) —
           // at Platinum the league cap EQUALS the wall, and that is exactly
           // where it blocks the Masters trial, so "wall < league cap" was the
@@ -3181,7 +3183,7 @@ function TutorialBanner({ onDismiss }: { onDismiss: () => void }) {
           <li><b>Every week:</b> feed each monster, pick its activity (train, rest, or excursion), then Advance Week.</li>
           <li><b>Earn gold in cups.</b> Enter tournaments at your league from the Stables. To move up a league, win the rank-up trial, then buy the license in the Ranch Shop.</li>
           <li><b>Plan your dynasty.</b> Freeze a monster at the 🧪 Lab <b>before its career ends</b> to breed or fuse it later. Once it retires to the Hall of Fame, the bloodline is closed.</li>
-          <li><b>Raise the ceiling.</b> Wild monsters train to 800 at most — bred and fused monsters go higher, and the Market Coach upgrades your whole stable's limit.</li>
+          <li><b>Raise the ceiling.</b> Wild monsters train to 800 at most — bred, fused, and licensed prestige monsters go higher, and the Market Coach upgrades your whole stable's limit.</li>
         </ul>
       </div>
       <button className="tutorial-dismiss" onClick={onDismiss}>✕</button>

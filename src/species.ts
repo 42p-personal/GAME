@@ -111,40 +111,58 @@ export const SPECIES: Species[] = [
     trainingProfile: { major: 'CON', flaw: 'INT' },
     innate: [{ name: 'Shell Ward', desc: 'Starts battle with an 18 HP shield.' }, { name: 'Inner Calm', desc: '+2 mana regen/turn.' }] },
 
-  // --- Draconic (STR / WIS, weakness CHA) — Silver rank exclusive ---
-  { id: 'pyraxon', name: 'Pyraxon', body: 'Draconic', naturalClass: 'Warrior', base: s(28, 18, 24, 20, 16, 8), lifespan: 5, flavour: 'Fire-breathing drake, ancient fury.',
+  // --- Draconic (STR / WIS, weakness CHA) — Iron rank exclusive (Special License) ---
+  // Body minor WIS (arcane heritage). Authored aptitudes v0.85.
+  { id: 'pyraxon', name: 'Pyraxon', body: 'Draconic', naturalClass: 'Warrior', base: s(28, 18, 24, 20, 16, 8), lifespan: 8, flavour: 'Fire-breathing drake, ancient fury.',
+    trainingProfile: { major: 'STR', flaw: 'DEX' }, // heavy-hitting brute, too ponderous to dodge
     innate: [{ name: 'Flame Aura', desc: '8% chance to Burn on every hit.' }, { name: 'Draconic Pride', desc: '+6% damage.' }] },
-  { id: 'frostwyren', name: 'Frostwyren', body: 'Draconic', naturalClass: 'Wizard', base: s(20, 20, 14, 24, 36, 6), lifespan: 5, flavour: 'Icy wyvern, patient mage.',
+  { id: 'frostwyren', name: 'Frostwyren', body: 'Draconic', naturalClass: 'Wizard', base: s(20, 20, 14, 24, 36, 6), lifespan: 8, flavour: 'Icy wyvern, patient mage.',
+    trainingProfile: { major: 'INT', flaw: 'DEX' }, // still, deliberate spellcaster
     innate: [{ name: 'Blizzard', desc: '6% chance to Stun on every hit.' }, { name: 'Glacial Wisdom', desc: '+2 mana regen/turn. Reduces damage taken by 1 per hit.' }] },
-  { id: 'stormlerath', name: 'Stormlerath', body: 'Draconic', naturalClass: 'Ranger', base: s(24, 30, 18, 20, 28, 6), lifespan: 4, flavour: 'Lightning-winged serpent, swift strike.',
+  { id: 'stormlerath', name: 'Stormlerath', body: 'Draconic', naturalClass: 'Ranger', base: s(24, 30, 18, 20, 28, 6), lifespan: 7, flavour: 'Lightning-winged serpent, swift strike.',
+    trainingProfile: { major: 'DEX', flaw: 'CON' }, // swift striker, glassy
     innate: [{ name: 'Overload', desc: '+7% damage.' }, { name: 'Dodge Storm', desc: '+6% dodge chance. +3% critical hit chance.' }] },
-  { id: 'verdantdrake', name: 'Verdantdrake', body: 'Draconic', naturalClass: 'Sage', base: s(18, 18, 20, 36, 28, 8), lifespan: 6, flavour: 'Emerald dragon, nature\'s guardian.',
+  { id: 'verdantdrake', name: 'Verdantdrake', body: 'Draconic', naturalClass: 'Sage', base: s(18, 18, 20, 36, 28, 8), lifespan: 9, flavour: 'Emerald dragon, nature\'s guardian.',
+    trainingProfile: { major: 'CON', flaw: 'STR' }, // rooted guardian — sturdy, not aggressive (WIS minor carries its Sage side)
     innate: [{ name: 'Life Bloom', desc: 'Team: +2 HP regen/turn. Team: +1 mana regen/turn.' }, { name: 'Root Grasp', desc: 'Enemies: -3% dodge chance. Enemies: -2% accuracy.' }] },
-  { id: 'voidmaw', name: 'Voidmaw', body: 'Draconic', naturalClass: 'Wizard', base: s(20, 24, 18, 28, 32, 6), lifespan: 4, flavour: 'Void-touched dragon, cosmic terror.',
+  { id: 'voidmaw', name: 'Voidmaw', body: 'Draconic', naturalClass: 'Wizard', base: s(20, 24, 18, 28, 32, 6), lifespan: 7, flavour: 'Void-touched dragon, cosmic terror.',
+    trainingProfile: { major: 'INT', flaw: 'CON' }, // cosmic caster, survives on Void Pulse lifesteal, not bulk
     innate: [{ name: 'Void Pulse', desc: 'Heals 10% of damage dealt as HP.' }, { name: 'Entropy', desc: 'Enemies: -5% damage dealt.' }] },
 
-  // --- Abyssal (INT / DEX, weakness CON) — Silver rank exclusive ---
-  { id: 'tenebrae', name: 'Tenebrae', body: 'Abyssal', naturalClass: 'Rogue', base: s(28, 34, 12, 20, 24, 10), lifespan: 4, flavour: 'Shadow squid, sneaky assassin.',
+  // --- Abyssal (INT / DEX, weakness CON) — Iron rank exclusive (Special License) ---
+  // Body minor INT (eldritch intellect). Authored aptitudes v0.85.
+  { id: 'tenebrae', name: 'Tenebrae', body: 'Abyssal', naturalClass: 'Rogue', base: s(28, 34, 12, 20, 24, 10), lifespan: 7, flavour: 'Shadow squid, sneaky assassin.',
+    trainingProfile: { major: 'DEX', flaw: 'CON' }, // hit-and-run assassin, can't turn tanky
     innate: [{ name: 'Cloak of Shadow', desc: '+8% dodge chance.' }, { name: 'Silent Strike', desc: '+40% damage on its first hit. +5% critical hit chance.' }] },
-  { id: 'abyssomancer', name: 'Abyssomancer', body: 'Abyssal', naturalClass: 'Wizard', base: s(14, 28, 10, 32, 40, 12), lifespan: 5, flavour: 'Deep-sea sorceress, eldritch power.',
+  { id: 'abyssomancer', name: 'Abyssomancer', body: 'Abyssal', naturalClass: 'Wizard', base: s(14, 28, 10, 32, 40, 12), lifespan: 8, flavour: 'Deep-sea sorceress, eldritch power.',
+    trainingProfile: { major: 'INT', flaw: 'CON' }, // pure glass-cannon caster
     innate: [{ name: 'Rift Magic', desc: '6% chance to cast a skill twice.' }, { name: 'Mana Theft', desc: 'Steals mana equal to 20% of damage dealt.' }] },
-  { id: 'lurkerss', name: 'Lurkerss', body: 'Abyssal', naturalClass: 'Sage', base: s(12, 30, 14, 36, 32, 14), lifespan: 5, flavour: 'Luminescent serpent, deep thinker.',
+  { id: 'lurkerss', name: 'Lurkerss', body: 'Abyssal', naturalClass: 'Sage', base: s(12, 30, 14, 36, 32, 14), lifespan: 8, flavour: 'Luminescent serpent, deep thinker.',
+    trainingProfile: { major: 'WIS', flaw: 'STR' }, // support-sage, never a fighter (INT minor deepens its casting)
     innate: [{ name: 'Psychic Aura', desc: 'Team: +3% dodge chance. Team: +1 mana regen/turn.' }, { name: 'Ancient Knowing', desc: '+5% dodge chance.' }] },
-  { id: 'chrono-leviathan', name: 'Chrono-Leviathan', body: 'Abyssal', naturalClass: 'Sage', base: s(14, 28, 10, 36, 34, 8), lifespan: 6, flavour: 'Time-warped colossus, ageless predator.',
+  { id: 'chrono-leviathan', name: 'Chrono-Leviathan', body: 'Abyssal', naturalClass: 'Sage', base: s(14, 28, 10, 36, 34, 8), lifespan: 10, flavour: 'Time-warped colossus, ageless predator.',
+    trainingProfile: { major: 'WIS', flaw: 'DEX' }, // ancient, ponderous healer — slow but sustains via Age Reversal
     innate: [{ name: 'Temporal Distortion', desc: 'Team: +1 mana regen/turn. Enemies: -4% dodge chance.' }, { name: 'Age Reversal', desc: 'Heals 15% of damage dealt as HP.' }] },
-  { id: 'cephalumbra', name: 'Cephalumbra', body: 'Abyssal', naturalClass: 'Rogue', base: s(28, 40, 10, 18, 24, 10), lifespan: 4, flavour: 'Phantom tentacles, ghost-swift.',
+  { id: 'cephalumbra', name: 'Cephalumbra', body: 'Abyssal', naturalClass: 'Rogue', base: s(28, 40, 10, 18, 24, 10), lifespan: 7, flavour: 'Phantom tentacles, ghost-swift.',
+    trainingProfile: { major: 'DEX', flaw: 'CON' }, // ghost-swift glass phantom
     innate: [{ name: 'Phase Shift', desc: '+9% dodge chance.' }, { name: 'Whip Strike', desc: 'Ignores 10% of enemy mitigation.' }] },
 
-  // --- Mythical (5 unique archetypes) — Masters rank exclusive ---
-  { id: 'titanrex', name: 'Titanrex', body: 'Mythical', naturalClass: 'Warrior', base: s(48, 14, 38, 10, 10, 6), lifespan: 7, flavour: 'Primal tyrant lizard, raw power.',
+  // --- Mythical (5 unique archetypes) — Platinum rank exclusive (Elite License) ---
+  // Body minor CHA (legendary presence). Authored aptitudes v0.85.
+  { id: 'titanrex', name: 'Titanrex', body: 'Mythical', naturalClass: 'Warrior', base: s(48, 14, 38, 10, 10, 6), lifespan: 9, flavour: 'Primal tyrant lizard, raw power.',
+    trainingProfile: { major: 'STR' }, // legendary — no true weak stat
     innate: [{ name: 'Prehistoric Roar', desc: '+20% damage on its first hit.' }, { name: 'Unstoppable', desc: 'Reduces damage taken by 1 per hit. Incoming debuffs are 15% weaker.' }] },
-  { id: 'stellarion', name: 'Stellarion', body: 'Mythical', naturalClass: 'Ranger', base: s(10, 46, 8, 28, 40, 12), lifespan: 5, flavour: 'Star-born hunter, celestial archer.',
+  { id: 'stellarion', name: 'Stellarion', body: 'Mythical', naturalClass: 'Ranger', base: s(10, 46, 8, 28, 40, 12), lifespan: 8, flavour: 'Star-born hunter, celestial archer.',
+    trainingProfile: { major: 'DEX' }, // legendary — no true weak stat
     innate: [{ name: 'Stellar Shot', desc: '+9% critical hit chance.' }, { name: 'Cosmic Precision', desc: '+10% accuracy.' }] },
-  { id: 'wisdomkeeper', name: 'Wisdomkeeper', body: 'Mythical', naturalClass: 'Sage', base: s(10, 16, 18, 50, 42, 10), lifespan: 7, flavour: 'Ancient oracle, all-seeing guide.',
+  { id: 'wisdomkeeper', name: 'Wisdomkeeper', body: 'Mythical', naturalClass: 'Sage', base: s(10, 16, 18, 50, 42, 10), lifespan: 10, flavour: 'Ancient oracle, all-seeing guide.',
+    trainingProfile: { major: 'WIS' }, // legendary — no true weak stat
     innate: [{ name: 'Foresight', desc: 'Team: +5% dodge chance.' }, { name: 'Truth\'s Word', desc: 'Reduces damage taken by 1 per hit. Every 3rd round, automatically shrugs off one debuff on itself.' }] },
-  { id: 'archmage-aleph', name: 'Archmage-Aleph', body: 'Mythical', naturalClass: 'Wizard', base: s(6, 18, 12, 36, 52, 20), lifespan: 5, flavour: 'First of mages, spell incarnate.',
+  { id: 'archmage-aleph', name: 'Archmage-Aleph', body: 'Mythical', naturalClass: 'Wizard', base: s(6, 18, 12, 36, 52, 20), lifespan: 8, flavour: 'First of mages, spell incarnate.',
+    trainingProfile: { major: 'INT' }, // legendary — no true weak stat
     innate: [{ name: 'Spell Echo', desc: '12% chance to cast a skill twice.' }, { name: 'Arcane Mastery', desc: '+5 mana regen/turn.' }] },
-  { id: 'harmonybringer', name: 'Harmonybringer', body: 'Mythical', naturalClass: 'Bard', base: s(8, 36, 26, 14, 10, 52), lifespan: 6, flavour: 'Mythical unifier, peace in chaos.',
+  { id: 'harmonybringer', name: 'Harmonybringer', body: 'Mythical', naturalClass: 'Bard', base: s(8, 36, 26, 14, 10, 52), lifespan: 9, flavour: 'Mythical unifier, peace in chaos.',
+    trainingProfile: { major: 'CHA' }, // legendary — no true weak stat
     innate: [{ name: 'Unison', desc: 'Team: reduces damage taken by 2 per hit.' }, { name: 'Aegis Bond', desc: 'Reduces damage taken by 2 per hit. +2 HP regen/turn.' }] },
 
   // --- Saurian (5) — FUSION class: Mammal + Reptilian (FUSION_DESIGN.md). Only

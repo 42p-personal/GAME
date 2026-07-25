@@ -31,10 +31,10 @@ export type Sex = 'M' | 'F'
 // (BODY_MINOR below, same stat for every species of that body) — a light
 // touch, not real differentiation. `major`/`flaw` are individually authored
 // per species (Species.trainingProfile) — this is what actually makes two
-// monsters of the same body type train differently. Species without an
-// authored `major`/`flaw` (the exclusive body types — Draconic/Abyssal/
-// Mythical, not yet migrated) fall back to the legacy derivation (top/2nd/
-// lowest base stat) inside game.ts:trainingProfileFor.
+// monsters of the same body type train differently. Every species now authors
+// major/flaw (the exclusive bodies were migrated in v0.85); any future species
+// left without one falls back to the legacy derivation (top/2nd/lowest base
+// stat) inside game.ts:trainingProfileFor.
 export interface TrainingProfile { minor: Stat; major?: Stat; flaw?: Stat }
 
 // What a species DATA ENTRY authors — just major/flaw, never minor (that's
@@ -48,6 +48,11 @@ export interface AuthoredAptitude { major?: Stat; flaw?: Stat }
 // types intentionally have no entry here and fall back to the legacy system.
 export const BODY_MINOR: Partial<Record<BodyType, Stat>> = {
   Mammal: 'STR', Avian: 'WIS', Marsupial: 'CHA', Aquatic: 'INT', Insectoid: 'CON', Reptilian: 'DEX',
+  // Exclusive bodies (v0.85): each prestige group now carries a shared thematic
+  // minor too, so a licensed monster trains like a designed creature, not a
+  // legacy stat-block. Draconic = arcane heritage (WIS); Abyssal = eldritch
+  // intellect (INT); Mythical = legendary presence (CHA).
+  Draconic: 'WIS', Abyssal: 'INT', Mythical: 'CHA',
 }
 
 export type Channel = 'melee' | 'ranged' | 'magic' | 'voice' | 'support'
