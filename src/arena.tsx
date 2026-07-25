@@ -145,6 +145,21 @@ function utilityFx(move: Move | undefined): { overlays: Overlay[]; color: string
   return { overlays, color: CHANNEL_COLOR.support }
 }
 
+// Glow colour for a buff/aura overlay, so the team-battle tiles can light up the
+// affected monster the way the 1v1 arena's aura overlays do. Every buff/utility
+// (struct 'stance') gets SOME glow — a specific colour when the overlay is known,
+// else a neutral golden buff-glow — so no buff ever plays without a visible tell.
+const AURA_GLOW: Partial<Record<Overlay, string>> = {
+  shield: 'rgba(129,212,250,.95)', thorns: 'rgba(174,213,129,.95)', heal: 'rgba(129,199,132,.98)',
+  cleanse: 'rgba(255,241,118,.95)', 'aura-atk': 'rgba(239,83,80,.95)', 'aura-def': 'rgba(144,164,174,.95)',
+  'aura-dodge': 'rgba(77,208,225,.95)', 'aura-regen': 'rgba(129,199,132,.95)',
+}
+const BUFF_GLOW_DEFAULT = 'rgba(255,213,79,.9)'
+function buffGlowColor(overlays?: Overlay[]): string {
+  for (const o of overlays ?? []) if (AURA_GLOW[o]) return AURA_GLOW[o]!
+  return BUFF_GLOW_DEFAULT
+}
+
 const barKey = (side: BattleSide, slot: number) => `${side}${slot}`
 // Fixed 1v1 stage coordinates: the target position an effect travels to /
 // erupts at, given which side is attacking (mirrors projA/projB's endpoints).
@@ -605,9 +620,16 @@ export function ArenaBattle({ teamA, teamB, result, league, playerSide, onDone }
     if (koed) cls += ' ko'
     if (acting) cls += ` acting acting-${fx!.kind ?? fx!.struct}`
     if (impacted) cls += ` impact impact-${fx!.kind ?? fx!.struct}`
+    // Buff/aura glow: every 'stance' fx (buffs, wards, songs, the free Guard)
+    // lights up the monster it lands on — the self-buffer (acting) and any
+    // targeted ally (impacted) — so no buff plays without a visible tell.
+    const buffed = (acting || impacted) && fx!.struct === 'stance'
+    if (buffed) cls += ' buffed'
     // a move's colour rides along as a CSS custom property so acting/impact
     // don't need a hand-written rule per kind just to pick up the right tint
-    const fxStyle = (acting || impacted) && fx?.color ? ({ '--fx-color': fx.color } as Record<string, string>) : undefined
+    const fxStyle: Record<string, string> | undefined = buffed
+      ? { '--glow-color': buffGlowColor(fx!.overlays) }
+      : ((acting || impacted) && fx?.color ? { '--fx-color': fx.color } : undefined)
     return (
       <div className={cls} key={slot} title={m.name} style={fxStyle}>
         <Sprite species={m.species} size={60} bare />

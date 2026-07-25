@@ -13,9 +13,9 @@ const team = (seeds: string[], train: number) => seeds.map((s) => generateMonste
 const GOLDENS = [
   {
     name: '1v1-low', a: ['gold-a1'], b: ['gold-b1'], train: 150,
-    winner: 'A', events: 173, logLines: 123,
+    winner: 'A', events: 221, logLines: 160, // recaptured v0.852: gold-a1 Titanrex / gold-b1 Pyraxon (prestige base-stat bump)
     finals: [
-      { side: 'A', slot: 0, hp: 183, mana: 3, wasKOd: false },
+      { side: 'A', slot: 0, hp: 188, mana: 0, wasKOd: false },
       { side: 'B', slot: 0, hp: 0, mana: 5, wasKOd: true },
     ],
   },
@@ -29,12 +29,12 @@ const GOLDENS = [
   },
   {
     name: '2v2-mid', a: ['gold-a3', 'gold-a4'], b: ['gold-b3', 'gold-b4'], train: 700,
-    winner: 'B', events: 111, logLines: 85,
+    winner: 'A', events: 126, logLines: 93, // recaptured v0.852: gold-a3 Wisdomkeeper / gold-b3 Stormlerath (prestige base-stat bump)
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 460, wasKOd: true },
-      { side: 'A', slot: 1, hp: 0, mana: 179, wasKOd: true },
-      { side: 'B', slot: 0, hp: 43, mana: 35, wasKOd: false },
-      { side: 'B', slot: 1, hp: 216, mana: 331, wasKOd: false },
+      { side: 'A', slot: 0, hp: 0, mana: 489, wasKOd: true },
+      { side: 'A', slot: 1, hp: 121, mana: 98, wasKOd: false },
+      { side: 'B', slot: 0, hp: 0, mana: 201, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 183, wasKOd: true },
     ],
   },
   {
@@ -43,14 +43,14 @@ const GOLDENS = [
     // (flat chip → % chip), CON coefficient trims, and WIS spell-power — the
     // clock now resolves a winner instead of wiping both.
     name: '3v3-high', a: ['gold-a5', 'gold-a6', 'gold-a7'], b: ['gold-b5', 'gold-b6', 'gold-b7'], train: 2000,
-    winner: 'A', events: 413, logLines: 297,
+    winner: 'A', events: 384, logLines: 280, // recaptured v0.852: prestige base-stat bump shifts the seeded rolls
     finals: [
-      { side: 'A', slot: 0, hp: 941, mana: 690, wasKOd: false },
-      { side: 'A', slot: 1, hp: 1262, mana: 19, wasKOd: false },
-      { side: 'A', slot: 2, hp: 1348, mana: 751, wasKOd: false },
-      { side: 'B', slot: 0, hp: 0, mana: 729, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 772, wasKOd: true },
-      { side: 'B', slot: 2, hp: 0, mana: 55, wasKOd: true },
+      { side: 'A', slot: 0, hp: 139, mana: 690, wasKOd: false },
+      { side: 'A', slot: 1, hp: 1298, mana: 33, wasKOd: false },
+      { side: 'A', slot: 2, hp: 1348, mana: 756, wasKOd: false },
+      { side: 'B', slot: 0, hp: 0, mana: 747, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 746, wasKOd: true },
+      { side: 'B', slot: 2, hp: 0, mana: 137, wasKOd: true },
     ],
   },
 ] as const

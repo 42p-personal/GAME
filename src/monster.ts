@@ -265,6 +265,13 @@ const NON_PRESTIGE = GENERATABLE.filter((s) => !isPrestigeBody(s.body))
 // SHAPE (and the per-monster training jitter baked in above). Used by the Market
 // Coach to guarantee an offer actually sits in the promised league band — a flat
 // training budget scatters far too wide to make that promise honestly.
+// Market Coach quality multiplier by body (v0.852): coached PRESTIGE stock comes
+// in stronger than basic stock at the same tier — the license buys a higher-grade
+// monster — and Mythical (the top prestige class) always lands highest. Applied
+// to the coach's target-top before normalisation, so it only affects coached
+// offers (targetTop set); wild/rival/golden generation is untouched.
+export const COACH_PRESTIGE_MULT: Partial<Record<string, number>> = { Draconic: 1.15, Abyssal: 1.15, Mythical: 1.3 }
+
 function normaliseTop(stats: Stats, top: number): Stats {
   const cur = Math.max(...STATS.map((k) => stats[k]))
   if (cur <= 0) return stats
@@ -290,7 +297,8 @@ export function generateMonster(seed: string, opts: GenOptions = {}): Monster {
   ranked.forEach((k, i) => { base[k] = jittered[i] })
 
   const trained = boostConstitution(applyTraining(base, opts.train ?? 0, rng), rng)
-  const stats = opts.targetTop ? normaliseTop(trained, opts.targetTop) : trained
+  const effTop = opts.targetTop ? Math.round(opts.targetTop * (COACH_PRESTIGE_MULT[species.body] ?? 1)) : undefined
+  const stats = effTop ? normaliseTop(trained, effTop) : trained
   const learned = learnedMoves(stats)
   const loadout = chooseLoadout(learned, stats)
   const maxStat = Math.max(...STATS.map((k) => stats[k]))

@@ -578,13 +578,33 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
   const frozenPool = game.labFrozen ?? []
   const studTotal = frozenPool.reduce((s, f) => s + studIncome(f), 0)
 
+  // --- Guided first-run tutorial (v0.86) -----------------------------------
+  // The 'buy'/'raise' beats are one-shot messages that DON'T advance the step
+  // (the step advances by buying 2 / clicking Back to Town), so a local "seen"
+  // set hides them after the player reads them; 'howto'/'final' advance the
+  // persisted step on close, so they self-dismiss.
+  const [tutSeen, setTutSeen] = useState<Set<string>>(() => new Set())
+  const step = game.tutorialStep
+  const closeGuided = () => setGame((g) => ({ ...g, tutorialStep: undefined, tutorialDismissed: true }))
+  const tutModal =
+    step === 'buy' && area === 'market' && !tutSeen.has('buy')
+      ? { title: `Greetings ${game.trainerName},`, body: "Welcome to the bull pen. To begin with, you're going to need to purchase two monsters from the market here.", onClose: () => setTutSeen((s) => new Set(s).add('buy')) }
+    : step === 'raise' && area === 'market' && !tutSeen.has('raise')
+      ? { body: "Well now, you got the creatures — you best go and raise 'em.", onClose: () => setTutSeen((s) => new Set(s).add('raise')) }
+    : step === 'howto' && area === 'hub'
+      ? { body: "Well now, I'll tell you a bit about how it works here. The Lab is where you freeze your monsters for fusing and breeding — you breed them at the Breeding Ranch to keep their stats and raise their potential, while fusing makes a whole new creature. The Ranch Shop helps you upgrade your grandpa's old place, and the Hall of Fame is for all your retired fighters. The Market's pretty self-explanatory since we've just been there — but remember, it gets fresh stock each month. I'll be seeing ya!", onClose: () => setGame((g) => ({ ...g, tutorialStep: 'final' })) }
+    : step === 'final' && area === 'hub'
+      ? { body: 'Train your monsters, feed them well, and let them earn you riches in the circuits. Breed a dynasty from your champions before they retire, or buy fresh monsters to fuse and see what their power unlocks.', onClose: closeGuided }
+    : null
+
   return (
     <>
       <AreaBackdrop scene={TOWN_AREA_ART[area] ?? 'town'} />
+      {tutModal && <GrandpaModal title={tutModal.title} body={tutModal.body} onClose={tutModal.onClose} />}
       {/* The welcome overview belongs on the town map only — repeating the whole
           "how it works" block on every sub-area (Market/Shop/Lab/…) was just
           clutter (v0.81 UI audit). */}
-      {area === 'hub' && game.tutorialEnabled && !game.tutorialDismissed && (
+      {area === 'hub' && !game.tutorialStep && game.tutorialEnabled && !game.tutorialDismissed && (
         <TutorialBanner onDismiss={() => setGame((g) => ({ ...g, tutorialDismissed: true }))} />
       )}
       <div className="townbar">
@@ -596,7 +616,12 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
       </div>
 
       {area !== 'hub' && (
-        <button className="ghost townback" onClick={() => setArea('hub')}>← Town</button>
+        <button
+          className={'ghost townback' + (area === 'market' && step === 'buy' ? ' tut-block' : area === 'market' && step === 'raise' ? ' tut-go' : '')}
+          disabled={area === 'market' && step === 'buy'}
+          title={area === 'market' && step === 'buy' ? 'Buy two monsters first' : undefined}
+          onClick={() => { if (step === 'raise') setGame((g) => ({ ...g, tutorialStep: 'howto' })); setArea('hub') }}
+        >← Town</button>
       )}
 
       {/* ---- HUB: the town map, a grid of location buttons ---- */}
@@ -611,10 +636,10 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
               <span className="hubicon">🏗️</span><b>Ranch Shop</b>
               <span className="dim">licenses, barn, care upgrades &amp; contracts</span>
             </button>
-            <button className="hubbtn" disabled={active.length === 0}
+            <button className={'hubbtn' + (step === 'final' ? ' tut-go' : '')} disabled={active.length === 0}
               title={active.length === 0 ? 'Buy a monster at the Market first' : undefined}
               onClick={() => setGame((g) => goto(g, 'ranch'))}>
-              <span className="hubicon">🏟</span><b>Stables</b>
+              <span className="hubicon">🏟</span><b>Grandpa's Ranch</b>
               <span className="dim">{active.length === 0 ? 'empty — visit the Market' : `train your ${active.length} competitor${active.length === 1 ? '' : 's'}`}</span>
             </button>
             <button className="hubbtn" onClick={() => setArea('breeding')}>
@@ -774,11 +799,8 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
         return (
         <div className="townmap">
           <div className="card loc">
-            <TipBanner game={game} setGame={setGame} id="lab">
-              🧪 Freeze a monster while it's still competing to pause its aging and bank its genome for
-              breeding or fusion.
-            </TipBanner>
             <div className="loc-h"><span>🧪 Lab · Freezer</span><span className="dim">{frozen.length}/{game.labSlots} slots</span></div>
+            <div className="warnnote">⚠️ A fused monster's stats do not carry over — fusion always starts fresh. To preserve a dynasty through stats, use the <b>Breeding Ranch</b>.</div>
             <div className="dim" style={{ marginBottom: 6 }}>
               The freezer preserves a monster's genome — it is the <b>only</b> route to breeding
               and fusion. Freeze it while it is still competing: once a career ends it retires to
@@ -876,7 +898,7 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
               const afford = game.gold >= o.price
               const prof = trainingProfileFor(m.species)
               return (
-                <div className="offer" key={o.seed}>
+                <div className={'offer' + (step === 'buy' ? ' tut-highlight' : '')} key={o.seed}>
                   {/* Compact by default (three full cards made Town very long);
                       the full MonsterCard is one click away. */}
                   <details className="offer-details">
@@ -3174,6 +3196,21 @@ function TipBanner({ game, setGame, id, children }: {
   )
 }
 
+// Guided-tutorial message box (v0.86) — Grandpa talking the player through the
+// first-run beats. A dismissible overlay; the caller decides what "continue" does.
+function GrandpaModal({ title, body, onClose }: { title?: string; body: string; onClose: () => void }) {
+  return (
+    <div className="tut-overlay" role="dialog" aria-modal="true">
+      <div className="tut-box">
+        <div className="tut-grandpa">👴</div>
+        {title && <div className="tut-title">{title}</div>}
+        <p className="tut-body">{body}</p>
+        <button className="tut-continue" onClick={onClose}>Continue →</button>
+      </div>
+    </div>
+  )
+}
+
 function TutorialBanner({ onDismiss }: { onDismiss: () => void }) {
   return (
     <div className="tutorial-banner">
@@ -3181,7 +3218,7 @@ function TutorialBanner({ onDismiss }: { onDismiss: () => void }) {
         <b>👋 How Monster Tamer works</b>
         <ul>
           <li><b>Every week:</b> feed each monster, pick its activity (train, rest, or excursion), then Advance Week.</li>
-          <li><b>Earn gold in cups.</b> Enter tournaments at your league from the Stables. To move up a league, win the rank-up trial, then buy the license in the Ranch Shop.</li>
+          <li><b>Earn gold in cups.</b> Enter tournaments at your league from Grandpa's Ranch. To move up a league, win the rank-up trial, then buy the license in the Ranch Shop.</li>
           <li><b>Plan your dynasty.</b> Freeze a monster at the 🧪 Lab <b>before its career ends</b> to breed or fuse it later. Once it retires to the Hall of Fame, the bloodline is closed.</li>
           <li><b>Raise the ceiling.</b> Wild monsters train to 800 at most — bred, fused, and licensed prestige monsters go higher, and the Market Coach upgrades your whole stable's limit.</li>
         </ul>

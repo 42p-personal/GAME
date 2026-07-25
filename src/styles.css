@@ -470,6 +470,10 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 .roster-tile.ko { opacity: .4; filter: grayscale(1); }
 .roster-tile.acting { border-color: var(--fx-color, var(--accent)); box-shadow: 0 0 0 1px var(--fx-color, var(--accent)); animation: tilePulse .5s ease; }
 .roster-tile.impact { animation: tileImpact .45s ease; }
+/* Buff/aura glow — every buff, ward, song or Guard lights up the affected tile
+   in the effect's colour (--glow-color), so no buff plays without a visible tell. */
+.roster-tile.buffed { border-color: var(--glow-color, #ffd54f); box-shadow: 0 0 0 2px var(--glow-color, #ffd54f), 0 0 15px 4px var(--glow-color, #ffd54f); animation: tileBuff .6s ease-out; }
+@keyframes tileBuff { 0% { box-shadow: 0 0 0 0 transparent; } 40% { box-shadow: 0 0 0 3px var(--glow-color, #ffd54f), 0 0 22px 7px var(--glow-color, #ffd54f); } 100% { box-shadow: 0 0 0 2px var(--glow-color, #ffd54f), 0 0 13px 3px var(--glow-color, #ffd54f); } }
 @keyframes tileImpact { 30% { box-shadow: 0 0 0 2px var(--fx-color, var(--accent)), 0 0 14px 2px var(--fx-color, var(--accent)); } }
 .roster-tile .rt-name { font-size: 10.5px; font-weight: 700; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .roster-tile .rt-class { font-size: 9px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -539,6 +543,23 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 .disclaimer h2 { margin-bottom: 16px; }
 
 .tutorial-banner { display: flex; gap: 14px; align-items: flex-start; justify-content: space-between; background: var(--panel2); border: 1px solid var(--accent); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; }
+
+/* Guided first-run tutorial (v0.86) — Grandpa's message box + navigation cues. */
+.tut-overlay { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(6,8,12,.62); padding: 20px; animation: tutFade .2s ease-out; }
+@keyframes tutFade { from { opacity: 0; } to { opacity: 1; } }
+.tut-box { max-width: 460px; width: 100%; background: var(--panel); border: 2px solid #e0b23c; border-radius: 14px; padding: 20px 22px 18px; box-shadow: 0 12px 40px rgba(0,0,0,.5); text-align: center; }
+.tut-grandpa { font-size: 46px; line-height: 1; margin-bottom: 6px; }
+.tut-title { font-weight: 800; font-size: 16px; margin-bottom: 8px; }
+.tut-body { font-size: 14px; line-height: 1.55; color: var(--ink); white-space: pre-line; margin: 0 0 16px; text-align: left; }
+.tut-continue { background: #e0b23c; color: #201700; font-weight: 800; }
+/* Navigation cues: gold "go here" highlight + red "not yet" block. */
+.tut-go { box-shadow: 0 0 0 2px #e0b23c, 0 0 16px 2px rgba(224,178,60,.55); border-color: #e0b23c !important; animation: tutGoPulse 1.3s ease-in-out infinite; }
+@keyframes tutGoPulse { 0%,100% { box-shadow: 0 0 0 2px #e0b23c, 0 0 10px 1px rgba(224,178,60,.4); } 50% { box-shadow: 0 0 0 2px #e0b23c, 0 0 20px 4px rgba(224,178,60,.7); } }
+.townback.tut-block { color: #ff8a80; border-color: #e0554e !important; box-shadow: 0 0 0 1px #e0554e; opacity: .85; }
+.offer.tut-highlight { border-radius: 10px; box-shadow: 0 0 0 2px #e0b23c, 0 0 14px 2px rgba(224,178,60,.5); }
+/* Persistent warning note (e.g. the Lab fusion-stats caveat). */
+.warnnote { font-size: 13px; line-height: 1.5; background: color-mix(in srgb, #e0b23c 12%, var(--panel2)); border: 1px solid #e0b23c; border-radius: 8px; padding: 8px 12px; margin: 8px 0; }
+@media (prefers-reduced-motion: reduce) { .tut-go { animation: none; } }
 
 /* Contextual one-shot tips (2026-07-25): smaller sibling of the welcome banner. */
 .tipbanner { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; background: color-mix(in srgb, var(--accent) 8%, var(--panel2)); border: 1px dashed var(--accent); border-radius: 8px; padding: 8px 12px; margin: 8px 0; font-size: 13px; line-height: 1.45; }
@@ -858,5 +879,6 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 
 @media (prefers-reduced-motion: reduce) {
   .slam-mark, .guillotine-blade, .beam-fx, .volley-arrow, .cage-bar, .firewall-fx, .notes-fx .note,
-  .ov-crater, .ov-exec, .ov-manaburn, .ov-tether, .ov-shield, .ov-thorns, .ov-heal, .ov-cleanse, .ov-aura, .status-puff { animation-duration: .01ms !important; }
+  .ov-crater, .ov-exec, .ov-manaburn, .ov-tether, .ov-shield, .ov-thorns, .ov-heal, .ov-cleanse, .ov-aura, .status-puff,
+  .roster-tile.buffed { animation-duration: .01ms !important; }
 }

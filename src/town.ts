@@ -409,6 +409,10 @@ export interface GameState {
   trainerName: string
   tutorialEnabled: boolean
   tutorialDismissed: boolean // player closed the welcome-tips banner
+  // Guided first-run tutorial (v0.86) — a small state machine, first game only:
+  // 'buy' (greet + buy 2 at market) → 'raise' (bought, go to town) → 'howto'
+  // (town explainer) → 'final' (ranch highlight + closing note) → cleared.
+  tutorialStep?: 'buy' | 'raise' | 'howto' | 'final'
   gold: number
   week: number // the global calendar — one clock for market, tournaments, and stable
   stable: Career[]
@@ -533,6 +537,7 @@ export function newGame(seed = 'start', opts?: { trainerName?: string; tutorialE
     trainerName: opts?.trainerName?.trim() || 'Tamer',
     tutorialEnabled: opts?.tutorialEnabled ?? true,
     tutorialDismissed: false,
+    tutorialStep: (opts?.tutorialEnabled ?? true) ? 'buy' : undefined,
     gold: START_GOLD,
     week: 0,
     stable: [],
@@ -688,7 +693,7 @@ export const labUpkeepPerFrozen = (g: GameState): number => (g.labTechLoan ? LAB
 export const BREED_COST = 300
 export const BREED_MAX_CHILDREN = 2
 export const BREED_POTENTIAL_STEP = 0.10
-export const BREED_HEAD_START = 0.45 // fraction of parents' avg stats a child hatches with (0.35→0.45 v0.72: stronger bred monsters, shorter climb per generation)
+export const BREED_HEAD_START = 0.15 // fraction of parents' avg stats a child hatches with. v0.86: 0.45→0.15 — a GENTLE stat carry (fusion carries none); the dynasty's real strength is the climbing `potential` cap-multiplier, not a big direct inheritance.
 export function breedPotentialV2(a: Career, b: Career): number {
   const champBonus = Math.min(0.08, Math.floor((champsOf(a) + champsOf(b)) / 2) * 0.01)
   return Math.min(MAX_POTENTIAL, Math.round((((a.potential ?? 1) + (b.potential ?? 1)) / 2 + BREED_POTENTIAL_STEP + champBonus) * 100) / 100)
@@ -1107,7 +1112,11 @@ export function buyMonster(g: GameState, index: number): GameState {
   c.comfortWeeks = comfortWeeksFor(g) // stable-wide comfort set applies to newcomers too (v0.6)
   c.wildCap = wildCapFor(g)
   const market = g.market.filter((_, i) => i !== index)
-  return { ...g, gold: g.gold - o.price, stable: [...g.stable, c], market, activeId: g.activeId || c.id, nextId: g.nextId + 1 }
+  const stable = [...g.stable, c]
+  // Guided tutorial: once the player owns two monsters, advance to the "now go
+  // raise 'em" beat (drives the market's gold Back-to-Town cue).
+  const tutorialStep = g.tutorialStep === 'buy' && stable.filter((x) => !x.retired).length >= 2 ? 'raise' as const : g.tutorialStep
+  return { ...g, gold: g.gold - o.price, stable, market, activeId: g.activeId || c.id, nextId: g.nextId + 1, tutorialStep }
 }
 
 export function goto(g: GameState, area: Area): GameState {
