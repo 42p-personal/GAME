@@ -241,7 +241,16 @@ export const activeQuartersFor = (league: string): number[] => ACTIVE_QUARTERS_B
 // marquee-bearing leagues (Silver+) slot their one fixed annual event into
 // its own quarter as THAT quarter's guaranteed cup (not an addition on top),
 // so total yearly cup counts stay comparable across every league.
+// The calendar is a pure function of (seed, year) but the generator is not free
+// (per-league RNG loops + the ≥2-cups/month filler pass + a sort), and the UI
+// asks for it several times per render across three screens. A tiny memo keyed
+// on the last few (seed, year) pairs makes repeat calls O(1). Entries are
+// treated as immutable by every caller, so sharing one array is safe.
+const CALENDAR_CACHE = new Map<string, Tournament[]>()
 export function tournamentCalendarFor(seed: string, year: number): Tournament[] {
+  const cacheKey = seed + ':' + year
+  const hit = CALENDAR_CACHE.get(cacheKey)
+  if (hit) return hit
   const out: Tournament[] = []
   const marqueeByLeague = new Map(PRESTIGE_EVENTS.map((p) => [p.league, p]))
   for (const league of Object.keys(POOL_REWARDS)) {
@@ -305,7 +314,10 @@ export function tournamentCalendarFor(seed: string, year: number): Tournament[] 
       }
     }
   }
-  return out.sort((a, b) => a.month - b.month || a.week - b.week || leagueIndexOf(a.league) - leagueIndexOf(b.league))
+  out.sort((a, b) => a.month - b.month || a.week - b.week || leagueIndexOf(a.league) - leagueIndexOf(b.league))
+  if (CALENDAR_CACHE.size > 8) CALENDAR_CACHE.clear() // a handful of (seed, year) pairs is all any session touches
+  CALENDAR_CACHE.set(cacheKey, out)
+  return out
 }
 
 export const leagueIndexOf = (league: string): number => LEAGUES.findIndex((l) => l.name === league)
@@ -693,7 +705,7 @@ export const labUpkeepPerFrozen = (g: GameState): number => (g.labTechLoan ? LAB
 export const BREED_COST = 300
 export const BREED_MAX_CHILDREN = 2
 export const BREED_POTENTIAL_STEP = 0.10
-export const BREED_HEAD_START = 0.15 // fraction of parents' avg stats a child hatches with. v0.86: 0.45→0.15 — a GENTLE stat carry (fusion carries none); the dynasty's real strength is the climbing `potential` cap-multiplier, not a big direct inheritance.
+export const BREED_HEAD_START = 0.3 // fraction of parents' avg stats a child hatches with. v0.861: 0.45→0.15→0.30 — a real head start (user spec: parents' stats SHOULD carry to the child; fusion carries none), while the climbing `potential` cap-multiplier stays the dynasty's long-run engine.
 export function breedPotentialV2(a: Career, b: Career): number {
   const champBonus = Math.min(0.08, Math.floor((champsOf(a) + champsOf(b)) / 2) * 0.01)
   return Math.min(MAX_POTENTIAL, Math.round((((a.potential ?? 1) + (b.potential ?? 1)) / 2 + BREED_POTENTIAL_STEP + champBonus) * 100) / 100)

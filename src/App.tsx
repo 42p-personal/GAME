@@ -1605,6 +1605,69 @@ function BracketGrid({ standings, allMatches, revealed }: { standings: EventStan
   )
 }
 
+// Live round-robin standings (v0.84; extracted + memoized v0.861): the field is
+// a pure function of the teams + the player's committed orders, so every match
+// is rebuilt deterministically and revealed round by round — consistent with
+// finalizeCup, which scores the identical matches at the end. Rebuilding means
+// re-simulating up to C(parts,2) full team battles, so it's cached: the memo
+// only recomputes when the staged cup advances (new orders / next match), not
+// on every render of the battle screen.
+function LiveStandingsCard({ ac, stable, matchIdx }: {
+  ac: NonNullable<GameState['activeCup']>; stable: Career[]; matchIdx: number
+}) {
+  const data = useMemo(() => {
+    // Derived here (not passed pre-mapped) so the memo keys on the stable
+    // array's identity — a fresh .map() in the parent would defeat the cache.
+    const playerCareers = ac.playerMonsterIds.map((id) => stable.find((c) => c.id === id)).filter((c): c is Career => !!c)
+    const rivalTeams = ac.rivalTeams
+    if (rivalTeams.length < 2) return null
+    const parts = rivalTeams.length + 1
+    const labelOf = (p: number) => (p === 0 ? 'Your Team' : `Rival Team ${p}`)
+    const all: EventMatch[] = []
+    const revealed: EventMatch[] = []
+    let pk = -1
+    let lastPlayerPos = -1
+    roundRobinSchedule(parts).forEach(([i, j]) => {
+      const involvesPlayer = i === 0 || j === 0
+      let m: EventMatch
+      if (involvesPlayer) {
+        pk++
+        const orders = ac.matchOrders[pk]
+        const built = buildEventPlayerTeam(playerCareers, orders)
+        const opp = applyMarkToOpponent(rivalTeams[(i === 0 ? j : i) - 1], orders?.mark)
+        // Player is participant 0 = the low index i, hence always side A.
+        m = { aLabel: labelOf(i), bLabel: labelOf(j), teamA: built.team, teamB: opp, result: simulateTeamBattle(built.team, opp, built.happiness, opp.map(() => 5)), involvesPlayer: true }
+        if (orders && pk < matchIdx) { revealed.push(m); lastPlayerPos = all.length }
+      } else {
+        const a = rivalTeams[i - 1], b = rivalTeams[j - 1]
+        m = { aLabel: labelOf(i), bLabel: labelOf(j), teamA: a, teamB: b, result: simulateTeamBattle(a, b, a.map(() => 5), b.map(() => 5)), involvesPlayer: false }
+      }
+      all.push(m)
+    })
+    // Reveal rival-vs-rival results up to the player's last completed match,
+    // so parallel results surface as the tournament progresses.
+    all.forEach((m, idx) => { if (!m.involvesPlayer && idx <= lastPlayerPos) revealed.push(m) })
+    const rows = Array.from({ length: parts }, (_, p) => ({ label: labelOf(p), isPlayer: p === 0, wins: 0, draws: 0, losses: 0, hpFracSum: 0 }))
+    const idxOf = (l: string) => rows.findIndex((r) => r.label === l)
+    const frac = (m: EventMatch, side: 'A' | 'B', team: Monster[]) => m.result.finals.filter((f) => f.side === side).reduce((s, f) => s + f.hp / maxHp(team[f.slot].stats), 0) / team.length
+    for (const m of revealed) {
+      const ai = idxOf(m.aLabel), bi = idxOf(m.bLabel)
+      if (m.result.winner === 'A') { rows[ai].wins++; rows[bi].losses++ } else if (m.result.winner === 'B') { rows[bi].wins++; rows[ai].losses++ } else { rows[ai].draws++; rows[bi].draws++ }
+      rows[ai].hpFracSum += frac(m, 'A', m.teamA); rows[bi].hpFracSum += frac(m, 'B', m.teamB)
+    }
+    const standings: EventStanding[] = [...rows].sort((a, b) => b.wins - a.wins || b.hpFracSum - a.hpFracSum).map((s, i) => ({ ...s, placement: i + 1 }))
+    return { all, revealed, standings }
+  }, [ac, stable, matchIdx])
+  if (!data) return null
+  return (
+    <div className="card" style={{ marginBottom: 10 }}>
+      <div className="section-title">Standings</div>
+      <BracketGrid standings={data.standings} allMatches={data.all} revealed={data.revealed} />
+      {data.revealed.length === 0 && <div className="hint">Results fill in as each match is played.</div>}
+    </div>
+  )
+}
+
 // Post-fight causal analysis (v0.84), shown on the between-match hub and the
 // results screen. Free tier: what happened (turning point, tactic ✓/✗, moments).
 // Battle Analyst tier (Ranch Shop): the opponent's gameplan + concrete advice.
@@ -1693,6 +1756,19 @@ function RanchView({ game, setGame, onBattleScreen }: {
   useEffect(() => {
     if (selectedTournamentId) entryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [selectedTournamentId])
+
+  // Scout-the-field rival teams (v0.861 memo): the field is deterministic per
+  // (seed, week, tournament), but generating 3-5 full trained teams used to
+  // re-run on EVERY RanchView render while an entry panel was open. Cached
+  // here (above the early returns, per hooks rules) and read at the panel.
+  const scoutRivalTeams = useMemo(() => {
+    const t = selectedTournamentId
+      ? tournamentCalendarFor(game.seed, yearOfWeek(game.week)).find((x) => x.id === selectedTournamentId)
+      : null
+    return t ? generateRivalTeamsForTournament(game, t) : null
+    // Output is a pure function of these (rival personality is fixed per game).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game.seed, game.week, game.licenseIndex, selectedTournamentId])
 
   if (game.stable.length === 0) {
     return (
@@ -1806,55 +1882,10 @@ function RanchView({ game, setGame, onBattleScreen }: {
     }
 
     if (battleSub === 'bracket') {
-      // Live round-robin standings (v0.84): the field is a pure function of the
-      // teams + the player's committed orders, so we can rebuild every match and
-      // reveal it round by round — the player sees how everyone's fared so far,
-      // updating after each of their fights. Consistent with finalizeCup, which
-      // scores the identical matches at the end.
-      const bracketCard = (isTrial || rivalTeams.length < 2) ? null : (() => {
-        const parts = rivalTeams.length + 1
-        const labelOf = (p: number) => (p === 0 ? 'Your Team' : `Rival Team ${p}`)
-        const all: EventMatch[] = []
-        const revealed: EventMatch[] = []
-        let pk = -1
-        let lastPlayerPos = -1
-        roundRobinSchedule(parts).forEach(([i, j]) => {
-          const involvesPlayer = i === 0 || j === 0
-          let m: EventMatch
-          if (involvesPlayer) {
-            pk++
-            const orders = ac.matchOrders[pk]
-            const built = buildEventPlayerTeam(playerCareers, orders)
-            const opp = applyMarkToOpponent(rivalTeams[(i === 0 ? j : i) - 1], orders?.mark)
-            // Player is participant 0 = the low index i, hence always side A.
-            m = { aLabel: labelOf(i), bLabel: labelOf(j), teamA: built.team, teamB: opp, result: simulateTeamBattle(built.team, opp, built.happiness, opp.map(() => 5)), involvesPlayer: true }
-            if (orders && pk < matchIdx) { revealed.push(m); lastPlayerPos = all.length }
-          } else {
-            const a = rivalTeams[i - 1], b = rivalTeams[j - 1]
-            m = { aLabel: labelOf(i), bLabel: labelOf(j), teamA: a, teamB: b, result: simulateTeamBattle(a, b, a.map(() => 5), b.map(() => 5)), involvesPlayer: false }
-          }
-          all.push(m)
-        })
-        // Reveal rival-vs-rival results up to the player's last completed match,
-        // so parallel results surface as the tournament progresses.
-        all.forEach((m, idx) => { if (!m.involvesPlayer && idx <= lastPlayerPos) revealed.push(m) })
-        const rows = Array.from({ length: parts }, (_, p) => ({ label: labelOf(p), isPlayer: p === 0, wins: 0, draws: 0, losses: 0, hpFracSum: 0 }))
-        const idxOf = (l: string) => rows.findIndex((r) => r.label === l)
-        const frac = (m: EventMatch, side: 'A' | 'B', team: Monster[]) => m.result.finals.filter((f) => f.side === side).reduce((s, f) => s + f.hp / maxHp(team[f.slot].stats), 0) / team.length
-        for (const m of revealed) {
-          const ai = idxOf(m.aLabel), bi = idxOf(m.bLabel)
-          if (m.result.winner === 'A') { rows[ai].wins++; rows[bi].losses++ } else if (m.result.winner === 'B') { rows[bi].wins++; rows[ai].losses++ } else { rows[ai].draws++; rows[bi].draws++ }
-          rows[ai].hpFracSum += frac(m, 'A', m.teamA); rows[bi].hpFracSum += frac(m, 'B', m.teamB)
-        }
-        const standings: EventStanding[] = [...rows].sort((a, b) => b.wins - a.wins || b.hpFracSum - a.hpFracSum).map((s, i) => ({ ...s, placement: i + 1 }))
-        return (
-          <div className="card" style={{ marginBottom: 10 }}>
-            <div className="section-title">Standings</div>
-            <BracketGrid standings={standings} allMatches={all} revealed={revealed} />
-            {revealed.length === 0 && <div className="hint">Results fill in as each match is played.</div>}
-          </div>
-        )
-      })()
+      // Live round-robin standings (v0.84): rebuilt in LiveStandingsCard, which
+      // memoizes the full-field re-simulation — it only recomputes when the
+      // staged cup's orders advance, not on every render of this screen.
+      const bracketCard = isTrial ? null : <LiveStandingsCard ac={ac} stable={game.stable} matchIdx={matchIdx} />
       // All player matches fought → finalize and show the announce screen.
       if (matchIdx >= nPlayerMatches || !opponentTeam) {
         return (
@@ -2616,8 +2647,10 @@ function RanchView({ game, setGame, onBattleScreen }: {
                       </TipBanner>
                     )}
                     {isOpenWeek && !alreadyEntered && (() => {
-                      // Rival teams are week-seeded, so this preview IS the real field.
-                      const rivalTeams = generateRivalTeamsForTournament(game, t)
+                      // Rival teams are week-seeded, so this preview IS the real
+                      // field — read from the memo (this panel only renders for
+                      // the selected tournament, which is what the memo holds).
+                      const rivalTeams = scoutRivalTeams ?? generateRivalTeamsForTournament(game, t)
                       return (
                         <details className="scout-field">
                           <summary>🔍 Scout the field — {rivalTeams.length} rival teams</summary>
