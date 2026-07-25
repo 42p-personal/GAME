@@ -204,3 +204,59 @@ that is probably harsher than a real casual player and overstates the skill gap.
 - **v0.74** — fuse-from-stable (removed the freeze hoop) + fusion potential 1.075→1.15. Mechanic verified firing in the sim; fusion now a 1-click stable action.
 - **v0.73** — pedigree span +2yr (fusion/prestige/bred) + bred head-start 0.35→0.45. **Peak Gold → Masters/Tamer Elite** (1 seed reached TE @ yr 12.7); top is now reachable via breeding, still challenging (12–19yr). Fusion still unused by the bot.
 - **v0.75** — difficulty escalation: flat `RIVAL_BUDGET_MULT 1.8` → `rivalBudgetMult(i) = 1.8 + i×0.02` (Wood 1.8 → TE 1.98). **A/B (25yr × 3 seeds, rebuilt bot):** flat → Gold/Gold/Bronze; escalating → Gold/**Silver**/Bronze — one seed held back a league, win-rates dipped slightly, no collapse. Gentle friction confirmed, first increment. ⚠️ **Instrument caveat:** the rebuilt bot trains only basic drills / 3-stat builds and peaks at **Gold** — much weaker than the prior Masters/TE bot, so it can't reproduce the skilled-human "easy run to Masters" the change targets. Money is a non-constraint at every peak (48k–121k surplus). Next: either strengthen the bot (intensive/extreme drills, comfort/tonic, timed breeding) to test the top directly, or nudge the step up (0.02 → ~0.03) and re-A/B.
+
+## v0.861 — validation run for the un-simmed v0.85–v0.86 batch
+
+**What accumulated without a sim pass:** life-stage training Teen 1.0→1.35× / Fully Grown
+0.95→1.15×; prestige overhaul (base stats ~144/~158, gen-1 cap 800→1000, 9–12y careers,
+−5%/no flaws); COACH_PRESTIGE_MULT; BREED_HEAD_START 0.45→0.15→0.30; free cup entry;
+trial gold; ≥2 cups/month.
+
+**Run (25y × 3 seeds, v0.81 bot) + A/B isolating the training multipliers:**
+| | OLD mults (1.0/0.95) | NEW mults (1.35/1.15) |
+|---|---|---|
+| Peak | Iron / Silver / Silver | **Silver / Silver / Silver** |
+| End gold | 56–66k | 50–71k |
+| Cup 1sts | 234–237 | 209–270 |
+| Trials won | 4–5 | 5 |
+| Generation | 2 | 2–3 |
+
+**Read:** the training bump is a mild accelerant, not a runaway — the stat cap
+(league cap × potential) binds either way, so faster training mostly reaches the same wall
+sooner (one seed converted Iron→Silver; ~+10% cup wins). No economy spiral. The two
+standing caveats predate this batch and still dominate the signal: (1) money is a
+non-constraint (50–70k unspent — sinks needed at the top end, or the bot under-spends);
+(2) the bot's basic-drill 3-stat build stalls at the Silver→Gold trial, so the top half of
+the ladder (where the prestige/coach changes actually live) is untested by this instrument.
+**Next:** strengthen the bot's economy brain (intensive/extreme drills, comfort/tonics,
+licenses+prestige purchases, timed freezes) before drawing conclusions above Silver.
+
+### v0.861 follow-up — full-economy bot rebuild + retest (same code, better instrument)
+
+The bot now exercises EVERY mechanic (all three drill tiers incl. the Extreme Manual,
+aptitude-aware 3-stat builds with maluses steered off-build, training foods + Vigor Melon
+rescues, market slots/coach, prestige licenses + prestige-preferring recruitment to a
+league-sized stable, barn/comfort/lab/pantry purchases, infirmary healing, peddler tonics,
+Elder freezing, best-pair breeding, spare-pair fusion, trial-first scheduling).
+
+**25y × 3 seeds, current live tuning:**
+| seed | peak | @yr | best stat | gen | cups→1sts | trials | breeds | coach | prestige owned | end gold |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 0 | Tamer Elite | 10 | 1180 | 2 | 192→125 | 9 | 4 | 2/2 | 13 | 702 |
+| 1 | Tamer Elite | 10 | 1180 | 2 | 192→140 | 9 | 4 | 2/2 | 13 | 754 |
+| 2 | Tamer Elite | 19 | 1170 | 2 | 211→117 | 9 | 4 | 2/2 | 10 | 1037 |
+
+**Reads:**
+- **The whole ladder is beatable** — first time any sim instrument has seen Masters/TE.
+  An optimal player summits in **~10y** (worst seed 19y); the v0.73 design point was
+  12–19y for a strong player, so the v0.85/0.86 buff stack has shaved ~2–3y off the
+  fast path. Borderline — a human is less optimal than this bot; watch, don't panic-nerf.
+- **The gold hoard was bot passivity, not a design hole**: fully-invested end gold is
+  ~0.7–1k (vs the old bot's 50–70k). A good player has real sinks all the way up.
+- **Fusion never fires for a prestige-heavy stable** — prestige bodies have no fusion
+  recipes, so once the Special License lands, fusable base bodies stop entering the
+  roster. Structural tension worth a design look (prestige recipes? keep as niche?).
+- **Gen stalls at 2** even with 4 breeds: freezer slots fill with the original parents,
+  so bred children rarely get frozen before career end. Partly bot heuristics, partly
+  a real slot-pressure feel a player would also hit.
+- Sustained ~60–65% cup win rate at-league — strong but not degenerate.
