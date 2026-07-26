@@ -44,8 +44,8 @@ export const INTENSIVE_DRILLS: Drill[] = [
 ]
 
 // Extreme drills (v0.6 economy pass, user spec): the risk tier above intensive —
-// a big gain to one stat at the cost of SIX points across TWO paired stats and
-// heavy stamina. Locked behind the Extreme Training Manual (Ranch Shop, 1500g).
+// a big gain to one stat at the cost of EIGHT points across TWO paired stats and
+// heavy stamina. Locked behind the Extreme Training Manual (Ranch Shop, 800g).
 // v0.90: retuned 20/-6 -> 24/-4 so the tier nets +16 (24 - 4 - 4), exactly
 // matching DIVERSE's +16 at the same 35 stamina. The two are deliberate MIRRORS:
 // same total gain, same cost, opposite shape. Extreme puts every point into one

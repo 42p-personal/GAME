@@ -11,7 +11,7 @@ import { ArenaBattle } from './arena'
 import { Sprite } from './Sprite'
 import { SPECIES } from './species'
 import { BIOS } from './bestiary'
-import { ALL_DRILLS, BASIC_DRILLS, DIVERSE_DRILLS, DIVERSE_GAIN, Drill, EXTREME_DRILLS, INTENSIVE_DRILLS } from './drills'
+import { ALL_DRILLS, BASIC_DRILLS, DIVERSE_DRILLS, DIVERSE_GAIN, Drill, EXTREME_COST, EXTREME_DRILLS, EXTREME_GAIN, INTENSIVE_DRILLS } from './drills'
 import {
   Career, EXTREME_DRILL_STAMINA, DIVERSE_DRILL_STAMINA, drillStamina, MAX_STAMINA, canRankUp, careerMonster, careerSpanYears, statCapFor,
   dateLabel, foodName, FORAGE_STAMINA_COST, FORAGE_HAPPINESS_COST, WILD_GEN1_CAP, previewWeekEffects, stageInfo, trainingProfileFor,
@@ -1058,7 +1058,7 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
           <div className="shoprow">
             <div>
               <b>📕 Extreme Training Manual</b>
-              <div className="dim">Unlocks extreme drills: +20 to one stat, −6 to two others, −{EXTREME_DRILL_STAMINA} stamina{game.extremeUnlocked ? ' · ✓ owned' : ''}</div>
+              <div className="dim">Unlocks extreme drills: +{EXTREME_GAIN} to one stat, −{EXTREME_COST} to two others, −{EXTREME_DRILL_STAMINA} stamina{game.extremeUnlocked ? ' · ✓ owned' : ''}</div>
             </div>
             {game.extremeUnlocked
               ? <button disabled>✓</button>
