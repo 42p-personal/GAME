@@ -8,7 +8,51 @@ nudge a value gently, sim it, read the result, adjust again. The sim is the arbi
 `docs/BALANCING.md` for the working ledger. This applies to every economy/difficulty/
 progression number, always.
 
-## Current state (v0.89)
+## Current state (v0.90)
+
+**v0.90 — the training-tier rebalance + the toolchain fix.** Shipped on top of the v0.89
+endgame arc (documented immediately below, still current). Validated against `sim/bot.ts`;
+evidence in `docs/BALANCING.md`.
+
+**Four training tiers**, with `diverse` new:
+
+| Tier | Shape | Net | Stamina | net/stam |
+|---|---|---|---|---|
+| basic | +6 | 6 | **15** (was 10) | 0.40 |
+| intensive | +12 / −4 | 8 | 25 | 0.32 |
+| **diverse** (NEW) | **+8 / +8** | **16** | **35** | 0.46 |
+| extreme | **+24 / −4 / −4** (was +20/−6/−6) | **16** | 35 | 0.46 |
+
+**Diverse and extreme are deliberate MIRRORS** — same net, same cost, opposite shape.
+Extreme spikes one stat and pays out of two others; diverse splits the total across a pair
+and pays nothing. Neither is stronger; you pick a shape. **Basic is now the LEAST efficient
+tier** (0.40 < 0.46), so the safe option is no longer the quietly optimal one and the
+manuals buy real throughput. New **📗 Diverse Training Manual, 800g** (`diverseUnlocked`),
+priced level with the **📕 Extreme Manual, repriced 1200 → 800g** — siblings, not a ladder.
+
+The six diverse drills: Pilgrim's Burden STR+WIS · The Cannon Crew STR+INT · Trapeze Hours
+DEX+CON · Blindfold Forms DEX+WIS · Taking the Fall CON+CHA · Illusionist's Patter INT+CHA.
+
+> ⚠️ **These six are exactly the complement of the 9 `CLASSES` stat-pairs.** That single
+> choice gives BOTH properties at once: all off-archetype (0/6 class pairs) AND perfectly
+> even coverage (every stat ×2). **Moving any one pair breaks one or both** — rediscovered
+> the hard way over ~5 edits. The `src/drills.ts` header records it.
+
+**Food:** Vigor Melon 200 → **90g**, Bliss Berry 250 → **90g**. Both now sit just above the
+75g training foods, so a feeding week is a real three-way call: train harder (+30% pair,
+−15 stam), recover (+30 stam), or lift mood (+3 happiness, persists). Golden Truffle stays
+500g — a cup-day gamble, not weekly upkeep.
+
+**Any drill/manual number shown in the UI must interpolate its constant.** The Extreme
+Manual shop copy hardcoded the old `+20/−6` and went stale through the retune; it now reads
+`EXTREME_GAIN`/`EXTREME_COST`. Static checks can't catch this class of bug — only a browser
+pass did.
+
+**Toolchain:** vite 5 → 8 (see the ✅ note below) — the Cloudflare auto-build works now.
+
+---
+
+## Prior state (v0.89)
 
 **v0.89 — the endgame arc.** Everything below was validated against the rebuilt
 full-economy sim bot (`sim/bot.ts`), and the evidence lives in `docs/BALANCING.md`.
