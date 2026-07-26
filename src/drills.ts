@@ -46,14 +46,15 @@ export const INTENSIVE_DRILLS: Drill[] = [
 // Extreme drills (v0.6 economy pass, user spec): the risk tier above intensive —
 // a big gain to one stat at the cost of SIX points across TWO paired stats and
 // heavy stamina. Locked behind the Extreme Training Manual (Ranch Shop, 1500g).
-// v0.90: raised 20 -> 28 so the tier nets +16 (28 - 6 - 6), exactly matching
-// DIVERSE's +16 at the same 35 stamina. The two are deliberate MIRRORS: same
-// total gain, same cost, opposite shape. Extreme puts every point into one stat
-// and pays for it out of two others; diverse splits the same total across a pair
-// and pays nothing. The double malus can still un-learn moves / drop class
-// thresholds, so it stays a gamble for rushing a stat, not a default.
-export const EXTREME_GAIN = 28
-export const EXTREME_COST = 6
+// v0.90: retuned 20/-6 -> 24/-4 so the tier nets +16 (24 - 4 - 4), exactly
+// matching DIVERSE's +16 at the same 35 stamina. The two are deliberate MIRRORS:
+// same total gain, same cost, opposite shape. Extreme puts every point into one
+// stat and pays for it out of two others; diverse splits the same total across a
+// pair and pays nothing. The softer -4 (was -6) keeps the tier a gamble without
+// making it a trap — two drills can still un-learn a move or drop a class
+// threshold, but a single one is far less likely to wreck a build.
+export const EXTREME_GAIN = 24
+export const EXTREME_COST = 4
 
 export const EXTREME_DRILLS: Drill[] = [
   { id: 'xstr', name: 'Titan Regimen', kind: 'extreme', gains: { STR: EXTREME_GAIN, DEX: -EXTREME_COST, WIS: -EXTREME_COST }, desc: 'Brutal loads; speed and composure pay for it.' },
