@@ -5,7 +5,7 @@
 // training malus (§9.1). Values are first-pass and meant for tuning.
 import { Stat } from './core'
 
-export type DrillKind = 'basic' | 'intensive' | 'extreme'
+export type DrillKind = 'basic' | 'intensive' | 'extreme' | 'diverse'
 
 export interface Drill {
   id: string
@@ -60,4 +60,26 @@ export const EXTREME_DRILLS: Drill[] = [
   { id: 'xcha', name: 'Grand Spectacle', kind: 'extreme', gains: { CHA: EXTREME_GAIN, WIS: -EXTREME_COST, INT: -EXTREME_COST }, desc: 'All showmanship; depth and study abandoned.' },
 ]
 
-export const ALL_DRILLS: Drill[] = [...BASIC_DRILLS, ...INTENSIVE_DRILLS, ...EXTREME_DRILLS]
+// Diverse drills (v0.90, user spec): raise TWO stats by +6 each with NO malus —
+// the only tier that builds a pair at once. Locked behind the Diverse Training
+// Manual (Ranch Shop, 800g). There is one per distinct CLASS stat-pair, so each
+// drill trains directly toward a real class identity (classes are derived from a
+// monster's top two stats, so a pair drill is the most direct way to steer one).
+// Net +12 across two stats beats a basic drill's +6 and an intensive's +12/-4,
+// but it costs the most stamina of any non-extreme tier — you buy breadth with
+// weeks, not with a stat penalty.
+export const DIVERSE_GAIN = 6
+
+export const DIVERSE_DRILLS: Drill[] = [
+  { id: 'dforge', name: 'Forge Circuit', kind: 'diverse', gains: { STR: DIVERSE_GAIN, CON: DIVERSE_GAIN }, desc: 'Hammer and anvil work — power and toughness together. (Tank / Warrior)' },
+  { id: 'dskirmish', name: 'Skirmish Drills', kind: 'diverse', gains: { STR: DIVERSE_GAIN, DEX: DIVERSE_GAIN }, desc: 'Close-quarters footwork and force. (Rogue)' },
+  { id: 'dmarksman', name: 'Marksman Forms', kind: 'diverse', gains: { DEX: DIVERSE_GAIN, INT: DIVERSE_GAIN }, desc: 'Range, wind, and a steady hand. (Ranger)' },
+  { id: 'dvigil', name: "Scholar's Vigil", kind: 'diverse', gains: { WIS: DIVERSE_GAIN, INT: DIVERSE_GAIN }, desc: 'Long study by candlelight. (Sage / Wizard)' },
+  { id: 'drunic', name: 'Runic Conditioning', kind: 'diverse', gains: { CON: DIVERSE_GAIN, INT: DIVERSE_GAIN }, desc: 'Sigils cut into a braced body. (Spellsword)' },
+  { id: 'dwarding', name: 'Warding Meditation', kind: 'diverse', gains: { CON: DIVERSE_GAIN, WIS: DIVERSE_GAIN }, desc: 'Stillness that turns a blade. (Spellshield)' },
+  { id: 'dcommand', name: 'Command Drills', kind: 'diverse', gains: { STR: DIVERSE_GAIN, CHA: DIVERSE_GAIN }, desc: 'Lead from the front, loudly. (Captain)' },
+  { id: 'drhetoric', name: 'Rhetoric Study', kind: 'diverse', gains: { WIS: DIVERSE_GAIN, CHA: DIVERSE_GAIN }, desc: 'Argument, cadence, and poise. (Orator)' },
+  { id: 'dstage', name: 'Stage Combat', kind: 'diverse', gains: { DEX: DIVERSE_GAIN, CHA: DIVERSE_GAIN }, desc: 'Choreography that plays to the crowd. (Bard)' },
+]
+
+export const ALL_DRILLS: Drill[] = [...BASIC_DRILLS, ...INTENSIVE_DRILLS, ...EXTREME_DRILLS, ...DIVERSE_DRILLS]

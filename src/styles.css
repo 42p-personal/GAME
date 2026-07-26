@@ -470,6 +470,10 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 .roster-tile.ko { opacity: .4; filter: grayscale(1); }
 .roster-tile.acting { border-color: var(--fx-color, var(--accent)); box-shadow: 0 0 0 1px var(--fx-color, var(--accent)); animation: tilePulse .5s ease; }
 .roster-tile.impact { animation: tileImpact .45s ease; }
+/* Diverse drills (v0.90) train a PAIR, so their row wraps freely instead of
+   using the 7-column per-stat grid the main training row uses. */
+.trainrow.diverserow { display: flex; flex-wrap: wrap; gap: 6px; }
+.trainrow.diverserow .trainblock { flex: 1 1 150px; }
 /* Buff/aura glow — every buff, ward, song or Guard lights up the affected tile
    in the effect's colour (--glow-color), so no buff plays without a visible tell. */
 .roster-tile.buffed { border-color: var(--glow-color, #ffd54f); box-shadow: 0 0 0 2px var(--glow-color, #ffd54f), 0 0 15px 4px var(--glow-color, #ffd54f); animation: tileBuff .6s ease-out; }

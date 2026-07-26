@@ -11,9 +11,9 @@ import { ArenaBattle } from './arena'
 import { Sprite } from './Sprite'
 import { SPECIES } from './species'
 import { BIOS } from './bestiary'
-import { BASIC_DRILLS, Drill, EXTREME_DRILLS, INTENSIVE_DRILLS } from './drills'
+import { ALL_DRILLS, BASIC_DRILLS, DIVERSE_DRILLS, DIVERSE_GAIN, Drill, EXTREME_DRILLS, INTENSIVE_DRILLS } from './drills'
 import {
-  BASIC_DRILL_STAMINA, Career, INTENSIVE_DRILL_STAMINA, EXTREME_DRILL_STAMINA, MAX_STAMINA, canRankUp, careerMonster, careerSpanYears, statCapFor,
+  Career, EXTREME_DRILL_STAMINA, DIVERSE_DRILL_STAMINA, drillStamina, MAX_STAMINA, canRankUp, careerMonster, careerSpanYears, statCapFor,
   dateLabel, foodName, FORAGE_STAMINA_COST, FORAGE_HAPPINESS_COST, WILD_GEN1_CAP, previewWeekEffects, stageInfo, trainingProfileFor,
 } from './game'
 import {
@@ -21,7 +21,7 @@ import {
   canBuySpecialLicense, canBuyEliteLicense, COACH_CAP_LIFT, wildCapFor,
   MARKET_BASE_SLOTS, MARKET_SLOTS_MAX, SCOUT_CHANCE, COACH_SURCHARGE, marketSlotCost, scoutCost, coachCost, coachLeague,
   buyMarketSlot, buyMarketScout, buyMarketCoach, setScoutPick, canBuyMarketCoach, coachVisible, speciesLicensed,
-  COMFORT_ITEMS, EXTREME_MANUAL_COST, BATTLE_ANALYST_COST, buyBattleAnalyst, Frozen, careerFromFrozen, BREED_COST, BREED_MAX_CHILDREN, applyStudBook, breed, breedPotentialV2, buyComfortItem, buyExtremeManual, studIncome, podiumsOf, champsOf, useTonic,
+  COMFORT_ITEMS, EXTREME_MANUAL_COST, DIVERSE_MANUAL_COST, buyDiverseManual, BATTLE_ANALYST_COST, buyBattleAnalyst, Frozen, careerFromFrozen, BREED_COST, BREED_MAX_CHILDREN, applyStudBook, breed, breedPotentialV2, buyComfortItem, buyExtremeManual, studIncome, podiumsOf, champsOf, useTonic,
   WeekPlanEntry, advanceWeek, barnCost, buyPantryContract, buyGrandLarder, buyEliteLicense, buyMonster, foodDiscountFor, resolveEvent,
   buySpecialLicense, cancelSignUp, cupLore, eligibleForTournament, fusionRoom, gameplanForRivalTeam, generateRivalTeamsForTournament, goto, healAtInfirmary, infirmaryFee, leagueIndexOf, monthOfWeek,
   placementLabel, scoutFee, teamSizeForLeague, seatedRivalTeamIndex,
@@ -1064,6 +1064,16 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
               ? <button disabled>✓</button>
               : <button disabled={game.gold < EXTREME_MANUAL_COST} onClick={() => setGame((g) => buyExtremeManual(g))}>Buy · {EXTREME_MANUAL_COST}g</button>}
           </div>
+          {/* Diverse Training Manual (v0.90): the pair-training tier. */}
+          <div className="shoprow">
+            <div>
+              <b>📗 Diverse Training Manual</b>
+              <div className="dim">Unlocks diverse drills: +{DIVERSE_GAIN} to TWO stats at once, no malus, −{DIVERSE_DRILL_STAMINA} stamina{game.diverseUnlocked ? ' · ✓ owned' : ''}</div>
+            </div>
+            {game.diverseUnlocked
+              ? <button disabled>✓</button>
+              : <button disabled={game.gold < DIVERSE_MANUAL_COST} onClick={() => setGame((g) => buyDiverseManual(g))}>Buy · {DIVERSE_MANUAL_COST}g</button>}
+          </div>
           {/* Battle Analyst (v0.84): deepens the post-fight match analysis. */}
           <div className="shoprow">
             <div>
@@ -1155,7 +1165,9 @@ function TrainBlock({ d, career, food, forage, gear, selected, onClick }: {
   const preview = previewWeekEffects(career, d.id, food, forage, gear)
   const gain = preview.statDeltas[stat]
   const malusEntries = (Object.entries(d.gains) as [Stat, number][]).filter(([, v]) => v < 0)
-  const stamCost = d.kind === 'basic' ? BASIC_DRILL_STAMINA : d.kind === 'intensive' ? INTENSIVE_DRILL_STAMINA : EXTREME_DRILL_STAMINA
+  const stamCost = drillStamina(d.kind)
+  // A diverse drill raises TWO stats, so it prints both rather than a single gain.
+  const gainStats = (Object.entries(d.gains) as [Stat, number][]).filter(([, v]) => v > 0).map(([k]) => k)
   const gainText = gain !== undefined ? `${gain > 0 ? '+' : ''}${gain} ${stat}` : `+${d.gains[stat]} ${stat}`
   // Aptitude coloring (user spec 2026-07-20): a stat this species trains FASTER
   // (major/minor) gets its number tinted to the stat's own colour instead
@@ -1168,7 +1180,15 @@ function TrainBlock({ d, career, food, forage, gear, selected, onClick }: {
     <button className={'trainblock' + (selected ? ' selected' : '')} onClick={onClick} title={d.desc}>
       <div className="trainblock-name" style={{ color: STAT_COLOR[stat] }}>{d.name}</div>
       <div className="trainblock-sub">
-        <span className="benefit-gain" style={hasBenefit ? { color: STAT_COLOR[stat] } : undefined}>{gainText}</span>
+        {d.kind === 'diverse'
+          ? gainStats.map((gs, i) => (
+            <span key={gs}>{i > 0 ? ', ' : ''}
+              <span className="benefit-gain" style={gs === prof.major || gs === prof.minor ? { color: STAT_COLOR[gs] } : undefined}>
+                +{preview.statDeltas[gs] ?? d.gains[gs]} {gs}
+              </span>
+            </span>
+          ))
+          : <span className="benefit-gain" style={hasBenefit ? { color: STAT_COLOR[stat] } : undefined}>{gainText}</span>}
         {malusEntries.map(([ms, mv]) => <span key={ms}>, <span className="benefit-malus">{preview.statDeltas[ms] ?? mv} {ms}</span></span>)} · −{stamCost} stam
       </div>
     </button>
@@ -1182,7 +1202,7 @@ function TrainBlock({ d, career, food, forage, gear, selected, onClick }: {
 // preview re-rolls with the post-feed happiness as the food selection changes.
 function PlanBenefit({ career, plan, gear }: { career: Career; plan: WeekPlanEntry; gear: GameState['trainingGear'] }) {
   const preview = previewWeekEffects(career, plan.activity, plan.food, plan.forage, gear)
-  const drill = [...BASIC_DRILLS, ...INTENSIVE_DRILLS, ...EXTREME_DRILLS].find((d) => d.id === plan.activity)
+  const drill = ALL_DRILLS.find((d) => d.id === plan.activity)
   const label = drill ? `💪 ${drill.name}` : plan.activity === 'excursion' ? '🧭 Excursion' : '😴 Rest'
   const cap = LEAGUES[career.licenseIndex].cap
   return (
@@ -2248,7 +2268,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
     if (!p) return null
     if (p.activity === 'rest') return '😴 Resting'
     if (p.activity === 'excursion') return '🧭 Excursion'
-    const d = [...BASIC_DRILLS, ...INTENSIVE_DRILLS].find((x) => x.id === p.activity)
+    const d = ALL_DRILLS.find((x) => x.id === p.activity)
     return d ? `💪 ${d.name}` : null
   }
 
@@ -2587,6 +2607,17 @@ function RanchView({ game, setGame, onBattleScreen }: {
                   })()}
                 </div>
               </div>
+              {game.diverseUnlocked && (
+                <>
+                  <div className="section-title">Diverse Training <span className="dim">· two stats at once, no malus</span></div>
+                  <div className="trainrow diverserow">
+                    {DIVERSE_DRILLS.map((d) => (
+                      <TrainBlock key={d.id} d={d} career={selectedCareer} food={selPlan.food} forage={selPlan.forage}
+                        gear={game.trainingGear} selected={selPlan.activity === d.id} onClick={() => setSelActivity(d.id)} />
+                    ))}
+                  </div>
+                </>
+              )}
             </>
           )}
 
@@ -2987,6 +3018,7 @@ function sanitizeAndMigrate(raw: string): GameState | null {
     }
     if (typeof g.labTechLoan !== 'boolean') g.labTechLoan = false
     if (typeof g.extremeUnlocked !== 'boolean') g.extremeUnlocked = false
+    if (typeof g.diverseUnlocked !== 'boolean') g.diverseUnlocked = false
     if (typeof g.battleAnalyst !== 'boolean') g.battleAnalyst = false
     // v0.7 Lab freezer (separate from the stud farm)
     if (!Array.isArray(g.labFrozen)) g.labFrozen = []

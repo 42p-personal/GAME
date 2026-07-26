@@ -16,8 +16,10 @@ export const MAX_STAMINA = 100
 export const BASIC_DRILL_STAMINA = 10
 export const INTENSIVE_DRILL_STAMINA = 25
 export const EXTREME_DRILL_STAMINA = 35 // extreme drills (v0.6): the risk tier
+export const DIVERSE_DRILL_STAMINA = 30 // diverse drills (v0.90): two stats at once, no malus — paid for in weeks
 export const drillStamina = (kind: string): number =>
-  kind === 'basic' ? BASIC_DRILL_STAMINA : kind === 'intensive' ? INTENSIVE_DRILL_STAMINA : EXTREME_DRILL_STAMINA
+  kind === 'basic' ? BASIC_DRILL_STAMINA : kind === 'intensive' ? INTENSIVE_DRILL_STAMINA
+    : kind === 'diverse' ? DIVERSE_DRILL_STAMINA : EXTREME_DRILL_STAMINA
 const EXCURSION_COST = 25
 
 export type Stage = 'Baby' | 'Teen' | 'Fully Grown' | 'Elder' | 'Retiree'

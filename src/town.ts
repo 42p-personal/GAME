@@ -495,6 +495,7 @@ export interface GameState {
   studSlots?: number // LEGACY (pre-v0.77) — the Lab's labSlots is now the only capacity
   labTechLoan: boolean // lab-tech loan event taken → freeze upkeep 5→3g/wk
   extremeUnlocked: boolean // Extreme Training Manual bought → extreme drill row open
+  diverseUnlocked: boolean // Diverse Training Manual bought → the pair-training drills open
   battleAnalyst: boolean // Ranch Shop: unlocks the deep post-fight read (gameplan + advice)
   // Lab freezer (v0.7, FUSION_DESIGN.md) — SEPARATE from the breeding stud farm.
   // Monsters frozen here are in stasis (aging paused): preserve one until you can
@@ -603,6 +604,7 @@ export function newGame(seed = 'start', opts?: { trainerName?: string; tutorialE
     studBooks: 0,
     labTechLoan: false,
     extremeUnlocked: false,
+    diverseUnlocked: false,
     battleAnalyst: false,
     labFrozen: [],
     labSlots: LAB_SLOTS_BASE,
@@ -697,9 +699,16 @@ export const studIncome = (c: { studBook?: boolean; tournamentHistory?: { placem
 // income, unlimited room. Breeding a retiree still means freezing it into the
 // (still limited) stud farm — that's the real cost of a dynasty now.
 // Extreme Training Manual (town store): unlocks the extreme drill row.
-export const EXTREME_MANUAL_COST = 1200
+export const EXTREME_MANUAL_COST = 800
 export const buyExtremeManual = (g: GameState): GameState =>
   g.extremeUnlocked || g.gold < EXTREME_MANUAL_COST ? g : { ...g, gold: g.gold - EXTREME_MANUAL_COST, extremeUnlocked: true }
+
+// Diverse Training Manual (v0.90): unlocks the pair drills — +6 to TWO stats at
+// once with no malus. Priced level with the Extreme Manual: they are siblings,
+// not a ladder. Extreme rushes ONE stat at a cost; diverse builds a class pair.
+export const DIVERSE_MANUAL_COST = 800
+export const buyDiverseManual = (g: GameState): GameState =>
+  g.diverseUnlocked || g.gold < DIVERSE_MANUAL_COST ? g : { ...g, gold: g.gold - DIVERSE_MANUAL_COST, diverseUnlocked: true }
 
 // Battle Analyst (v0.84): a one-time hire that deepens the post-fight report —
 // reads the opponent's gameplan and turns the match into concrete advice.
@@ -1674,6 +1683,7 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
       : plan.activity === 'rest' || plan.activity === 'compete' ? { kind: 'rest' } // stale 'compete' with no live entry falls back to rest
         : plan.activity === 'excursion' ? { kind: 'excursion' }
           : planDrill?.kind === 'extreme' && !g.extremeUnlocked ? { kind: 'rest' } // extreme row locked behind the Manual
+          : planDrill?.kind === 'diverse' && !g.diverseUnlocked ? { kind: 'rest' } // diverse row locked behind its Manual
             : { kind: 'train', drillId: plan.activity }
     // Pass the food ONLY if it was actually bought (buyFood sets fedThisWeek) —
     // an unaffordable food must not grant its training boost.
