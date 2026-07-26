@@ -26,7 +26,7 @@ import {
   buySpecialLicense, cancelSignUp, cupLore, eligibleForTournament, fusionRoom, gameplanForRivalTeam, generateRivalTeamsForTournament, goto, healAtInfirmary, infirmaryFee, leagueIndexOf, monthOfWeek,
   placementLabel, scoutFee, teamSizeForLeague, seatedRivalTeamIndex,
   trainerXpProgress, trainerBarnBonus, trainerStipend, effectiveBarnCap, barnFull as barnFullOf, BREEDING_BONUS,
-  buyLicense, cancelTrial, nextLicenseCost, startTrial, trialStatus, TRIAL_CHAMPION_MULT, RIVAL_PERSONALITY_GAMEPLAN,
+  buyLicense, cancelTrial, nextLicenseCost, startTrial, trialStatus, trialChampionMult, RIVAL_PERSONALITY_GAMEPLAN,
   fuse, fusionSpin, fusionRecipeFor, freezeToLab, thawFromLab, expandLab, labExpandCost, LAB_SLOTS_BASE, FUSION_COST,
   generateRival, newGame, offerMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, signUp,
   applyMarkToOpponent, buildEventPlayerTeam, finalizeCup, finalizeTrial, roundRobinSchedule,
@@ -807,7 +807,7 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
               the Hall of Fame and the line is closed.
             </div>
             <div className="hint">
-              ⚗️ Fusion pairs: Mammal + Reptilian → Saurian · Avian + Aquatic → Tempestine · Marsupial + Insectoid → Broodkin
+              ⚗️ Fusion pairs: Mammal + Reptilian → Saurian · Avian + Aquatic → Tempestine · Marsupial + Insectoid → Broodkin · Mythical + Draconic/Abyssal → <b>Primeval</b> (1.25× potential)
             </div>
             {/* Freeze an active monster in */}
             <div className="section-title">Freeze into stasis</div>
@@ -2447,7 +2447,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
                 // WELL-ROUNDED monsters at ~cap×1.8×1.25 total — one maxed stat
                 // is not enough beyond Wood (sim: 1-stat builds win <10%, 3-stat
                 // ~70%). Compare the picked team's totals against that target.
-                const champTarget = league.cap * rivalBudgetMult(game.licenseIndex) * TRIAL_CHAMPION_MULT
+                const champTarget = league.cap * rivalBudgetMult(game.licenseIndex) * trialChampionMult(game.licenseIndex)
                 const picked = trialPick.map((id) => pool.find((c) => c.id === id)!).filter(Boolean)
                 const teamAvg = picked.length ? picked.reduce((s, c) => s + STATS.reduce((t, k) => t + c.stats[k], 0), 0) / picked.length : 0
                 const ratio = teamAvg / champTarget
@@ -2876,7 +2876,11 @@ function sanitizeAndMigrate(raw: string): GameState | null {
     if (typeof g.scoutPickA !== 'string') g.scoutPickA = null
     if (typeof g.scoutPickB !== 'string') g.scoutPickB = null
     // v0.77 gen-1 ceiling: back-fill from whatever coach tier the save holds.
-    for (const c of g.stable) if (typeof c.wildCap !== 'number') c.wildCap = wildCapFor(g)
+    // wildCap is SYNCED stable-wide (coach tier), so always re-derive on load —
+    // v0.87 lowered the ladder (800/900/1000 → 700/800/900), and statCapFor now
+    // reads the coach tier out of this value for prestige caps too, so a stale
+    // pre-v0.87 wildCap would misread as a higher tier.
+    for (const c of g.stable) c.wildCap = wildCapFor(g)
     // migrate pre-round-robin tournamentHistory: placement was 'champion'|'none'
     if (Array.isArray(g.stable)) for (const c of g.stable) {
       if (Array.isArray(c.tournamentHistory)) for (const h of c.tournamentHistory) {
@@ -3253,7 +3257,7 @@ function TutorialBanner({ onDismiss }: { onDismiss: () => void }) {
           <li><b>Every week:</b> feed each monster, pick its activity (train, rest, or excursion), then Advance Week.</li>
           <li><b>Earn gold in cups.</b> Enter tournaments at your league from Grandpa's Ranch. To move up a league, win the rank-up trial, then buy the license in the Ranch Shop.</li>
           <li><b>Plan your dynasty.</b> Freeze a monster at the 🧪 Lab <b>before its career ends</b> to breed or fuse it later. Once it retires to the Hall of Fame, the bloodline is closed.</li>
-          <li><b>Raise the ceiling.</b> Wild monsters train to 800 at most — bred, fused, and licensed prestige monsters go higher, and the Market Coach upgrades your whole stable's limit.</li>
+          <li><b>Raise the ceiling.</b> Wild monsters train to 700 at most — prestige monsters go higher, the Market Coach raises every ceiling in your stable, and bred or fused bloodlines climb highest of all.</li>
         </ul>
       </div>
       <button className="tutorial-dismiss" onClick={onDismiss}>✕</button>

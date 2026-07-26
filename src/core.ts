@@ -15,11 +15,12 @@ export type Stats = Record<Stat, number>
 
 export type BodyType = 'Mammal' | 'Avian' | 'Marsupial' | 'Aquatic' | 'Insectoid' | 'Reptilian' | 'Draconic' | 'Abyssal' | 'Mythical'
   | 'Saurian' | 'Tempestine' | 'Broodkin' // fusion classes (FUSION_DESIGN.md)
+  | 'Primeval' // prestige fusion (v0.88): Mythical + Draconic/Abyssal
 
 // Fusion classes (v0.7): body types that only exist as the RESULT of fusion —
 // never wild, never in the market. Drives the gen-1 Platinum stat cap and the
 // per-monster (not per-species) inherited majors + rolled minor/flaw. See FUSION_DESIGN.md.
-export const FUSION_BODIES: BodyType[] = ['Saurian', 'Tempestine', 'Broodkin']
+export const FUSION_BODIES: BodyType[] = ['Saurian', 'Tempestine', 'Broodkin', 'Primeval']
 export const isFusionBody = (b: BodyType): boolean => FUSION_BODIES.includes(b)
 // The licence-gated "prestige" bodies (Special → Draconic/Abyssal, Elite →
 // Mythical). Lives here so both generation and career code share one list.
@@ -311,15 +312,20 @@ export const LEAGUES: League[] = [
   { name: 'Bronze', cap: 400 },
   { name: 'Iron', cap: 500 },
   { name: 'Silver', cap: 600 },
-  { name: 'Gold', cap: 700 },
-  { name: 'Platinum', cap: 800 },
-  { name: 'Masters', cap: 900 },
-  { name: 'Tamer Elite', cap: 1000 },
+  // v0.88: the top of the curve steepens — the last four rungs pull away from
+  // the flat +100/league of the lower circuit, so each late promotion is a real
+  // jump, and TAMERS APEX caps the ladder at 1400. A gen-1 monster (walled at
+  // 700–1100) cannot compete at Apex: only a bred dynasty reaches that ceiling.
+  { name: 'Gold', cap: 750 },
+  { name: 'Platinum', cap: 900 },
+  { name: 'Masters', cap: 1000 },
+  { name: 'Tamer Elite', cap: 1200 },
+  { name: 'Tamers Apex', cap: 1400 },
 ]
 
 export function leagueForStat(maxStat: number): string {
   for (const l of LEAGUES) if (maxStat <= l.cap) return l.name
-  return 'Tamer Elite'
+  return 'Tamers Apex'
 }
 
 // --- Classes (primary/secondary), balanced table §6 ---
@@ -377,6 +383,10 @@ export const BODY_ELEMENT: Record<BodyType, { resist: Element; weak: Element }> 
   Saurian: { resist: 'earth', weak: 'air' }, // fusion (Mammal+Reptilian): grounded stone-scaled titans, unsettled by wind
   Tempestine: { resist: 'air', weak: 'fire' }, // fusion (Avian+Aquatic): storm creatures at home in the gale, scattered by flame
   Broodkin: { resist: 'water', weak: 'earth' }, // fusion (Marsupial+Insectoid): brood-carriers; chitin cracks under tremors
+  // Primeval (v0.88, prestige fusion — Mythical + Draconic/Abyssal): all 12
+  // distinct (resist, weak) pairs are taken, so Primeval INHERITS Mythical's
+  // celestial affinity — the one sanctioned duplicate (validate.ts knows).
+  Primeval: { resist: 'air', weak: 'earth' },
 }
 export const RESIST_MULT = 0.7
 export const WEAK_MULT = 1.3

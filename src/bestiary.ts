@@ -37,4 +37,10 @@ export const BIOS: Record<string, string> = {
   serpwyn: 'An oracle who read the futures of champions for forty seasons before deciding to test whether prophecy is easier from inside the arena. She has never been surprised by an opponent. Not once.',
   geckari: 'Grew up scaling the arena’s outer walls for years to watch matches for free, long before he had a way in. Fights the way he watched — from angles nobody thinks to defend.',
   tortavos: 'He signed up for the Circuit two hundred years ago and arrived last spring, entirely unbothered. Time moves differently inside his shell, and opponents who rush him tend to find that out the hard way.',
+  // --- Primeval: the prestige fusion — first-age titans remade in the Lab ---
+  aeonrex: 'When a Mythical frame is fused with dragon-blood, what wakes up remembers the dawn age — and resents having missed the ages since. Every arena he enters, he treats as territory reclaimed.',
+  stellavore: 'The old stories say the gaps between constellations are bite marks. She neither confirms nor denies, but opponents report the arena lights dimming when she draws.',
+  chronoshell: 'An era is sealed inside its carapace — tamers who press an ear to the shell swear they hear weather. It does not dodge; the moment simply hasn\'t arrived where the blow lands.',
+  originmage: 'The first spell ever cast never actually ended — it has just been looking for a body sturdy enough to keep casting it. The Lab finally built one.',
+  worldsong: 'The song that shaped the world lost its singer eons ago. Fused from mythical voice and deep-water resonance, she picks up the melody mid-verse, and arenas fall silent to let her finish.',
 }

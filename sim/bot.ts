@@ -33,17 +33,29 @@ import {
   roundRobinSchedule, signUp, startTrial, teamSizeForLeague, tournamentCalendarFor, trialStatus, weekOfMonth, yearOfWeek, WeekPlanEntry,
   buySpecialLicense, canBuySpecialLicense, buyEliteLicense, canBuyEliteLicense,
   buyExtremeManual, EXTREME_MANUAL_COST, buyMarketCoach, canBuyMarketCoach, coachCost,
-  buyMarketSlot, marketSlotCost, upgradeBarn, barnCost, effectiveBarnCap,
+  buyMarketSlot, marketSlotCost, buyMarketScout, scoutCost, setScoutPick, upgradeBarn, barnCost, effectiveBarnCap,
   buyComfortItem, COMFORT_ITEMS, expandLab, labExpandCost, healAtInfirmary, infirmaryFee,
   fuse, fusionRecipeFor, FUSION_COST, useTonic, buyPantryContract, offerGenOpts,
 } from '../src/town'
 import { Career, careerMonster, careerSpanYears, stageInfo, statCapFor, statTrainingBonus } from '../src/game'
 import { LEAGUES, MatchOrders, Monster, STATS, Stat, Tactics, Food, isPrestigeBody } from '../src/core'
 import { maxHp, generateMonster } from '../src/monster'
+import { SPECIES } from '../src/species'
 
 const CC = new Set<string>(['stun', 'sleep', 'fear', 'confusion', 'silence', 'charm', 'knockback', 'blind'])
 const total = (s: Record<Stat, number>) => STATS.reduce((t, k) => t + s[k], 0)
 const healthy = (c: Career) => c.hp >= maxHp(c.stats) * 0.6 && !c.retired
+// Goal-directed saving: while the Primeval ingredients are BOTH owned (a live
+// Mythical + a live Draconic/Abyssal, stable or frozen), earmark the fusion
+// cost so the weekly shopping ladder can't graze gold below it forever — the
+// instrumented run showed the pair coexisting for 9 straight years while gold
+// never once reached the fuse threshold at the moment it was checked.
+function fusionEarmark(g: GameState): number {
+  const pool = [...(g.labFrozen ?? []), ...g.stable.filter((c) => !c.retired && isPrestigeBody(c.species.body))]
+  const hasMyth = pool.some((c) => c.species.body === 'Mythical')
+  const hasMate = pool.some((c) => c.species.body === 'Draconic' || c.species.body === 'Abyssal')
+  return hasMyth && hasMate ? FUSION_COST + 500 : 0
+}
 const WEEKS_PER_YEAR = 48
 const RESERVE = 300 // gold floor kept for food/emergencies
 type DrillLite = { id: string; gains: Partial<Record<Stat, number>>; kind: string }
@@ -140,12 +152,26 @@ function planFor(c: Career, g: GameState, drills: DrillLite[]): WeekPlanEntry {
 
 // --- Shopping brain ----------------------------------------------------------
 function shop(g: GameState): GameState {
-  const spare = () => g.gold - RESERVE
+  const spare = () => g.gold - RESERVE - fusionEarmark(g)
   // League progression always comes first.
   if (g.licenseEarned > g.licenseIndex && g.gold >= nextLicenseCost(g)) g = buyLicense(g)
   // Prestige licenses are cheap gates to strictly better bodies.
   if (canBuySpecialLicense(g)) g = buySpecialLicense(g)
   if (canBuyEliteLicense(g)) g = buyEliteLicense(g)
+  // Market Scout: the prestige-hunting tool (scout picks BYPASS market
+  // rarity) — bought EARLY once licensed (it was starving at the bottom of
+  // this ladder: the bigger purchases above drained gold below its threshold
+  // every week for 25 straight years). Aim it at the Primeval ingredients —
+  // a Mythical first (Elite), else a Draconic (Special).
+  const sCost = scoutCost(g)
+  if (sCost !== null && (g.specialLicense || g.eliteLicense) && spare() >= sCost + 300) g = buyMarketScout(g)
+  if ((g.marketScout ?? 0) >= 1) {
+    const own = [...g.stable, ...(g.labFrozen ?? [])]
+    const hasMyth = own.some((c) => c.species.body === 'Mythical')
+    const wantBody = g.eliteLicense && !hasMyth ? 'Mythical' : 'Draconic'
+    const pick = SPECIES.find((sp) => sp.body === wantBody)?.id ?? null
+    if (g.scoutPickA !== pick) g = setScoutPick(g, 'A', pick)
+  }
   // Market Coach: THE ceiling lift (wildCap 800 → 900 → 1000) — top big-ticket.
   if (canBuyMarketCoach(g) && spare() >= (coachCost(g) ?? Infinity) + 400) g = buyMarketCoach(g)
   // Extreme Manual unlocks the top drill tier.
@@ -174,7 +200,7 @@ function recruit(g: GameState): GameState {
   const offers = g.market.map((o, i) => {
     const m = generateMonster(o.seed, offerGenOpts(o))
     return { i, price: o.price, prestige: isPrestigeBody(m.species.body), total: total(m.stats) }
-  }).filter((o) => o.price <= Math.max(0, g.gold - RESERVE) * 0.6)
+  }).filter((o) => o.price <= Math.max(0, g.gold - RESERVE - fusionEarmark(g)) * 0.6)
   const pick = offers.sort((a, b) => Number(b.prestige) - Number(a.prestige) || b.total / b.price - a.total / a.price)[0]
   return pick ? buyMonster(g, pick.i) : g
 }
@@ -194,15 +220,32 @@ function dynasty(g: GameState): GameState {
   // Breed: best available pair by combined stats (parents stay frozen).
   const breedable = (g.labFrozen ?? []).filter((f) => (f.breedCount ?? 0) < 2).sort((a, b) => total(b.stats) - total(a.stats))
   if (breedable.length >= 2 && active() < desired && g.gold >= 300 + RESERVE) g = breed(g, breedable[0].id, breedable[1].id)
-  // Fuse: a SPARE valid-recipe pair (keep the two best as breeding stock).
+  // Fuse — two tiers of ambition:
+  // 1) PRESTIGE fusion (Primeval, 1.25× potential): the endgame founder. Worth
+  //    spending prestige stock on deliberately — consider ALL frozen monsters
+  //    plus AGING (Elder+) stable prestige, since fuse() pulls from both pools.
+  // 2) A spare base-body pair among frozen stock (keep the two best as
+  //    breeding parents), as before.
   const frozen = g.labFrozen ?? []
+  if (g.gold >= FUSION_COST + RESERVE + 500) {
+    // A human building a Primeval doesn't wait for retirement age — the pair's
+    // Elder windows never line up (the Mythical arrives ~a decade later). Buy
+    // the ingredients and fuse them YOUNG: any age, weakest of each body first
+    // so the fusion doesn't eat the current cup team's carries.
+    const pool = [...frozen, ...g.stable.filter((c) => !c.retired && isPrestigeBody(c.species.body))]
+    const weakest = (body: (b: string) => boolean) =>
+      pool.filter((c) => body(c.species.body)).sort((a, b) => total(a.stats) - total(b.stats))[0]
+    const myth = weakest((b) => b === 'Mythical')
+    const mate = weakest((b) => b === 'Draconic' || b === 'Abyssal')
+    if (myth && mate) g = fuse(g, myth.id, mate.id)
+  }
   if (frozen.length >= 3 && active() < effectiveBarnCap(g) && g.gold >= FUSION_COST + RESERVE + 500) {
-    const spareStock = [...frozen].sort((a, b) => total(b.stats) - total(a.stats)).slice(2)
-    outer: for (let a = 0; a < spareStock.length; a++) {
+    const spareStock = [...(g.labFrozen ?? [])].sort((a, b) => total(b.stats) - total(a.stats)).slice(2)
+    outer2: for (let a = 0; a < spareStock.length; a++) {
       for (let b = a + 1; b < spareStock.length; b++) {
         if (fusionRecipeFor(spareStock[a].species.body, spareStock[b].species.body)) {
           g = fuse(g, spareStock[a].id, spareStock[b].id)
-          break outer
+          break outer2
         }
       }
     }
@@ -219,6 +262,7 @@ interface Report {
 function playGame(seed: string, years: number, DRILLS: DrillLite[]): Report {
   let g = newGame(seed, { tutorialEnabled: false })
   let cupsEntered = 0, podiums = 0, wins = 0, trialsWon = 0, peakLicense = 0, peakYear = 0, breeds = 0, fusions = 0
+  const seenDynasty = new Set<string>()
   const endWeek = years * WEEKS_PER_YEAR
   while (g.week < endWeek) {
     // 0) Weekly event: when rich, take the priciest affordable choice (peddler
@@ -249,13 +293,13 @@ function playGame(seed: string, years: number, DRILLS: DrillLite[]): Report {
     // 3) Shop ladder + recruitment + dynasty moves.
     g = shop(g)
     g = recruit(g)
-    const breedsBefore = g.stable.length + (g.labFrozen ?? []).length
     g = dynasty(g)
-    if (g.stable.length + (g.labFrozen ?? []).length > breedsBefore) {
-      // one new career appeared this week — a breed or a fusion
-      const newest = g.stable[g.stable.length - 1]
-      if (newest?.id.startsWith('own-fuse')) fusions++
-      else breeds++
+    // Count new dynasty careers by id prefix — a fusion consumes two parents
+    // for one baby (net -1 roster), so count-delta detection missed them.
+    for (const c of g.stable) {
+      if (seenDynasty.has(c.id)) continue
+      if (c.id.startsWith('own-fuse-')) { seenDynasty.add(c.id); fusions++ }
+      else if (c.id.startsWith('own-breed-')) { seenDynasty.add(c.id); breeds++ }
     }
     // 4) Rank-up trial FIRST when genuinely ready (best fighter near the cap).
     const readyStat = Math.max(0, ...g.stable.filter(healthy).map((c) => Math.max(...STATS.map((k) => c.stats[k]))))

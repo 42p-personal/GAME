@@ -2,7 +2,7 @@
 // span all areas; the Ranch (src/game.ts) raises the active monster week by week.
 import {
   ActiveCup, BodyType, ClassRole, Food, GAMEPLANS, INNATE_SECONDARY_LEVEL, LEAGUES, MatchOrders, MAX_HAPPINESS, Monster, Rival, RivalPersonality, Sex, Species, Stat, STATS, Stats, TeamGameplan, classForStats, foodDiscountGroup, hashString,
-  isFusionBody, mulberry32, roleOfClass,
+  isFusionBody, isPrestigeBody, mulberry32, roleOfClass,
 } from './core'
 import { SPECIES } from './species'
 import { GenOptions, generateMonster, maxHp, maxMana } from './monster'
@@ -35,8 +35,15 @@ export const MARKET_SLOTS_MAX = MARKET_SLOT_COSTS.length
 export const marketSlotCost = (g: GameState): number | null => MARKET_SLOT_COSTS[g.marketSlots ?? 0] ?? null
 
 export const MARKET_SCOUT_COSTS = [350, 500] // buy, then upgrade
-export const SCOUT_CHANCE = [0, 0.15, 0.25] // per slot, by scout tier
+export const SCOUT_CHANCE = [0, 0.12, 0.2] // per slot, by scout tier (v0.87: 0.15/0.25 → 0.12/0.20 — scouting stays the prestige-hunting tool but lands a touch less often)
 export const scoutCost = (g: GameState): number | null => MARKET_SCOUT_COSTS[g.marketScout ?? 0] ?? null
+
+// Prestige market scarcity (v0.87): licensed prestige bodies are rare stock —
+// only this fraction of would-be prestige rolls survives (the rest re-roll to
+// base species), and a surviving offer carries a price premium. First gentle
+// increment, tuned against the long-haul sim.
+export const PRESTIGE_MARKET_CHANCE = 0.12
+export const PRESTIGE_PRICE_MULT = 1.5
 
 // Market Coach: stock arrives already trained into a league BAND rather than
 // wild. Gated on rank (Gold, then Platinum) so it can't front-run progression,
@@ -97,6 +104,7 @@ export const PRESTIGE_POOL_REWARDS: Record<string, { gold: number; exp: number }
   Platinum: { gold: 745, exp: 373 },
   Masters: { gold: 864, exp: 432 },
   'Tamer Elite': { gold: 994, exp: 497 },
+  'Tamers Apex': { gold: 1140, exp: 570 },
 }
 
 // Event names (user spec 2026-07-20): never named after a month, unique within
@@ -121,6 +129,7 @@ const PRESTIGE_POOL_NAMES: Record<string, string[]> = {
   Platinum: ['The Platinum Vanguard', 'Diamond Point Open', 'The Adamant Trials', 'Starforge Championship', 'The Prism Cup', 'Luminous Classic', 'The Zenith Brawl', 'Crystalline Clash'],
   Masters: ["The Sovereign's Gauntlet", "Champion's Reckoning", 'The Undefeated Cup', 'Legacy Trials', "The Ascendant's Bout", 'Crownless Championship', 'The Elder Circuit', 'Masterwork Melee'],
   'Tamer Elite': ['The Zenith Accord', 'Pinnacle Proving', 'The Ultimatum Cup', 'Peerless Championship', 'The Reckoning', 'Ascendancy Trials', 'The Final Word', 'The Undisputed'],
+  'Tamers Apex': ['The Eternal Throne', 'Apotheosis Trials', 'The Last Ascent', 'Godsblood Classic', 'The Immortal Round', 'Dynasty Everlasting', 'The Summit Beyond', 'Firstborn Championship'],
 }
 
 // Marquee rewards bumped 2026-07-25 (were 350/400/450/500/600) to stay
@@ -133,6 +142,7 @@ export const PRESTIGE_EVENTS: Omit<Tournament, 'id'>[] = [
   { name: 'The Radiant Throne', month: 8, week: 2, league: 'Platinum', rewards: { gold: 950, exp: 475 } },
   { name: "The Grandmasters' Summit", month: 9, week: 2, league: 'Masters', rewards: { gold: 1091, exp: 546 } },
   { name: 'The Apex Invitational', month: 10, week: 2, league: 'Tamer Elite', rewards: { gold: 1242, exp: 621 } },
+  { name: 'The Dynasty Eternal', month: 12, week: 2, league: 'Tamers Apex', rewards: { gold: 1425, exp: 713 } },
 ]
 
 // Cup lore (user spec 2026-07-22): a pre-cup preamble (prize money + a line of
@@ -193,14 +203,14 @@ export function cupLore(t: Tournament): CupLore {
 // exclusive spectacle, enforced by validate.ts (sizes must also never shrink
 // while climbing).
 export const TEAM_SIZE_BY_LEAGUE: Record<string, number> = {
-  Wood: 1, Copper: 2, Tin: 2, Bronze: 3, Iron: 3, Silver: 4, Gold: 4, Platinum: 5, Masters: 5, 'Tamer Elite': 6,
+  Wood: 1, Copper: 2, Tin: 2, Bronze: 3, Iron: 3, Silver: 4, Gold: 4, Platinum: 5, Masters: 5, 'Tamer Elite': 6, 'Tamers Apex': 6,
 }
 export const teamSizeForLeague = (league: string): number => TEAM_SIZE_BY_LEAGUE[league] ?? 1
 
 // Non-player team count per event (user's own words: "always ≥3, sometimes
 // 4/5" — exact boundaries weren't specified, this is a single tunable table).
 export const RIVAL_TEAM_COUNT_BY_LEAGUE: Record<string, number> = {
-  Wood: 3, Copper: 3, Tin: 3, Bronze: 3, Iron: 3, Silver: 4, Gold: 4, Platinum: 5, Masters: 5, 'Tamer Elite': 5,
+  Wood: 3, Copper: 3, Tin: 3, Bronze: 3, Iron: 3, Silver: 4, Gold: 4, Platinum: 5, Masters: 5, 'Tamer Elite': 5, 'Tamers Apex': 5,
 }
 export const rivalTeamCountForLeague = (league: string): number => RIVAL_TEAM_COUNT_BY_LEAGUE[league] ?? 3
 
@@ -231,6 +241,7 @@ const POOL_NAMES: Record<string, string[]> = { ...CIRCUIT_EVENT_NAMES, ...PRESTI
 const ACTIVE_QUARTERS_BY_LEAGUE: Record<string, number[]> = {
   Masters: [0, 2], // Q1 + Q3 — Q3 holds the Grandmasters' Summit (month 9)
   'Tamer Elite': [1, 3], // Q2 + Q4 — Q4 holds the Apex Invitational (month 10)
+  'Tamers Apex': [1, 3], // Q2 + Q4 — Q4 holds The Dynasty Eternal (month 12)
 }
 export const activeQuartersFor = (league: string): number[] => ACTIVE_QUARTERS_BY_LEAGUE[league] ?? [0, 1, 2, 3]
 
@@ -704,11 +715,36 @@ export const labUpkeepPerFrozen = (g: GameState): number => (g.labTechLoan ? LAB
 // gone: the Hall of Fame is honours only. That's the real cost of a dynasty.
 export const BREED_COST = 300
 export const BREED_MAX_CHILDREN = 2
-export const BREED_POTENTIAL_STEP = 0.10
+export const BREED_POTENTIAL_STEP = 0.10 // the WILD baseline; see BREED_STEP_BY_TIER
+// Breeding climb by heritage (v0.88). A bloodline's per-generation potential
+// step depends on its BEST parent's body: bought prestige climbs a little
+// faster than wild stock, Mythical a little faster again, FUSED lines faster
+// still, and the prestige fusion (Primeval) fastest of all. Ballpark targets
+// (user spec, measured at the Tamer Elite league cap of 1000):
+//   wild line     1.00 → 1.40 over FOUR breeding generations  (4 × 0.10)
+//   Primeval      1.25 → 1.40 over ONE                        (1 × 0.15)
+export const BREED_STEP_BY_TIER = { wild: 0.10, prestige: 0.11, mythical: 0.12, fusion: 0.13, primeval: 0.15 } as const
+function breedTier(body: BodyType): keyof typeof BREED_STEP_BY_TIER {
+  if (body === 'Primeval') return 'primeval'
+  if (isFusionBody(body)) return 'fusion'
+  if (body === 'Mythical') return 'mythical'
+  if (isPrestigeBody(body)) return 'prestige'
+  return 'wild'
+}
+// The line climbs at its BETTER parent's rate — one exceptional founder is not
+// dragged down by a modest partner.
+export const breedStepFor = (a: BodyType, b: BodyType): number =>
+  Math.max(BREED_STEP_BY_TIER[breedTier(a)], BREED_STEP_BY_TIER[breedTier(b)])
 export const BREED_HEAD_START = 0.3 // fraction of parents' avg stats a child hatches with. v0.861: 0.45→0.15→0.30 — a real head start (user spec: parents' stats SHOULD carry to the child; fusion carries none), while the climbing `potential` cap-multiplier stays the dynasty's long-run engine.
 export function breedPotentialV2(a: Career, b: Career): number {
   const champBonus = Math.min(0.08, Math.floor((champsOf(a) + champsOf(b)) / 2) * 0.01)
-  return Math.min(MAX_POTENTIAL, Math.round((((a.potential ?? 1) + (b.potential ?? 1)) / 2 + BREED_POTENTIAL_STEP + champBonus) * 100) / 100)
+  // Base off the BETTER parent (v0.88, was their average): a single exceptional
+  // founder — a fused Primeval especially — is no longer diluted by a modest
+  // partner. For same-generation pairings (the usual case) this is identical to
+  // the old average, so ordinary lines climb exactly as before.
+  const base = Math.max(a.potential ?? 1, b.potential ?? 1)
+  const step = breedStepFor(a.species.body, b.species.body)
+  return Math.min(MAX_POTENTIAL, Math.round((base + step + champBonus) * 100) / 100)
 }
 export function breed(g: GameState, aId: string, bId: string): GameState {
   if (aId === bId || g.gold < BREED_COST || barnFull(g)) return g
@@ -779,10 +815,16 @@ export function thawFromLab(g: GameState, id: string): GameState {
 export const FUSION_COST = 1000
 export const FUSION_START_STAT = 100 // every fused monster starts at 100 across the board
 export const FUSION_POTENTIAL = 1.15 // 3★ (v0.73): a strong bloodline from birth — fusing is a shortcut to a high-potential line
-export const FUSION_RECIPES: { bodies: [BodyType, BodyType]; classLabel: string; pool: string[] }[] = [
+export const FUSION_RECIPES: { bodies: [BodyType, BodyType]; classLabel: string; pool: string[]; potential?: number }[] = [
   { bodies: ['Mammal', 'Reptilian'], classLabel: 'Saurian', pool: ['grendscale', 'vipramane', 'thornhide', 'runewyrm', 'basilroar'] },
   { bodies: ['Avian', 'Aquatic'], classLabel: 'Tempestine', pool: ['thunderoc', 'galewing', 'tidecaller', 'maelstrom', 'brinehowl'] },
   { bodies: ['Marsupial', 'Insectoid'], classLabel: 'Broodkin', pool: ['chitinhop', 'broodmother', 'mantiskin', 'resinback', 'swarmherd'] },
+  // Primeval (v0.88): the PRESTIGE fusion — Mythical crossed with either
+  // Special-license body. Two pair-recipes feed ONE class so a Mythical is
+  // fusable with whatever prestige stock the freezer holds. Higher potential
+  // (1.25 vs 1.15) makes Primeval the premier founder of endgame bloodlines.
+  { bodies: ['Mythical', 'Draconic'], classLabel: 'Primeval', pool: ['aeonrex', 'stellavore', 'chronoshell', 'originmage', 'worldsong'], potential: 1.25 },
+  { bodies: ['Mythical', 'Abyssal'], classLabel: 'Primeval', pool: ['aeonrex', 'stellavore', 'chronoshell', 'originmage', 'worldsong'], potential: 1.25 },
 ]
 export function fusionRecipeFor(a: BodyType, b: BodyType) {
   return FUSION_RECIPES.find((r) => (r.bodies[0] === a && r.bodies[1] === b) || (r.bodies[0] === b && r.bodies[1] === a)) ?? null
@@ -819,7 +861,9 @@ export function fuse(g: GameState, aId: string, bId: string): GameState {
   const species = SPECIES.find((s) => s.id === spin.speciesId)!
   const rng = mulberry32(hashString('fuse:' + a.id + '+' + b.id + ':' + g.nextId))
   const babySeed = 'fuse-' + a.id + '+' + b.id + ':' + g.nextId
-  const baby = newCareer(babySeed, { id: 'own-fuse-' + g.nextId + '-' + babySeed, ageWeeks: WEEKS_PER_YEAR, licenseIndex: g.licenseIndex, potential: FUSION_POTENTIAL })
+  // Per-recipe potential (v0.88): Primeval founds at 1.25, the base three at 1.15.
+  const potential = fusionRecipeFor(a.species.body, b.species.body)?.potential ?? FUSION_POTENTIAL
+  const baby = newCareer(babySeed, { id: 'own-fuse-' + g.nextId + '-' + babySeed, ageWeeks: WEEKS_PER_YEAR, licenseIndex: g.licenseIndex, potential })
   baby.species = species
   baby.generation = 1 // founds a bloodline — gen-1 Platinum-capped until bred
   for (const s of STATS) baby.stats[s] = FUSION_START_STAT // all 100
@@ -840,7 +884,7 @@ export function fuse(g: GameState, aId: string, bId: string): GameState {
   baby.bonusFlaw = flawPool[Math.floor(rng() * flawPool.length)]
   baby.comfortWeeks = comfortWeeksFor(g)
   baby.wildCap = wildCapFor(g)
-  const stars = '★'.repeat(Math.round((FUSION_POTENTIAL - 1) / 0.05))
+  const stars = '★'.repeat(Math.round((potential - 1) / 0.05))
   baby.log = [`${baby.name} the ${species.name} is forged — a ${spin.classLabel}. Training aptitude: +20% ${baby.bonusMajor1} & +20% ${baby.bonusMajor2}, +10% ${baby.bonusMinor}, −10% ${baby.bonusFlaw}. ${stars} bloodline, Platinum-capped until bred onward.`]
   return {
     ...g,
@@ -857,7 +901,10 @@ export function fuse(g: GameState, aId: string, bId: string): GameState {
 // at 50g (user spec) and grown ~i^1.5 — each step lands around 1-1.5 cup wins
 // at the tier you're leaving, so a player who can WIN the trial can afford the
 // license soon after (never a doubling wall). validate.ts asserts monotonic.
-export const LICENSE_COSTS = [0, 50, 120, 220, 350, 520, 750, 1000, 1300, 1650]
+// v0.87 mid-game pass: mid-tier licenses (Bronze→Gold) nudged up ~10–15% — that
+// band is exactly when cup gold starts flowing, so the rank-up should cost a
+// real cut of it. Still monotonic and never-doubling (validator-checked).
+export const LICENSE_COSTS = [0, 50, 120, 235, 410, 610, 860, 1000, 1300, 1650, 2100]
 export const nextLicenseCost = (g: GameState): number => LICENSE_COSTS[g.licenseIndex + 1] ?? Infinity
 // The one sync invariant of per-player licensing: every stable career trains
 // and is fee-assessed at the PLAYER's license tier.
@@ -1023,10 +1070,25 @@ export function rollMarketOffers(seed: string, roll: number, cfg: MarketConfig =
     if (pickA && r < chance) speciesId = pickA
     else if (pickB && r < chance * 2) speciesId = pickB
 
+    let prestigeSlot = false
     if (!speciesId) {
       // Random slot — respect the licence gates by re-rolling the seed.
       const monster = generateMonster(s)
       if (!speciesLicensed(monster.species, hasSpecial, hasElite)) { attemptIndex++; continue }
+      // Prestige rarity (v0.87): licensed prestige bodies are RARE finds, not
+      // regular stock — 15/45 rollable species are prestige, so without this a
+      // licensed player sees one per board and the roster goes all-Draconic.
+      // A separate deterministic roll lets only ~PRESTIGE_MARKET_CHANCE of
+      // them through; the rest re-roll to base species. The Market Scout's
+      // pick (above) deliberately bypasses this — scouting IS the hunting tool.
+      if (isPrestigeBody(monster.species.body)) {
+        const pr = mulberry32(hashString(seed + ':prestige:' + roll + ':' + attemptIndex))()
+        if (pr > PRESTIGE_MARKET_CHANCE) { attemptIndex++; continue }
+        prestigeSlot = true
+      }
+    } else {
+      const sp = SPECIES.find((x) => x.id === speciesId)
+      prestigeSlot = !!sp && isPrestigeBody(sp.body)
     }
 
     // Market Coach: draw this slot's top-stat target from the tier's band, so
@@ -1042,9 +1104,13 @@ export function rollMarketOffers(seed: string, roll: number, cfg: MarketConfig =
       ? Math.round(band[0] + cr * cr * (band[1] - band[0]))
       : undefined
 
+    // Prestige premium (v0.87): a rare body costs like one — a gentle first
+    // increment (×1.5 on the rolled price), tightened via sim evidence if the
+    // license still pays for itself too fast.
+    const rolledPrice = prestigeSlot ? Math.round(price * PRESTIGE_PRICE_MULT) : price
     offers.push({
       seed: s,
-      price: price + (COACH_SURCHARGE[Math.max(0, Math.min(2, coach))] ?? 0),
+      price: rolledPrice + (COACH_SURCHARGE[Math.max(0, Math.min(2, coach))] ?? 0),
       ...(speciesId ? { speciesId, scouted: true } : {}),
       ...(targetTop ? { targetTop } : {}),
     })
@@ -1849,7 +1915,7 @@ export function cancelSignUp(g: GameState): GameState {
 // the same cup is always the same strength, which is also what makes scouting
 // and placements meaningful. Replaces the old min(playerTotal, budget)
 // rubber-banding.
-export const RIVAL_BAND_MIN = 0.6
+export const RIVAL_BAND_MIN = 0.65 // v0.87 mid-game pass: 0.6 → 0.65 — fewer rolled-weak teams padding round-robin placements
 export const RIVAL_BAND_MAX = 1.0
 // Per-rival-monster stat budget = cap × this × band (2026-07-22 balance): was
 // 3.5, which put every rival ~3-4 stats near cap — far beyond what a player can
@@ -1865,7 +1931,7 @@ export const RIVAL_BUDGET_MULT = 1.8
 // growth — constant challenge across the whole ladder. Deliberately SHALLOW per the
 // "small increments, sim-validated" rule: Wood 1.8 → Tamer Elite ~1.98 (no extreme
 // Masters spike). Tune the step from the long-haul sim, not by feel.
-export const RIVAL_BUDGET_STEP = 0.02
+export const RIVAL_BUDGET_STEP = 0.03 // v0.87 mid-game pass: 0.02 → 0.03 (the increment v0.75's ledger entry prescribed) — Wood 1.8 → Tamer Elite ~2.07
 export function rivalBudgetMult(leagueIndex: number): number {
   return RIVAL_BUDGET_MULT + Math.max(0, leagueIndex) * RIVAL_BUDGET_STEP
 }
@@ -2070,7 +2136,7 @@ function stageTrial(g: GameState, stable: Career[]): { activeCup: ActiveCup } | 
   const league = LEAGUES[g.licenseIndex].name
   const teamSize = teamSizeForLeague(league)
   const ids = pending.monsterIds.slice(0, teamSize)
-  const champBudget = LEAGUES[g.licenseIndex].cap * rivalBudgetMult(g.licenseIndex) * TRIAL_CHAMPION_MULT
+  const champBudget = LEAGUES[g.licenseIndex].cap * rivalBudgetMult(g.licenseIndex) * trialChampionMult(g.licenseIndex)
   const champRaw = generateRivalTeam(g.seed + ':' + g.week + ':trial:' + g.licenseIndex, teamSize, champBudget, g.licenseIndex >= leagueIndexOf('Silver'))
   const champTeam = applyGameplan(champRaw, gameplanForRivalTeam(g.seed, g.week, 'trial-' + g.licenseIndex, 0))
   return { activeCup: { kind: 'trial', tournamentId: 'trial-' + g.licenseIndex, week: g.week, playerMonsterIds: ids, rivalTeams: [champTeam], matchOrders: {}, doneThrough: -1 } }
@@ -2217,6 +2283,11 @@ export function finalizeCup(g: GameState): GameState {
 }
 
 export const TRIAL_CHAMPION_MULT = 1.25
+// v0.87 mid-game pass: mid-league champions (Bronze→Gold) punch a touch harder
+// so rank-ups stop being a surf-through. The TOP trials deliberately stay at the
+// base mult — the Masters/TE gates are already the hardest step on the ladder.
+export const trialChampionMult = (leagueIndex: number): number =>
+  leagueIndex >= 3 && leagueIndex <= 6 ? 1.3 : TRIAL_CHAMPION_MULT
 export const TRIAL_COOLDOWN_WEEKS = 3
 // Finalize a fought-out rank-up trial (v0.81): the single champion match, fought
 // with the player's chosen orders, then license-unlock / cooldown / injury. The

@@ -221,6 +221,25 @@ export const SPECIES: Species[] = [
   { id: 'swarmherd', name: 'Swarmherd', body: 'Broodkin', naturalClass: 'Bard', base: s(18, 26, 20, 14, 22, 28), lifespan: 6, flavour: 'A lean herald flanked by a drifting cloud of hatchlings.',
     trainingProfile: {},
     innate: [{ name: 'Command Swarm', desc: 'Team: +4% damage.' }, { name: 'Disorient', desc: 'Enemies: -4% dodge chance.' }] },
+
+  // --- Primeval (v0.88, PRESTIGE fusion: Mythical + Draconic/Abyssal) ---
+  // First-age titans — the pinnacle fusion line. Aptitude-neutral shells like
+  // all fusion bodies (majors are INHERITED per-monster at fusion time).
+  { id: 'aeonrex', name: 'Aeonrex', body: 'Primeval', naturalClass: 'Warrior', base: s(48, 16, 38, 12, 10, 14), lifespan: 8, flavour: 'Dawn-age tyrant, crowned in fossil light.',
+    trainingProfile: {},
+    innate: [{ name: 'Dawn Fury', desc: '+8% damage.' }, { name: 'Unbroken Age', desc: 'Reduces damage taken by 2 per hit. Incoming debuffs are 20% weaker.' }] },
+  { id: 'stellavore', name: 'Stellavore', body: 'Primeval', naturalClass: 'Ranger', base: s(12, 46, 10, 24, 38, 12), lifespan: 8, flavour: 'Star-devouring hunter from before the constellations.',
+    trainingProfile: {},
+    innate: [{ name: 'Starving Aim', desc: '+10% critical hit chance.' }, { name: 'Light Drinker', desc: 'Heals 12% of damage dealt as HP.' }] },
+  { id: 'chronoshell', name: 'Chronoshell', body: 'Primeval', naturalClass: 'Spellshield', base: s(24, 10, 46, 34, 16, 12), lifespan: 8, flavour: 'A colossus carrying an era inside its carapace.',
+    trainingProfile: {},
+    innate: [{ name: 'Era Shell', desc: 'Enters battle with a 20-point protective ward.' }, { name: 'Time Dilation', desc: 'Team: +1 mana regen/turn. Enemies: -4% dodge chance.' }] },
+  { id: 'originmage', name: 'Originmage', body: 'Primeval', naturalClass: 'Wizard', base: s(8, 18, 12, 38, 50, 18), lifespan: 8, flavour: 'The first spell ever cast, given flesh.',
+    trainingProfile: {},
+    innate: [{ name: 'First Spell', desc: '10% chance to cast a skill twice.' }, { name: 'Wellspring Eternal', desc: '+4 mana regen/turn.' }] },
+  { id: 'worldsong', name: 'Worldsong', body: 'Primeval', naturalClass: 'Bard', base: s(10, 38, 26, 14, 12, 48), lifespan: 8, flavour: 'The song that shaped the world, still singing.',
+    trainingProfile: {},
+    innate: [{ name: 'Genesis Chord', desc: 'Team: +5% damage.' }, { name: 'Ending Verse', desc: 'Team: reduces damage taken by 2 per hit.' }] },
 ]
 
 // --- Body-type average stat profiles (§8.4) ---

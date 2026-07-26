@@ -195,7 +195,7 @@ export function statMalusMultiplier(species: Species, stat: Stat): number {
 // nudged up slightly per league (v0.71) as part of the small economy pass.
 export const LEAGUE_TOP_GOLD: Record<string, number> = {
   Wood: 110, Copper: 165, Tin: 220, Bronze: 280, Iron: 340,
-  Silver: 520, Gold: 580, Platinum: 640, Masters: 700, 'Tamer Elite': 760,
+  Silver: 520, Gold: 580, Platinum: 640, Masters: 700, 'Tamer Elite': 760, 'Tamers Apex': 820,
 }
 const EXCURSION_CAP_FRACTION = 0.4 // 1/3 → 0.4 (v0.71): a very slight downtime-income bump
 
@@ -330,24 +330,40 @@ export interface NewCareerOpts {
 // monster's bloodline potential (LOOP_DESIGN Phase 5). Wild-caught monsters
 // (potential absent) get the plain league cap, so nothing changes for them —
 // and generation/battle never consult this, only career training does.
-// v0.77 gen-1 ceilings. A monster you did not BREED is walled; breeding (gen 2+)
-// is the only way past, and its potential then sets the ceiling.
-//   wild / market       → 800, lifted to 900 / 1000 by the Market Coach tiers
-//   fusion (gen 1)      → 1000 flat
-//   prestige (gen 1)    → 1000 flat (v0.85) — matches fusion
-// Prestige monsters used to hit the 800 wild wall despite the license + rank
-// gate, walling them BELOW a fusion at Masters/Tamer Elite (league cap 900/1000).
-// v0.85 lifts them to the fusion ceiling, so the license buys a real ceiling —
-// they now train to the full league cap (still gated by it, so they can't
-// out-scale the rivals a league's cup fields).
+// Gen-1 ceilings — the v0.87 interlocking cap ladder (user spec). A monster you
+// did not BREED is walled; breeding (gen 2+) is the only way past, and its
+// potential then sets the ceiling. The Market Coach is now a UNIVERSAL quality
+// upgrade: it lifts wild AND prestige walls (by tier), so the ladder reads
+//
+//                no coach   coach T1   coach T2
+//   wild/market     700        800        900
+//   Dra/Abyssal     800        900        950
+//   Mythical        900        950       1000
+//   fusion (gen 1)      1000 flat — the crafted body
+//   PRIMEVAL (gen 1)    1100 flat — the prestige fusion outranks everything
+//                                   gen-1, the only one above the TE league cap
+//
+// Only fusion and a fully-coached Mythical reach 1000, and only a Primeval goes
+// past it; everything else gen-1 falls short of the Tamer Elite cap, so the top
+// of the ladder still belongs to bred dynasties (league cap × potential). The
+// coach tier is derived from the synced `wildCap` (700/800/900 — always
+// stable-wide, re-synced on load).
 export const FUSION_GEN1_CAP = 1000
-export const WILD_GEN1_CAP = 800
-export const PRESTIGE_GEN1_CAP = 1000
+export const PRIMEVAL_GEN1_CAP = 1100
+export const WILD_GEN1_CAP = 700
+export const PRESTIGE_GEN1_CAPS: Partial<Record<string, [number, number, number]>> = {
+  Draconic: [800, 900, 950], Abyssal: [800, 900, 950], Mythical: [900, 950, 1000],
+}
 export function statCapFor(c: { licenseIndex: number; potential?: number; species?: Species; generation?: number; wildCap?: number }): number {
   const base = LEAGUES[c.licenseIndex].cap * (c.potential ?? 1)
   const gen1 = (c.generation ?? 1) <= 1
+  if (gen1 && c.species?.body === 'Primeval') return Math.round(Math.min(base, PRIMEVAL_GEN1_CAP))
   if (gen1 && c.species && isFusionBody(c.species.body)) return Math.round(Math.min(base, FUSION_GEN1_CAP))
-  if (gen1 && c.species && isPrestigeBody(c.species.body)) return Math.round(Math.min(base, PRESTIGE_GEN1_CAP))
+  if (gen1 && c.species && isPrestigeBody(c.species.body)) {
+    const coachTier = Math.max(0, Math.min(2, Math.round(((c.wildCap ?? WILD_GEN1_CAP) - WILD_GEN1_CAP) / 100)))
+    const caps = PRESTIGE_GEN1_CAPS[c.species.body]
+    return Math.round(Math.min(base, caps ? caps[coachTier] : FUSION_GEN1_CAP))
+  }
   if (gen1) return Math.round(Math.min(base, c.wildCap ?? WILD_GEN1_CAP))
   return Math.round(base)
 }

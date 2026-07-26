@@ -260,3 +260,168 @@ Elder freezing, best-pair breeding, spare-pair fusion, trial-first scheduling).
   so bred children rarely get frozen before career end. Partly bot heuristics, partly
   a real slot-pressure feel a player would also hit.
 - Sustained ~60–65% cup win rate at-league — strong but not degenerate.
+
+## v0.87 — prestige scarcity increment #1 (market rarity + price premium + scout nerf)
+
+**Problem (from the v0.861 full-economy run):** once the Special License lands, prestige
+bodies are ~1/3 of all market rolls at ordinary prices — the roster goes all-prestige
+(10–13 owned per 25y) and the ladder's fast path compressed to ~10y.
+
+**Change (gentle first increment, all in `rollMarketOffers` — golden-safe):**
+- `PRESTIGE_MARKET_CHANCE 0.12` — only 12% of would-be prestige rolls survive; the rest
+  re-roll to base species. Measured stock: prestige fell 33% → **5.3% of offers**
+  (~1 offer per 3 full restocks). The Market Scout pick deliberately bypasses rarity —
+  scouting IS the hunting tool.
+- `PRESTIGE_PRICE_MULT 1.5` on the rolled price (measured avg 209g vs 150g base).
+- `SCOUT_CHANCE 0.15/0.25 → 0.12/0.20` — the hunting tool lands a touch less often.
+
+**Retest (25y × 3 seeds, full-economy bot):**
+| | before | after |
+|---|---|---|
+| Peak @yr | TE@10 / TE@10 / TE@19 | TE@18 / TE@17 / Masters@19 |
+| Prestige owned | 13 / 13 / 10 | **4 / 3 / 1** |
+| Cup 1sts | 125 / 140 / 117 | 98 / 130 / 76 |
+| End gold | 702–1037 | 719–806 |
+
+The fast path moved from ~10y back into the 12–19y design band, prestige ownership landed
+in the intended 2–4 range, money stays fully invested, and one seed now tops out at
+Masters — the summit is once again earned. License-price increase (option 3) held in
+reserve; fusion still never fires (structural, separate design question).
+
+## v0.87 — mid-game difficulty pass (four small nudges, one increment)
+
+**Problem:** every seed cleared Tin→Gold nearly frictionless — mid trials never failed,
+mid cup win rates peaked, difficulty lived only in the last two trials.
+
+**Nudges:**
+| knob | was | now |
+|---|---|---|
+| `RIVAL_BUDGET_STEP` | 0.02 | **0.03** (v0.75's prescribed increment; TE mult 1.98 → 2.07) |
+| `RIVAL_BAND_MIN` | 0.60 | **0.65** (fewer rolled-weak teams = fewer free round-robin wins) |
+| trial champion mult | 1.25 flat | **1.30 for Bronze→Gold** (`trialChampionMult`; top trials unchanged — already the hardest step) |
+| `LICENSE_COSTS` mid | 220/350/520/750 | **235/410/610/860** (~10–15%; still monotonic + never-doubling) |
+
+**Retest (25y × 6 seeds):** summit years stretched (TE @ 17/18/22/25 vs 17–18 clustered),
+cup 1st-place rate fell ~20–25% across the board (72–119 vs 76–140), one seed now tops out
+at Platinum (was Masters), and — first time ever — one seed reached **gen 3 / best stat
+1270**. Money still fully invested. Mid-game friction is real without any collapse: the
+distribution now runs Platinum → TE across six optimal-play runs, which is the shape we
+want (summit possible, never guaranteed).
+
+## v0.87 — interlocking gen-1 cap ladder (user spec)
+
+**Change:** the Market Coach becomes a UNIVERSAL quality upgrade — it lifts wild AND
+prestige walls by tier. `statCapFor` reads the coach tier from the synced wildCap:
+
+|            | no coach | coach T1 | coach T2 |
+|---|---|---|---|
+| wild/market | **700** (was 800) | 800 | 900 (was 1000) |
+| Draconic/Abyssal | **800** (was 1000) | 900 | 950 |
+| Mythical | **900** (was 1000) | 950 | **1000** |
+| fusion gen-1 | 1000 flat (unchanged) | | |
+| **Primeval** gen-1 | **1100 flat** (v0.88) — the only gen-1 above the TE league cap | | |
+
+Only fusion and a fully-coached Mythical reach 1000 — every other gen-1 now falls short
+of the TE cap, so the summit belongs to bred dynasties. Saves re-sync wildCap on load.
+
+**Retest (25y × 6):** 5/6 seeds reach TE (@15–25y), seed 5 still walls at Platinum.
+Best stats 1000–1180 are now BRED gen-2 monsters — and notably seed 4 summited with
+**zero prestige owned**: with prestige walls lowered, optimal spending shifted from
+"buy prestige" to "breed earlier", which is precisely the intent. The ladder made
+dynasty the endgame route without making the summit unreachable. Fusion still 0 —
+its problem is recipe friction, not ceilings.
+
+## v0.88 — Primeval: the prestige fusion (Mythical + Draconic/Abyssal)
+
+**New fusion class** (5 species: Aeonrex, Stellavore, Chronoshell, Originmage, Worldsong —
+roster 65): two body-pair recipes (Mythical+Draconic, Mythical+Abyssal) feed one class.
+**1.25× potential** (vs 1.15 base fusion) makes Primeval the premier founder of endgame
+bloodlines. Element affinity inherits Mythical's air/earth (all 12 pairs were taken —
+one sanctioned validator exception). Fusion bodies stay out of wild/market generation —
+goldens untouched.
+
+**Making the bot prove it** (three instrumented findings, each a real player insight):
+1. The scout was priority-starved — bigger purchases drained gold below its threshold
+   every week for 25 straight years. Promoted: scouting is the prestige-hunting tool.
+2. The pair's Elder windows never overlap (the Mythical arrives ~a decade later) —
+   fuse YOUNG, weakest-of-each-body, like a player deliberately building a Primeval.
+3. Even with the pair assembled for 9 straight years, gold never touched the fuse
+   threshold at the weekly check — the bot now EARMARKS the fusion cost while the
+   ingredients are owned. This is a genuine UX signal: a player needs a way to see
+   "you own a fusable pair — save 1000g" (future nudge?).
+
+**Result (25y × 6):** fusion fires 1–2× in 5/6 seeds (was 0 in every sim ever run);
+peaks TE ×5 @13–21y + Masters ×1; best stats 1035–1180. The fusion loop is finally a
+living part of optimal play, and Primeval lines are staged as the Tamers Apex on-ramp.
+
+## v0.88 — breeding cap ladder by heritage (user spec)
+
+**Change.** The per-generation potential step is no longer flat 0.10 — it now depends on
+the line's BEST parent (`BREED_STEP_BY_TIER` / `breedStepFor`), and `breedPotentialV2`
+bases off `max(parents)` instead of their average so one exceptional founder isn't
+diluted by a modest partner. (For same-generation pairings — the usual case — max ==
+average, so ordinary lines are unchanged.)
+
+| heritage | step/gen | gen-1 cap | gens to a 1400 cap |
+|---|---|---|---|
+| wild | 0.10 | 700–900 | **4** |
+| Draconic / Abyssal | 0.11 | 800–950 | 4 (reaches 1440) |
+| Mythical | 0.12 | 900–1000 | 4 (reaches 1480) |
+| base fusion | 0.13 | 1000 | 2 |
+| **Primeval** (prestige fusion) | **0.15** | 1100 | **1** |
+
+**Measured ladder** (Tamer Elite, league cap 1000, no champion bonus):
+```
+tier              gen1   gen2          gen3          gen4          gen5
+wild               700   1100 (1.10)   1200 (1.20)   1300 (1.30)   1400 (1.40)
+Draconic           800   1110 (1.11)   1220 (1.22)   1330 (1.33)   1440 (1.44)
+Mythical           900   1120 (1.12)   1240 (1.24)   1360 (1.36)   1480 (1.48)
+fusion (Saurian)  1000   1280 (1.28)   1410 (1.41)   1500 (cap)    1500 (cap)
+Primeval          1100   1400 (1.40)   1500 (cap)    1500 (cap)    1500 (cap)
+```
+A lone Primeval bred with a plain wild gen-1 partner still lands **1.40 / 1400** — the
+stated one-generation target holds for the realistic pairing, not just Primeval×Primeval.
+
+**Note:** `MAX_POTENTIAL` stays 1.5, so the prestige-fusion advantage is *speed to the
+ceiling*, not a higher ceiling — a patient wild dynasty still gets there, four
+generations later. Long-haul sim unchanged (TE ×5 / Masters ×1, 25y × 6) because the bot
+plateaus at gen 2; the ladder is a deterministic formula, verified analytically above.
+
+## v0.89 — league curve steepened + TAMERS APEX (11th league)
+
+**Curve (user spec).** The top of the ladder pulls away from the flat +100/league:
+Gold 700→**750**, Platinum 800→**900**, Masters 900→**1000**, Tamer Elite 1000→**1200**,
+and a new summit **Tamers Apex at 1400**. (Spec read "Masters 100" — taken as 1000, the
+only monotonic value between Platinum 900 and TE 1200.)
+
+Apex is wired through every league-keyed table: pool rewards (1140/570), an 8-name cup
+pool, the annual marquee **The Dynasty Eternal** (month 12), 6v6, 5 rival teams,
+half-density calendar [Q2,Q4], license 2100g, excursion ceiling 820g, validator probes.
+Backdrop reuses the Tamer Elite art (TODO: generate its own).
+
+**Golden moved (recaptured):** `3v3-high`. `boostConstitution` derives its CON target from
+the league cap of the monster's stat band, so changing Masters/TE caps changes a
+`train: 2000` roll. Legitimate data change, not a regression. 12/12 green.
+
+**Retest (25y × 6):**
+| | before curve | after curve |
+|---|---|---|
+| Peaks | TE ×5, Masters ×1 | **TE ×2, Masters ×3, Platinum ×1** |
+| Best stat | 1035–1190 | 1035–1428 |
+| Apex reached | — | **never** |
+
+**Two consequences worth a decision:**
+1. **The whole late game got materially harder.** Rival budgets are `league cap × mult`,
+   so raising four league caps raised every late-game field with them: a Tamer Elite cup
+   rival went ~1683 → ~2049 total stats. Three seeds that used to summit now stop at
+   Masters/Platinum. That may be exactly the intent (the summit should be rare) — but it
+   is a bigger difficulty swing than the four "small nudges" that preceded it.
+2. **Tamers Apex is currently unreachable.** Its trial champion is **3675 total stats per
+   monster, six of them**, versus a player best of ~1428 top / ~2400 total. No seed won
+   the TE trial *and* then the Apex trial. If Apex is meant to be enterable this decade,
+   it needs either a gentler `trialChampionMult` at the top or a lower Apex rival mult.
+3. **The breeding ballpark drifted.** Bred caps are `league cap × potential`, so with Apex
+   at 1400 a *wild* gen-2 line already reaches 1540 there — the "4 generations to a 1400
+   cap" target was calibrated against a 1000-cap league and now lands in ~1 generation at
+   the top. The tier ORDER still holds (wild < prestige < Mythical < fusion < Primeval);
+   only the absolute numbers moved.

@@ -17,6 +17,8 @@ export const LEAGUE_BACKGROUND: Partial<Record<string, string>> = {
   Gold: '/backgrounds/gold.jpg',
   Platinum: '/backgrounds/platinum.jpg',
   Masters: '/backgrounds/masters.jpg',
+  // TODO(art): Tamers Apex reuses the Tamer Elite backdrop until its own is generated.
+  'Tamers Apex': '/backgrounds/tamer-elite.jpg',
   'Tamer Elite': '/backgrounds/tamer-elite.jpg',
 }
 
