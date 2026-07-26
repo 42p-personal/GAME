@@ -455,3 +455,40 @@ is winnable, rare, and takes most of a 25-year career.
 **Still open:** gen 3 remains rare (freezer-slot pressure), and rivals do not follow the
 gen-1 cap ladder — their budget is `league cap × mult` as a total-stat pool, so any future
 `LEAGUES` edit moves every field with it.
+
+## v0.90 — training tiers: Diverse Manual, extreme retune, basic stamina
+
+**Changes under test.** New DIVERSE tier (800g manual): +8/+8 on a pair, no malus,
+35 stamina — six off-archetype pairs, every stat exactly twice. EXTREME retuned
+20/−6/−6 → **24/−4/−4** so it nets +16 at 35 stamina, exactly mirroring diverse
+(same output, same cost, opposite shape). EXTREME_MANUAL 1200 → **800**.
+BASIC_DRILL_STAMINA 10 → **15**, which drops basic to 0.40 net/stamina — *below*
+both top tiers at 0.46, so the safe option is no longer the quietly optimal one.
+
+**Instrument change (same pass).** The bot picked drills off a fixed tier ladder,
+which could never evaluate a pair tier. It now scores every affordable drill by
+USEFUL yield — gains on a build stat count, gains on a capped stat are wasted,
+losses count only if they land on the build — and takes the best. That is also
+just better play, and it is what lets diverse compete on merit (+16 when both
+stats are on-build, +8 when only one is).
+
+**Result (25y × 6):**
+| | before (v0.89 fix pass) | after |
+|---|---|---|
+| Peaks | TE ×3, Masters ×2, **Apex ×1** | TE ×3, Masters ×2, **Platinum ×1** |
+| Best stat | 1062–1416 | **1332 / 1320 / 1428** top three |
+| Fusion fired | 3 of 6 seeds | **6 of 6** |
+| Cups entered | 191–249 | 160–196 |
+| End gold | 341–917 | 341–860 (still fully invested) |
+
+**Read.** The training buff did **not** cause a power spiral — peaks are flat or
+slightly lower even though best stats rose ~10%. Same lesson as the v0.851
+life-stage bump: the stat CAP binds, so faster training mostly reaches the same
+wall sooner. The visible cost is throughput: pricier basic drills and a 35-stamina
+top tier mean more rest weeks, so cup entries fell ~20% and one seed slipped
+Apex → Platinum. Fusion firing in every seed is the clear win.
+
+⚠️ **Confounded comparison.** The drill data and the bot's drill AI changed in the
+same run, so this is not a clean A/B — the peak movement could be either. The
+headline (no runaway) is robust because it is cap-bound, but if the Apex → Platinum
+slip matters, isolate it by running the new bot against the old drill values.

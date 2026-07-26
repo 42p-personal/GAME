@@ -32,12 +32,12 @@ import {
   freezeToLab, breed, leagueIndexOf, monthOfWeek, newGame, nextLicenseCost, resolveEvent as resolveWeeklyEvent,
   roundRobinSchedule, signUp, startTrial, teamSizeForLeague, tournamentCalendarFor, trialStatus, weekOfMonth, yearOfWeek, WeekPlanEntry,
   buySpecialLicense, canBuySpecialLicense, buyEliteLicense, canBuyEliteLicense,
-  buyExtremeManual, EXTREME_MANUAL_COST, buyMarketCoach, canBuyMarketCoach, coachCost,
+  buyExtremeManual, EXTREME_MANUAL_COST, buyDiverseManual, DIVERSE_MANUAL_COST, buyMarketCoach, canBuyMarketCoach, coachCost,
   buyMarketSlot, marketSlotCost, buyMarketScout, scoutCost, setScoutPick, upgradeBarn, barnCost, effectiveBarnCap,
   buyComfortItem, COMFORT_ITEMS, expandLab, labExpandCost, healAtInfirmary, infirmaryFee,
   fuse, fusionRecipeFor, FUSION_COST, useTonic, buyPantryContract, offerGenOpts,
 } from '../src/town'
-import { Career, careerMonster, careerSpanYears, stageInfo, statCapFor, statTrainingBonus } from '../src/game'
+import { Career, careerMonster, careerSpanYears, drillStamina, stageInfo, statCapFor, statTrainingBonus } from '../src/game'
 import { LEAGUES, MatchOrders, Monster, STATS, Stat, Tactics, Food, isPrestigeBody } from '../src/core'
 import { maxHp, generateMonster } from '../src/monster'
 import { SPECIES } from '../src/species'
@@ -145,12 +145,24 @@ function planFor(c: Career, g: GameState, drills: DrillLite[]): WeekPlanEntry {
   const targets = buildStats(c)
   if (!targets.length) return { activity: 'rest', food }
   const stat = targets[g.week % targets.length] // rotate the build
-  // Drill tier by stamina: extreme (if unlocked) > intensive > basic. Among
-  // candidates, steer the malus onto stats OUTSIDE the build.
-  const tier = g.extremeUnlocked && stamina >= 55 ? 'extreme' : stamina >= 30 ? 'intensive' : 'basic'
-  const pool = drills.filter((d) => d.kind === tier && (d.gains[stat] ?? 0) > 0)
-  const offBuild = (d: DrillLite) => STATS.every((k) => (d.gains[k] ?? 0) >= 0 || !targets.includes(k))
-  const drill = pool.find(offBuild) ?? pool[0] ?? drills.find((d) => d.kind === 'basic' && (d.gains[stat] ?? 0) > 0)
+  // Pick by USEFUL yield rather than a fixed tier ladder (v0.90): score every
+  // affordable drill by the points it actually adds to the build — gains on a
+  // build stat count, gains on a capped stat are wasted, and losses on a build
+  // stat count against it. This is what lets DIVERSE compete on merit: +8/+8
+  // with no malus scores 16 when both stats are on-build, but only 8 when one
+  // isn't, so the bot takes it exactly when a human would.
+  const cap = statCapFor(c)
+  const unlocked = (d: DrillLite) =>
+    (d.kind !== 'extreme' || g.extremeUnlocked) && (d.kind !== 'diverse' || g.diverseUnlocked)
+  const useful = (d: DrillLite) => STATS.reduce((sum, k) => {
+    const v = d.gains[k] ?? 0
+    if (v > 0) return sum + (targets.includes(k) && c.stats[k] < cap ? v : 0)
+    return sum + (targets.includes(k) ? v : 0) // a malus only hurts if it lands on the build
+  }, 0)
+  const affordable = drills.filter((d) => unlocked(d) && drillStamina(d.kind) <= stamina)
+  const scored = affordable.map((d) => ({ d, u: useful(d) })).filter((x) => x.u > 0)
+    .sort((a, b) => b.u - a.u || drillStamina(a.d.kind) - drillStamina(b.d.kind))
+  const drill = scored[0]?.d ?? drills.find((d) => d.kind === 'basic' && (d.gains[stat] ?? 0) > 0)
   // Training food doubles down on the drilled stat when we can afford the
   // stamina (−15) and the gold.
   if (drill && food !== 'vigor melon' && stamina >= 50 && spare > 700) food = TRAIN_FOOD[stat]
@@ -183,6 +195,8 @@ function shop(g: GameState): GameState {
   if (canBuyMarketCoach(g) && spare() >= (coachCost(g) ?? Infinity) + 400) g = buyMarketCoach(g)
   // Extreme Manual unlocks the top drill tier.
   if (!g.extremeUnlocked && spare() >= EXTREME_MANUAL_COST + 600) g = buyExtremeManual(g)
+  // The diverse tier matches extreme's output with no malus — worth the same 800g.
+  if (!g.diverseUnlocked && spare() >= DIVERSE_MANUAL_COST + 600) g = buyDiverseManual(g)
   // Barn: room for a league-sized team + a growing baby.
   const desired = Math.max(3, teamSizeForLeague(LEAGUES[g.licenseIndex].name) + 1)
   if (effectiveBarnCap(g) < desired + 1 && spare() >= barnCost(g) + 400) g = upgradeBarn(g)
