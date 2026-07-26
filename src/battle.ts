@@ -1252,6 +1252,27 @@ function resolveMove(attacker: Combatant, ctx: BattleContext, move: Move, rng: R
   // Record this side's engagement for the 'focus' target-priority tactic —
   // teammates who follow the focus order strike whoever the side hit last.
   if (targets[0].side !== attacker.side) ctx.focus[attacker.side] = { side: targets[0].side, slot: targets[0].slot }
+  // Scattering multi-hit (v0.91 signature effect): each strike picks a living
+  // enemy AT RANDOM and resolves as a FULL independent attack — its own
+  // accuracy, variance, crit and mitigation roll — instead of `hits` simply
+  // multiplying damage onto one target. Repeats are allowed, so a flurry can
+  // pile onto a single foe or rake across the line; that swinginess is the
+  // point. The per-hit copy drops `hits`, so resolveDamageOnTarget stays a
+  // plain single strike and needed no change at all.
+  // ⚠️ Strictly gated behind `randomTargets`, which NO pool move sets. When it
+  // is absent this branch never runs and not one extra rng() call happens, so
+  // every existing matchup — and every golden — stays byte-identical.
+  if (e?.randomTargets && e.hits) {
+    const strikes = randInt(rng, e.hits[0], e.hits[1])
+    const single: Move = { ...move, effects: { ...e, hits: undefined, randomTargets: undefined } }
+    for (let i = 0; i < strikes; i++) {
+      const live = enemiesOf(ctx, attacker)
+      if (!live.length) break // the line was wiped mid-flurry
+      resolveDamageOnTarget(attacker, live[Math.floor(rng() * live.length)], single, rng, log, ev, openerEligible)
+    }
+    if (e.guard) applyBeneficialEffects(attacker, attacker, move, rng, log)
+    return
+  }
   for (const t of targets) resolveDamageOnTarget(attacker, t, move, rng, log, ev, openerEligible)
   // self-guard follow-up on a damage move stays targeted at the attacker
   // specifically (a "hit and raise a shield" rider), once per cast — not once

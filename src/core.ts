@@ -81,6 +81,7 @@ export interface MoveEffects {
   lifesteal?: number // 0..1 — fraction of damage dealt returned as HP
   recoil?: number // 0..1 — fraction of damage dealt taken by the user (max 0.15 in practice)
   hits?: [number, number] // multi-hit: strikes N times; `power` is per hit
+  randomTargets?: boolean // with `hits`: each strike picks a LIVING ENEMY AT RANDOM (re-rolled per hit, repeats allowed) and resolves as its own independent attack, instead of `hits` multiplying damage onto one target. Signature-move effect (v0.91) — no pool move sets it, so the engine's existing rng call order is untouched.
   execute?: number // 0..1 — 1.5× damage when target HP is below this fraction
   manaBurn?: number // flat MP burned off the target
   guard?: number // flat damage reduction on EVERY hit taken until the user's next action
