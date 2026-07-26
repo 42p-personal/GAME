@@ -30,7 +30,7 @@ import {
   fuse, fusionSpin, fusionRecipeFor, fusablePairIn, freezeToLab, thawFromLab, expandLab, labExpandCost, LAB_SLOTS_BASE, FUSION_COST,
   generateRival, newGame, offerMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, signUp,
   applyMarkToOpponent, buildEventPlayerTeam, finalizeCup, finalizeRite, finalizeTrial, roundRobinSchedule,
-  riteStatus, riteEligible, startRite, cancelRite, riteChampionMult, SIGNATURE_RITE_LEVEL, RITE_COOLDOWN_WEEKS,
+  riteStatus, riteEligible, riteRoster, startRite, cancelRite, riteChampionMult, SIGNATURE_RITE_LEVEL,
   tournamentCalendarFor, upgradeBarn, visibleLeagueCount, weekOfMonth, yearOfWeek,
 } from './town'
 import { AREA_BACKGROUND, AreaArtKey, TOWN_AREA_ART } from './areaArt'
@@ -2563,42 +2563,46 @@ function RanchView({ game, setGame, onBattleScreen }: {
                 )
               })()}
               {/* The Signature Rite (v0.91): the ONLY source of a signature skill.
-                  Built like the rank-up trial — on-demand, takes the week, a loss
-                  costs only a cooldown — but always 1v1, and gated on TRAINER
-                  level rather than on the monster, so it stays invisible for a
-                  first season. Once per monster; the panel hides entirely for a
-                  monster that already carries one. */}
+                  On-demand like the rank-up trial, but fought by the WHOLE active
+                  roster, allowed ONCE A YEAR win or lose, and built harder than a
+                  rank-up champion at every rung. Gated on TRAINER level, not on
+                  the monster, so it stays invisible for a first season. */}
               {(() => {
                 if (game.pendingRite) return (
                   <div className="trial-panel">
-                    <b>★ Rite set:</b> {game.stable.find((c) => c.id === game.pendingRite!.monsterId)?.name} faces the Challenger — resolves on Advance Week.
+                    <b>★ Rite set:</b> your whole stable ({game.pendingRite.monsterIds.length}) faces the Rite Challengers — resolves on Advance Week.
                     <button className="ghost" onClick={() => setGame((g) => cancelRite(g))}>Cancel</button>
                   </div>
                 )
-                if (selectedCareer.signature) return null // nothing left to prove
                 if (trainerLevel(game) < SIGNATURE_RITE_LEVEL) return null // stay quiet in the early game
                 const gate = riteStatus(game)
                 if (!gate.ok) return <div className="hint" style={{ marginTop: 10 }}>★ Signature Rite: {gate.reason}</div>
-                if (!riteEligible(game).some((c) => c.id === selectedCareer.id)) return null
-                const top = [...STATS].sort((x, y) => selectedCareer.stats[y] - selectedCareer.stats[x])[0]
+                const roster = riteRoster(game)
+                const size = roster.length
                 const foeTarget = LEAGUES[game.licenseIndex].cap * rivalBudgetMult(game.licenseIndex) * riteChampionMult(game.licenseIndex)
-                const mine = STATS.reduce((t, k) => t + selectedCareer.stats[k], 0)
-                const ratio = mine / foeTarget
+                const teamAvg = roster.reduce((s2, c) => s2 + STATS.reduce((t, k) => t + c.stats[k], 0), 0) / size
+                const ratio = teamAvg / foeTarget
+                const heir = riteEligible(game).reduce((best, c) =>
+                  STATS.reduce((t, k) => t + c.stats[k], 0) > STATS.reduce((t, k) => t + best.stats[k], 0) ? c : best)
+                const heirTop = [...STATS].sort((x, y) => heir.stats[y] - heir.stats[x])[0]
                 return (
                   <div className="trial-panel">
-                    <div className="section-title">★ The Signature Rite — {selectedCareer.name} alone</div>
+                    <div className="section-title">★ The Signature Rite — {size}v{size}</div>
                     <div className="dim">
-                      A 1v1 against a challenger built for this league. Win and {selectedCareer.name} forges a <b>signature skill</b> themed on its best stat ({top}) — its own move, which its children inherit dormant and awaken by matching {selectedCareer.name}'s {top}. Takes the week; a loss costs {RITE_COOLDOWN_WEEKS} weeks and nothing more.
+                      Your <b>whole active stable</b> ({size}) fights a field built harder than a rank-up champion. Win and one monster forges a <b>signature skill</b> — its own move, which its children inherit dormant and awaken by matching its stat. <b>Once a year, win or lose</b>; the fight takes everyone&apos;s week and all of them come home needing rest.
+                    </div>
+                    <div className="dim" style={{ fontSize: 12 }}>
+                      On a win the signature goes to <b>{heir.name}</b> (highest total without one) — themed on <b style={{ color: STAT_COLOR[heirTop] }}>{heirTop}</b>.
                     </div>
                     <div className={ratio >= 0.85 ? 'up' : ratio >= 0.6 ? 'dim' : 'neg'} style={{ fontSize: 12 }}>
-                      {ratio >= 0.85 ? `⚔ ${selectedCareer.name} (${mine} total) matches the challenger (~${Math.round(foeTarget)}) — a real shot.`
-                        : ratio >= 0.6 ? `⚠ ${selectedCareer.name} (${mine} total) is the underdog vs ~${Math.round(foeTarget)}.`
-                          : `🛑 ${selectedCareer.name} (${mine} total) is severely outmatched vs ~${Math.round(foeTarget)}.`}
+                      {ratio >= 0.85 ? `⚔ Your stable (~${Math.round(teamAvg)} avg total) stands with the challengers (~${Math.round(foeTarget)}) — a real shot.`
+                        : ratio >= 0.6 ? `⚠ Your stable (~${Math.round(teamAvg)} avg total) is the underdog vs ~${Math.round(foeTarget)} — this is meant to be harder than a rank-up trial.`
+                          : `🛑 Your stable (~${Math.round(teamAvg)} avg total) is severely outmatched vs ~${Math.round(foeTarget)} — a wasted year.`}
                     </div>
                     <button className="enter" style={{ marginTop: 6 }} disabled={!!game.pendingTournament || !!game.pendingTrial}
                       title={game.pendingTournament || game.pendingTrial ? 'One arena event per week — cancel the other first' : undefined}
-                      onClick={() => setGame((g) => startRite(g, selectedCareer.id))}>
-                      ★ Attempt the Rite
+                      onClick={() => setGame((g) => startRite(g))}>
+                      ★ Attempt the Rite ({size} monster{size === 1 ? '' : 's'})
                     </button>
                   </div>
                 )

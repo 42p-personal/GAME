@@ -520,7 +520,7 @@ export interface GameState {
   // An on-demand rank-up trial signed up for THIS week (consumes the entered
   // monsters' weekly action, like a cup). Resolved in advanceWeek.
   pendingTrial: { monsterIds: string[] } | null
-  pendingRite: { monsterId: string } | null // Signature Rite (v0.91) — on-demand, one monster, unlocks at trainer LV6
+  pendingRite: { monsterIds: string[] } | null // Signature Rite (v0.91) — on-demand, WHOLE roster, annual, unlocks at trainer LV6
   riteCooldownUntil: number
   // Week gate after a FAILED trial — no re-attempt until g.week >= this.
   trialCooldownUntil: number
@@ -985,38 +985,49 @@ export function cancelTrial(g: GameState): GameState {
 //   • Repeatable across a stable — but once per MONSTER. A monster that already
 //     carries a signature (earned or inherited) has nothing left to prove.
 export const SIGNATURE_RITE_LEVEL = 6 // trainer level that unlocks the rite
-export const RITE_COOLDOWN_WEEKS = 4 // longer than the trial's 3 — the rite is optional
-export const RITE_CHAMPION_MULT = 1.35
-// Top-league relief, same reasoning as trialChampionMult: the champion budget
-// already climbs with rivalBudgetMult, so a flat multiplier compounds into an
-// unwinnable wall at the summit (the mistake v0.89 had to fix for Tamer Elite).
-export const riteChampionMult = (leagueIndex: number): number => (leagueIndex >= 9 ? 1.2 : RITE_CHAMPION_MULT)
+// ONCE A YEAR, win or lose (user spec). Unlike the trial's punitive 3-week
+// cooldown, this is a scheduling constraint rather than a penalty: the rite is
+// the single biggest decision of a monster's year, and making the clock run
+// regardless of outcome means attempting it is itself the commitment. It also
+// caps signatures at one per year per stable no matter how deep the roster.
+export const RITE_COOLDOWN_WEEKS = WEEKS_PER_YEAR
+// HARDER THAN THE RANK-UP TRIAL at every rung (user spec). Expressed as a delta
+// over trialChampionMult rather than a flat number so it inherits that
+// function's summit relief automatically — a flat multiplier compounds with the
+// climbing rival budget into an unwinnable wall at the top, which is exactly the
+// bug v0.89 had to fix for Tamer Elite.
+export const RITE_EXTRA_MULT = 0.15
+export const riteChampionMult = (leagueIndex: number): number => trialChampionMult(leagueIndex) + RITE_EXTRA_MULT
 // Which of the six signature tiers this player's league earns. licenseIndex
-// 0-1 → tier 0 … 10 → tier 5, so the reward scales with how far you have climbed
-// rather than with the (fixed) unlock level.
+// 0-1 -> tier 0 ... 10 -> tier 5, so the reward scales with how far you have
+// climbed rather than with the (fixed) unlock level.
 export const riteTierFor = (licenseIndex: number): number => Math.max(0, Math.min(SIGNATURE_LEAGUES.length - 1, Math.floor(licenseIndex / 2)))
-// A monster is eligible if it is active and does not already hold a signature.
-export const riteEligible = (g: GameState): Career[] => g.stable.filter((c) => !c.retired && !c.signature)
+// The rite is fought by the WHOLE active roster (user spec) — not a picked team.
+export const riteRoster = (g: GameState): Career[] => g.stable.filter((c) => !c.retired)
+// ...but only a monster without a signature can be the one to receive it.
+export const riteEligible = (g: GameState): Career[] => riteRoster(g).filter((c) => !c.signature)
 export function riteStatus(g: GameState): { ok: boolean; reason?: string } {
   if (trainerLevel(g) < SIGNATURE_RITE_LEVEL) return { ok: false, reason: `unlocks at trainer level ${SIGNATURE_RITE_LEVEL} (you are ${trainerLevel(g)})` }
-  if (g.week < (g.riteCooldownUntil ?? 0)) return { ok: false, reason: `the rite site is closed — ready in ${(g.riteCooldownUntil ?? 0) - g.week}wk` }
+  if (g.week < (g.riteCooldownUntil ?? 0)) return { ok: false, reason: `held once a year — the site reopens in ${(g.riteCooldownUntil ?? 0) - g.week}wk` }
+  if (riteRoster(g).length === 0) return { ok: false, reason: 'no active monsters' }
   if (riteEligible(g).length === 0) return { ok: false, reason: 'every active monster already carries a signature' }
   if (g.pendingTournament) return { ok: false, reason: 'already signed up for a cup this week' }
   if (g.pendingTrial) return { ok: false, reason: 'a rank-up trial is already set for this week' }
   return { ok: true }
 }
-export function startRite(g: GameState, monsterId: string): GameState {
+export function startRite(g: GameState): GameState {
   if (!riteStatus(g).ok || g.pendingRite) return g
-  if (!riteEligible(g).some((c) => c.id === monsterId)) return g
-  // Consumes the monster's week, exactly like a cup or a trial.
+  const ids = riteRoster(g).map((c) => c.id)
+  // Consumes EVERY entrant's week — the whole stable is committed.
   const weekPlans = { ...(g.weekPlans ?? {}) }
-  weekPlans[monsterId] = { ...(weekPlans[monsterId] ?? { activity: 'rest', food: '' as const }), activity: 'compete' }
-  return { ...g, weekPlans, pendingRite: { monsterId } }
+  for (const id of ids) weekPlans[id] = { ...(weekPlans[id] ?? { activity: 'rest', food: '' as const }), activity: 'compete' }
+  return { ...g, weekPlans, pendingRite: { monsterIds: ids } }
 }
 export function cancelRite(g: GameState): GameState {
   const weekPlans = { ...(g.weekPlans ?? {}) }
-  const id = g.pendingRite?.monsterId
-  if (id && weekPlans[id]?.activity === 'compete') weekPlans[id] = { ...weekPlans[id], activity: 'rest' }
+  for (const id of g.pendingRite?.monsterIds ?? []) {
+    if (weekPlans[id]?.activity === 'compete') weekPlans[id] = { ...weekPlans[id], activity: 'rest' }
+  }
   return { ...g, weekPlans, pendingRite: null }
 }
 // Pay for an earned license: the whole ACCOUNT advances a league.
@@ -1724,7 +1735,7 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
   // Competing IS the weekly action (v0.5): monsters entered in a cup or the
   // rank-up trial fight instead of training — enforced here at the data layer
   // regardless of what the stored plan says (the UI locks it too).
-  const competing = new Set([...(g.pendingTournament?.monsterIds ?? []), ...(g.pendingTrial?.monsterIds ?? []), ...(g.pendingRite ? [g.pendingRite.monsterId] : [])])
+  const competing = new Set([...(g.pendingTournament?.monsterIds ?? []), ...(g.pendingTrial?.monsterIds ?? []), ...(g.pendingRite?.monsterIds ?? [])])
   let gold = g.gold
   let rentalDue = (g.labFrozen?.length ?? 0) * labUpkeepPerFrozen(g)
   const stable = g.stable.map((c) => {
@@ -2220,12 +2231,16 @@ function stageCup(g: GameState, stable: Career[]): { activeCup: ActiveCup; enter
 function stageRite(g: GameState, stable: Career[]): { activeCup: ActiveCup } | null {
   const pending = g.pendingRite
   if (!pending) return null
-  const c = stable.find((x) => x.id === pending.monsterId)
-  if (!c || c.retired || c.signature) return null
+  const careers = pending.monsterIds.map((id) => stable.find((x) => x.id === id))
+  if (careers.some((c) => !c || c.retired)) return null
+  const size = pending.monsterIds.length
+  if (size === 0) return null
+  // The opposing side matches the roster ONE FOR ONE and is built harder than a
+  // rank-up champion, so bringing more monsters is never a way to cheapen it.
   const budget = LEAGUES[g.licenseIndex].cap * rivalBudgetMult(g.licenseIndex) * riteChampionMult(g.licenseIndex)
-  const raw = generateRivalTeam(g.seed + ':' + g.week + ':rite:' + c.id, 1, budget, g.licenseIndex >= leagueIndexOf('Silver'))
-  const team = applyGameplan(raw, gameplanForRivalTeam(g.seed, g.week, 'rite-' + c.id, 0))
-  return { activeCup: { kind: 'rite', tournamentId: 'rite-' + c.id, week: g.week, playerMonsterIds: [c.id], rivalTeams: [team], matchOrders: {}, doneThrough: -1 } }
+  const raw = generateRivalTeam(g.seed + ':' + g.week + ':rite:' + g.licenseIndex, size, budget, g.licenseIndex >= leagueIndexOf('Silver'))
+  const team = applyGameplan(raw, gameplanForRivalTeam(g.seed, g.week, 'rite-' + g.licenseIndex, 0))
+  return { activeCup: { kind: 'rite', tournamentId: 'rite-' + g.licenseIndex + '-' + g.week, week: g.week, playerMonsterIds: pending.monsterIds, rivalTeams: [team], matchOrders: {}, doneThrough: -1 } }
 }
 
 // Stage a rank-up trial: build the single champion team now; fight it later.
@@ -2471,51 +2486,67 @@ export function finalizeRite(g: GameState): { game: GameState; won: boolean } {
   const ac = g.activeCup
   if (!ac || ac.kind !== 'rite') return { game: { ...g, activeCup: null }, won: false }
   const stable = g.stable.map((c) => c)
-  const idx = stable.findIndex((x) => x.id === ac.playerMonsterIds[0])
-  if (idx < 0 || stable[idx].retired) return { game: { ...g, activeCup: null }, won: false }
+  const idxs = ac.playerMonsterIds.map((id) => stable.findIndex((x) => x.id === id))
+  if (idxs.some((i) => i < 0 || stable[i].retired)) return { game: { ...g, activeCup: null }, won: false }
   const league = LEAGUES[g.licenseIndex].name
-  const career = stable[idx]
-  const built = buildEventPlayerTeam([career], ac.matchOrders[0])
+  const teamSize = ac.playerMonsterIds.length
+  const playerCareers = idxs.map((i) => stable[i])
+  const built = buildEventPlayerTeam(playerCareers, ac.matchOrders[0])
   const playerTeam = built.team
   const foeTeam = applyMarkToOpponent(ac.rivalTeams[0], ac.matchOrders[0]?.mark)
   const result = simulateTeamBattle(playerTeam, foeTeam, built.happiness, foeTeam.map(() => 5))
   const won = result.winner === 'A' // a draw proves nothing
   const hpFrac = (team: Monster[], side: 'A' | 'B') =>
-    result.finals.filter((f) => f.side === side).reduce((s, f) => s + f.hp / maxHp(team[f.slot].stats), 0)
+    result.finals.filter((f) => f.side === side).reduce((s, f) => s + f.hp / maxHp(team[f.slot].stats), 0) / teamSize
   const standings: EventStanding[] = [
-    { label: career.name, isPlayer: true, wins: won ? 1 : 0, draws: result.winner === 'draw' ? 1 : 0, losses: won || result.winner === 'draw' ? 0 : 1, hpFracSum: hpFrac(playerTeam, 'A'), placement: won ? 1 : 2 },
-    { label: 'The Challenger', isPlayer: false, wins: won ? 0 : result.winner === 'draw' ? 0 : 1, draws: result.winner === 'draw' ? 1 : 0, losses: won ? 1 : 0, hpFracSum: hpFrac(foeTeam, 'B'), placement: won ? 2 : 1 },
+    { label: 'Your Stable', isPlayer: true, wins: won ? 1 : 0, draws: result.winner === 'draw' ? 1 : 0, losses: won || result.winner === 'draw' ? 0 : 1, hpFracSum: hpFrac(playerTeam, 'A'), placement: won ? 1 : 2 },
+    { label: 'The Rite Challengers', isPlayer: false, wins: won ? 0 : result.winner === 'draw' ? 0 : 1, draws: result.winner === 'draw' ? 1 : 0, losses: won ? 1 : 0, hpFracSum: hpFrac(foeTeam, 'B'), placement: won ? 2 : 1 },
   ].sort((a, b) => a.placement - b.placement)
 
-  const nc: Career = { ...career, stats: { ...career.stats }, log: [...career.log] }
+  // The whole stable fights, but ONE signature is forged: the entrant without
+  // one that has the highest total stats — deterministic, and it reads as the
+  // stable's champion stepping forward. Monsters that already carry a signature
+  // are excluded rather than overwritten, so a deep legacy is never lost.
+  let forgedOn: string | null = null
+  const updated = playerCareers.map((c) => ({ ...c, stats: { ...c.stats }, log: [...c.log] }))
   if (won) {
-    const topStat = [...STATS].sort((x, y) => nc.stats[y] - nc.stats[x])[0]
-    nc.signature = forgeSignature({
-      stat: topStat,
-      tier: riteTierFor(g.licenseIndex),
-      atStat: nc.stats[topStat],
-      eventName: `the Signature Rite (${league})`,
-      forgedBy: nc.name,
-      seed: ac.tournamentId + ':' + ac.week,
-    })
-    nc.log.push(`  ★ SIGNATURE FORGED — ${nc.name} passes the rite, and the moment becomes a move: ${nc.signature.name} (${topStat}). Heirs inherit it dormant and awaken it at ${nc.signature.awakenStat} ${topStat}.`)
-  } else {
-    nc.log.push(`  ✖ The rite goes unanswered — ${nc.name} is turned back. The site reopens in ${RITE_COOLDOWN_WEEKS} weeks.`)
+    const eligible = updated.filter((c) => !c.signature)
+    if (eligible.length > 0) {
+      const star = eligible.reduce((best, c) =>
+        STATS.reduce((t, k) => t + c.stats[k], 0) > STATS.reduce((t, k) => t + best.stats[k], 0) ? c : best)
+      const topStat = [...STATS].sort((x, y) => star.stats[y] - star.stats[x])[0]
+      star.signature = forgeSignature({
+        stat: topStat,
+        tier: riteTierFor(g.licenseIndex),
+        atStat: star.stats[topStat],
+        eventName: `the Signature Rite (${league})`,
+        forgedBy: star.name,
+        seed: ac.tournamentId,
+      })
+      forgedOn = star.name
+      star.log.push(`  ★ SIGNATURE FORGED — the stable passes the rite and ${star.name} steps forward: ${star.signature.name} (${topStat}). Heirs inherit it dormant and awaken it at ${star.signature.awakenStat} ${topStat}.`)
+    }
   }
-  const injRng = mulberry32(hashString(g.seed + ':' + ac.week + ':rite:injury:' + career.id))
-  nc.hp = Math.max(1, Math.round(maxHp(nc.stats) * injRng() * 0.5))
-  nc.mp = Math.round(maxMana(nc.stats) * injRng() * 0.5)
-  nc.log = nc.log.slice(-40)
-  stable[idx] = nc
+  updated.forEach((nc) => {
+    if (!won) nc.log.push(`  ✖ The rite goes unanswered — the challengers hold. The site reopens next year.`)
+    else if (nc.name !== forgedOn) nc.log.push(`  ★ Fought in the winning rite — ${forgedOn ?? 'the stable'} takes the signature.`)
+    const injRng = mulberry32(hashString(g.seed + ':' + ac.week + ':rite:injury:' + nc.id))
+    nc.hp = Math.max(1, Math.round(maxHp(nc.stats) * injRng() * 0.5))
+    nc.mp = Math.round(maxMana(nc.stats) * injRng() * 0.5)
+    nc.log = nc.log.slice(-40)
+  })
+  updated.forEach((nc, k) => { stable[idxs[k]] = nc })
 
   const lastBattle: LastBattle = {
-    tournamentId: ac.tournamentId, tournamentName: `The Signature Rite — ${career.name}`, league, teamSize: 1,
-    matches: [{ aLabel: career.name, bLabel: 'The Challenger', teamA: playerTeam, teamB: foeTeam, result, involvesPlayer: true }],
+    tournamentId: ac.tournamentId, tournamentName: `The Signature Rite — ${league}`, league, teamSize,
+    matches: [{ aLabel: 'Your Stable', bLabel: 'The Rite Challengers', teamA: playerTeam, teamB: foeTeam, result, involvesPlayer: true }],
     standings, playerPlacement: won ? 1 : 2, fieldSize: 2, goldReward: 0, expNote: '', isTrial: true,
   }
   const game: GameState = {
     ...g, stable, activeCup: null, lastBattle,
-    riteCooldownUntil: won ? (g.riteCooldownUntil ?? 0) : g.week + RITE_COOLDOWN_WEEKS,
+    // The clock runs WIN OR LOSE — the rite is an annual event, not a
+    // retry-until-it-lands grind.
+    riteCooldownUntil: g.week + RITE_COOLDOWN_WEEKS,
     trainerXp: (g.trainerXp ?? 0) + (won ? 40 : 0),
   }
   return { game, won }
