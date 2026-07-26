@@ -186,7 +186,7 @@ export const SPRITES: Record<BodyType, string[]> = {
     '..XBLLBAABLLBX..', '..XBBBBAABBBBX..', '...XBBBAABBBX...', '....XXXXXXXX....',
     '..XX..XX..XX....', '.XX..XX..XX.....', '................', '................',
   ],
-  Primeval: [ // v0.88 prestige fusion — reuses the Mythical silhouette until real art lands
+  Primeval: [ // v0.88 prestige fusion — structural fallback only; real art ships in speciesArt.ts
     '................', '.......A........', '......AAA.......', '....XXXXXXX.....',
     '...XBBBBBBBX....', '..XBBEPBBBBBX...', '..XBBBBBBBBBX...', '.AXBLLLLLLLBXA..',
     '.AXBLLLLLLLBXA..', '..XBBBBBBBBBX...', '...XBBBBBBBX....', '....XXXXXXX.....',
