@@ -68,9 +68,17 @@ and `doneThrough` is now actually maintained); the Lab shows a **fusion nudge** 
 hold a fusable pair (the sim only started fusing once it earmarked the cost, so a player
 needs telling); `BREED_HEAD_START` carries 30% of parents' stats.
 
-**⚠️ The esbuild `overrides` fix is still NOT viable.** Forcing one esbuild repo-wide
-(0.28.1) does dedupe the tree — and then vite@5's `esbuild-transpile` fails the build with
-124 transform errors. Tested and reverted. The real fix is a vite 5 → 8 migration.
+**✅ The Cloudflare auto-build is FIXED (vite 5 → 8).** The tree used to carry two esbuilds
+— vite@5 pinned 0.21.5 while vitest@4's nested vite wanted ^0.27||^0.28 — and the
+deeply-nested duplicate's platform-gated optional deps tripped Cloudflare's pinned
+`npm@10.9.2` with `EBADPLATFORM — @esbuild/aix-ppc64`. Upgrading vite realigns it with what
+vitest already pulls in: **one hoisted `esbuild@0.28.1`**, wrangler deduped onto it, no
+nested copy. `vite.config.ts` needed no changes. Also pins Node (`.node-version` 22.12.0 +
+`engines`), since vite 8 needs `^20.19.0 || >=22.12.0` and nothing declared a version.
+Green on Cloudflare — see the deploy section. Historical note: the first attempt was a
+package.json `overrides` forcing esbuild 0.28.1 under vite@5; that deduped the tree and then
+broke vite@5's own `esbuild-transpile` with 124 transform errors. **Upgrade vite, don't pin
+esbuild beneath it.**
 
 ---
 
@@ -376,30 +384,36 @@ at every league). Results: draws 10→4%, Tank 71→52%, Wizard 49→62%, Bard/O
   notice. Browser-verified E2E: trial → victory → shop unlock → buy (−50g) → account at Copper →
   Tin gate at 120g. Old saves migrate (player license = max of old per-career licenses).
 
-### ⚠️ Deploying — READ THIS
-Cloudflare's **git-triggered auto-deploy is unreliable** (a standing `EBADPLATFORM —
-@esbuild/aix-ppc64` bug in Cloudflare's pinned `npm@10.9.2` on a deeply-nested duplicate optional
-dep under vitest/wrangler; `npm ci` never fails locally). **Manual `npm run deploy` is the only
-dependable path to production.** Flow: commit to `preview` → verify → `git merge --ff-only` into
-`main` → push both → then deploy manually:
+### Deploying
+**Git-triggered auto-deploy WORKS as of the vite 8 migration (2026-07-26).** Push to `main`
+and Cloudflare builds and ships it. The long-standing `EBADPLATFORM — @esbuild/aix-ppc64`
+failure was the duplicate-esbuild bug described in the v0.89 section; the tree now resolves to
+a single hoisted esbuild and `npm ci` succeeds on their builders. Confirmed green on both
+open PRs.
+
+**Two things that must not regress**, or the auto-build breaks again:
+- **One esbuild in the tree.** `npm ls esbuild --all` must show a single version (wrangler
+  deduped onto it). Any dep bump that reintroduces a second one brings the failure back.
+- **`.node-version` (22.12.0) and `engines`.** vite 8 requires `^20.19.0 || >=22.12.0`;
+  without the pin Cloudflare builds on its own default.
+
+**Manual deploy is now the fallback, not the ritual** — still the fastest way to ship without
+a push, and still needed if the auto-build ever fails again:
 ```bash
 CLOUDFLARE_API_TOKEN=<token> npx wrangler pages deploy dist --project-name game --branch main
 ```
-**⚠️ Wrangler misroutes the FIRST manual deploy to Preview** — 3 out of 3 times on
-2026-07-24, `--branch main` was ignored and the deploy landed as `Environment: Preview,
-Branch: preview` (tell-tale: the output prints "Deployment alias URL:
+⚠️ If you use it: **wrangler misroutes the FIRST manual deploy to Preview** — 3 out of 3 times
+on 2026-07-24, `--branch main` was ignored and it landed as `Environment: Preview, Branch:
+preview` (tell-tale: the output prints "Deployment alias URL:
 https://preview.game-eoz.pages.dev"). The IDENTICAL command re-run immediately lands as
-Production. So the deploy ritual is ALWAYS: deploy → `npx wrangler pages deployment list
---project-name game` → confirm the new hash says **Production / main** → if it says
-Preview, just deploy again and re-check. Never announce "shipped" from the deploy
-command's own success output.
+Production. So: deploy → `npx wrangler pages deployment list --project-name game` → confirm
+the new hash says **Production / main** → if it says Preview, deploy again and re-check.
+Never announce "shipped" from the deploy command's own success output.
 
-After a git push, `npx wrangler pages deployment list --project-name game` shows whether the
-auto-build failed. The apex domains (`tamergame.42p.uk` / `game-eoz.pages.dev`) can edge-cache a
-stale `index.html` for a while after a manual deploy — the deployment-specific
-`<hash>.game-eoz.pages.dev` URL is the source of truth for "did the new bundle actually ship".
-The real permanent fix (not yet done) is a package.json `overrides` forcing one esbuild version
-repo-wide — deferred because it needs its own test pass against vite/vitest.
+`npx wrangler pages deployment list --project-name game` also shows whether an auto-build
+failed. The apex domains (`tamergame.42p.uk` / `game-eoz.pages.dev`) can edge-cache a stale
+`index.html` for a while after a deploy — the deployment-specific `<hash>.game-eoz.pages.dev`
+URL is the source of truth for "did the new bundle actually ship".
 
 ### ⚠️ Verifying visual changes without screenshots
 Screenshots are frequently unavailable (Browser pane not displayed → no compositing).

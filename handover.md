@@ -11,9 +11,9 @@ unshipped, and the decisions/gotchas from this session.
 
 | | |
 |---|---|
-| Branch | `feat/v0.89-tamers-apex` (checked out) |
+| Branch | `feat/v0.89-tamers-apex` (checked out, synced with origin) |
 | `origin/main` | `e55892d` (v0.861) |
-| Remote branch | pushed at `5b5ea3c` — **11 newer commits are LOCAL ONLY** |
+| Open PR | **#1** → `main`, 18 commits, **Cloudflare check green** |
 | `APP_VERSION` | `0.89` — **not bumped for the v0.90 training/food work** |
 | Working tree | clean |
 | Deployed | **nothing from this session** — production is still v0.861 |
@@ -22,24 +22,21 @@ unshipped, and the decisions/gotchas from this session.
 first four commits, which are now safely on the branch). Harmless; reconciles on
 merge. Reset it to `origin/main` if you want main clean.
 
-### PR could not be created
-`GH_TOKEN` is a fine-grained PAT with **Contents: write but NOT Pull requests:
-write**. `gh pr create` and `POST /repos/.../pulls` both return 403. The branch is
-pushed; open the PR by hand at
-`https://github.com/42p-personal/GAME/compare/main...feat/v0.89-tamers-apex?expand=1`.
-A ready title+body is in the session scratchpad as `PR_BODY.md` (may be gone —
-regenerate from the commit log if so). Fix by adding the PR permission to the token.
+**PR #2** (vite 5 → 8) was stacked on this branch and is **merged** — that is what
+turned the Cloudflare check green. Its branch is deleted.
+
+`GH_TOKEN` is a fine-grained PAT. It initially lacked *Pull requests: write* (403 on
+create); the permission has since been added and PR creation works. If a 403 comes
+back, that's the setting to check — editing a fine-grained PAT's permissions does
+not change the token value, so nothing needs re-exporting.
 
 ### Before shipping
-1. Push the 11 local commits.
-2. Decide the version bump (the v0.90 work is unversioned).
-3. Deploy is **manual only** — Cloudflare git auto-build is broken (see §4).
-   Ritual: `npm run build`, then
-   `CLOUDFLARE_API_TOKEN=<token> npx wrangler pages deploy dist --project-name game --branch main`,
-   then `npx wrangler pages deployment list --project-name game` and confirm the
-   new hash says **Production / main**. First manual deploy often misroutes to
-   Preview — re-run the identical command. Never announce "shipped" from the
-   deploy command's own output.
+1. Decide the version bump (the v0.90 work is unversioned).
+2. Merge PR #1 into `main`. **Deploy is now automatic** — the vite 8 migration
+   fixed the Cloudflare auto-build, so pushing `main` builds and ships it.
+   Manual `wrangler` is the fallback only; if you use it, see the deploy section
+   in `CLAUDE.md` for the Preview-misroute trap.
+3. Update `CLAUDE.md` to v0.90 (it stops at v0.89).
 
 ---
 
@@ -111,10 +108,12 @@ in 5 of 6 seeds, 3–4 breeds each, money fully invested (236–1620g).
 - **Rivals do NOT follow the gen-1 cap ladder.** Their strength is
   `league cap × rivalBudgetMult(i)` as a **total-stat budget per monster with no
   per-stat cap**. Any `LEAGUES` edit moves every rival field with it.
-- **The esbuild `overrides` fix is NOT viable.** Tested this session: forcing one
-  esbuild (0.28.1) does dedupe the tree, then vite@5's `esbuild-transpile` fails
-  the build with 124 transform errors. Reverted. Real fix is a vite 5 → 8
-  migration. Until then Cloudflare auto-build stays broken and deploys are manual.
+- **The Cloudflare auto-build is FIXED** (vite 5 → 8, PR #2, merged). Two things
+  must not regress or it breaks again: `npm ls esbuild --all` must show ONE
+  version, and `.node-version`/`engines` must keep pinning Node ≥22.12 (vite 8
+  requires it). The earlier `overrides` attempt — forcing esbuild 0.28.1 under
+  vite@5 — deduped the tree and then broke vite@5's `esbuild-transpile` with 124
+  transform errors. **Upgrade vite, don't pin esbuild beneath it.**
 - **`boostConstitution` derives its CON target from the league cap**, so changing
   `LEAGUES` legitimately moves high-`train` goldens. `3v3-high` was recaptured for
   exactly this reason — check the inline note before assuming a regression.
@@ -150,15 +149,16 @@ in 5 of 6 seeds, 3–4 breeds each, money fully invested (236–1620g).
 
 1. **Browser-verify the v0.90 UI** — the diverse training row and the 📗 shop entry
    have NEVER been seen in a browser. Everything else was verified.
-2. **Push + version bump + deploy** (see §1).
+2. **Version bump + merge PR #1 + deploy** (see §1). Deploy is automatic now.
 3. **Update CLAUDE.md to v0.90** — it stops at v0.89.
 4. **Fusion signature moves + expanded learnable skills** (task #112) — the best
    remaining feature. The four fusion classes currently differ statistically but
    play identically.
 5. Achievements / goal-gradient; Hall of Fame live perks + richer inheritance;
    `tauntForce` targeting pass.
-6. vite 5 → 8 migration (unblocks auto-deploy).
-7. Housekeeping: save slot 3 may hold a throwaway "Buck" tutorial-test game.
+6. Housekeeping: save slot 3 may hold a throwaway "Buck" tutorial-test game.
+
+*(vite 5 → 8 was on this list and is now DONE — PR #2, merged.)*
 
 ---
 
