@@ -425,3 +425,33 @@ the league cap of the monster's stat band, so changing Masters/TE caps changes a
    cap" target was calibrated against a 1000-cap league and now lands in ~1 generation at
    the top. The tier ORDER still holds (wild < prestige < Mythical < fusion < Primeval);
    only the absolute numbers moved.
+
+## v0.89 (fix pass) — the summit is reachable
+
+Three findings, each fixed and re-simmed:
+
+**1. The final gates were a compounding wall.** `trialChampionMult` was a flat 1.25 while
+`league cap` AND `rivalBudgetMult` both climb, so the Tamer Elite champion sat at 3105
+total stats per monster ×6 — the sim never won it once, making Tamers Apex unreachable by
+construction. Now per-rung: **1.30** Bronze→Gold (the v0.87 mid-game friction), **1.15**
+at Tamer Elite/Apex. The TE trial started falling immediately (10 trials won).
+
+**2. The prestige licence reprice starved fusion.** Repricing to the original design
+values (800/2000) pushed fusion to **0 across all six seeds** — gold that would have
+forged a Primeval went on licences. Dialled back to **500/1200** (still 2.5×/2× the old
+200/600) and fusion returned (3 of 6 seeds). Apex licence also trimmed 2100 → **1900**:
+winning the last trial and then being unable to afford entry made the summit a tease.
+
+**3. The bot never bought a licence it had EARNED.** It earmarks gold for fusion but not
+for licences, so it won the Apex trial and spent the entrance fee on more monsters — for
+35 straight years. That is an instrument gap, not a design flaw: a rational player stops
+shopping and saves. Added `licenseEarmark`.
+
+**Result (25y × 6):** **Tamers Apex reached** — seed 4, year 23, best stat 1416, 10 trials
+won. Distribution now runs Masters ×2 / Tamer Elite ×3 / **Tamers Apex ×1**, fusion fires
+in 4 of 6 seeds, money stays fully invested (524–927g). The ladder terminates: the summit
+is winnable, rare, and takes most of a 25-year career.
+
+**Still open:** gen 3 remains rare (freezer-slot pressure), and rivals do not follow the
+gen-1 cap ladder — their budget is `league cap × mult` as a total-stat pool, so any future
+`LEAGUES` edit moves every field with it.

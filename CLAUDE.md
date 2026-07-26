@@ -8,7 +8,73 @@ nudge a value gently, sim it, read the result, adjust again. The sim is the arbi
 `docs/BALANCING.md` for the working ledger. This applies to every economy/difficulty/
 progression number, always.
 
-## Current state (v0.851)
+## Current state (v0.89)
+
+**v0.89 — the endgame arc.** Everything below was validated against the rebuilt
+full-economy sim bot (`sim/bot.ts`), and the evidence lives in `docs/BALANCING.md`.
+
+**TAMERS APEX — an 11th league (cap 1400)** sits above Tamer Elite, and the top of the
+curve steepens to meet it: Gold 700→**750**, Platinum 800→**900**, Masters 900→**1000**,
+Tamer Elite 1000→**1200**. Apex is wired through every league-keyed table (pool rewards,
+an 8-name cup pool, the annual marquee *The Dynasty Eternal*, 6v6, 5 rival teams,
+half-density calendar, 1900g license, excursion ceiling, `validate.ts` probes) and has its
+own painted backdrop. Because every gen-1 monster is walled at 700–1100, **an Apex-grade
+roster can only come from a bred dynasty** — that is the whole point of the league.
+
+**PRIMEVAL — the prestige fusion** (`Mythical + Draconic/Abyssal`, two recipes → one
+class of five: Aeonrex, Stellavore, Chronoshell, Originmage, Worldsong). Roster **65
+species**, all with real sprite art. **1.25× potential** and a **1100 gen-1 cap** — the
+only gen-1 monster above the Tamer Elite league cap. Element affinity inherits Mythical's
+air/earth (all 12 distinct pairs were taken — the one sanctioned `validate.ts` exception).
+
+**The gen-1 cap ladder.** The Market Coach is now a *universal* quality upgrade, lifting
+wild AND prestige walls by tier (`statCapFor` reads the coach tier off the synced `wildCap`):
+
+|              | no coach | coach T1 | coach T2 |
+|--------------|----------|----------|----------|
+| wild/market  | 700      | 800      | 900      |
+| Draconic/Abyssal | 800  | 900      | 950      |
+| Mythical     | 900      | 950      | 1000     |
+| fusion       | 1000 flat | | |
+| **Primeval** | **1100 flat** | | |
+
+**The breeding ladder.** The per-generation potential step keys off the line's BEST parent
+(`BREED_STEP_BY_TIER`) — wild .10, prestige .11, Mythical .12, fusion .13, **Primeval .15**
+— and `breedPotentialV2` bases off `max(parents)` rather than their average, so one
+exceptional founder isn't diluted by a modest partner. Ratio the user specified: a wild
+line needs FOUR breeding generations to reach ~1.40 potential; a Primeval needs ONE.
+(Absolute caps scale with league cap, so the numbers rise at the top — the ORDER is the
+invariant.) `BREED_HEAD_START` is 0.30.
+
+**Prestige scarcity.** Licensed prestige stock is a *rare find*, not regular stock:
+`PRESTIGE_MARKET_CHANCE` 0.12 lets only 12% of would-be prestige rolls through (measured
+33% → 5.3% of offers), survivors carry a 1.5× premium, and the Market Scout —
+which deliberately BYPASSES rarity, making it the hunting tool — was trimmed to 12/20%.
+Licenses repriced 200/600 → **500/1200**.
+
+**Difficulty.** `RIVAL_BUDGET_STEP` .02→**.03**, `RIVAL_BAND_MIN` .60→**.65**, mid license
+costs +10–15%, and `trialChampionMult` is now per-rung: **1.30** Bronze→Gold (mid-game
+friction), **1.15** at Tamer Elite/Apex (summit relief — a flat 1.25 compounded with the
+climbing budget mult into a literal wall; the sim never once won the TE trial before this).
+
+**⚠️ Rivals do NOT follow the gen-1 cap ladder.** Their strength is
+`league cap × rivalBudgetMult(i)` as a TOTAL-stat budget per monster (no per-stat cap at
+all) — so raising a league cap raises its whole field automatically. Worth remembering
+before touching `LEAGUES`.
+
+**Other v0.89 fixes.** Resume-mid-cup no longer replays fought matches (`resumeOutcomes`
+rebuilds the win/loss strip from the committed `MatchOrders` — results are deterministic —
+and `doneThrough` is now actually maintained); the Lab shows a **fusion nudge** when you
+hold a fusable pair (the sim only started fusing once it earmarked the cost, so a player
+needs telling); `BREED_HEAD_START` carries 30% of parents' stats.
+
+**⚠️ The esbuild `overrides` fix is still NOT viable.** Forcing one esbuild repo-wide
+(0.28.1) does dedupe the tree — and then vite@5's `esbuild-transpile` fails the build with
+124 transform errors. Tested and reverted. The real fix is a vite 5 → 8 migration.
+
+---
+
+## Prior state (v0.851)
 
 **v0.851 — prestige overhaul + life-stage / career-span tuning.** A multi-step pass
 (v0.84 → v0.851) on top of the v0.81 tactics architecture. All of it is **golden-safe

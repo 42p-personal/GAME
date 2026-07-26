@@ -27,7 +27,7 @@ import {
   placementLabel, scoutFee, teamSizeForLeague, seatedRivalTeamIndex,
   trainerXpProgress, trainerBarnBonus, trainerStipend, effectiveBarnCap, barnFull as barnFullOf, BREEDING_BONUS,
   buyLicense, cancelTrial, nextLicenseCost, startTrial, trialStatus, trialChampionMult, RIVAL_PERSONALITY_GAMEPLAN,
-  fuse, fusionSpin, fusionRecipeFor, freezeToLab, thawFromLab, expandLab, labExpandCost, LAB_SLOTS_BASE, FUSION_COST,
+  fuse, fusionSpin, fusionRecipeFor, fusablePairIn, freezeToLab, thawFromLab, expandLab, labExpandCost, LAB_SLOTS_BASE, FUSION_COST,
   generateRival, newGame, offerMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, signUp,
   applyMarkToOpponent, buildEventPlayerTeam, finalizeCup, finalizeTrial, roundRobinSchedule,
   tournamentCalendarFor, upgradeBarn, visibleLeagueCount, weekOfMonth, yearOfWeek,
@@ -801,6 +801,21 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
           <div className="card loc">
             <div className="loc-h"><span>🧪 Lab · Freezer</span><span className="dim">{frozen.length}/{game.labSlots} slots</span></div>
             <div className="warnnote">⚠️ A fused monster's stats do not carry over — fusion always starts fresh. To preserve a dynasty through stats, use the <b>Breeding Ranch</b>.</div>
+            {/* Fusion nudge (v0.89): holding a valid pair is easy to miss, and the
+                cost is easy to never quite have spare — so say both out loud. */}
+            {(() => {
+              const pair = fusablePairIn(game)
+              if (!pair) return null
+              const short = FUSION_COST - game.gold
+              return (
+                <div className={short > 0 ? 'hint' : 'tipbanner'}>
+                  ⚗️ <b>{pair.a.name}</b> + <b>{pair.b.name}</b> can be fused into a <b>{pair.label}</b>
+                  {short > 0
+                    ? <> — save <b>{short}g</b> more to afford it (fusion costs {FUSION_COST}g). Both parents must still be alive.</>
+                    : <> — you can afford it now ({FUSION_COST}g). Fuse before either ages out.</>}
+                </div>
+              )
+            })()}
             <div className="dim" style={{ marginBottom: 6 }}>
               The freezer preserves a monster's genome — it is the <b>only</b> route to breeding
               and fusion. Freeze it while it is still competing: once a career ends it retires to
@@ -1696,6 +1711,31 @@ function MatchAnalysis({ fought, analyst }: { fought: { teamA: Monster[]; teamB:
   )
 }
 
+// Resume a part-fought tournament (v0.89 fix). Reloading mid-cup used to drop
+// the player back at Match 1: `matchIdx` reset to 0 while the committed
+// MatchOrders stayed in the save, so already-decided fights replayed one by one.
+// Orders are only written when a fight is committed and the engine is a pure
+// function of (monsters + orders), so every fought match reproduces exactly —
+// which lets us rebuild the win/loss strip and skip straight to the right match.
+function resumeOutcomes(g: GameState): ('win' | 'loss' | 'draw')[] {
+  const ac = g.activeCup
+  if (!ac) return []
+  const careers = ac.playerMonsterIds.map((id) => g.stable.find((c) => c.id === id)).filter((c): c is Career => !!c)
+  if (careers.length !== ac.playerMonsterIds.length) return []
+  const oppOrder = ac.kind === 'trial' ? [0]
+    : roundRobinSchedule(ac.rivalTeams.length + 1).filter(([i, j]) => i === 0 || j === 0).map(([i, j]) => (i === 0 ? j : i) - 1)
+  const out: ('win' | 'loss' | 'draw')[] = []
+  for (let k = 0; k < oppOrder.length; k++) {
+    const orders = ac.matchOrders[k]
+    if (!orders) break // first uncommitted match — that's where play resumes
+    const built = buildEventPlayerTeam(careers, orders)
+    const opp = applyMarkToOpponent(ac.rivalTeams[oppOrder[k]], orders.mark)
+    const w = simulateTeamBattle(built.team, opp, built.happiness, opp.map(() => 5)).winner
+    out.push(w === 'A' ? 'win' : w === 'B' ? 'loss' : 'draw')
+  }
+  return out
+}
+
 function RanchView({ game, setGame, onBattleScreen }: {
   game: GameState; setGame: Dispatch<SetStateAction<GameState>>; onBattleScreen: (v: boolean) => void
 }) {
@@ -1716,17 +1756,20 @@ function RanchView({ game, setGame, onBattleScreen }: {
   const [teamPick, setTeamPick] = useState<Record<string, string[]>>({})
   const [selectedTournamentId, setSelectedTournamentId] = useState<string | null>(null)
   const [battleOver, setBattleOver] = useState(false)
-  const [matchIdx, setMatchIdx] = useState(0)
+  // Computed ONCE on mount: the matches already fought in a part-played cup.
+  const [resumed] = useState(() => resumeOutcomes(game))
+  const [matchIdx, setMatchIdx] = useState(resumed.length)
   // Bracket hub sub-phase (v0.81): pre-cup lore -> next-match hub (scout the
   // opponent) -> pick tactics -> the fight (simulated live with those orders)
   // -> back to the hub -> ... -> finalize -> post-cup announcement.
-  const [battleSub, setBattleSub] = useState<'preamble' | 'bracket' | 'tactics' | 'fight' | 'announce'>('preamble')
+  // Resuming mid-cup skips the pre-cup lore and lands on the between-match hub.
+  const [battleSub, setBattleSub] = useState<'preamble' | 'bracket' | 'tactics' | 'fight' | 'announce'>(resumed.length > 0 ? 'bracket' : 'preamble')
   // In-progress per-fight orders (the pre-fight tactics screen edits this), the
   // built+simulated current match, and the player's running win/loss strip.
   const [matchTactics, setMatchTactics] = useState<MatchOrders | null>(null)
   const [liveMatch, setLiveMatch] = useState<{ teamA: Monster[]; teamB: Monster[]; result: BattleResult } | null>(null)
   const [lastFought, setLastFought] = useState<{ teamA: Monster[]; teamB: Monster[]; result: BattleResult } | null>(null)
-  const [fightOutcomes, setFightOutcomes] = useState<('win' | 'loss' | 'draw')[]>([])
+  const [fightOutcomes, setFightOutcomes] = useState<('win' | 'loss' | 'draw')[]>(resumed)
   // Which of the player's upcoming matches have been paid-scouted, and at
   // what tier — keyed by matchIdx, reset each new tournament event.
   const [scouted, setScouted] = useState<Record<number, 'basic' | 'full'>>({})
@@ -2033,7 +2076,11 @@ function RanchView({ game, setGame, onBattleScreen }: {
                 // (no intermediate "See Results" page). Otherwise on to the next
                 // match's hub.
                 if (matchIdx + 1 >= nPlayerMatches) { setGame((g) => (ac.kind === 'trial' ? finalizeTrial(g).game : finalizeCup(g))); setBattleSub('announce') }
-                else setBattleSub('bracket')
+                else {
+                  // Record progress in the save too, so `doneThrough` stays truthful.
+                  setGame((g) => (g.activeCup ? { ...g, activeCup: { ...g.activeCup, doneThrough: matchIdx } } : g))
+                  setBattleSub('bracket')
+                }
               }}>{matchIdx + 1 >= nPlayerMatches ? 'See Results →' : '→ Next Match'}</button>
             </div>
           )}

@@ -21,8 +21,12 @@ export type Area = 'town' | 'ranch'
 // checked it, so a Wood player with the gold walked straight into Draconics.
 // Now the rank gate is real and the price is correspondingly low: reaching the
 // league IS the cost, gold is just the receipt.
-export const SPECIAL_LICENSE_COST = 200 // Draconic + Abyssal
-export const ELITE_LICENSE_COST = 600 // Mythical
+// v0.89: repriced to the original design values (CLAUDE.md's Body Types section).
+// v0.77 cut these to 200/600 on the reasoning that "reaching the league IS the
+// cost" — but the sim showed rank arrives with gold to spare, so the gate was
+// free in practice and every licensed roster went straight to all-prestige.
+export const SPECIAL_LICENSE_COST = 500 // Draconic + Abyssal
+export const ELITE_LICENSE_COST = 1200 // Mythical
 export const SPECIAL_LICENSE_LEAGUE = 4 // Iron
 export const ELITE_LICENSE_LEAGUE = 7 // Platinum
 
@@ -904,7 +908,7 @@ export function fuse(g: GameState, aId: string, bId: string): GameState {
 // v0.87 mid-game pass: mid-tier licenses (Bronze→Gold) nudged up ~10–15% — that
 // band is exactly when cup gold starts flowing, so the rank-up should cost a
 // real cut of it. Still monotonic and never-doubling (validator-checked).
-export const LICENSE_COSTS = [0, 50, 120, 235, 410, 610, 860, 1000, 1300, 1650, 2100]
+export const LICENSE_COSTS = [0, 50, 120, 235, 410, 610, 860, 1000, 1300, 1650, 1900]
 export const nextLicenseCost = (g: GameState): number => LICENSE_COSTS[g.licenseIndex + 1] ?? Infinity
 // The one sync invariant of per-player licensing: every stable career trains
 // and is fee-assessed at the PLAYER's license tier.
@@ -2283,11 +2287,16 @@ export function finalizeCup(g: GameState): GameState {
 }
 
 export const TRIAL_CHAMPION_MULT = 1.25
-// v0.87 mid-game pass: mid-league champions (Bronze→Gold) punch a touch harder
-// so rank-ups stop being a surf-through. The TOP trials deliberately stay at the
-// base mult — the Masters/TE gates are already the hardest step on the ladder.
+// Champion multiplier by rung (v0.89):
+//   Bronze→Gold  1.30  — the v0.87 mid-game bump; rank-ups stop being a surf-through
+//   Wood→Iron / Platinum / Masters  1.25 — the baseline
+//   Tamer Elite / Tamers Apex  1.15 — the SUMMIT relief. The champion budget is
+//     `league cap × rivalBudgetMult × this`, and both of those already climb, so a
+//     flat 1.25 up here compounded into a wall: the 25y×6 sim never once won the
+//     Tamer Elite trial, leaving Tamers Apex unreachable by construction. The last
+//     two gates stay the hardest on the ladder, just no longer impossible.
 export const trialChampionMult = (leagueIndex: number): number =>
-  leagueIndex >= 3 && leagueIndex <= 6 ? 1.3 : TRIAL_CHAMPION_MULT
+  leagueIndex >= 9 ? 1.15 : leagueIndex >= 3 && leagueIndex <= 6 ? 1.3 : TRIAL_CHAMPION_MULT
 export const TRIAL_COOLDOWN_WEEKS = 3
 // Finalize a fought-out rank-up trial (v0.81): the single champion match, fought
 // with the player's chosen orders, then license-unlock / cooldown / injury. The
@@ -2374,6 +2383,21 @@ export function healAtInfirmary(g: GameState, id: string): GameState {
 
 
 export const fusionRoom = (g: GameState): boolean => !barnFull(g)
+
+// Does the player currently hold a fusable pair? (v0.89 UX nudge.) The balance
+// sim only ever started fusing once the bot EARMARKED the cost — with both
+// parents alive the 1000g is perpetually spent on something else, so a player
+// needs telling that the pair they're holding is a fusion waiting to happen.
+export function fusablePairIn(g: GameState): { a: Career; b: Career; label: string } | null {
+  const pool = [...g.stable.filter((c) => !c.retired), ...(g.labFrozen ?? [])]
+  for (let i = 0; i < pool.length; i++) {
+    for (let j = i + 1; j < pool.length; j++) {
+      const recipe = fusionRecipeFor(pool[i].species.body, pool[j].species.body)
+      if (recipe) return { a: pool[i], b: pool[j], label: recipe.classLabel }
+    }
+  }
+  return null
+}
 
 // Kept for the v0.77 save migration: rebuild a Career from a legacy stud record.
 export function careerFromFrozen(fr: Frozen, id: string): Career {

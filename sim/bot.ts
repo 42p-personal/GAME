@@ -50,6 +50,13 @@ const healthy = (c: Career) => c.hp >= maxHp(c.stats) * 0.6 && !c.retired
 // cost so the weekly shopping ladder can't graze gold below it forever — the
 // instrumented run showed the pair coexisting for 9 straight years while gold
 // never once reached the fuse threshold at the moment it was checked.
+// An EARNED licence is the single best purchase in the game (it lifts every cap
+// and unlocks the next league), so a rational player stops shopping and saves for
+// it. Without this the bot won Tamers Apex's trial and then spent the entrance fee
+// on more monsters, every run, for 35 straight years.
+function licenseEarmark(g: GameState): number {
+  return g.licenseEarned > g.licenseIndex ? nextLicenseCost(g) : 0
+}
 function fusionEarmark(g: GameState): number {
   const pool = [...(g.labFrozen ?? []), ...g.stable.filter((c) => !c.retired && isPrestigeBody(c.species.body))]
   const hasMyth = pool.some((c) => c.species.body === 'Mythical')
@@ -152,7 +159,7 @@ function planFor(c: Career, g: GameState, drills: DrillLite[]): WeekPlanEntry {
 
 // --- Shopping brain ----------------------------------------------------------
 function shop(g: GameState): GameState {
-  const spare = () => g.gold - RESERVE - fusionEarmark(g)
+  const spare = () => g.gold - RESERVE - fusionEarmark(g) - licenseEarmark(g)
   // League progression always comes first.
   if (g.licenseEarned > g.licenseIndex && g.gold >= nextLicenseCost(g)) g = buyLicense(g)
   // Prestige licenses are cheap gates to strictly better bodies.
@@ -200,7 +207,7 @@ function recruit(g: GameState): GameState {
   const offers = g.market.map((o, i) => {
     const m = generateMonster(o.seed, offerGenOpts(o))
     return { i, price: o.price, prestige: isPrestigeBody(m.species.body), total: total(m.stats) }
-  }).filter((o) => o.price <= Math.max(0, g.gold - RESERVE - fusionEarmark(g)) * 0.6)
+  }).filter((o) => o.price <= Math.max(0, g.gold - RESERVE - fusionEarmark(g) - licenseEarmark(g)) * 0.6)
   const pick = offers.sort((a, b) => Number(b.prestige) - Number(a.prestige) || b.total / b.price - a.total / a.price)[0]
   return pick ? buyMonster(g, pick.i) : g
 }
