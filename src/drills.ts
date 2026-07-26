@@ -71,21 +71,22 @@ export const EXTREME_DRILLS: Drill[] = [
 // huge spike bought with two sacrifices; diverse is a clean pair with nothing
 // given up. Locked behind the Diverse Training Manual (Ranch Shop, 800g).
 //
-// The pairs are hand-picked (user spec) rather than derived, so the set is a
-// deliberate mix: three are pairs no class is built around (STR+WIS, DEX+WIS,
-// INT+CHA) and three DO match a class — The Strongman's Act STR+CHA (Captain),
-// Knife-Thrower's Eye DEX+INT (Ranger), The Twelfth Round CON+WIS (Spellshield).
-// NOTE the spread is uneven by design: WIS appears in three drills and CON in
-// only one, so a CON-leaning build gets the least out of this tier. If that ever
-// wants fixing, moving ONE drill onto a CON pair rebalances it.
+// All six pairs are OFF-ARCHETYPE: of the 15 possible stat pairs, 9 are a
+// CLASSES primary/secondary pair and these are the other 6. So a diverse drill
+// never just hands you a class — it pushes a monster somewhere the class table
+// has no entry for, and whatever class emerges is a consequence of the whole
+// build rather than of picking the matching drill.
+// That complement set is also perfectly even on its own: every stat appears in
+// exactly TWO of the six, so no build is favoured. Both properties come from the
+// same choice — changing any single pair breaks one or both, so retune with care.
 export const DIVERSE_GAIN = 8
 
 export const DIVERSE_DRILLS: Drill[] = [
   { id: 'dpilgrim', name: "Pilgrim's Burden", kind: 'diverse', gains: { STR: DIVERSE_GAIN, WIS: DIVERSE_GAIN }, desc: 'Stone carried up the mountain and back — the body labours, the mind settles.' },
-  { id: 'dstrongman', name: "The Strongman's Act", kind: 'diverse', gains: { STR: DIVERSE_GAIN, CHA: DIVERSE_GAIN }, desc: 'Bend the bar, then sell it to the back row.' },
-  { id: 'dtwelfth', name: 'The Twelfth Round', kind: 'diverse', gains: { CON: DIVERSE_GAIN, WIS: DIVERSE_GAIN }, desc: 'Still standing when the legs should be gone, and still reading the fight.' },
+  { id: 'dcannon', name: 'The Cannon Crew', kind: 'diverse', gains: { STR: DIVERSE_GAIN, INT: DIVERSE_GAIN }, desc: 'Haul the barrel into place, then work out exactly where it points.' },
+  { id: 'dtrapeze', name: 'Trapeze Hours', kind: 'diverse', gains: { DEX: DIVERSE_GAIN, CON: DIVERSE_GAIN }, desc: 'Swing until the hands give out, then swing another hour.' },
   { id: 'dblindfold', name: 'Blindfold Forms', kind: 'diverse', gains: { DEX: DIVERSE_GAIN, WIS: DIVERSE_GAIN }, desc: 'Practised sightless, until reading the room stops needing eyes.' },
-  { id: 'dknife', name: "Knife-Thrower's Eye", kind: 'diverse', gains: { DEX: DIVERSE_GAIN, INT: DIVERSE_GAIN }, desc: 'Blades, angles, and a volunteer who trusts the arithmetic.' },
+  { id: 'dfall', name: 'Taking the Fall', kind: 'diverse', gains: { CON: DIVERSE_GAIN, CHA: DIVERSE_GAIN }, desc: 'Absorb the hit, sell the hit, get up grinning.' },
   { id: 'dpatter', name: "Illusionist's Patter", kind: 'diverse', gains: { INT: DIVERSE_GAIN, CHA: DIVERSE_GAIN }, desc: 'Sleight of hand and a running commentary nobody can quite follow.' },
 ]
 
