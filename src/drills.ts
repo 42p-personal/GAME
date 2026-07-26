@@ -71,20 +71,20 @@ export const EXTREME_DRILLS: Drill[] = [
 // huge spike bought with two sacrifices; diverse is a clean pair with nothing
 // given up. Locked behind the Diverse Training Manual (Ranch Shop, 800g).
 //
-// The six pairs are deliberately the ones NO class is built around. Of the 15
-// possible stat pairs, 9 are a CLASSES primary/secondary pair; these are the
-// other 6 — so a diverse drill never just hands you an archetype. It is genuine
-// cross-training that pushes a monster somewhere the class table doesn't go
-// (STR+WIS, DEX+CON, CHA+INT...), and any class you end up with is a
-// consequence of the whole build, not of picking the matching drill.
-// The complement set happens to be perfectly even: every stat appears in
-// exactly TWO of the six, so no stat is favoured.
+// Most of the six are pairs NO class is built around (STR+WIS, DEX+WIS,
+// CON+CHA, INT+CHA), so a diverse drill generally pushes a monster somewhere the
+// class table doesn't go rather than handing over an archetype. Two are
+// deliberate exceptions (user spec): Sapper's Craft CON+INT and The Twelfth
+// Round CON+WIS DO match Spellsword and Spellshield.
+// NOTE: because neither exception may use STR or DEX, those two stats now appear
+// in only ONE diverse drill each, while CON and WIS appear in three. The tier is
+// deliberately no longer evenly spread — STR/DEX builds get less from it.
 export const DIVERSE_GAIN = 8
 
 export const DIVERSE_DRILLS: Drill[] = [
   { id: 'dpilgrim', name: "Pilgrim's Burden", kind: 'diverse', gains: { STR: DIVERSE_GAIN, WIS: DIVERSE_GAIN }, desc: 'Stone carried up the mountain and back — the body labours, the mind settles.' },
-  { id: 'dsapper', name: "Sapper's Craft", kind: 'diverse', gains: { STR: DIVERSE_GAIN, INT: DIVERSE_GAIN }, desc: 'Dig under the wall, place the charge, know exactly where it falls.' },
-  { id: 'dtwelfth', name: 'The Twelfth Round', kind: 'diverse', gains: { DEX: DIVERSE_GAIN, CON: DIVERSE_GAIN }, desc: 'Still moving when the legs should be gone, and still hard to hit.' },
+  { id: 'dsapper', name: "Sapper's Craft", kind: 'diverse', gains: { CON: DIVERSE_GAIN, INT: DIVERSE_GAIN }, desc: 'Patient tunnelling under the wall, and the arithmetic to bring it down.' },
+  { id: 'dtwelfth', name: 'The Twelfth Round', kind: 'diverse', gains: { CON: DIVERSE_GAIN, WIS: DIVERSE_GAIN }, desc: 'Still standing when the legs should be gone, and still reading the fight.' },
   { id: 'dblindfold', name: 'Blindfold Forms', kind: 'diverse', gains: { DEX: DIVERSE_GAIN, WIS: DIVERSE_GAIN }, desc: 'Practised sightless, until reading the room stops needing eyes.' },
   { id: 'dcrowd', name: 'Crowd Wrestling', kind: 'diverse', gains: { CON: DIVERSE_GAIN, CHA: DIVERSE_GAIN }, desc: 'Take the hit, sell the hit, hear the roar. Showmanship with bruises.' },
   { id: 'dpatter', name: "Illusionist's Patter", kind: 'diverse', gains: { INT: DIVERSE_GAIN, CHA: DIVERSE_GAIN }, desc: 'Sleight of hand and a running commentary nobody can quite follow.' },
