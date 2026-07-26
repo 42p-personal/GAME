@@ -426,7 +426,7 @@ export const FOODS: FoodDef[] = [
   { id: 'prime cut', name: 'Prime Cut', price: 75, tier: 'training', icon: '🥩', desc: 'STR & CON training +30% · −1 happiness · −15 stamina.', boostStats: ['STR', 'CON'], boostMult: 0.3, happiness: -1, stamina: -15 },
   { id: 'scholars tea', name: "Scholar's Tea", price: 75, tier: 'training', icon: '🌿', desc: 'WIS & INT training +30% · −1 happiness · −15 stamina.', boostStats: ['WIS', 'INT'], boostMult: 0.3, happiness: -1, stamina: -15 },
   { id: 'sprinters mix', name: "Sprinter's Mix", price: 75, tier: 'training', icon: '⚡', desc: 'DEX & CHA training +30% · −1 happiness · −15 stamina.', boostStats: ['DEX', 'CHA'], boostMult: 0.3, happiness: -1, stamina: -15 },
-  { id: 'vigor melon', name: 'Vigor Melon', price: 200, tier: 'premium', icon: '🍈', desc: '+30 stamina.', stamina: 30 },
+  { id: 'vigor melon', name: 'Vigor Melon', price: 75, tier: 'premium', icon: '🍈', desc: '+30 stamina.', stamina: 30 },
   { id: 'bliss berry', name: 'Bliss Berry', price: 250, tier: 'premium', icon: '🫐', desc: '+3 happiness.', happiness: 3 },
   { id: 'golden truffle', name: 'Golden Truffle', price: 500, tier: 'premium', icon: '🟡', desc: 'Win your next cup → +50% gold & exp. Nothing if you lose.', rewardMult: 1.5 },
 ]
