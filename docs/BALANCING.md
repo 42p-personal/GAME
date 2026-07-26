@@ -492,3 +492,39 @@ Apex → Platinum. Fusion firing in every seed is the clear win.
 same run, so this is not a clean A/B — the peak movement could be either. The
 headline (no runaway) is robust because it is cap-bound, but if the Apex → Platinum
 slip matters, isolate it by running the new bot against the old drill values.
+
+## v0.90 — premium food reprice (Vigor Melon + Bliss Berry → 90g)
+
+**Change.** Vigor Melon 200 → **90g**, Bliss Berry 250 → **90g**. The melon was the
+only stamina food in the game and cost more than a top-tier drill's entire stamina
+budget, so it was never worth buying; the berry's +3 happiness was priced like a
+luxury for an effect that only skews a roll. Both now sit just above the 75g
+training foods, making a feeding week a real three-way call: train harder, recover,
+or lift mood.
+
+**Instrument.** The bot's feeding brain was rewritten to actually use them, and the
+FIRST policy was badly wrong in an instructive way — "melon whenever below the
+full-effectiveness band (<=70)" meant ~90g × 6 monsters × nearly every week:
+
+| | melon-every-week | disciplined (<=50 only) |
+|---|---|---|
+| Peaks | Masters ×2, TE ×2, Platinum ×1, **Gold ×1** | TE ×3, Masters ×2, **Apex ×1** |
+| Best stat | 750–1416 | **1168–1652** |
+| Breeds | 0–2 | 3–4 |
+| Fusion fired | **1 of 6** | 5 of 6 |
+| Coach bought | 0–1 | 1–2 |
+
+Weekly food drained the capital that the Coach, the manuals, breeding and fusion
+all need — one seed stalled at **Gold on generation 1**. Paying 90g to escape the
+−5% band recovers ~0.8 stat points; paying it to escape the −50% cliff doubles the
+week. The fixed policy buys a melon only at `staminaMalus < 0.95` (stamina ≤50),
+a berry only below 4 happiness, and holds an 800–1200g floor so capital wins.
+
+**Result (25y × 6, best run to date):** peaks TE ×3 / Masters ×2 / **Tamers Apex ×1**
+(seed 2, year 15, best stat **1652**), fusion in 5 of 6 seeds, 3–4 breeds each,
+money still fully invested (236–1620g).
+
+⚠️ **Design signal, not just a bot bug.** At 90g premium food is now cheap enough
+that a player *can* casually overspend into a wrecked economy — the failure is
+invisible (you feel well-fed while your capital never compounds). That is either a
+genuinely interesting trap or an unfair one; worth a UI nudge if playtesters fall in.

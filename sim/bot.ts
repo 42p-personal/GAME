@@ -37,8 +37,8 @@ import {
   buyComfortItem, COMFORT_ITEMS, expandLab, labExpandCost, healAtInfirmary, infirmaryFee,
   fuse, fusionRecipeFor, FUSION_COST, useTonic, buyPantryContract, offerGenOpts,
 } from '../src/town'
-import { Career, careerMonster, careerSpanYears, drillStamina, stageInfo, statCapFor, statTrainingBonus } from '../src/game'
-import { LEAGUES, MatchOrders, Monster, STATS, Stat, Tactics, Food, isPrestigeBody } from '../src/core'
+import { Career, MAX_STAMINA, careerMonster, careerSpanYears, drillStamina, stageInfo, staminaMalus, statCapFor, statTrainingBonus } from '../src/game'
+import { LEAGUES, MatchOrders, Monster, STATS, Stat, Tactics, Food, MAX_HAPPINESS, isPrestigeBody } from '../src/core'
 import { maxHp, generateMonster } from '../src/monster'
 import { SPECIES } from '../src/species'
 
@@ -135,12 +135,25 @@ const cheapRation = (g: GameState): Food => (Object.entries(g.foodMarket)
 const TRAIN_FOOD: Record<string, Food> = { STR: 'prime cut', CON: 'prime cut', WIS: 'scholars tea', INT: 'scholars tea', DEX: 'sprinters mix', CHA: 'sprinters mix' }
 
 function planFor(c: Career, g: GameState, drills: DrillLite[]): WeekPlanEntry {
-  const spare = g.gold - RESERVE
+  const spare = g.gold - RESERVE - fusionEarmark(g) - licenseEarmark(g)
+  // --- Feeding brain (v0.90). The premium upkeep foods were repriced to 90g, so
+  // they are routine tools now, not emergencies. Food is eaten BEFORE the drill,
+  // so it sets the stamina the activity starts from. Priority:
+  //   1. Vigor Melon only for the fatigue bands that genuinely cost something:
+  //      <=50 (-10%) and especially <=30 (HALVED). Buying out of the -5% band is
+  //      a trap — 90g to recover ~0.8 stat points. Measured: a melon-every-week
+  //      policy cost 2-5 breeds, 5 of 6 fusions and most Coach purchases per run,
+  //      because weekly food drains the capital the big upgrades need.
+  //   2. Bliss Berry only when happiness is genuinely low — it PERSISTS, so it
+  //      lifts the happiness-weighted roll on every future week, but it competes
+  //      with the same capital, so the bar is high.
+  //   3. Training food (+30% on the drilled pair) when its -15 stamina can be
+  //      paid without dropping out of the top band.
+  //   4. Otherwise the cheapest ration.
   let food: Food = cheapRation(g)
   let stamina = c.stamina
-  // A fatigued week is rescued with a Vigor Melon (+30 stamina, fed BEFORE the
-  // drill so it genuinely lifts the monster out of the fatigue bracket).
-  if (stamina < 20 && spare > 1200) { food = 'vigor melon'; stamina += 30 }
+  if (spare > 800 && staminaMalus(stamina) < 0.95) { food = 'vigor melon'; stamina = Math.min(MAX_STAMINA, stamina + 30) }
+  else if (spare > 1200 && c.happiness <= MAX_HAPPINESS - 6) food = 'bliss berry'
   if (c.hp < maxHp(c.stats) * 0.5 || stamina < 12) return { activity: 'rest', food }
   const targets = buildStats(c)
   if (!targets.length) return { activity: 'rest', food }
@@ -163,9 +176,13 @@ function planFor(c: Career, g: GameState, drills: DrillLite[]): WeekPlanEntry {
   const scored = affordable.map((d) => ({ d, u: useful(d) })).filter((x) => x.u > 0)
     .sort((a, b) => b.u - a.u || drillStamina(a.d.kind) - drillStamina(b.d.kind))
   const drill = scored[0]?.d ?? drills.find((d) => d.kind === 'basic' && (d.gains[stat] ?? 0) > 0)
-  // Training food doubles down on the drilled stat when we can afford the
-  // stamina (−15) and the gold.
-  if (drill && food !== 'vigor melon' && stamina >= 50 && spare > 700) food = TRAIN_FOOD[stat]
+  // Training food doubles down on the drilled stat — but only if the -15 stamina
+  // still leaves enough for the drill AND keeps us in the full-effectiveness
+  // band. A +30% boost is worthless if it costs a 10% fatigue penalty.
+  if (drill && food === cheapRation(g) && spare > 800
+    && staminaMalus(stamina - 15) === 1 && stamina - 15 >= drillStamina(drill.kind)) {
+    food = TRAIN_FOOD[stat]
+  }
   return { activity: drill?.id ?? 'rest', food }
 }
 
