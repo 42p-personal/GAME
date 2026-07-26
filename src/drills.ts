@@ -71,22 +71,21 @@ export const EXTREME_DRILLS: Drill[] = [
 // huge spike bought with two sacrifices; diverse is a clean pair with nothing
 // given up. Locked behind the Diverse Training Manual (Ranch Shop, 800g).
 //
-// Most of the six are pairs NO class is built around (STR+WIS, DEX+WIS,
-// CON+CHA, INT+CHA), so a diverse drill generally pushes a monster somewhere the
-// class table doesn't go rather than handing over an archetype. Two are
-// deliberate exceptions (user spec): Sapper's Craft CON+INT and The Twelfth
-// Round CON+WIS DO match Spellsword and Spellshield.
-// NOTE: because neither exception may use STR or DEX, those two stats now appear
-// in only ONE diverse drill each, while CON and WIS appear in three. The tier is
-// deliberately no longer evenly spread — STR/DEX builds get less from it.
+// The pairs are hand-picked (user spec) rather than derived, so the set is a
+// deliberate mix: three are pairs no class is built around (STR+WIS, DEX+WIS,
+// INT+CHA) and three DO match a class — The Strongman's Act STR+CHA (Captain),
+// Knife-Thrower's Eye DEX+INT (Ranger), The Twelfth Round CON+WIS (Spellshield).
+// NOTE the spread is uneven by design: WIS appears in three drills and CON in
+// only one, so a CON-leaning build gets the least out of this tier. If that ever
+// wants fixing, moving ONE drill onto a CON pair rebalances it.
 export const DIVERSE_GAIN = 8
 
 export const DIVERSE_DRILLS: Drill[] = [
   { id: 'dpilgrim', name: "Pilgrim's Burden", kind: 'diverse', gains: { STR: DIVERSE_GAIN, WIS: DIVERSE_GAIN }, desc: 'Stone carried up the mountain and back — the body labours, the mind settles.' },
-  { id: 'dsapper', name: "Sapper's Craft", kind: 'diverse', gains: { CON: DIVERSE_GAIN, INT: DIVERSE_GAIN }, desc: 'Patient tunnelling under the wall, and the arithmetic to bring it down.' },
+  { id: 'dstrongman', name: "The Strongman's Act", kind: 'diverse', gains: { STR: DIVERSE_GAIN, CHA: DIVERSE_GAIN }, desc: 'Bend the bar, then sell it to the back row.' },
   { id: 'dtwelfth', name: 'The Twelfth Round', kind: 'diverse', gains: { CON: DIVERSE_GAIN, WIS: DIVERSE_GAIN }, desc: 'Still standing when the legs should be gone, and still reading the fight.' },
   { id: 'dblindfold', name: 'Blindfold Forms', kind: 'diverse', gains: { DEX: DIVERSE_GAIN, WIS: DIVERSE_GAIN }, desc: 'Practised sightless, until reading the room stops needing eyes.' },
-  { id: 'dcrowd', name: 'Crowd Wrestling', kind: 'diverse', gains: { CON: DIVERSE_GAIN, CHA: DIVERSE_GAIN }, desc: 'Take the hit, sell the hit, hear the roar. Showmanship with bruises.' },
+  { id: 'dknife', name: "Knife-Thrower's Eye", kind: 'diverse', gains: { DEX: DIVERSE_GAIN, INT: DIVERSE_GAIN }, desc: 'Blades, angles, and a volunteer who trusts the arithmetic.' },
   { id: 'dpatter', name: "Illusionist's Patter", kind: 'diverse', gains: { INT: DIVERSE_GAIN, CHA: DIVERSE_GAIN }, desc: 'Sleight of hand and a running commentary nobody can quite follow.' },
 ]
 
