@@ -83,8 +83,8 @@ export const DIVERSE_GAIN = 8
 
 export const DIVERSE_DRILLS: Drill[] = [
   { id: 'dpilgrim', name: "Pilgrim's Burden", kind: 'diverse', gains: { STR: DIVERSE_GAIN, WIS: DIVERSE_GAIN }, desc: 'Stone carried up the mountain and back — the body labours, the mind settles.' },
-  { id: 'dsiege', name: 'Siege Engineering', kind: 'diverse', gains: { STR: DIVERSE_GAIN, INT: DIVERSE_GAIN }, desc: 'Levers, counterweights and load-bearing maths. Brute force, calculated.' },
-  { id: 'dsparring', name: 'Tireless Sparring', kind: 'diverse', gains: { DEX: DIVERSE_GAIN, CON: DIVERSE_GAIN }, desc: 'Round after round after round — light on the feet, hard to put down.' },
+  { id: 'dsapper', name: "Sapper's Craft", kind: 'diverse', gains: { STR: DIVERSE_GAIN, INT: DIVERSE_GAIN }, desc: 'Dig under the wall, place the charge, know exactly where it falls.' },
+  { id: 'dtwelfth', name: 'The Twelfth Round', kind: 'diverse', gains: { DEX: DIVERSE_GAIN, CON: DIVERSE_GAIN }, desc: 'Still moving when the legs should be gone, and still hard to hit.' },
   { id: 'dblindfold', name: 'Blindfold Forms', kind: 'diverse', gains: { DEX: DIVERSE_GAIN, WIS: DIVERSE_GAIN }, desc: 'Practised sightless, until reading the room stops needing eyes.' },
   { id: 'dcrowd', name: 'Crowd Wrestling', kind: 'diverse', gains: { CON: DIVERSE_GAIN, CHA: DIVERSE_GAIN }, desc: 'Take the hit, sell the hit, hear the roar. Showmanship with bruises.' },
   { id: 'dpatter', name: "Illusionist's Patter", kind: 'diverse', gains: { INT: DIVERSE_GAIN, CHA: DIVERSE_GAIN }, desc: 'Sleight of hand and a running commentary nobody can quite follow.' },
