@@ -25,11 +25,12 @@ import {
   WeekPlanEntry, advanceWeek, barnCost, buyPantryContract, buyGrandLarder, buyEliteLicense, buyMonster, foodDiscountFor, resolveEvent,
   buySpecialLicense, cancelSignUp, cupLore, eligibleForTournament, fusionRoom, gameplanForRivalTeam, generateRivalTeamsForTournament, goto, healAtInfirmary, infirmaryFee, leagueIndexOf, monthOfWeek,
   placementLabel, scoutFee, teamSizeForLeague, seatedRivalTeamIndex,
-  trainerXpProgress, trainerBarnBonus, trainerStipend, effectiveBarnCap, barnFull as barnFullOf, BREEDING_BONUS,
+  trainerXpProgress, trainerBarnBonus, trainerLevel, trainerStipend, effectiveBarnCap, barnFull as barnFullOf, BREEDING_BONUS,
   buyLicense, cancelTrial, nextLicenseCost, startTrial, trialStatus, trialChampionMult, RIVAL_PERSONALITY_GAMEPLAN,
   fuse, fusionSpin, fusionRecipeFor, fusablePairIn, freezeToLab, thawFromLab, expandLab, labExpandCost, LAB_SLOTS_BASE, FUSION_COST,
   generateRival, newGame, offerMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, signUp,
-  applyMarkToOpponent, buildEventPlayerTeam, finalizeCup, finalizeTrial, roundRobinSchedule,
+  applyMarkToOpponent, buildEventPlayerTeam, finalizeCup, finalizeRite, finalizeTrial, roundRobinSchedule,
+  riteStatus, riteEligible, startRite, cancelRite, riteChampionMult, SIGNATURE_RITE_LEVEL, RITE_COOLDOWN_WEEKS,
   tournamentCalendarFor, upgradeBarn, visibleLeagueCount, weekOfMonth, yearOfWeek,
 } from './town'
 import { AREA_BACKGROUND, AreaArtKey, TOWN_AREA_ART } from './areaArt'
@@ -1742,7 +1743,7 @@ function resumeOutcomes(g: GameState): ('win' | 'loss' | 'draw')[] {
   if (!ac) return []
   const careers = ac.playerMonsterIds.map((id) => g.stable.find((c) => c.id === id)).filter((c): c is Career => !!c)
   if (careers.length !== ac.playerMonsterIds.length) return []
-  const oppOrder = ac.kind === 'trial' ? [0]
+  const oppOrder = ac.kind === 'trial' || ac.kind === 'rite' ? [0]
     : roundRobinSchedule(ac.rivalTeams.length + 1).filter(([i, j]) => i === 0 || j === 0).map(([i, j]) => (i === 0 ? j : i) - 1)
   const out: ('win' | 'loss' | 'draw')[] = []
   for (let k = 0; k < oppOrder.length; k++) {
@@ -1888,7 +1889,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
   // moment its orders are committed, so tactics genuinely decide the outcome.
   if (phase === 'battle' && game.activeCup) {
     const ac = game.activeCup
-    const isTrial = ac.kind === 'trial'
+    const isTrial = ac.kind === 'trial' || ac.kind === 'rite'
     const playerCareers = ac.playerMonsterIds.map((id) => game.stable.find((c) => c.id === id)).filter((c): c is Career => !!c)
     const teamSize = playerCareers.length
     const tourney = isTrial ? null : tournamentCalendarFor(game.seed, yearOfWeek(ac.week)).find((t) => t.id === ac.tournamentId)
@@ -1957,7 +1958,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
             {progress}
             {bracketCard}
             <div className="carerow" style={{ justifyContent: 'center' }}>
-              <button className="enter" onClick={() => { setGame((g) => (ac.kind === 'trial' ? finalizeTrial(g).game : finalizeCup(g))); setBattleSub('announce') }}>See Results →</button>
+              <button className="enter" onClick={() => { setGame((g) => (ac.kind === 'rite' ? finalizeRite(g).game : ac.kind === 'trial' ? finalizeTrial(g).game : finalizeCup(g))); setBattleSub('announce') }}>See Results →</button>
             </div>
           </>
         )
@@ -2095,7 +2096,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
                 // Last fight → finalize and jump STRAIGHT to the results screen
                 // (no intermediate "See Results" page). Otherwise on to the next
                 // match's hub.
-                if (matchIdx + 1 >= nPlayerMatches) { setGame((g) => (ac.kind === 'trial' ? finalizeTrial(g).game : finalizeCup(g))); setBattleSub('announce') }
+                if (matchIdx + 1 >= nPlayerMatches) { setGame((g) => (ac.kind === 'rite' ? finalizeRite(g).game : ac.kind === 'trial' ? finalizeTrial(g).game : finalizeCup(g))); setBattleSub('announce') }
                 else {
                   // Record progress in the save too, so `doneThrough` stays truthful.
                   setGame((g) => (g.activeCup ? { ...g, activeCup: { ...g.activeCup, doneThrough: matchIdx } } : g))
@@ -2557,6 +2558,47 @@ function RanchView({ game, setGame, onBattleScreen }: {
                       title={game.pendingTournament ? 'Cancel your cup sign-up first — one arena event per week' : undefined}
                       onClick={() => { setGame((g) => startTrial(g, trialPick)); setTrialPick([]) }}>
                       ⚔ Challenge ({trialPick.length}/{size} picked)
+                    </button>
+                  </div>
+                )
+              })()}
+              {/* The Signature Rite (v0.91): the ONLY source of a signature skill.
+                  Built like the rank-up trial — on-demand, takes the week, a loss
+                  costs only a cooldown — but always 1v1, and gated on TRAINER
+                  level rather than on the monster, so it stays invisible for a
+                  first season. Once per monster; the panel hides entirely for a
+                  monster that already carries one. */}
+              {(() => {
+                if (game.pendingRite) return (
+                  <div className="trial-panel">
+                    <b>★ Rite set:</b> {game.stable.find((c) => c.id === game.pendingRite!.monsterId)?.name} faces the Challenger — resolves on Advance Week.
+                    <button className="ghost" onClick={() => setGame((g) => cancelRite(g))}>Cancel</button>
+                  </div>
+                )
+                if (selectedCareer.signature) return null // nothing left to prove
+                if (trainerLevel(game) < SIGNATURE_RITE_LEVEL) return null // stay quiet in the early game
+                const gate = riteStatus(game)
+                if (!gate.ok) return <div className="hint" style={{ marginTop: 10 }}>★ Signature Rite: {gate.reason}</div>
+                if (!riteEligible(game).some((c) => c.id === selectedCareer.id)) return null
+                const top = [...STATS].sort((x, y) => selectedCareer.stats[y] - selectedCareer.stats[x])[0]
+                const foeTarget = LEAGUES[game.licenseIndex].cap * rivalBudgetMult(game.licenseIndex) * riteChampionMult(game.licenseIndex)
+                const mine = STATS.reduce((t, k) => t + selectedCareer.stats[k], 0)
+                const ratio = mine / foeTarget
+                return (
+                  <div className="trial-panel">
+                    <div className="section-title">★ The Signature Rite — {selectedCareer.name} alone</div>
+                    <div className="dim">
+                      A 1v1 against a challenger built for this league. Win and {selectedCareer.name} forges a <b>signature skill</b> themed on its best stat ({top}) — its own move, which its children inherit dormant and awaken by matching {selectedCareer.name}'s {top}. Takes the week; a loss costs {RITE_COOLDOWN_WEEKS} weeks and nothing more.
+                    </div>
+                    <div className={ratio >= 0.85 ? 'up' : ratio >= 0.6 ? 'dim' : 'neg'} style={{ fontSize: 12 }}>
+                      {ratio >= 0.85 ? `⚔ ${selectedCareer.name} (${mine} total) matches the challenger (~${Math.round(foeTarget)}) — a real shot.`
+                        : ratio >= 0.6 ? `⚠ ${selectedCareer.name} (${mine} total) is the underdog vs ~${Math.round(foeTarget)}.`
+                          : `🛑 ${selectedCareer.name} (${mine} total) is severely outmatched vs ~${Math.round(foeTarget)}.`}
+                    </div>
+                    <button className="enter" style={{ marginTop: 6 }} disabled={!!game.pendingTournament || !!game.pendingTrial}
+                      title={game.pendingTournament || game.pendingTrial ? 'One arena event per week — cancel the other first' : undefined}
+                      onClick={() => setGame((g) => startRite(g, selectedCareer.id))}>
+                      ★ Attempt the Rite
                     </button>
                   </div>
                 )
@@ -3036,6 +3078,9 @@ function sanitizeAndMigrate(raw: string): GameState | null {
     if (typeof g.extremeUnlocked !== 'boolean') g.extremeUnlocked = false
     if (typeof g.diverseUnlocked !== 'boolean') g.diverseUnlocked = false
     if (typeof g.battleAnalyst !== 'boolean') g.battleAnalyst = false
+    // v0.91 Signature Rite — absent on every pre-v0.91 save
+    if (g.pendingRite === undefined) g.pendingRite = null
+    if (typeof g.riteCooldownUntil !== 'number') g.riteCooldownUntil = 0
     // v0.7 Lab freezer (separate from the stud farm)
     if (!Array.isArray(g.labFrozen)) g.labFrozen = []
     if (typeof g.labSlots !== 'number') g.labSlots = LAB_SLOTS_BASE

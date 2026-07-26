@@ -203,7 +203,7 @@ export interface MatchOrders {
 // each, and the event is finalized (rewards/injury/standings) only when the last
 // player match ends. Serializable so an in-flight event survives save/reload.
 export interface ActiveCup {
-  kind: 'cup' | 'trial'
+  kind: 'cup' | 'trial' | 'rite' // 'rite' = the Signature Rite (v0.91), a 1v1 on-demand challenge
   tournamentId: string
   week: number // the tournament's week (advanceWeek increments g.week, so this is stored for calendar/reward/injury lookups)
   playerMonsterIds: string[] // the fielded team, fixed for the event
