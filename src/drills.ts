@@ -65,25 +65,29 @@ export const EXTREME_DRILLS: Drill[] = [
   { id: 'xcha', name: 'Grand Spectacle', kind: 'extreme', gains: { CHA: EXTREME_GAIN, WIS: -EXTREME_COST, INT: -EXTREME_COST }, desc: 'All showmanship; depth and study abandoned.' },
 ]
 
-// Diverse drills (v0.90, user spec): raise TWO stats by +8 each with NO malus,
-// for 35 stamina — the exact mirror of an EXTREME drill (+28 / -6 / -6 = +16 at
-// 35 stamina). Neither tier is stronger; you are choosing a SHAPE. Extreme is
-// one huge spike bought with two sacrifices; diverse is a clean pair with
-// nothing given up. Locked behind the Diverse Training Manual (Ranch Shop 800g).
+// Diverse drills (v0.90): raise TWO stats by +8 each with NO malus, for 35
+// stamina — the exact mirror of an EXTREME drill (+24 / -4 / -4 = +16 at 35
+// stamina). Neither tier is stronger; you are choosing a SHAPE. Extreme is one
+// huge spike bought with two sacrifices; diverse is a clean pair with nothing
+// given up. Locked behind the Diverse Training Manual (Ranch Shop, 800g).
 //
-// SIX drills, chosen so every stat appears in exactly TWO of them — the pairs
-// form a single closed loop STR-CON-WIS-INT-DEX-CHA-STR, so no stat is favoured
-// and no pair is redundant. Each is still a real CLASS pair (classes derive from
-// a monster's top two stats), so a diverse drill steers class identity directly.
+// The six pairs are deliberately the ones NO class is built around. Of the 15
+// possible stat pairs, 9 are a CLASSES primary/secondary pair; these are the
+// other 6 — so a diverse drill never just hands you an archetype. It is genuine
+// cross-training that pushes a monster somewhere the class table doesn't go
+// (STR+WIS, DEX+CON, CHA+INT...), and any class you end up with is a
+// consequence of the whole build, not of picking the matching drill.
+// The complement set happens to be perfectly even: every stat appears in
+// exactly TWO of the six, so no stat is favoured.
 export const DIVERSE_GAIN = 8
 
 export const DIVERSE_DRILLS: Drill[] = [
-  { id: 'dforge', name: 'Forge Circuit', kind: 'diverse', gains: { STR: DIVERSE_GAIN, CON: DIVERSE_GAIN }, desc: 'Hammer and anvil work — power and toughness together. (Tank / Warrior)' },
-  { id: 'dwarding', name: 'Warding Meditation', kind: 'diverse', gains: { CON: DIVERSE_GAIN, WIS: DIVERSE_GAIN }, desc: 'Stillness that turns a blade. (Spellshield)' },
-  { id: 'dvigil', name: "Scholar's Vigil", kind: 'diverse', gains: { WIS: DIVERSE_GAIN, INT: DIVERSE_GAIN }, desc: 'Long study by candlelight. (Sage / Wizard)' },
-  { id: 'dmarksman', name: 'Marksman Forms', kind: 'diverse', gains: { INT: DIVERSE_GAIN, DEX: DIVERSE_GAIN }, desc: 'Range, wind, and a steady hand. (Ranger)' },
-  { id: 'dstage', name: 'Stage Combat', kind: 'diverse', gains: { DEX: DIVERSE_GAIN, CHA: DIVERSE_GAIN }, desc: 'Choreography that plays to the crowd. (Bard)' },
-  { id: 'dcommand', name: 'Command Drills', kind: 'diverse', gains: { CHA: DIVERSE_GAIN, STR: DIVERSE_GAIN }, desc: 'Lead from the front, loudly. (Captain)' },
+  { id: 'dpilgrim', name: "Pilgrim's Burden", kind: 'diverse', gains: { STR: DIVERSE_GAIN, WIS: DIVERSE_GAIN }, desc: 'Stone carried up the mountain and back — the body labours, the mind settles.' },
+  { id: 'dsiege', name: 'Siege Engineering', kind: 'diverse', gains: { STR: DIVERSE_GAIN, INT: DIVERSE_GAIN }, desc: 'Levers, counterweights and load-bearing maths. Brute force, calculated.' },
+  { id: 'dsparring', name: 'Tireless Sparring', kind: 'diverse', gains: { DEX: DIVERSE_GAIN, CON: DIVERSE_GAIN }, desc: 'Round after round after round — light on the feet, hard to put down.' },
+  { id: 'dblindfold', name: 'Blindfold Forms', kind: 'diverse', gains: { DEX: DIVERSE_GAIN, WIS: DIVERSE_GAIN }, desc: 'Practised sightless, until reading the room stops needing eyes.' },
+  { id: 'dcrowd', name: 'Crowd Wrestling', kind: 'diverse', gains: { CON: DIVERSE_GAIN, CHA: DIVERSE_GAIN }, desc: 'Take the hit, sell the hit, hear the roar. Showmanship with bruises.' },
+  { id: 'dpatter', name: "Illusionist's Patter", kind: 'diverse', gains: { INT: DIVERSE_GAIN, CHA: DIVERSE_GAIN }, desc: 'Sleight of hand and a running commentary nobody can quite follow.' },
 ]
 
 export const ALL_DRILLS: Drill[] = [...BASIC_DRILLS, ...INTENSIVE_DRILLS, ...EXTREME_DRILLS, ...DIVERSE_DRILLS]
