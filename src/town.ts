@@ -12,6 +12,7 @@ import {
   WILD_GEN1_CAP, careerMonster, careerSpanYears, forageFeed, newCareer, rollMarket, statCapFor, trainingProfileFor,
 } from './game'
 import { ALL_DRILLS } from './drills'
+import { SIGNATURE_LEAGUES, Signature, forgeSignature, inheritSignature } from './signature'
 import { learnedMoves } from './monster'
 
 export type Area = 'town' | 'ranch'
@@ -775,10 +776,19 @@ export function breed(g: GameState, aId: string, bId: string): GameState {
   const bProf = b.species.trainingProfile?.major
   baby.heritageStat = bProf ?? [...STATS].sort((x, y) => b.stats[y] - b.stats[x])[0]
   baby.generation = generation
+  // A signature passes down DORMANT (user spec): reduced power, rider stripped,
+  // and it awakens only when the child trains the relevant stat up to whatever
+  // its ancestor had on the day the move was forged. If BOTH parents hold one
+  // the higher-tier marquee wins — the line carries its proudest day forward,
+  // not merely the most recent. See signature.ts and the awakening in applyWeek.
+  const heirloom = [a.signature, b.signature].filter((s): s is Signature => !!s)
+    .sort((x, y) => y.tier - x.tier)[0]
+  if (heirloom) baby.signature = inheritSignature(heirloom)
   baby.comfortWeeks = comfortWeeksFor(g)
   baby.wildCap = wildCapFor(g)
   const stars = '★'.repeat(Math.max(0, Math.round((potential - 1) / 0.05)))
   baby.log = [`${baby.name} is born — Gen ${generation} ${stars}, child of ${a.name} & ${b.name} (potential ×${potential.toFixed(2)}, heritage: ${baby.heritageStat}).`]
+  if (baby.signature) baby.log.push(`  ☆ Inherits ${baby.signature.name}, dormant — ${baby.signature.forgedBy} forged it winning ${baby.signature.eventName}. Train ${baby.signature.stat} to ${baby.signature.awakenStat} to awaken it.`)
   return {
     ...g,
     gold: g.gold - BREED_COST,
@@ -2267,6 +2277,31 @@ export function finalizeCup(g: GameState): GameState {
     return nc
   })
   updatedCareers.forEach((nc, k) => { stable[idxs[k]] = nc })
+
+  // SIGNATURE SKILL (v0.91) — winning an annual marquee forges one. This is the
+  // game's ONLY source; see signature.ts for why it hangs off the marquee and
+  // nothing else. One per event, to the fielded monster with the highest total
+  // stats (deterministic, and it reads as the team's star); themed on that
+  // monster's own best stat, tiered by the marquee's league. A monster that
+  // already holds a signature keeps it rather than overwriting a deeper legacy.
+  const marqueeTier = playerPlacement === 1 ? SIGNATURE_LEAGUES.indexOf(t.league) : -1
+  if (marqueeTier >= 0 && PRESTIGE_EVENTS.some((p) => p.name === t.name)) {
+    const eligible = updatedCareers.filter((c) => !c.signature)
+    if (eligible.length > 0) {
+      const star = eligible.reduce((best, c) =>
+        STATS.reduce((s, k) => s + c.stats[k], 0) > STATS.reduce((s, k) => s + best.stats[k], 0) ? c : best)
+      const topStat = [...STATS].sort((x, y) => star.stats[y] - star.stats[x])[0]
+      star.signature = forgeSignature({
+        stat: topStat,
+        tier: marqueeTier,
+        atStat: star.stats[topStat],
+        eventName: t.name,
+        forgedBy: star.name,
+        seed: t.id,
+      })
+      star.log.push(`  ★ SIGNATURE FORGED — ${star.name} wins ${t.name} and the moment becomes a move: ${star.signature.name} (${topStat}). Heirs inherit it dormant, and awaken it at ${star.signature.awakenStat} ${topStat}.`)
+    }
+  }
 
   // Seated-rival head-to-head (v0.5, moved here from advanceWeek with the
   // deferred resolution): if the named rival's team was seated in this cup and

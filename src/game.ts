@@ -6,6 +6,7 @@ import {
 } from './core'
 import { ALL_DRILLS } from './drills'
 import { GenOptions, chooseLoadout, generateMonster, learnedMoves, maxHp, maxMana } from './monster'
+import { Signature, canAwaken, signatureMove } from './signature'
 
 export const WEEKS_PER_MONTH = 4
 export const MONTHS_PER_YEAR = 12
@@ -110,6 +111,7 @@ export interface Career {
   studBook?: boolean // a Stud Book is assigned — its record pays weekly fees
   tonicWeeks?: number // Elder Tonic uses on THIS monster (+8wk each, unlimited)
   heritageStat?: Stat // bred child: parent B's major — trains +10% faster
+  signature?: Signature // the one EARNED move (annual marquee win) — inherited dormant by children, see signature.ts
   generation?: number // dynasty depth: absent/1 = wild-caught; children = max(parents)+1
   // Fusion monsters (v0.7): aptitude lives PER MONSTER, not the species — the two
   // +20% majors are INHERITED from the two fused parents' majors, plus a rolled
@@ -468,7 +470,11 @@ export function forageFeed(c: Career): Career {
 // edge case where a drill malus dropped a stat below a move's learnLevel,
 // silently shrinking the persisted loadout below 3.
 export function careerMonster(c: Career): Monster {
-  const learned = learnedMoves(c.stats)
+  // A signature joins the learned pool rather than sitting beside it, so it
+  // competes for one of the three loadout slots exactly like a pool move (user
+  // spec) — and every downstream consumer (ability selector, auto-pick, the
+  // battle engine) needs no knowledge of signatures at all.
+  const learned = c.signature ? [...learnedMoves(c.stats), signatureMove(c.signature)] : learnedMoves(c.stats)
   const persisted = c.loadout
     .map((id) => learned.find((mv) => mv.id === id))
     .filter((mv): mv is Move => !!mv)
@@ -627,6 +633,15 @@ export function applyWeek(c: Career, action: WeeklyAction, gold: number, rental 
 
   const afterMoves = learnedMoves(n.stats).length
   if (afterMoves > beforeMoves) n.log.push(`  ↳ learned ${afterMoves - beforeMoves} new move(s)!`)
+
+  // An inherited signature awakens the week its heir finally matches the stat
+  // its ancestor had when the move was forged. Consumes NO rng, so applyWeek and
+  // previewWeekEffects stay byte-identical — the invariant that keeps the weekly
+  // preview exact (see the RNG discipline note in CLAUDE.md).
+  if (n.signature && canAwaken(n.signature, n.stats)) {
+    n.signature = { ...n.signature, awakened: true }
+    n.log.push(`  ★ ${n.signature.name} AWAKENS — ${n.name} matches ${n.signature.forgedBy}'s ${n.signature.stat} and the bloodline's signature is theirs in full.`)
+  }
 
   applyStageTransition(n, stage)
 

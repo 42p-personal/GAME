@@ -2420,6 +2420,22 @@ function RanchView({ game, setGame, onBattleScreen }: {
                   {selectedCareer.heritageStat ? ` · heritage ${selectedCareer.heritageStat} (+10% training)` : ''}
                 </div>
               )}
+              {/* Signature skill (v0.91): earned at an annual marquee, inherited
+                  dormant. Shows the lineage explicitly — whose it was and which
+                  event forged it — since that provenance IS the reward, and the
+                  awaken bar so an heir's owner knows exactly what to train. */}
+              {selectedCareer.signature && (
+                <div className="dim" style={{ fontSize: 11 }}>
+                  {selectedCareer.signature.awakened ? '★' : '☆'} Signature:{' '}
+                  <b style={{ color: STAT_COLOR[selectedCareer.signature.stat] }}>{selectedCareer.signature.name}</b>
+                  {selectedCareer.signature.inherited > 0
+                    ? <> · inherited from {selectedCareer.signature.forgedBy} ({selectedCareer.signature.eventName})</>
+                    : <> · forged at {selectedCareer.signature.eventName}</>}
+                  {selectedCareer.signature.awakened
+                    ? <> · <span className="pos">awakened</span></>
+                    : <> · <span className="neg">dormant</span> — train {selectedCareer.signature.stat} to {selectedCareer.signature.awakenStat} (now {selectedCareer.stats[selectedCareer.signature.stat]})</>}
+                </div>
+              )}
               {/* Fusion training aptitude (v0.7): inherited per-monster, so it's not
                   visible from the species — show it explicitly here. */}
               {selectedCareer.bonusMajor1 && (
