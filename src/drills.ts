@@ -5,7 +5,7 @@
 // training malus (§9.1). Values are first-pass and meant for tuning.
 import { Stat } from './core'
 
-export type DrillKind = 'basic' | 'intensive' | 'extreme'
+export type DrillKind = 'basic' | 'intensive' | 'extreme' | 'diverse'
 
 export interface Drill {
   id: string
@@ -44,12 +44,17 @@ export const INTENSIVE_DRILLS: Drill[] = [
 ]
 
 // Extreme drills (v0.6 economy pass, user spec): the risk tier above intensive —
-// a big gain to one stat at the cost of SIX points across TWO paired stats and
-// heavy stamina. Locked behind the Extreme Training Manual (Ranch Shop, 1500g).
-// Net +8 but the double malus can genuinely un-learn moves / drop class
-// thresholds — a deliberate gamble for rushing a stat, not a default.
-export const EXTREME_GAIN = 20
-export const EXTREME_COST = 6
+// a big gain to one stat at the cost of EIGHT points across TWO paired stats and
+// heavy stamina. Locked behind the Extreme Training Manual (Ranch Shop, 800g).
+// v0.90: retuned 20/-6 -> 24/-4 so the tier nets +16 (24 - 4 - 4), exactly
+// matching DIVERSE's +16 at the same 35 stamina. The two are deliberate MIRRORS:
+// same total gain, same cost, opposite shape. Extreme puts every point into one
+// stat and pays for it out of two others; diverse splits the same total across a
+// pair and pays nothing. The softer -4 (was -6) keeps the tier a gamble without
+// making it a trap — two drills can still un-learn a move or drop a class
+// threshold, but a single one is far less likely to wreck a build.
+export const EXTREME_GAIN = 24
+export const EXTREME_COST = 4
 
 export const EXTREME_DRILLS: Drill[] = [
   { id: 'xstr', name: 'Titan Regimen', kind: 'extreme', gains: { STR: EXTREME_GAIN, DEX: -EXTREME_COST, WIS: -EXTREME_COST }, desc: 'Brutal loads; speed and composure pay for it.' },
@@ -60,4 +65,29 @@ export const EXTREME_DRILLS: Drill[] = [
   { id: 'xcha', name: 'Grand Spectacle', kind: 'extreme', gains: { CHA: EXTREME_GAIN, WIS: -EXTREME_COST, INT: -EXTREME_COST }, desc: 'All showmanship; depth and study abandoned.' },
 ]
 
-export const ALL_DRILLS: Drill[] = [...BASIC_DRILLS, ...INTENSIVE_DRILLS, ...EXTREME_DRILLS]
+// Diverse drills (v0.90): raise TWO stats by +8 each with NO malus, for 35
+// stamina — the exact mirror of an EXTREME drill (+24 / -4 / -4 = +16 at 35
+// stamina). Neither tier is stronger; you are choosing a SHAPE. Extreme is one
+// huge spike bought with two sacrifices; diverse is a clean pair with nothing
+// given up. Locked behind the Diverse Training Manual (Ranch Shop, 800g).
+//
+// All six pairs are OFF-ARCHETYPE: of the 15 possible stat pairs, 9 are a
+// CLASSES primary/secondary pair and these are the other 6. So a diverse drill
+// never just hands you a class — it pushes a monster somewhere the class table
+// has no entry for, and whatever class emerges is a consequence of the whole
+// build rather than of picking the matching drill.
+// That complement set is also perfectly even on its own: every stat appears in
+// exactly TWO of the six, so no build is favoured. Both properties come from the
+// same choice — changing any single pair breaks one or both, so retune with care.
+export const DIVERSE_GAIN = 8
+
+export const DIVERSE_DRILLS: Drill[] = [
+  { id: 'dpilgrim', name: "Pilgrim's Burden", kind: 'diverse', gains: { STR: DIVERSE_GAIN, WIS: DIVERSE_GAIN }, desc: 'Stone carried up the mountain and back — the body labours, the mind settles.' },
+  { id: 'dcannon', name: 'The Cannon Crew', kind: 'diverse', gains: { STR: DIVERSE_GAIN, INT: DIVERSE_GAIN }, desc: 'Haul the barrel into place, then work out exactly where it points.' },
+  { id: 'dtrapeze', name: 'Trapeze Hours', kind: 'diverse', gains: { DEX: DIVERSE_GAIN, CON: DIVERSE_GAIN }, desc: 'Swing until the hands give out, then swing another hour.' },
+  { id: 'dblindfold', name: 'Blindfold Forms', kind: 'diverse', gains: { DEX: DIVERSE_GAIN, WIS: DIVERSE_GAIN }, desc: 'Practised sightless, until reading the room stops needing eyes.' },
+  { id: 'dfall', name: 'Taking the Fall', kind: 'diverse', gains: { CON: DIVERSE_GAIN, CHA: DIVERSE_GAIN }, desc: 'Absorb the hit, sell the hit, get up grinning.' },
+  { id: 'dpatter', name: "Illusionist's Patter", kind: 'diverse', gains: { INT: DIVERSE_GAIN, CHA: DIVERSE_GAIN }, desc: 'Sleight of hand and a running commentary nobody can quite follow.' },
+]
+
+export const ALL_DRILLS: Drill[] = [...BASIC_DRILLS, ...INTENSIVE_DRILLS, ...EXTREME_DRILLS, ...DIVERSE_DRILLS]

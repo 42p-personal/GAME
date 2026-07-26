@@ -204,3 +204,327 @@ that is probably harsher than a real casual player and overstates the skill gap.
 - **v0.74** — fuse-from-stable (removed the freeze hoop) + fusion potential 1.075→1.15. Mechanic verified firing in the sim; fusion now a 1-click stable action.
 - **v0.73** — pedigree span +2yr (fusion/prestige/bred) + bred head-start 0.35→0.45. **Peak Gold → Masters/Tamer Elite** (1 seed reached TE @ yr 12.7); top is now reachable via breeding, still challenging (12–19yr). Fusion still unused by the bot.
 - **v0.75** — difficulty escalation: flat `RIVAL_BUDGET_MULT 1.8` → `rivalBudgetMult(i) = 1.8 + i×0.02` (Wood 1.8 → TE 1.98). **A/B (25yr × 3 seeds, rebuilt bot):** flat → Gold/Gold/Bronze; escalating → Gold/**Silver**/Bronze — one seed held back a league, win-rates dipped slightly, no collapse. Gentle friction confirmed, first increment. ⚠️ **Instrument caveat:** the rebuilt bot trains only basic drills / 3-stat builds and peaks at **Gold** — much weaker than the prior Masters/TE bot, so it can't reproduce the skilled-human "easy run to Masters" the change targets. Money is a non-constraint at every peak (48k–121k surplus). Next: either strengthen the bot (intensive/extreme drills, comfort/tonic, timed breeding) to test the top directly, or nudge the step up (0.02 → ~0.03) and re-A/B.
+
+## v0.861 — validation run for the un-simmed v0.85–v0.86 batch
+
+**What accumulated without a sim pass:** life-stage training Teen 1.0→1.35× / Fully Grown
+0.95→1.15×; prestige overhaul (base stats ~144/~158, gen-1 cap 800→1000, 9–12y careers,
+−5%/no flaws); COACH_PRESTIGE_MULT; BREED_HEAD_START 0.45→0.15→0.30; free cup entry;
+trial gold; ≥2 cups/month.
+
+**Run (25y × 3 seeds, v0.81 bot) + A/B isolating the training multipliers:**
+| | OLD mults (1.0/0.95) | NEW mults (1.35/1.15) |
+|---|---|---|
+| Peak | Iron / Silver / Silver | **Silver / Silver / Silver** |
+| End gold | 56–66k | 50–71k |
+| Cup 1sts | 234–237 | 209–270 |
+| Trials won | 4–5 | 5 |
+| Generation | 2 | 2–3 |
+
+**Read:** the training bump is a mild accelerant, not a runaway — the stat cap
+(league cap × potential) binds either way, so faster training mostly reaches the same wall
+sooner (one seed converted Iron→Silver; ~+10% cup wins). No economy spiral. The two
+standing caveats predate this batch and still dominate the signal: (1) money is a
+non-constraint (50–70k unspent — sinks needed at the top end, or the bot under-spends);
+(2) the bot's basic-drill 3-stat build stalls at the Silver→Gold trial, so the top half of
+the ladder (where the prestige/coach changes actually live) is untested by this instrument.
+**Next:** strengthen the bot's economy brain (intensive/extreme drills, comfort/tonics,
+licenses+prestige purchases, timed freezes) before drawing conclusions above Silver.
+
+### v0.861 follow-up — full-economy bot rebuild + retest (same code, better instrument)
+
+The bot now exercises EVERY mechanic (all three drill tiers incl. the Extreme Manual,
+aptitude-aware 3-stat builds with maluses steered off-build, training foods + Vigor Melon
+rescues, market slots/coach, prestige licenses + prestige-preferring recruitment to a
+league-sized stable, barn/comfort/lab/pantry purchases, infirmary healing, peddler tonics,
+Elder freezing, best-pair breeding, spare-pair fusion, trial-first scheduling).
+
+**25y × 3 seeds, current live tuning:**
+| seed | peak | @yr | best stat | gen | cups→1sts | trials | breeds | coach | prestige owned | end gold |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 0 | Tamer Elite | 10 | 1180 | 2 | 192→125 | 9 | 4 | 2/2 | 13 | 702 |
+| 1 | Tamer Elite | 10 | 1180 | 2 | 192→140 | 9 | 4 | 2/2 | 13 | 754 |
+| 2 | Tamer Elite | 19 | 1170 | 2 | 211→117 | 9 | 4 | 2/2 | 10 | 1037 |
+
+**Reads:**
+- **The whole ladder is beatable** — first time any sim instrument has seen Masters/TE.
+  An optimal player summits in **~10y** (worst seed 19y); the v0.73 design point was
+  12–19y for a strong player, so the v0.85/0.86 buff stack has shaved ~2–3y off the
+  fast path. Borderline — a human is less optimal than this bot; watch, don't panic-nerf.
+- **The gold hoard was bot passivity, not a design hole**: fully-invested end gold is
+  ~0.7–1k (vs the old bot's 50–70k). A good player has real sinks all the way up.
+- **Fusion never fires for a prestige-heavy stable** — prestige bodies have no fusion
+  recipes, so once the Special License lands, fusable base bodies stop entering the
+  roster. Structural tension worth a design look (prestige recipes? keep as niche?).
+- **Gen stalls at 2** even with 4 breeds: freezer slots fill with the original parents,
+  so bred children rarely get frozen before career end. Partly bot heuristics, partly
+  a real slot-pressure feel a player would also hit.
+- Sustained ~60–65% cup win rate at-league — strong but not degenerate.
+
+## v0.87 — prestige scarcity increment #1 (market rarity + price premium + scout nerf)
+
+**Problem (from the v0.861 full-economy run):** once the Special License lands, prestige
+bodies are ~1/3 of all market rolls at ordinary prices — the roster goes all-prestige
+(10–13 owned per 25y) and the ladder's fast path compressed to ~10y.
+
+**Change (gentle first increment, all in `rollMarketOffers` — golden-safe):**
+- `PRESTIGE_MARKET_CHANCE 0.12` — only 12% of would-be prestige rolls survive; the rest
+  re-roll to base species. Measured stock: prestige fell 33% → **5.3% of offers**
+  (~1 offer per 3 full restocks). The Market Scout pick deliberately bypasses rarity —
+  scouting IS the hunting tool.
+- `PRESTIGE_PRICE_MULT 1.5` on the rolled price (measured avg 209g vs 150g base).
+- `SCOUT_CHANCE 0.15/0.25 → 0.12/0.20` — the hunting tool lands a touch less often.
+
+**Retest (25y × 3 seeds, full-economy bot):**
+| | before | after |
+|---|---|---|
+| Peak @yr | TE@10 / TE@10 / TE@19 | TE@18 / TE@17 / Masters@19 |
+| Prestige owned | 13 / 13 / 10 | **4 / 3 / 1** |
+| Cup 1sts | 125 / 140 / 117 | 98 / 130 / 76 |
+| End gold | 702–1037 | 719–806 |
+
+The fast path moved from ~10y back into the 12–19y design band, prestige ownership landed
+in the intended 2–4 range, money stays fully invested, and one seed now tops out at
+Masters — the summit is once again earned. License-price increase (option 3) held in
+reserve; fusion still never fires (structural, separate design question).
+
+## v0.87 — mid-game difficulty pass (four small nudges, one increment)
+
+**Problem:** every seed cleared Tin→Gold nearly frictionless — mid trials never failed,
+mid cup win rates peaked, difficulty lived only in the last two trials.
+
+**Nudges:**
+| knob | was | now |
+|---|---|---|
+| `RIVAL_BUDGET_STEP` | 0.02 | **0.03** (v0.75's prescribed increment; TE mult 1.98 → 2.07) |
+| `RIVAL_BAND_MIN` | 0.60 | **0.65** (fewer rolled-weak teams = fewer free round-robin wins) |
+| trial champion mult | 1.25 flat | **1.30 for Bronze→Gold** (`trialChampionMult`; top trials unchanged — already the hardest step) |
+| `LICENSE_COSTS` mid | 220/350/520/750 | **235/410/610/860** (~10–15%; still monotonic + never-doubling) |
+
+**Retest (25y × 6 seeds):** summit years stretched (TE @ 17/18/22/25 vs 17–18 clustered),
+cup 1st-place rate fell ~20–25% across the board (72–119 vs 76–140), one seed now tops out
+at Platinum (was Masters), and — first time ever — one seed reached **gen 3 / best stat
+1270**. Money still fully invested. Mid-game friction is real without any collapse: the
+distribution now runs Platinum → TE across six optimal-play runs, which is the shape we
+want (summit possible, never guaranteed).
+
+## v0.87 — interlocking gen-1 cap ladder (user spec)
+
+**Change:** the Market Coach becomes a UNIVERSAL quality upgrade — it lifts wild AND
+prestige walls by tier. `statCapFor` reads the coach tier from the synced wildCap:
+
+|            | no coach | coach T1 | coach T2 |
+|---|---|---|---|
+| wild/market | **700** (was 800) | 800 | 900 (was 1000) |
+| Draconic/Abyssal | **800** (was 1000) | 900 | 950 |
+| Mythical | **900** (was 1000) | 950 | **1000** |
+| fusion gen-1 | 1000 flat (unchanged) | | |
+| **Primeval** gen-1 | **1100 flat** (v0.88) — the only gen-1 above the TE league cap | | |
+
+Only fusion and a fully-coached Mythical reach 1000 — every other gen-1 now falls short
+of the TE cap, so the summit belongs to bred dynasties. Saves re-sync wildCap on load.
+
+**Retest (25y × 6):** 5/6 seeds reach TE (@15–25y), seed 5 still walls at Platinum.
+Best stats 1000–1180 are now BRED gen-2 monsters — and notably seed 4 summited with
+**zero prestige owned**: with prestige walls lowered, optimal spending shifted from
+"buy prestige" to "breed earlier", which is precisely the intent. The ladder made
+dynasty the endgame route without making the summit unreachable. Fusion still 0 —
+its problem is recipe friction, not ceilings.
+
+## v0.88 — Primeval: the prestige fusion (Mythical + Draconic/Abyssal)
+
+**New fusion class** (5 species: Aeonrex, Stellavore, Chronoshell, Originmage, Worldsong —
+roster 65): two body-pair recipes (Mythical+Draconic, Mythical+Abyssal) feed one class.
+**1.25× potential** (vs 1.15 base fusion) makes Primeval the premier founder of endgame
+bloodlines. Element affinity inherits Mythical's air/earth (all 12 pairs were taken —
+one sanctioned validator exception). Fusion bodies stay out of wild/market generation —
+goldens untouched.
+
+**Making the bot prove it** (three instrumented findings, each a real player insight):
+1. The scout was priority-starved — bigger purchases drained gold below its threshold
+   every week for 25 straight years. Promoted: scouting is the prestige-hunting tool.
+2. The pair's Elder windows never overlap (the Mythical arrives ~a decade later) —
+   fuse YOUNG, weakest-of-each-body, like a player deliberately building a Primeval.
+3. Even with the pair assembled for 9 straight years, gold never touched the fuse
+   threshold at the weekly check — the bot now EARMARKS the fusion cost while the
+   ingredients are owned. This is a genuine UX signal: a player needs a way to see
+   "you own a fusable pair — save 1000g" (future nudge?).
+
+**Result (25y × 6):** fusion fires 1–2× in 5/6 seeds (was 0 in every sim ever run);
+peaks TE ×5 @13–21y + Masters ×1; best stats 1035–1180. The fusion loop is finally a
+living part of optimal play, and Primeval lines are staged as the Tamers Apex on-ramp.
+
+## v0.88 — breeding cap ladder by heritage (user spec)
+
+**Change.** The per-generation potential step is no longer flat 0.10 — it now depends on
+the line's BEST parent (`BREED_STEP_BY_TIER` / `breedStepFor`), and `breedPotentialV2`
+bases off `max(parents)` instead of their average so one exceptional founder isn't
+diluted by a modest partner. (For same-generation pairings — the usual case — max ==
+average, so ordinary lines are unchanged.)
+
+| heritage | step/gen | gen-1 cap | gens to a 1400 cap |
+|---|---|---|---|
+| wild | 0.10 | 700–900 | **4** |
+| Draconic / Abyssal | 0.11 | 800–950 | 4 (reaches 1440) |
+| Mythical | 0.12 | 900–1000 | 4 (reaches 1480) |
+| base fusion | 0.13 | 1000 | 2 |
+| **Primeval** (prestige fusion) | **0.15** | 1100 | **1** |
+
+**Measured ladder** (Tamer Elite, league cap 1000, no champion bonus):
+```
+tier              gen1   gen2          gen3          gen4          gen5
+wild               700   1100 (1.10)   1200 (1.20)   1300 (1.30)   1400 (1.40)
+Draconic           800   1110 (1.11)   1220 (1.22)   1330 (1.33)   1440 (1.44)
+Mythical           900   1120 (1.12)   1240 (1.24)   1360 (1.36)   1480 (1.48)
+fusion (Saurian)  1000   1280 (1.28)   1410 (1.41)   1500 (cap)    1500 (cap)
+Primeval          1100   1400 (1.40)   1500 (cap)    1500 (cap)    1500 (cap)
+```
+A lone Primeval bred with a plain wild gen-1 partner still lands **1.40 / 1400** — the
+stated one-generation target holds for the realistic pairing, not just Primeval×Primeval.
+
+**Note:** `MAX_POTENTIAL` stays 1.5, so the prestige-fusion advantage is *speed to the
+ceiling*, not a higher ceiling — a patient wild dynasty still gets there, four
+generations later. Long-haul sim unchanged (TE ×5 / Masters ×1, 25y × 6) because the bot
+plateaus at gen 2; the ladder is a deterministic formula, verified analytically above.
+
+## v0.89 — league curve steepened + TAMERS APEX (11th league)
+
+**Curve (user spec).** The top of the ladder pulls away from the flat +100/league:
+Gold 700→**750**, Platinum 800→**900**, Masters 900→**1000**, Tamer Elite 1000→**1200**,
+and a new summit **Tamers Apex at 1400**. (Spec read "Masters 100" — taken as 1000, the
+only monotonic value between Platinum 900 and TE 1200.)
+
+Apex is wired through every league-keyed table: pool rewards (1140/570), an 8-name cup
+pool, the annual marquee **The Dynasty Eternal** (month 12), 6v6, 5 rival teams,
+half-density calendar [Q2,Q4], license 2100g, excursion ceiling 820g, validator probes.
+Backdrop reuses the Tamer Elite art (TODO: generate its own).
+
+**Golden moved (recaptured):** `3v3-high`. `boostConstitution` derives its CON target from
+the league cap of the monster's stat band, so changing Masters/TE caps changes a
+`train: 2000` roll. Legitimate data change, not a regression. 12/12 green.
+
+**Retest (25y × 6):**
+| | before curve | after curve |
+|---|---|---|
+| Peaks | TE ×5, Masters ×1 | **TE ×2, Masters ×3, Platinum ×1** |
+| Best stat | 1035–1190 | 1035–1428 |
+| Apex reached | — | **never** |
+
+**Two consequences worth a decision:**
+1. **The whole late game got materially harder.** Rival budgets are `league cap × mult`,
+   so raising four league caps raised every late-game field with them: a Tamer Elite cup
+   rival went ~1683 → ~2049 total stats. Three seeds that used to summit now stop at
+   Masters/Platinum. That may be exactly the intent (the summit should be rare) — but it
+   is a bigger difficulty swing than the four "small nudges" that preceded it.
+2. **Tamers Apex is currently unreachable.** Its trial champion is **3675 total stats per
+   monster, six of them**, versus a player best of ~1428 top / ~2400 total. No seed won
+   the TE trial *and* then the Apex trial. If Apex is meant to be enterable this decade,
+   it needs either a gentler `trialChampionMult` at the top or a lower Apex rival mult.
+3. **The breeding ballpark drifted.** Bred caps are `league cap × potential`, so with Apex
+   at 1400 a *wild* gen-2 line already reaches 1540 there — the "4 generations to a 1400
+   cap" target was calibrated against a 1000-cap league and now lands in ~1 generation at
+   the top. The tier ORDER still holds (wild < prestige < Mythical < fusion < Primeval);
+   only the absolute numbers moved.
+
+## v0.89 (fix pass) — the summit is reachable
+
+Three findings, each fixed and re-simmed:
+
+**1. The final gates were a compounding wall.** `trialChampionMult` was a flat 1.25 while
+`league cap` AND `rivalBudgetMult` both climb, so the Tamer Elite champion sat at 3105
+total stats per monster ×6 — the sim never won it once, making Tamers Apex unreachable by
+construction. Now per-rung: **1.30** Bronze→Gold (the v0.87 mid-game friction), **1.15**
+at Tamer Elite/Apex. The TE trial started falling immediately (10 trials won).
+
+**2. The prestige licence reprice starved fusion.** Repricing to the original design
+values (800/2000) pushed fusion to **0 across all six seeds** — gold that would have
+forged a Primeval went on licences. Dialled back to **500/1200** (still 2.5×/2× the old
+200/600) and fusion returned (3 of 6 seeds). Apex licence also trimmed 2100 → **1900**:
+winning the last trial and then being unable to afford entry made the summit a tease.
+
+**3. The bot never bought a licence it had EARNED.** It earmarks gold for fusion but not
+for licences, so it won the Apex trial and spent the entrance fee on more monsters — for
+35 straight years. That is an instrument gap, not a design flaw: a rational player stops
+shopping and saves. Added `licenseEarmark`.
+
+**Result (25y × 6):** **Tamers Apex reached** — seed 4, year 23, best stat 1416, 10 trials
+won. Distribution now runs Masters ×2 / Tamer Elite ×3 / **Tamers Apex ×1**, fusion fires
+in 4 of 6 seeds, money stays fully invested (524–927g). The ladder terminates: the summit
+is winnable, rare, and takes most of a 25-year career.
+
+**Still open:** gen 3 remains rare (freezer-slot pressure), and rivals do not follow the
+gen-1 cap ladder — their budget is `league cap × mult` as a total-stat pool, so any future
+`LEAGUES` edit moves every field with it.
+
+## v0.90 — training tiers: Diverse Manual, extreme retune, basic stamina
+
+**Changes under test.** New DIVERSE tier (800g manual): +8/+8 on a pair, no malus,
+35 stamina — six off-archetype pairs, every stat exactly twice. EXTREME retuned
+20/−6/−6 → **24/−4/−4** so it nets +16 at 35 stamina, exactly mirroring diverse
+(same output, same cost, opposite shape). EXTREME_MANUAL 1200 → **800**.
+BASIC_DRILL_STAMINA 10 → **15**, which drops basic to 0.40 net/stamina — *below*
+both top tiers at 0.46, so the safe option is no longer the quietly optimal one.
+
+**Instrument change (same pass).** The bot picked drills off a fixed tier ladder,
+which could never evaluate a pair tier. It now scores every affordable drill by
+USEFUL yield — gains on a build stat count, gains on a capped stat are wasted,
+losses count only if they land on the build — and takes the best. That is also
+just better play, and it is what lets diverse compete on merit (+16 when both
+stats are on-build, +8 when only one is).
+
+**Result (25y × 6):**
+| | before (v0.89 fix pass) | after |
+|---|---|---|
+| Peaks | TE ×3, Masters ×2, **Apex ×1** | TE ×3, Masters ×2, **Platinum ×1** |
+| Best stat | 1062–1416 | **1332 / 1320 / 1428** top three |
+| Fusion fired | 3 of 6 seeds | **6 of 6** |
+| Cups entered | 191–249 | 160–196 |
+| End gold | 341–917 | 341–860 (still fully invested) |
+
+**Read.** The training buff did **not** cause a power spiral — peaks are flat or
+slightly lower even though best stats rose ~10%. Same lesson as the v0.851
+life-stage bump: the stat CAP binds, so faster training mostly reaches the same
+wall sooner. The visible cost is throughput: pricier basic drills and a 35-stamina
+top tier mean more rest weeks, so cup entries fell ~20% and one seed slipped
+Apex → Platinum. Fusion firing in every seed is the clear win.
+
+⚠️ **Confounded comparison.** The drill data and the bot's drill AI changed in the
+same run, so this is not a clean A/B — the peak movement could be either. The
+headline (no runaway) is robust because it is cap-bound, but if the Apex → Platinum
+slip matters, isolate it by running the new bot against the old drill values.
+
+## v0.90 — premium food reprice (Vigor Melon + Bliss Berry → 90g)
+
+**Change.** Vigor Melon 200 → **90g**, Bliss Berry 250 → **90g**. The melon was the
+only stamina food in the game and cost more than a top-tier drill's entire stamina
+budget, so it was never worth buying; the berry's +3 happiness was priced like a
+luxury for an effect that only skews a roll. Both now sit just above the 75g
+training foods, making a feeding week a real three-way call: train harder, recover,
+or lift mood.
+
+**Instrument.** The bot's feeding brain was rewritten to actually use them, and the
+FIRST policy was badly wrong in an instructive way — "melon whenever below the
+full-effectiveness band (<=70)" meant ~90g × 6 monsters × nearly every week:
+
+| | melon-every-week | disciplined (<=50 only) |
+|---|---|---|
+| Peaks | Masters ×2, TE ×2, Platinum ×1, **Gold ×1** | TE ×3, Masters ×2, **Apex ×1** |
+| Best stat | 750–1416 | **1168–1652** |
+| Breeds | 0–2 | 3–4 |
+| Fusion fired | **1 of 6** | 5 of 6 |
+| Coach bought | 0–1 | 1–2 |
+
+Weekly food drained the capital that the Coach, the manuals, breeding and fusion
+all need — one seed stalled at **Gold on generation 1**. Paying 90g to escape the
+−5% band recovers ~0.8 stat points; paying it to escape the −50% cliff doubles the
+week. The fixed policy buys a melon only at `staminaMalus < 0.95` (stamina ≤50),
+a berry only below 4 happiness, and holds an 800–1200g floor so capital wins.
+
+**Result (25y × 6, best run to date):** peaks TE ×3 / Masters ×2 / **Tamers Apex ×1**
+(seed 2, year 15, best stat **1652**), fusion in 5 of 6 seeds, 3–4 breeds each,
+money still fully invested (236–1620g).
+
+⚠️ **Design signal, not just a bot bug.** At 90g premium food is now cheap enough
+that a player *can* casually overspend into a wrecked economy — the failure is
+invisible (you feel well-fed while your capital never compounds). That is either a
+genuinely interesting trap or an unfair one; worth a UI nudge if playtesters fall in.

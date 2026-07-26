@@ -11,9 +11,9 @@ import { ArenaBattle } from './arena'
 import { Sprite } from './Sprite'
 import { SPECIES } from './species'
 import { BIOS } from './bestiary'
-import { BASIC_DRILLS, Drill, EXTREME_DRILLS, INTENSIVE_DRILLS } from './drills'
+import { ALL_DRILLS, BASIC_DRILLS, DIVERSE_DRILLS, DIVERSE_GAIN, Drill, EXTREME_COST, EXTREME_DRILLS, EXTREME_GAIN, INTENSIVE_DRILLS } from './drills'
 import {
-  BASIC_DRILL_STAMINA, Career, INTENSIVE_DRILL_STAMINA, EXTREME_DRILL_STAMINA, MAX_STAMINA, canRankUp, careerMonster, careerSpanYears, statCapFor,
+  Career, EXTREME_DRILL_STAMINA, DIVERSE_DRILL_STAMINA, drillStamina, MAX_STAMINA, canRankUp, careerMonster, careerSpanYears, statCapFor,
   dateLabel, foodName, FORAGE_STAMINA_COST, FORAGE_HAPPINESS_COST, WILD_GEN1_CAP, previewWeekEffects, stageInfo, trainingProfileFor,
 } from './game'
 import {
@@ -21,13 +21,13 @@ import {
   canBuySpecialLicense, canBuyEliteLicense, COACH_CAP_LIFT, wildCapFor,
   MARKET_BASE_SLOTS, MARKET_SLOTS_MAX, SCOUT_CHANCE, COACH_SURCHARGE, marketSlotCost, scoutCost, coachCost, coachLeague,
   buyMarketSlot, buyMarketScout, buyMarketCoach, setScoutPick, canBuyMarketCoach, coachVisible, speciesLicensed,
-  COMFORT_ITEMS, EXTREME_MANUAL_COST, BATTLE_ANALYST_COST, buyBattleAnalyst, Frozen, careerFromFrozen, BREED_COST, BREED_MAX_CHILDREN, applyStudBook, breed, breedPotentialV2, buyComfortItem, buyExtremeManual, studIncome, podiumsOf, champsOf, useTonic,
+  COMFORT_ITEMS, EXTREME_MANUAL_COST, DIVERSE_MANUAL_COST, buyDiverseManual, BATTLE_ANALYST_COST, buyBattleAnalyst, Frozen, careerFromFrozen, BREED_COST, BREED_MAX_CHILDREN, applyStudBook, breed, breedPotentialV2, buyComfortItem, buyExtremeManual, studIncome, podiumsOf, champsOf, useTonic,
   WeekPlanEntry, advanceWeek, barnCost, buyPantryContract, buyGrandLarder, buyEliteLicense, buyMonster, foodDiscountFor, resolveEvent,
   buySpecialLicense, cancelSignUp, cupLore, eligibleForTournament, fusionRoom, gameplanForRivalTeam, generateRivalTeamsForTournament, goto, healAtInfirmary, infirmaryFee, leagueIndexOf, monthOfWeek,
   placementLabel, scoutFee, teamSizeForLeague, seatedRivalTeamIndex,
   trainerXpProgress, trainerBarnBonus, trainerStipend, effectiveBarnCap, barnFull as barnFullOf, BREEDING_BONUS,
-  buyLicense, cancelTrial, nextLicenseCost, startTrial, trialStatus, TRIAL_CHAMPION_MULT, RIVAL_PERSONALITY_GAMEPLAN,
-  fuse, fusionSpin, fusionRecipeFor, freezeToLab, thawFromLab, expandLab, labExpandCost, LAB_SLOTS_BASE, FUSION_COST,
+  buyLicense, cancelTrial, nextLicenseCost, startTrial, trialStatus, trialChampionMult, RIVAL_PERSONALITY_GAMEPLAN,
+  fuse, fusionSpin, fusionRecipeFor, fusablePairIn, freezeToLab, thawFromLab, expandLab, labExpandCost, LAB_SLOTS_BASE, FUSION_COST,
   generateRival, newGame, offerMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, signUp,
   applyMarkToOpponent, buildEventPlayerTeam, finalizeCup, finalizeTrial, roundRobinSchedule,
   tournamentCalendarFor, upgradeBarn, visibleLeagueCount, weekOfMonth, yearOfWeek,
@@ -801,13 +801,28 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
           <div className="card loc">
             <div className="loc-h"><span>🧪 Lab · Freezer</span><span className="dim">{frozen.length}/{game.labSlots} slots</span></div>
             <div className="warnnote">⚠️ A fused monster's stats do not carry over — fusion always starts fresh. To preserve a dynasty through stats, use the <b>Breeding Ranch</b>.</div>
+            {/* Fusion nudge (v0.89): holding a valid pair is easy to miss, and the
+                cost is easy to never quite have spare — so say both out loud. */}
+            {(() => {
+              const pair = fusablePairIn(game)
+              if (!pair) return null
+              const short = FUSION_COST - game.gold
+              return (
+                <div className={short > 0 ? 'hint' : 'tipbanner'}>
+                  ⚗️ <b>{pair.a.name}</b> + <b>{pair.b.name}</b> can be fused into a <b>{pair.label}</b>
+                  {short > 0
+                    ? <> — save <b>{short}g</b> more to afford it (fusion costs {FUSION_COST}g). Both parents must still be alive.</>
+                    : <> — you can afford it now ({FUSION_COST}g). Fuse before either ages out.</>}
+                </div>
+              )
+            })()}
             <div className="dim" style={{ marginBottom: 6 }}>
               The freezer preserves a monster's genome — it is the <b>only</b> route to breeding
               and fusion. Freeze it while it is still competing: once a career ends it retires to
               the Hall of Fame and the line is closed.
             </div>
             <div className="hint">
-              ⚗️ Fusion pairs: Mammal + Reptilian → Saurian · Avian + Aquatic → Tempestine · Marsupial + Insectoid → Broodkin
+              ⚗️ Fusion pairs: Mammal + Reptilian → Saurian · Avian + Aquatic → Tempestine · Marsupial + Insectoid → Broodkin · Mythical + Draconic/Abyssal → <b>Primeval</b> (1.25× potential)
             </div>
             {/* Freeze an active monster in */}
             <div className="section-title">Freeze into stasis</div>
@@ -1043,11 +1058,21 @@ function TownView({ game, setGame }: { game: GameState; setGame: Dispatch<SetSta
           <div className="shoprow">
             <div>
               <b>📕 Extreme Training Manual</b>
-              <div className="dim">Unlocks extreme drills: +20 to one stat, −6 to two others, −{EXTREME_DRILL_STAMINA} stamina{game.extremeUnlocked ? ' · ✓ owned' : ''}</div>
+              <div className="dim">Unlocks extreme drills: +{EXTREME_GAIN} to one stat, −{EXTREME_COST} to two others, −{EXTREME_DRILL_STAMINA} stamina{game.extremeUnlocked ? ' · ✓ owned' : ''}</div>
             </div>
             {game.extremeUnlocked
               ? <button disabled>✓</button>
               : <button disabled={game.gold < EXTREME_MANUAL_COST} onClick={() => setGame((g) => buyExtremeManual(g))}>Buy · {EXTREME_MANUAL_COST}g</button>}
+          </div>
+          {/* Diverse Training Manual (v0.90): the pair-training tier. */}
+          <div className="shoprow">
+            <div>
+              <b>📗 Diverse Training Manual</b>
+              <div className="dim">Unlocks diverse drills: +{DIVERSE_GAIN} to TWO stats at once, no malus, −{DIVERSE_DRILL_STAMINA} stamina{game.diverseUnlocked ? ' · ✓ owned' : ''}</div>
+            </div>
+            {game.diverseUnlocked
+              ? <button disabled>✓</button>
+              : <button disabled={game.gold < DIVERSE_MANUAL_COST} onClick={() => setGame((g) => buyDiverseManual(g))}>Buy · {DIVERSE_MANUAL_COST}g</button>}
           </div>
           {/* Battle Analyst (v0.84): deepens the post-fight match analysis. */}
           <div className="shoprow">
@@ -1140,7 +1165,9 @@ function TrainBlock({ d, career, food, forage, gear, selected, onClick }: {
   const preview = previewWeekEffects(career, d.id, food, forage, gear)
   const gain = preview.statDeltas[stat]
   const malusEntries = (Object.entries(d.gains) as [Stat, number][]).filter(([, v]) => v < 0)
-  const stamCost = d.kind === 'basic' ? BASIC_DRILL_STAMINA : d.kind === 'intensive' ? INTENSIVE_DRILL_STAMINA : EXTREME_DRILL_STAMINA
+  const stamCost = drillStamina(d.kind)
+  // A diverse drill raises TWO stats, so it prints both rather than a single gain.
+  const gainStats = (Object.entries(d.gains) as [Stat, number][]).filter(([, v]) => v > 0).map(([k]) => k)
   const gainText = gain !== undefined ? `${gain > 0 ? '+' : ''}${gain} ${stat}` : `+${d.gains[stat]} ${stat}`
   // Aptitude coloring (user spec 2026-07-20): a stat this species trains FASTER
   // (major/minor) gets its number tinted to the stat's own colour instead
@@ -1153,7 +1180,15 @@ function TrainBlock({ d, career, food, forage, gear, selected, onClick }: {
     <button className={'trainblock' + (selected ? ' selected' : '')} onClick={onClick} title={d.desc}>
       <div className="trainblock-name" style={{ color: STAT_COLOR[stat] }}>{d.name}</div>
       <div className="trainblock-sub">
-        <span className="benefit-gain" style={hasBenefit ? { color: STAT_COLOR[stat] } : undefined}>{gainText}</span>
+        {d.kind === 'diverse'
+          ? gainStats.map((gs, i) => (
+            <span key={gs}>{i > 0 ? ', ' : ''}
+              <span className="benefit-gain" style={gs === prof.major || gs === prof.minor ? { color: STAT_COLOR[gs] } : undefined}>
+                +{preview.statDeltas[gs] ?? d.gains[gs]} {gs}
+              </span>
+            </span>
+          ))
+          : <span className="benefit-gain" style={hasBenefit ? { color: STAT_COLOR[stat] } : undefined}>{gainText}</span>}
         {malusEntries.map(([ms, mv]) => <span key={ms}>, <span className="benefit-malus">{preview.statDeltas[ms] ?? mv} {ms}</span></span>)} · −{stamCost} stam
       </div>
     </button>
@@ -1167,7 +1202,7 @@ function TrainBlock({ d, career, food, forage, gear, selected, onClick }: {
 // preview re-rolls with the post-feed happiness as the food selection changes.
 function PlanBenefit({ career, plan, gear }: { career: Career; plan: WeekPlanEntry; gear: GameState['trainingGear'] }) {
   const preview = previewWeekEffects(career, plan.activity, plan.food, plan.forage, gear)
-  const drill = [...BASIC_DRILLS, ...INTENSIVE_DRILLS, ...EXTREME_DRILLS].find((d) => d.id === plan.activity)
+  const drill = ALL_DRILLS.find((d) => d.id === plan.activity)
   const label = drill ? `💪 ${drill.name}` : plan.activity === 'excursion' ? '🧭 Excursion' : '😴 Rest'
   const cap = LEAGUES[career.licenseIndex].cap
   return (
@@ -1696,6 +1731,31 @@ function MatchAnalysis({ fought, analyst }: { fought: { teamA: Monster[]; teamB:
   )
 }
 
+// Resume a part-fought tournament (v0.89 fix). Reloading mid-cup used to drop
+// the player back at Match 1: `matchIdx` reset to 0 while the committed
+// MatchOrders stayed in the save, so already-decided fights replayed one by one.
+// Orders are only written when a fight is committed and the engine is a pure
+// function of (monsters + orders), so every fought match reproduces exactly —
+// which lets us rebuild the win/loss strip and skip straight to the right match.
+function resumeOutcomes(g: GameState): ('win' | 'loss' | 'draw')[] {
+  const ac = g.activeCup
+  if (!ac) return []
+  const careers = ac.playerMonsterIds.map((id) => g.stable.find((c) => c.id === id)).filter((c): c is Career => !!c)
+  if (careers.length !== ac.playerMonsterIds.length) return []
+  const oppOrder = ac.kind === 'trial' ? [0]
+    : roundRobinSchedule(ac.rivalTeams.length + 1).filter(([i, j]) => i === 0 || j === 0).map(([i, j]) => (i === 0 ? j : i) - 1)
+  const out: ('win' | 'loss' | 'draw')[] = []
+  for (let k = 0; k < oppOrder.length; k++) {
+    const orders = ac.matchOrders[k]
+    if (!orders) break // first uncommitted match — that's where play resumes
+    const built = buildEventPlayerTeam(careers, orders)
+    const opp = applyMarkToOpponent(ac.rivalTeams[oppOrder[k]], orders.mark)
+    const w = simulateTeamBattle(built.team, opp, built.happiness, opp.map(() => 5)).winner
+    out.push(w === 'A' ? 'win' : w === 'B' ? 'loss' : 'draw')
+  }
+  return out
+}
+
 function RanchView({ game, setGame, onBattleScreen }: {
   game: GameState; setGame: Dispatch<SetStateAction<GameState>>; onBattleScreen: (v: boolean) => void
 }) {
@@ -1716,17 +1776,20 @@ function RanchView({ game, setGame, onBattleScreen }: {
   const [teamPick, setTeamPick] = useState<Record<string, string[]>>({})
   const [selectedTournamentId, setSelectedTournamentId] = useState<string | null>(null)
   const [battleOver, setBattleOver] = useState(false)
-  const [matchIdx, setMatchIdx] = useState(0)
+  // Computed ONCE on mount: the matches already fought in a part-played cup.
+  const [resumed] = useState(() => resumeOutcomes(game))
+  const [matchIdx, setMatchIdx] = useState(resumed.length)
   // Bracket hub sub-phase (v0.81): pre-cup lore -> next-match hub (scout the
   // opponent) -> pick tactics -> the fight (simulated live with those orders)
   // -> back to the hub -> ... -> finalize -> post-cup announcement.
-  const [battleSub, setBattleSub] = useState<'preamble' | 'bracket' | 'tactics' | 'fight' | 'announce'>('preamble')
+  // Resuming mid-cup skips the pre-cup lore and lands on the between-match hub.
+  const [battleSub, setBattleSub] = useState<'preamble' | 'bracket' | 'tactics' | 'fight' | 'announce'>(resumed.length > 0 ? 'bracket' : 'preamble')
   // In-progress per-fight orders (the pre-fight tactics screen edits this), the
   // built+simulated current match, and the player's running win/loss strip.
   const [matchTactics, setMatchTactics] = useState<MatchOrders | null>(null)
   const [liveMatch, setLiveMatch] = useState<{ teamA: Monster[]; teamB: Monster[]; result: BattleResult } | null>(null)
   const [lastFought, setLastFought] = useState<{ teamA: Monster[]; teamB: Monster[]; result: BattleResult } | null>(null)
-  const [fightOutcomes, setFightOutcomes] = useState<('win' | 'loss' | 'draw')[]>([])
+  const [fightOutcomes, setFightOutcomes] = useState<('win' | 'loss' | 'draw')[]>(resumed)
   // Which of the player's upcoming matches have been paid-scouted, and at
   // what tier — keyed by matchIdx, reset each new tournament event.
   const [scouted, setScouted] = useState<Record<number, 'basic' | 'full'>>({})
@@ -2033,7 +2096,11 @@ function RanchView({ game, setGame, onBattleScreen }: {
                 // (no intermediate "See Results" page). Otherwise on to the next
                 // match's hub.
                 if (matchIdx + 1 >= nPlayerMatches) { setGame((g) => (ac.kind === 'trial' ? finalizeTrial(g).game : finalizeCup(g))); setBattleSub('announce') }
-                else setBattleSub('bracket')
+                else {
+                  // Record progress in the save too, so `doneThrough` stays truthful.
+                  setGame((g) => (g.activeCup ? { ...g, activeCup: { ...g.activeCup, doneThrough: matchIdx } } : g))
+                  setBattleSub('bracket')
+                }
               }}>{matchIdx + 1 >= nPlayerMatches ? 'See Results →' : '→ Next Match'}</button>
             </div>
           )}
@@ -2201,7 +2268,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
     if (!p) return null
     if (p.activity === 'rest') return '😴 Resting'
     if (p.activity === 'excursion') return '🧭 Excursion'
-    const d = [...BASIC_DRILLS, ...INTENSIVE_DRILLS].find((x) => x.id === p.activity)
+    const d = ALL_DRILLS.find((x) => x.id === p.activity)
     return d ? `💪 ${d.name}` : null
   }
 
@@ -2447,7 +2514,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
                 // WELL-ROUNDED monsters at ~cap×1.8×1.25 total — one maxed stat
                 // is not enough beyond Wood (sim: 1-stat builds win <10%, 3-stat
                 // ~70%). Compare the picked team's totals against that target.
-                const champTarget = league.cap * rivalBudgetMult(game.licenseIndex) * TRIAL_CHAMPION_MULT
+                const champTarget = league.cap * rivalBudgetMult(game.licenseIndex) * trialChampionMult(game.licenseIndex)
                 const picked = trialPick.map((id) => pool.find((c) => c.id === id)!).filter(Boolean)
                 const teamAvg = picked.length ? picked.reduce((s, c) => s + STATS.reduce((t, k) => t + c.stats[k], 0), 0) / picked.length : 0
                 const ratio = teamAvg / champTarget
@@ -2540,6 +2607,17 @@ function RanchView({ game, setGame, onBattleScreen }: {
                   })()}
                 </div>
               </div>
+              {game.diverseUnlocked && (
+                <>
+                  <div className="section-title">Diverse Training <span className="dim">· two stats at once, no malus</span></div>
+                  <div className="trainrow diverserow">
+                    {DIVERSE_DRILLS.map((d) => (
+                      <TrainBlock key={d.id} d={d} career={selectedCareer} food={selPlan.food} forage={selPlan.forage}
+                        gear={game.trainingGear} selected={selPlan.activity === d.id} onClick={() => setSelActivity(d.id)} />
+                    ))}
+                  </div>
+                </>
+              )}
             </>
           )}
 
@@ -2876,7 +2954,11 @@ function sanitizeAndMigrate(raw: string): GameState | null {
     if (typeof g.scoutPickA !== 'string') g.scoutPickA = null
     if (typeof g.scoutPickB !== 'string') g.scoutPickB = null
     // v0.77 gen-1 ceiling: back-fill from whatever coach tier the save holds.
-    for (const c of g.stable) if (typeof c.wildCap !== 'number') c.wildCap = wildCapFor(g)
+    // wildCap is SYNCED stable-wide (coach tier), so always re-derive on load —
+    // v0.87 lowered the ladder (800/900/1000 → 700/800/900), and statCapFor now
+    // reads the coach tier out of this value for prestige caps too, so a stale
+    // pre-v0.87 wildCap would misread as a higher tier.
+    for (const c of g.stable) c.wildCap = wildCapFor(g)
     // migrate pre-round-robin tournamentHistory: placement was 'champion'|'none'
     if (Array.isArray(g.stable)) for (const c of g.stable) {
       if (Array.isArray(c.tournamentHistory)) for (const h of c.tournamentHistory) {
@@ -2936,6 +3018,7 @@ function sanitizeAndMigrate(raw: string): GameState | null {
     }
     if (typeof g.labTechLoan !== 'boolean') g.labTechLoan = false
     if (typeof g.extremeUnlocked !== 'boolean') g.extremeUnlocked = false
+    if (typeof g.diverseUnlocked !== 'boolean') g.diverseUnlocked = false
     if (typeof g.battleAnalyst !== 'boolean') g.battleAnalyst = false
     // v0.7 Lab freezer (separate from the stud farm)
     if (!Array.isArray(g.labFrozen)) g.labFrozen = []
@@ -3253,7 +3336,7 @@ function TutorialBanner({ onDismiss }: { onDismiss: () => void }) {
           <li><b>Every week:</b> feed each monster, pick its activity (train, rest, or excursion), then Advance Week.</li>
           <li><b>Earn gold in cups.</b> Enter tournaments at your league from Grandpa's Ranch. To move up a league, win the rank-up trial, then buy the license in the Ranch Shop.</li>
           <li><b>Plan your dynasty.</b> Freeze a monster at the 🧪 Lab <b>before its career ends</b> to breed or fuse it later. Once it retires to the Hall of Fame, the bloodline is closed.</li>
-          <li><b>Raise the ceiling.</b> Wild monsters train to 800 at most — bred, fused, and licensed prestige monsters go higher, and the Market Coach upgrades your whole stable's limit.</li>
+          <li><b>Raise the ceiling.</b> Wild monsters train to 700 at most — prestige monsters go higher, the Market Coach raises every ceiling in your stable, and bred or fused bloodlines climb highest of all.</li>
         </ul>
       </div>
       <button className="tutorial-dismiss" onClick={onDismiss}>✕</button>

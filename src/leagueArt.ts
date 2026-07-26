@@ -18,6 +18,7 @@ export const LEAGUE_BACKGROUND: Partial<Record<string, string>> = {
   Platinum: '/backgrounds/platinum.jpg',
   Masters: '/backgrounds/masters.jpg',
   'Tamer Elite': '/backgrounds/tamer-elite.jpg',
+  'Tamers Apex': '/backgrounds/tamers-apex.jpg',
 }
 
 // Sandbox and any other league-less battle falls back to the Wood backdrop

@@ -344,4 +344,5 @@ precede Phase 3 if you want the cheap win sooner).
 - [ ] New randomness is seeded + deterministic (replay-safe).
 - [ ] `validateDesign()` extended where a new invariant exists, so it's enforced not eyeballed.
 - [ ] Browser pass with zero console errors before commit.
-- [ ] Ship via preview → main → manual `npm run deploy` (git builds still EBADPLATFORM).
+- [ ] Ship via preview → main; the git-triggered Cloudflare build deploys it (fixed by the
+      vite 8 migration — `npm run deploy` is now only the fallback).

@@ -229,6 +229,18 @@ export const INNATE_EFFECTS: Record<string, InnateEffect> = {
   'Amber Set': { debuffResist: 15 },
   'Command Swarm': { auraDmgMult: 1.04 },
   Disorient: { enemyDodgeDebuff: 4 },
+
+  // --- Primeval (v0.88, prestige fusion: Mythical + Draconic/Abyssal) ---
+  'Dawn Fury': { dmgMult: 1.08 },
+  'Unbroken Age': { flatDR: 2, debuffResist: 20 },
+  'Starving Aim': { crit: 10 },
+  'Light Drinker': { lifesteal: 0.12 },
+  'Era Shell': { startWard: 20 },
+  'Time Dilation': { auraRegen: 1, enemyDodgeDebuff: 4 },
+  'First Spell': { echo: 10 },
+  'Wellspring Eternal': { regen: 4 },
+  'Genesis Chord': { auraDmgMult: 1.05 },
+  'Ending Verse': { auraFlatDR: 2 },
 }
 
 // A species' two innates are ALTERNATIVES, not a stacked pair (user spec

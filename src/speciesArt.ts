@@ -74,4 +74,10 @@ export const SPECIES_ART: Partial<Record<string, string>> = {
   mantiskin: '/sprites/mantiskin.png',
   resinback: '/sprites/resinback.png',
   swarmherd: '/sprites/swarmherd.png',
+  // Primeval — the prestige fusion (v0.88), same recipe as every sprite above.
+  aeonrex: '/sprites/aeonrex.png',
+  stellavore: '/sprites/stellavore.png',
+  chronoshell: '/sprites/chronoshell.png',
+  originmage: '/sprites/originmage.png',
+  worldsong: '/sprites/worldsong.png',
 }

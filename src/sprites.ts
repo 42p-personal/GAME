@@ -186,6 +186,12 @@ export const SPRITES: Record<BodyType, string[]> = {
     '..XBLLBAABLLBX..', '..XBBBBAABBBBX..', '...XBBBAABBBX...', '....XXXXXXXX....',
     '..XX..XX..XX....', '.XX..XX..XX.....', '................', '................',
   ],
+  Primeval: [ // v0.88 prestige fusion — structural fallback only; real art ships in speciesArt.ts
+    '................', '.......A........', '......AAA.......', '....XXXXXXX.....',
+    '...XBBBBBBBX....', '..XBBEPBBBBBX...', '..XBBBBBBBBBX...', '.AXBLLLLLLLBXA..',
+    '.AXBLLLLLLLBXA..', '..XBBBBBBBBBX...', '...XBBBBBBBX....', '....XXXXXXX.....',
+    '.....XX.XX......', '.....XX.XX......', '................', '................',
+  ],
 }
 
 export function palette(hue: number): Record<string, string> {

@@ -43,13 +43,13 @@ const GOLDENS = [
     // (flat chip → % chip), CON coefficient trims, and WIS spell-power — the
     // clock now resolves a winner instead of wiping both.
     name: '3v3-high', a: ['gold-a5', 'gold-a6', 'gold-a7'], b: ['gold-b5', 'gold-b6', 'gold-b7'], train: 2000,
-    winner: 'A', events: 384, logLines: 280, // recaptured v0.852: prestige base-stat bump shifts the seeded rolls
+    winner: 'A', events: 349, logLines: 254, // recaptured v0.89: the league-cap curve changed (Masters 900→1000, TE 1000→1200) and boostConstitution derives its CON target from the league cap, so a train:2000 roll lands differently
     finals: [
-      { side: 'A', slot: 0, hp: 139, mana: 690, wasKOd: false },
-      { side: 'A', slot: 1, hp: 1298, mana: 33, wasKOd: false },
-      { side: 'A', slot: 2, hp: 1348, mana: 756, wasKOd: false },
+      { side: 'A', slot: 0, hp: 1052, mana: 709, wasKOd: false },
+      { side: 'A', slot: 1, hp: 1298, mana: 57, wasKOd: false },
+      { side: 'A', slot: 2, hp: 1348, mana: 763, wasKOd: false },
       { side: 'B', slot: 0, hp: 0, mana: 747, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 746, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 766, wasKOd: true },
       { side: 'B', slot: 2, hp: 0, mana: 137, wasKOd: true },
     ],
   },

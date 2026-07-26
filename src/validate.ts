@@ -25,12 +25,14 @@ export function designProblems(): string[] {
   }
 
   // Element affinities: every body type must have a unique (resist, weak) pair.
+  // ONE sanctioned exception: all 12 distinct pairs are taken, so Primeval
+  // (v0.88 prestige fusion) deliberately inherits Mythical's celestial affinity.
   const seenElements = new Map<string, string>()
   for (const [body, aff] of Object.entries(BODY_ELEMENT) as [BodyType, { resist: string; weak: string }][]) {
     if (aff.resist === aff.weak) problems.push(`BODY_ELEMENT: ${body} resists and is weak to ${aff.resist}.`)
     const key = aff.resist + '>' + aff.weak
     const prev = seenElements.get(key)
-    if (prev) problems.push(`BODY_ELEMENT: ${body} duplicates ${prev}'s affinity (resist ${aff.resist} / weak ${aff.weak}).`)
+    if (prev && !(body === 'Primeval' && prev === 'Mythical')) problems.push(`BODY_ELEMENT: ${body} duplicates ${prev}'s affinity (resist ${aff.resist} / weak ${aff.weak}).`)
     seenElements.set(key, body)
   }
 
@@ -77,7 +79,7 @@ export function designProblems(): string[] {
   // the other 2 (that's what makes them run at half density, not just a lower
   // average).
   const fullDensity = ['Wood', 'Copper', 'Tin', 'Bronze', 'Iron', 'Silver', 'Gold', 'Platinum']
-  const halfDensity = ['Masters', 'Tamer Elite']
+  const halfDensity = ['Masters', 'Tamer Elite', 'Tamers Apex']
   for (const seed of ['probe-a', 'probe-b', 'probe-c']) {
     for (let year = 0; year < 4; year++) {
       const cal = tournamentCalendarFor(seed, year)
@@ -153,7 +155,10 @@ export function designProblems(): string[] {
     const size = TEAM_SIZE_BY_LEAGUE[l.name]
     if (size === undefined) { problems.push(`TEAMS: no team size for ${l.name}.`); continue }
     if (size < prevSize) problems.push(`TEAMS: ${l.name} (${size}) fields a smaller team than the league below it (${prevSize}).`)
-    if (size >= 6 && l.name !== 'Tamer Elite') problems.push(`TEAMS: ${l.name} fields ${size}v${size} — 6v6 is reserved for Tamer Elite.`)
+    // 6v6 is the engine/barn maximum and is reserved for the two summit
+    // leagues (Tamer Elite and, from v0.88, Tamers Apex).
+    if (size > 6) problems.push(`TEAMS: ${l.name} fields ${size}v${size} — 6v6 is the maximum team size.`)
+    if (size >= 6 && !['Tamer Elite', 'Tamers Apex'].includes(l.name)) problems.push(`TEAMS: ${l.name} fields ${size}v${size} — 6v6 is reserved for the summit leagues.`)
     prevSize = size
   }
 
