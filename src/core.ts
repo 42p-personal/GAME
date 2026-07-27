@@ -166,7 +166,28 @@ export interface Move {
   // pass — author them per-move to refine reach as balance demands.
   range?: number // world units the move can reach
   castTime?: number // seconds the caster is rooted committing to it
+  spatial?: MoveSpatial // field-engine-only movement mechanics (v0.93)
   desc: string
+}
+
+// ── SPATIAL MECHANICS (v0.93, field engine only) ────────────────────────────
+// A whole class of ability the turn-based engine could not express, because it
+// had no space: closing the gap, teleporting behind someone, yanking a caster
+// out of cover, pinning a diver in place.
+//
+// ⚠️ GATED like every other engine addition here — battle.ts NEVER reads this,
+// so authoring it cannot move a golden. Absent = the move behaves as it always
+// has.
+export interface MoveSpatial {
+  // Travel as part of the cast. `dash` crosses the ground and IS blocked by
+  // cover; `blink` is instantaneous and ignores it — that difference is the
+  // whole reason to want a blink.
+  move?: { kind: 'dash' | 'blink'; to: 'target' | 'behindTarget' | 'awayFromTarget' | 'ally'; maxRange: number }
+  pull?: number // drag the target this many world units TOWARD the caster
+  push?: number // shove the target this many world units AWAY
+  root?: number // seconds the target cannot move (it may still act)
+  slow?: { mult: number; duration: number } // multiply the target's speed
+  backstab?: number // damage multiplier when striking from BEHIND the target
 }
 
 export interface Ability { name: string; desc: string }

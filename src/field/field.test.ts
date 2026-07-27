@@ -158,7 +158,8 @@ describe('target selection', () => {
     id, side: 'B', slot: 0, m: mk(id), pos: { x: 20, y: 11 }, vel: { x: 0, y: 0 },
     radius: 0.9, speed: 3, hp: 500, maxHp: 500, mp: 50, maxMp: 50,
     traits: { cohesion: 0.5, predation: 0.5 }, targetId: null, retargetIn: 0,
-    cooldowns: {}, castingFor: 0, castMoveId: null, statuses: [], dead: false, ...over,
+    cooldowns: {}, castingFor: 0, castMoveId: null, statuses: [],
+    rootedFor: 0, slowMult: 1, slowFor: 0, dead: false, ...over,
   })
 
   it('a PREDATOR crosses the field for the valuable kill; an ANCHOR takes what is near', () => {
@@ -195,7 +196,8 @@ describe('positioning', () => {
     id: 'u', side: 'A', slot: 0, m: mk('p'), pos: { x: 6, y: 11 }, vel: { x: 0, y: 0 },
     radius: 0.9, speed: 3, hp: 500, maxHp: 500, mp: 50, maxMp: 50,
     traits: { cohesion: 0.5, predation: 0.5 }, targetId: null, retargetIn: 0,
-    cooldowns: {}, castingFor: 0, castMoveId: null, statuses: [], dead: false, ...over,
+    cooldowns: {}, castingFor: 0, castMoveId: null, statuses: [],
+    rootedFor: 0, slowMult: 1, slowFor: 0, dead: false, ...over,
   })
 
   it('closes the distance toward a distant target', () => {
@@ -227,7 +229,8 @@ describe('awareness — the counter to a dive', () => {
     id, side: 'A', slot: 0, m: mk(id), pos: { x: 10, y: 11 }, vel: { x: 0, y: 0 },
     radius: 0.9, speed: 3, hp: 500, maxHp: 500, mp: 50, maxMp: 50,
     traits: { cohesion: 0.5, predation: 0.5 }, targetId: null, retargetIn: 0,
-    cooldowns: {}, castingFor: 0, castMoveId: null, statuses: [], dead: false, ...over,
+    cooldowns: {}, castingFor: 0, castMoveId: null, statuses: [],
+    rootedFor: 0, slowMult: 1, slowFor: 0, dead: false, ...over,
   })
 
   it('an ALERT monster turns on the enemy diving its wounded ally', () => {

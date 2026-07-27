@@ -5,7 +5,7 @@
 // depends on `simulateFieldBattle` being a pure function of
 // (monsters + placement + obstacles + seed). So: fixed dt, fixed unit order,
 // one seeded rng stream, and no wall-clock or Math.random anywhere.
-import { Channel, Monster, Move, Stat, mulberry32, hashString } from '../core'
+import { Channel, Monster, Move, MoveSpatial, Stat, mulberry32, hashString } from '../core'
 import { manaCost, maxHp, maxMana } from '../monster'
 import {
   DT, FIELD_H, FIELD_W, FieldEvent, FieldResult, FieldSetup, FieldSide, FieldUnit,
@@ -14,6 +14,7 @@ import {
 } from './types'
 import { desiredGoal, dist, norm, pickTarget, sub, traitsFor } from './decide'
 import { personalityOf, spendAbove } from './personality'
+import { spatialOf } from './spatial'
 
 // ── Geometry helpers ────────────────────────────────────────────────────────
 const insideObstacle = (p: Vec2, o: Obstacle, pad = 0) =>
@@ -34,6 +35,15 @@ function segmentHitsRect(a: Vec2, b: Vec2, o: Obstacle): boolean {
   }
   return false
 }
+
+/** Is the attacker on the far side of the target from its own goal line? */
+export const isBehind = (attacker: FieldUnit, target: FieldUnit): boolean =>
+  attacker.side === 'A' ? attacker.pos.x > target.pos.x : attacker.pos.x < target.pos.x
+
+const clampToField = (p: Vec2): Vec2 => ({
+  x: Math.min(FIELD_W - 0.5, Math.max(0.5, p.x)),
+  y: Math.min(FIELD_H - 0.5, Math.max(0.5, p.y)),
+})
 
 export const hasLineOfSight = (a: Vec2, b: Vec2, obstacles: Obstacle[]): boolean =>
   !obstacles.some((o) => segmentHitsRect(a, b, o))
@@ -80,6 +90,9 @@ function buildUnit(m: Monster, side: FieldSide, slot: number, pos: Vec2): FieldU
     castingFor: 0,
     castMoveId: null,
     statuses: [],
+    rootedFor: 0,
+    slowMult: 1,
+    slowFor: 0,
     dead: false,
   }
 }
@@ -197,6 +210,9 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       // timers
       for (const k of Object.keys(u.cooldowns)) u.cooldowns[k] = Math.max(0, u.cooldowns[k] - DT)
       u.retargetIn -= DT
+      u.rootedFor = Math.max(0, u.rootedFor - DT)
+      u.slowFor = Math.max(0, u.slowFor - DT)
+      if (u.slowFor <= 0) u.slowMult = 1
       u.mp = Math.min(u.maxMp, u.mp + (u.m.stats.WIS / 300) * DT)
 
       const foes = units.filter((x) => x.side !== u.side)
@@ -238,6 +254,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
         u.cooldowns[mv.id] = mv.cooldown * 0.9 + castOf(mv)
         u.mp = Math.max(0, u.mp - manaCost(mv))
         events.push({ t, kind: 'cast', id: u.id, targetId: target.id, move: mv.name, channel: mv.channel })
+        applyCasterMovement(u, target, mv, t, obstacles)
         vis.set(u.id, 'cast')
         // Instant moves land the same tick they are cast.
         if (u.castingFor <= 0) { resolveHit(u, target, mv.id); u.castMoveId = null }
@@ -245,6 +262,9 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       }
 
       // MOVE. Steer toward the goal, slide off obstacles, keep off allies.
+      // A ROOTED unit may still act — it simply cannot travel, which is what
+      // makes a root a genuine answer to a fast diver rather than a stun.
+      if (u.rootedFor > 0) { vis.set(u.id, 'idle'); continue }
       const goal = desiredGoal(u, target, mates, foes)
       stepToward(u, goal, mates, obstacles)
       vis.set(u.id, 'move')
@@ -292,15 +312,77 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     const atk = u.m.stats[mv.stat] ?? 0
     const mitigation = mv.channel === 'melee' || mv.channel === 'ranged' ? target.m.stats.CON : target.m.stats.WIS
     const crit = rng() < 0.08
-    const raw = mv.power * (1 + atk / 320) * (crit ? 1.5 : 1)
+    // BACKSTAB: the payoff for arriving behind someone, and the reason a blink
+    // is worth a slot. It only pays if the caster is genuinely on the far side.
+    const sp = spatialOf(mv.name)
+    const behind = sp?.backstab && isBehind(u, target) ? sp.backstab : 1
+    const raw = mv.power * (1 + atk / 320) * (crit ? 1.5 : 1) * behind
     const dmg = Math.max(1, Math.round(raw * (1 - Math.min(0.55, mitigation / 1400))))
     target.hp -= dmg
     events.push({ t: t2, kind: 'hit', id: u.id, targetId: target.id, move: mv.name, channel: mv.channel, dmg, crit })
+    if (sp) applyOnTarget(u, target, sp, t2)
     if (target.hp <= 0) {
       target.hp = 0
       target.dead = true
       vis.set(target.id, 'dead')
       events.push({ t: t2, kind: 'death', id: target.id })
+    }
+  }
+
+
+  /**
+   * Move the CASTER as part of its cast — a charge or a teleport.
+   *
+   * The difference between them is the whole design: a `dash` crosses the
+   * ground and IS stopped by cover, so good positioning still protects you; a
+   * `blink` ignores cover, which is the only way to reach a caster who has
+   * correctly hidden behind a rock. That is what a teleport is FOR — and why
+   * it is priced with a backstab that only pays if you actually arrive behind.
+   */
+  function applyCasterMovement(u: FieldUnit, target: FieldUnit, mv: Move, t: number, obs: Obstacle[]) {
+    const sp = spatialOf(mv.name)
+    if (!sp?.move) return
+    const from = { ...u.pos }
+    const dir = norm(sub(target.pos, u.pos))
+    let dest: Vec2
+    if (sp.move.to === 'behindTarget') {
+      dest = { x: target.pos.x + dir.x * 1.6, y: target.pos.y + dir.y * 1.6 }
+    } else if (sp.move.to === 'awayFromTarget') {
+      dest = { x: u.pos.x - dir.x * sp.move.maxRange, y: u.pos.y - dir.y * sp.move.maxRange }
+    } else {
+      dest = { x: target.pos.x - dir.x * 1.4, y: target.pos.y - dir.y * 1.4 }
+    }
+    const d = dist(from, dest)
+    if (d > sp.move.maxRange) {
+      const k = sp.move.maxRange / d
+      dest = { x: from.x + (dest.x - from.x) * k, y: from.y + (dest.y - from.y) * k }
+    }
+    dest = clampToField(dest)
+    if (obs.some((o) => insideObstacle(dest, o, u.radius * 0.6))) return // never land inside rock
+    if (sp.move.kind === 'dash' && !hasLineOfSight(from, dest, obs)) return // a charge is blocked by cover
+    u.pos = dest
+    if (sp.move.kind === 'blink') {
+      events.push({ t, kind: 'blink', id: u.id,
+        fromX: +from.x.toFixed(2), fromY: +from.y.toFixed(2),
+        toX: +dest.x.toFixed(2), toY: +dest.y.toFixed(2) })
+    }
+  }
+
+  /** Forced movement and movement denial, landed on the target. */
+  function applyOnTarget(u: FieldUnit, target: FieldUnit, sp: MoveSpatial, t: number) {
+    if (sp.pull || sp.push) {
+      const away = norm(sub(target.pos, u.pos))
+      const shift = (sp.push ?? 0) - (sp.pull ?? 0)
+      const dest = clampToField({ x: target.pos.x + away.x * shift, y: target.pos.y + away.y * shift })
+      if (!obstacles.some((o) => insideObstacle(dest, o, target.radius * 0.6))) {
+        target.pos = dest
+        events.push({ t, kind: 'shove', id: target.id, by: u.id, kind2: sp.push ? 'push' : 'pull' })
+      }
+    }
+    if (sp.root) target.rootedFor = Math.max(target.rootedFor, sp.root)
+    if (sp.slow) {
+      target.slowMult = Math.min(target.slowMult, sp.slow.mult)
+      target.slowFor = Math.max(target.slowFor, sp.slow.duration)
     }
   }
 
@@ -316,7 +398,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       }
     }
     dir = norm(dir)
-    const step = u.speed * DT
+    const step = u.speed * u.slowMult * DT
     const tryMove = (nx: number, ny: number) => {
       const p = { x: nx, y: ny }
       if (obs.some((o) => insideObstacle(p, o, u.radius * 0.6))) return false

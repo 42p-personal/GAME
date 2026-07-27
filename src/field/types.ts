@@ -74,6 +74,11 @@ export interface FieldUnit {
   castingFor: number
   castMoveId: string | null
   statuses: { kind: StatusKind; until: number }[]
+  /** seconds left unable to MOVE (it may still act) — from a root */
+  rootedFor: number
+  /** speed multiplier and the time it expires — from a slow */
+  slowMult: number
+  slowFor: number
   dead: boolean
 }
 
@@ -86,6 +91,8 @@ export type FieldEvent =
   | { t: number; kind: 'miss'; id: string; targetId: string; move: string }
   | { t: number; kind: 'heal'; id: string; targetId: string; move: string; amount: number }
   | { t: number; kind: 'status'; id: string; status: StatusKind }
+  | { t: number; kind: 'blink'; id: string; fromX: number; fromY: number; toX: number; toY: number }
+  | { t: number; kind: 'shove'; id: string; by: string; kind2: 'pull' | 'push' }
   | { t: number; kind: 'death'; id: string }
   | { t: number; kind: 'end'; winner: FieldSide | 'draw' }
 
