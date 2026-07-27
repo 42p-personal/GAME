@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+"""Post-process a species' battle-sprite frames into an animation-ready set.
+
+    python3 tools/battle_sprite.py <id> <idle.png> <walk1.png> <walk2.png> <strike.png>
+    python3 tools/battle_sprite.py --check <id>        # inspect a finished set
+
+White background -> transparent, trim, then place every frame on a 128x128
+canvas with ONE SHARED SCALE and its feet on a FIXED BASELINE.
+
+Two things here are load-bearing, and both are the opposite of what the
+portrait pipeline does:
+
+1. FOOT-ANCHORED, not bbox-centred. Centring each frame's bounding box is right
+   for a lone still image and wrong for animation: a walk frame whose creature
+   is a few pixels shorter gets re-centred, so the sprite bobs and slides
+   between frames instead of walking.
+
+2. ONE SCALE FOR THE WHOLE SPECIES, taken from the largest frame. Scaling each
+   frame independently to "fill the canvas" makes the monster visibly grow and
+   shrink as it animates — a lunging strike frame is wider than an idle, so
+   fitting each one alone would shrink the strike. All four are measured
+   together, then scaled by the same factor.
+"""
+import sys
+from PIL import Image
+
+SIZE = 128
+BASELINE = 0.94   # feet sit this far down the canvas
+FILL = 0.88       # the largest frame occupies this much of the canvas
+THRESH = 26       # how close to white counts as background
+FRAMES = ('idle', 'walk1', 'walk2', 'strike')
+OUT_DIR = 'public/battle'
+
+
+def to_transparent(im: Image.Image, thresh: int = THRESH) -> Image.Image:
+    """Flood-fill the background inward from the border, so white INSIDE the
+    creature (an eye, a tusk) survives."""
+    im = im.convert('RGBA')
+    w, h = im.size
+    px = im.load()
+
+    def is_bg(p):
+        return p[0] >= 255 - thresh and p[1] >= 255 - thresh and p[2] >= 255 - thresh
+
+    stack = [(x, 0) for x in range(w)] + [(x, h - 1) for x in range(w)]
+    stack += [(0, y) for y in range(h)] + [(w - 1, y) for y in range(h)]
+    seen = set()
+    while stack:
+        x, y = stack.pop()
+        if (x, y) in seen or not (0 <= x < w and 0 <= y < h):
+            continue
+        seen.add((x, y))
+        p = px[x, y]
+        if p[3] == 0 or not is_bg(p):
+            continue
+        px[x, y] = (255, 255, 255, 0)
+        stack.extend([(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)])
+    return im
+
+
+def build(species_id: str, paths: list[str]) -> int:
+    if len(paths) != len(FRAMES):
+        print(f'ERROR: expected {len(FRAMES)} frames {FRAMES}, got {len(paths)}')
+        return 2
+
+    cut = []
+    for p in paths:
+        im = to_transparent(Image.open(p))
+        bbox = im.getbbox()
+        if not bbox:
+            print(f'ERROR: {p} is empty after background removal')
+            return 1
+        cut.append(im.crop(bbox))
+
+    # ONE scale for the set, from whichever frame is largest in either axis, so
+    # nothing overflows the canvas and nothing changes size mid-animation.
+    limit = SIZE * FILL
+    scale = min(min(limit / c.width, limit / c.height) for c in cut)
+
+    for name, im in zip(FRAMES, cut):
+        new = (max(1, round(im.width * scale)), max(1, round(im.height * scale)))
+        im = im.resize(new, Image.LANCZOS)
+        canvas = Image.new('RGBA', (SIZE, SIZE), (0, 0, 0, 0))
+        x = (SIZE - im.width) // 2                 # centred horizontally
+        y = int(SIZE * BASELINE) - im.height       # FEET on the baseline
+        canvas.paste(im, (x, max(0, y)), im)
+        out = f'{OUT_DIR}/{species_id}-{name}.png'
+        canvas.save(out)
+        print(f'  {out}  content={im.size}  feet_y={int(SIZE * BASELINE)}')
+    print(f'{species_id}: {len(FRAMES)} frames, shared scale {scale:.3f}')
+    return 0
+
+
+def check(species_id: str) -> int:
+    """Verify a finished set is animation-safe."""
+    ok = True
+    feet = []
+    for name in FRAMES:
+        p = f'{OUT_DIR}/{species_id}-{name}.png'
+        try:
+            im = Image.open(p)
+        except FileNotFoundError:
+            print(f'  MISSING {p}')
+            ok = False
+            continue
+        bb = im.getbbox()
+        if im.size != (SIZE, SIZE):
+            print(f'  {name}: WRONG CANVAS {im.size}')
+            ok = False
+        if bb:
+            feet.append(bb[3])
+            print(f'  {name}: bbox={bb} w={bb[2]-bb[0]} h={bb[3]-bb[1]}')
+    if feet and max(feet) - min(feet) > 2:
+        print(f'  FAIL: feet vary by {max(feet) - min(feet)}px — the sprite will bob')
+        ok = False
+    elif feet:
+        print(f'  feet aligned within {max(feet) - min(feet)}px')
+    print('OK' if ok else 'PROBLEMS FOUND')
+    return 0 if ok else 1
+
+
+def main() -> int:
+    if len(sys.argv) >= 3 and sys.argv[1] == '--check':
+        return check(sys.argv[2])
+    if len(sys.argv) < 3:
+        print(__doc__)
+        return 2
+    return build(sys.argv[1], sys.argv[2:])
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
