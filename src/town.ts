@@ -2064,7 +2064,12 @@ export function compositionTemplate(teamSize: number, plan?: TeamGameplan): Clas
   // rushdown still has someone to keep it standing and a bulwark still has a
   // carry to protect — an archetype with no win condition is just a worse team.
   let dmg = Math.round((teamSize * mix.damage) / total)
-  if (teamSize > 1) dmg = Math.max(1, Math.min(teamSize - 1, dmg))
+  // ⚠️ A SOLO monster has no team to support, so it must be able to fight:
+  // bulwark's 2/4 mix rounds to ZERO damage at teamSize 1, which fielded a
+  // Wood/Copper rival holding only Mend + Focus — no damage move at all, able
+  // to use nothing but the free Attack. The plan still reads through its
+  // TACTICS at 1v1 (a solo bulwark guards, a solo rushdown charges).
+  dmg = teamSize === 1 ? 1 : Math.max(1, Math.min(teamSize - 1, dmg))
   return Array.from({ length: teamSize }, (_, i): ClassRole => (i < dmg ? 'damage' : 'support'))
 }
 
