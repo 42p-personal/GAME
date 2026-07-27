@@ -30,7 +30,7 @@ import {
   trainerXpProgress, trainerBarnBonus, trainerLevel, trainerStipend, effectiveBarnCap, barnFull as barnFullOf, BREEDING_BONUS,
   buyLicense, cancelTrial, nextLicenseCost, startTrial, trialStatus, trialChampionMult, RIVAL_PERSONALITY_GAMEPLAN,
   fuse, fusionSpin, fusionRecipeFor, fusablePairIn, freezeToLab, thawFromLab, expandLab, labExpandCost, LAB_SLOTS_BASE, FUSION_COST,
-  generateRival, newGame, offerMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, signUp,
+  generateRival, newGame, offerMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, signUp, pendingCupIsThisWeek, isSignUpOpen,
   applyMarkToOpponent, buildEventPlayerTeam, finalizeCup, finalizeRite, finalizeTrial, roundRobinSchedule,
   riteStatus, riteEligible, riteRoster, startRite, cancelRite, riteChampionMult, claimSignature, SIGNATURE_RITE_LEVEL,
   tournamentCalendarFor, upgradeBarn, visibleLeagueCount, weekOfMonth, yearOfWeek,
@@ -1198,6 +1198,72 @@ function TrainBlock({ d, career, food, forage, gear, selected, onClick }: {
   )
 }
 
+// The week's activity picker — six stat columns (basic + intensives + extreme),
+// an OTHER column for rest/excursion, and the diverse row once unlocked.
+//
+// Extracted from RanchView (v0.92) so the weekly feed-and-train walkthrough can
+// use it. Food and training are ONE decision per monster — the drill previews
+// read the food through previewWeekEffects, so choosing a training food and
+// seeing the drill numbers move belongs on the same screen. The Ranch keeps the
+// roster overview and the tournament calendar; the week's plan is set here.
+function TrainingPicker({ career, plan, gear, extremeUnlocked, diverseUnlocked, onPick }: {
+  career: Career; plan: WeekPlanEntry; gear: GameState['trainingGear']
+  extremeUnlocked: boolean; diverseUnlocked: boolean; onPick: (activity: string) => void
+}) {
+  const restPrev = previewWeekEffects(career, 'rest', plan.food, plan.forage, gear)
+  const excPrev = previewWeekEffects(career, 'excursion', plan.food, plan.forage, gear)
+  return (
+    <>
+      <div className="trainrow">
+        {STATS.map((stat) => {
+          const basic = BASIC_DRILLS.find((d) => primaryStatOf(d) === stat)!
+          const intensives = INTENSIVE_DRILLS.filter((d) => primaryStatOf(d) === stat)
+          const extreme = EXTREME_DRILLS.find((d) => primaryStatOf(d) === stat)
+          const gearTier = gear[stat] ?? 0
+          return (
+            <div className="traincol" key={stat}>
+              <div className="traincol-h" style={{ color: STAT_COLOR[stat] }}>{stat}{gearTier > 0 && <span className="dim"> ⚙+{gearTier * 5}%</span>}</div>
+              <TrainBlock d={basic} career={career} food={plan.food} forage={plan.forage} gear={gear} selected={plan.activity === basic.id} onClick={() => onPick(basic.id)} />
+              {intensives.map((d) => (
+                <TrainBlock key={d.id} d={d} career={career} food={plan.food} forage={plan.forage} gear={gear} selected={plan.activity === d.id} onClick={() => onPick(d.id)} />
+              ))}
+              {extremeUnlocked && extreme && (
+                <TrainBlock d={extreme} career={career} food={plan.food} forage={plan.forage} gear={gear} selected={plan.activity === extreme.id} onClick={() => onPick(extreme.id)} />
+              )}
+            </div>
+          )
+        })}
+        <div className="traincol">
+          <div className="traincol-h dim">OTHER</div>
+          <button className={'trainblock' + (plan.activity === 'rest' ? ' selected' : '')} onClick={() => onPick('rest')}>
+            <div className="trainblock-name">Rest</div>
+            <div className="trainblock-sub">
+              <span className="benefit-gain">+{restPrev.staminaDelta} stam</span>
+              {restPrev.hpDelta > 0 && <>, <span className="benefit-gain">+{restPrev.hpDelta} HP</span></>}
+              {restPrev.mpDelta > 0 && <>, <span className="benefit-gain">+{restPrev.mpDelta} MP</span></>}
+            </div>
+          </button>
+          <button className={'trainblock' + (plan.activity === 'excursion' ? ' selected' : '')} onClick={() => onPick('excursion')}>
+            <div className="trainblock-name">Excursion</div>
+            <div className="trainblock-sub"><span className="benefit-gain">+{excPrev.goldDelta}g</span>, <span className="benefit-malus">{excPrev.staminaDelta} stam</span></div>
+          </button>
+        </div>
+      </div>
+      {diverseUnlocked && (
+        <>
+          <div className="section-title">Diverse Training <span className="dim">· two stats at once, no malus</span></div>
+          <div className="trainrow diverserow">
+            {DIVERSE_DRILLS.map((d) => (
+              <TrainBlock key={d.id} d={d} career={career} food={plan.food} forage={plan.forage}
+                gear={gear} selected={plan.activity === d.id} onClick={() => onPick(d.id)} />
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  )
+}
+
 // The planned action's benefit, shown while picking food (user spec 2026-07-20):
 // training shows each stat bar going current → new, rest shows the stamina gain,
 // excursion shows the flat gold purse. Gains render white; maluses render black.
@@ -2145,6 +2211,13 @@ function RanchView({ game, setGame, onBattleScreen }: {
     ? game.stable[feedIdxs[0] ?? 0]
     : game.stable[decisionIdx]
   const currentPlan: WeekPlanEntry = weekPlan[currentCareer.id] || { activity: 'rest', food: '' }
+  // ⚠️ pendingCupIsThisWeek, NOT just pendingTournament: a cup may be reserved a
+  // week early (v0.92) and that reservation week is still a training week.
+  const cupThisWeek = pendingCupIsThisWeek(game)
+  const competingThisWeek =
+    (cupThisWeek && !!game.pendingTournament?.monsterIds.includes(currentCareer.id)) ||
+    !!game.pendingTrial?.monsterIds.includes(currentCareer.id) ||
+    !!game.pendingRite?.monsterIds.includes(currentCareer.id)
   const nextFeedIdx = feedIdxs.find((i) => i > decisionIdx)
   const prevFeedIdx = [...feedIdxs].reverse().find((i) => i < decisionIdx)
   const advanceFeeding = () => {
@@ -2253,6 +2326,26 @@ function RanchView({ game, setGame, onBattleScreen }: {
                     <span className="forage-sub">no gold — but −{FORAGE_STAMINA_COST} stamina · −{FORAGE_HAPPINESS_COST} happiness</span>
                   </button>
                 )}
+                {/* Training now sits WITH the food (v0.92). One monster, one
+                    screen, one decision: the drill previews read the selected
+                    food through previewWeekEffects, so a training food visibly
+                    moves the numbers on the drill you are choosing. */}
+                <div className="section-title" style={{ marginTop: '1rem' }}>Training — pick this week's work</div>
+                {competingThisWeek ? (
+                  <div className="retired">
+                    🏟 {currentCareer.name} competes this week — the event takes the whole week, so there's no training.
+                    Feed it well and send it in.
+                  </div>
+                ) : (
+                  <TrainingPicker
+                    career={currentCareer}
+                    plan={currentPlan}
+                    gear={game.trainingGear}
+                    extremeUnlocked={game.extremeUnlocked}
+                    diverseUnlocked={game.diverseUnlocked}
+                    onPick={(activity) => setPlanFor(currentCareer.id, { ...currentPlan, activity })}
+                  />
+                )}
                 <PlanBenefit career={currentCareer} plan={currentPlan} gear={game.trainingGear} />
               </>
             )}
@@ -2278,8 +2371,6 @@ function RanchView({ game, setGame, onBattleScreen }: {
   const selM = careerMonster(selectedCareer)
   const selProf = trainingProfileFor(selectedCareer.species)
   const selPlan: WeekPlanEntry = weekPlan[selectedCareer.id] || { activity: 'rest', food: '' }
-  const setSelActivity = (activity: string) =>
-    setPlanFor(selectedCareer.id, { ...selPlan, activity })
 
   const activityName = (p?: WeekPlanEntry) => {
     if (!p) return null
@@ -2332,7 +2423,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
         <span>🪙 {game.gold}g</span>
         {pendingEventName && <span className="up">✅ {pendingEventName}</span>}
       </div>
-      <div className="feedok">✓ feeding complete for this week — plan training below, or check the calendar</div>
+      <div className="feedok">✓ this week is planned — check the calendar, or advance the week</div>
       {trialGate.ok && !game.pendingTrial && (
         <TipBanner game={game} setGame={setGame} id="rankup">
           🎖 A monster can now attempt the {LEAGUES[game.licenseIndex].name} rank-up trial — train two or
@@ -2682,63 +2773,19 @@ function RanchView({ game, setGame, onBattleScreen }: {
           ) : (game.pendingTournament?.monsterIds.includes(selectedCareer.id) || game.pendingTrial?.monsterIds.includes(selectedCareer.id)) ? (
             <div className="retired">🏟 {selectedCareer.name} is competing this week — the event takes the whole week, no training. (Cancel the {game.pendingTrial ? 'trial' : 'sign-up'} to free the week.)</div>
           ) : (
-            <>
-              <div className="section-title">Training</div>
-              <div className="trainrow">
-                {STATS.map((stat) => {
-                  const basic = BASIC_DRILLS.find((d) => primaryStatOf(d) === stat)!
-                  const intensives = INTENSIVE_DRILLS.filter((d) => primaryStatOf(d) === stat)
-                  const extreme = EXTREME_DRILLS.find((d) => primaryStatOf(d) === stat)
-                  const gearTier = game.trainingGear[stat] ?? 0
-                  return (
-                    <div className="traincol" key={stat}>
-                      <div className="traincol-h" style={{ color: STAT_COLOR[stat] }}>{stat}{gearTier > 0 && <span className="dim"> ⚙+{gearTier * 5}%</span>}</div>
-                      <TrainBlock d={basic} career={selectedCareer} food={selPlan.food} forage={selPlan.forage} gear={game.trainingGear} selected={selPlan.activity === basic.id} onClick={() => setSelActivity(basic.id)} />
-                      {intensives.map((d) => (
-                        <TrainBlock key={d.id} d={d} career={selectedCareer} food={selPlan.food} forage={selPlan.forage} gear={game.trainingGear} selected={selPlan.activity === d.id} onClick={() => setSelActivity(d.id)} />
-                      ))}
-                      {game.extremeUnlocked && extreme && (
-                        <TrainBlock d={extreme} career={selectedCareer} food={selPlan.food} forage={selPlan.forage} gear={game.trainingGear} selected={selPlan.activity === extreme.id} onClick={() => setSelActivity(extreme.id)} />
-                      )}
-                    </div>
-                  )
-                })}
-                <div className="traincol">
-                  <div className="traincol-h dim">OTHER</div>
-                  {(() => {
-                    const restPrev = previewWeekEffects(selectedCareer, 'rest', selPlan.food, selPlan.forage, game.trainingGear)
-                    const excPrev = previewWeekEffects(selectedCareer, 'excursion', selPlan.food, selPlan.forage, game.trainingGear)
-                    return (
-                      <>
-                        <button className={'trainblock' + (selPlan.activity === 'rest' ? ' selected' : '')} onClick={() => setSelActivity('rest')}>
-                          <div className="trainblock-name">Rest</div>
-                          <div className="trainblock-sub">
-                            <span className="benefit-gain">+{restPrev.staminaDelta} stam</span>
-                            {restPrev.hpDelta > 0 && <>, <span className="benefit-gain">+{restPrev.hpDelta} HP</span></>}
-                            {restPrev.mpDelta > 0 && <>, <span className="benefit-gain">+{restPrev.mpDelta} MP</span></>}
-                          </div>
-                        </button>
-                        <button className={'trainblock' + (selPlan.activity === 'excursion' ? ' selected' : '')} onClick={() => setSelActivity('excursion')}>
-                          <div className="trainblock-name">Excursion</div>
-                          <div className="trainblock-sub"><span className="benefit-gain">+{excPrev.goldDelta}g</span>, <span className="benefit-malus">{excPrev.staminaDelta} stam</span></div>
-                        </button>
-                      </>
-                    )
-                  })()}
-                </div>
+            <div className="card plannedweek">
+              <div className="section-title">This week's plan</div>
+              <div className="plannedweek-row">
+                <span className="plannedweek-act">{activityName(selPlan) ?? '😴 Resting'}</span>
+                <span className="dim">
+                  {selPlan.food ? `· ${foodName(selPlan.food)}` : selPlan.forage ? '· 🌿 Foraging' : '· no food chosen yet'}
+                </span>
               </div>
-              {game.diverseUnlocked && (
-                <>
-                  <div className="section-title">Diverse Training <span className="dim">· two stats at once, no malus</span></div>
-                  <div className="trainrow diverserow">
-                    {DIVERSE_DRILLS.map((d) => (
-                      <TrainBlock key={d.id} d={d} career={selectedCareer} food={selPlan.food} forage={selPlan.forage}
-                        gear={game.trainingGear} selected={selPlan.activity === d.id} onClick={() => setSelActivity(d.id)} />
-                    ))}
-                  </div>
-                </>
-              )}
-            </>
+              <div className="dim" style={{ marginTop: 6 }}>
+                Food and training are chosen together in the weekly walkthrough — press <b>Advance Week</b>, or{' '}
+                <button className="linkish" onClick={() => { setDecisionIdx(feedIdxs[0] ?? 0); setPhase('feeding') }}>open it now</button>.
+              </div>
+            </div>
           )}
 
           {/* Tournament calendar — always visible on the stable screen (v0.84) */}
@@ -2806,7 +2853,11 @@ function RanchView({ game, setGame, onBattleScreen }: {
                 const signedHere = game.pendingTournament?.tournamentId === t.id
                 const signedMonsters = signedHere ? game.stable.filter((c) => game.pendingTournament!.monsterIds.includes(c.id)) : []
                 const alreadyEntered = (game.enteredThisMonth ?? []).includes(t.id)
-                const isOpenWeek = isCurrentMonth && currentWeek === t.week
+                // Sign-ups open the week BEFORE the event as well as on it
+                // (v0.92) — the roster has to be known before the feed-and-train
+                // walkthrough opens, or entering would discard the plan just set.
+                const isOpenWeek = isSignUpOpen(game, t)
+                const isEarlyWeek = isOpenWeek && !(isCurrentMonth && currentWeek === t.week)
                 const rawPickIds = (teamPick[t.id] ?? []).filter((id) => eligible.some((c) => c.id === id))
                 // For 1v1 the select DEFAULTS to the first eligible monster — the
                 // effective pick must include that default so the warnings below
@@ -2905,7 +2956,8 @@ function RanchView({ game, setGame, onBattleScreen }: {
                     })()}
                     {signedHere ? (
                       <div>
-                        ✅ {signedMonsters.map((c) => c.name).join(', ') || '?'} compete{signedMonsters.length === 1 ? 's' : ''} this week{' '}
+                        ✅ {signedMonsters.map((c) => c.name).join(', ') || '?'} {signedMonsters.length === 1 ? 'is' : 'are'}{' '}
+                        {isEarlyWeek ? <><b>entered for Week {t.week}</b> — still free to train until then</> : <>competing this week</>}{' '}
                         <button className="ghost" onClick={() => setGame((g) => cancelSignUp(g))}>Cancel</button>
                         {signedMonsters.length > 1 && <div className="dim" style={{ marginTop: 4 }}>🎯 Formation, protect &amp; target orders are set before each fight.</div>}
                       </div>
@@ -2913,9 +2965,8 @@ function RanchView({ game, setGame, onBattleScreen }: {
                       <div className="dim">✔ Already competed this month.</div>
                     ) : !isOpenWeek ? (
                       <div className="dim">
-                        {!isCurrentMonth ? `Sign-ups open in Month ${t.month}, Week ${t.week}.`
-                          : currentWeek < t.week ? `Sign-ups open on Week ${t.week} (currently Week ${currentWeek}).`
-                            : `Week ${t.week} has passed for this event.`}
+                        {isCurrentMonth && currentWeek > t.week ? `Week ${t.week} has passed for this event.`
+                          : `Sign-ups open a week before the event — from Month ${t.month}, Week ${t.week - 1 || 4}.`}
                       </div>
                     ) : eligible.length < teamSize ? (
                       <div className="dim">

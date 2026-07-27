@@ -952,7 +952,7 @@ export function trialStatus(g: GameState): { ok: boolean; reason?: string } {
   if (g.licenseEarned > g.licenseIndex) return { ok: false, reason: 'license already earned — buy it in the Ranch Shop' }
   if (g.week < g.trialCooldownUntil) return { ok: false, reason: `recovering from the last attempt — ready in ${g.trialCooldownUntil - g.week}wk` }
   if (!trialReady(g)) return { ok: false, reason: `train a monster to ${LEAGUES[g.licenseIndex].cap - 10} in a stat first` }
-  if (g.pendingTournament) return { ok: false, reason: 'already signed up for a cup this week' }
+  if (pendingCupIsThisWeek(g)) return { ok: false, reason: 'already signed up for a cup this week' }
   return { ok: true }
 }
 // Sign up for the trial — an on-demand champion fight (de-calendarized, v0.5:
@@ -1021,7 +1021,7 @@ export function riteStatus(g: GameState): { ok: boolean; reason?: string } {
   if (g.week < (g.riteCooldownUntil ?? 0)) return { ok: false, reason: `held once a year — the site reopens in ${(g.riteCooldownUntil ?? 0) - g.week}wk` }
   if (riteRoster(g).length === 0) return { ok: false, reason: 'no active monsters' }
   if (riteEligible(g).length === 0) return { ok: false, reason: 'every active monster already carries a signature' }
-  if (g.pendingTournament) return { ok: false, reason: 'already signed up for a cup this week' }
+  if (pendingCupIsThisWeek(g)) return { ok: false, reason: 'already signed up for a cup this week' }
   if (g.pendingTrial) return { ok: false, reason: 'a rank-up trial is already set for this week' }
   return { ok: true }
 }
@@ -1745,7 +1745,11 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
   // Competing IS the weekly action (v0.5): monsters entered in a cup or the
   // rank-up trial fight instead of training — enforced here at the data layer
   // regardless of what the stored plan says (the UI locks it too).
-  const competing = new Set([...(g.pendingTournament?.monsterIds ?? []), ...(g.pendingTrial?.monsterIds ?? []), ...(g.pendingRite?.monsterIds ?? [])])
+  // ⚠️ A cup entry only consumes the week when the event IS this week — sign-ups
+  // may be placed a week early (SIGNUP_LEAD_WEEKS) and that reservation week is
+  // still a normal training week.
+  const cupWasThisWeek = pendingCupIsThisWeek(g)
+  const competing = new Set([...(cupWasThisWeek ? g.pendingTournament!.monsterIds : []), ...(g.pendingTrial?.monsterIds ?? []), ...(g.pendingRite?.monsterIds ?? [])])
   let gold = g.gold
   let rentalDue = (g.labFrozen?.length ?? 0) * labUpkeepPerFrozen(g)
   const stable = g.stable.map((c) => {
@@ -1883,7 +1887,10 @@ export function advanceWeek(g: GameState, plansOverride?: Record<string, WeekPla
     market: monthTurned
       ? rollMarketOffers(g.seed, week / WEEKS_PER_MONTH, marketConfigOf(g))
       : g.market,
-    pendingTournament: null,
+    // ⚠️ A cup entry is only spent once its event week has actually been ticked
+    // through. A reservation placed a week early (SIGNUP_LEAD_WEEKS) must SURVIVE
+    // this tick, or the entry silently evaporates before the event it booked.
+    pendingTournament: cupWasThisWeek ? null : g.pendingTournament,
     pendingTrial: null,
     pendingRite: null,
     activeCup, // staged event handed to the interactive battle flow (v0.81)
@@ -1981,9 +1988,41 @@ export function teamHasLicensedLeader(g: GameState, t: Tournament, monsterIds: s
   return monsterIds.some((id) => (g.stable.find((x) => x.id === id)?.licenseIndex ?? -1) >= tIdx)
 }
 
+// A tournament's ABSOLUTE week on the game clock, for the year `g.week` is in.
+// month/week are 1-based; the clock is 0-based.
+export const tournamentAbsWeek = (g: GameState, t: Tournament): number =>
+  yearOfWeek(g.week) * WEEKS_PER_YEAR + (t.month - 1) * WEEKS_PER_MONTH + (t.week - 1)
+
+// SIGN-UP WINDOW (v0.92): the event week, or the week BEFORE it.
+// Training is now chosen inside the weekly feed-and-train walkthrough, which
+// runs at the START of a week — so entering a cup that same week would overwrite
+// a plan the player had just set. Entering a week early makes the roster known
+// BEFORE that window opens, and the walkthrough shows "competing" instead of
+// offering drills it is about to discard.
+export const SIGNUP_LEAD_WEEKS = 1
+export function signUpWindowFor(g: GameState, t: Tournament): { opensAbs: number; eventAbs: number } {
+  const eventAbs = tournamentAbsWeek(g, t)
+  return { opensAbs: eventAbs - SIGNUP_LEAD_WEEKS, eventAbs }
+}
+export const isSignUpOpen = (g: GameState, t: Tournament): boolean => {
+  const { opensAbs, eventAbs } = signUpWindowFor(g, t)
+  return g.week >= opensAbs && g.week <= eventAbs
+}
+
+// Is a standing cup entry for THIS week? A week-early reservation is NOT — the
+// roster still trains normally until the event week comes round. Everything
+// that treats a sign-up as "competing now" must ask this, not just whether a
+// pendingTournament exists.
+export function pendingCupIsThisWeek(g: GameState): boolean {
+  const p = g.pendingTournament
+  if (!p) return false
+  const t = tournamentCalendarFor(g.seed, yearOfWeek(g.week)).find((x) => x.id === p.tournamentId)
+  return !!t && tournamentAbsWeek(g, t) === g.week
+}
+
 export function signUp(g: GameState, tournamentId: string, monsterIds: string[]): GameState {
   const t = tournamentCalendarFor(g.seed, yearOfWeek(g.week)).find((x) => x.id === tournamentId)
-  if (!t || monthOfWeek(g.week) !== t.month || weekOfMonth(g.week) !== t.week) return g
+  if (!t || !isSignUpOpen(g, t)) return g
   if ((g.enteredThisMonth ?? []).includes(tournamentId)) return g // one entry per event
   const needed = teamSizeForLeague(t.league)
   if (monsterIds.length !== needed) return g
@@ -2000,8 +2039,13 @@ export function signUp(g: GameState, tournamentId: string, monsterIds: string[])
   // Cups are FREE to enter (entry fee removed 2026-07-XX) — the weekly action is
   // the real cost. Competing IS the weekly action (v0.5): entered monsters' plans
   // lock to 'compete' (advanceWeek enforces it at the data layer regardless).
+  // ⚠️ ONLY when the event is THIS week. A week-early reservation must leave the
+  // roster free to train the week in between — that lead time is the whole point,
+  // and locking it here would just move the cost forward a week.
   const weekPlans = { ...(g.weekPlans ?? {}) }
-  for (const id of monsterIds) weekPlans[id] = { ...(weekPlans[id] ?? { activity: 'rest', food: '' as const }), activity: 'compete' }
+  if (tournamentAbsWeek(g, t) === g.week) {
+    for (const id of monsterIds) weekPlans[id] = { ...(weekPlans[id] ?? { activity: 'rest', food: '' as const }), activity: 'compete' }
+  }
   return { ...g, weekPlans, pendingTournament: { tournamentId, monsterIds, feePaid: 0 } }
 }
 
@@ -2314,6 +2358,8 @@ export function applyMarkToOpponent(team: Monster[], mark?: number): Monster[] {
 function stageCup(g: GameState, stable: Career[]): { activeCup: ActiveCup; enteredId: string } | null {
   const pending = g.pendingTournament
   if (!pending) return null
+  // A reservation placed a week early must NOT fire early — it waits for its week.
+  if (!pendingCupIsThisWeek(g)) return null
   const t = tournamentCalendarFor(g.seed, yearOfWeek(g.week)).find((x) => x.id === pending.tournamentId)
   const careers = pending.monsterIds.map((id) => stable.find((x) => x.id === id))
   if (!t || careers.some((c) => !c || c.retired)) return null

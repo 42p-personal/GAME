@@ -888,3 +888,15 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
   .ov-crater, .ov-exec, .ov-manaburn, .ov-tether, .ov-shield, .ov-thorns, .ov-heal, .ov-cleanse, .ov-aura, .status-puff,
   .roster-tile.buffed { animation-duration: .01ms !important; }
 }
+
+/* Ranch "this week's plan" summary (v0.92). Training moved into the weekly
+   feed-and-train walkthrough, so the Ranch reports the plan rather than setting
+   it, and offers a way back into the window. */
+.plannedweek { margin-top: 12px; }
+.plannedweek-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; font-size: 14px; }
+.plannedweek-act { font-weight: 800; color: var(--ink); }
+/* Inline text button. Sets its own background, so it MUST set its own color —
+   the v0.79 audit lesson. */
+.linkish { background: none; border: none; padding: 0; font: inherit; cursor: pointer;
+  color: var(--accent); text-decoration: underline; min-height: 24px; }
+.linkish:hover { color: var(--ink); }

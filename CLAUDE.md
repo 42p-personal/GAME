@@ -8,7 +8,70 @@ nudge a value gently, sim it, read the result, adjust again. The sim is the arbi
 `docs/BALANCING.md` for the working ledger. This applies to every economy/difficulty/
 progression number, always.
 
-## Current state (v0.91)
+## Current state (v0.92)
+
+**v0.92 — the weekly window + rival teams that are BUILT to a plan.**
+
+### Food and training are ONE decision (`App.tsx`)
+Training moved out of the Ranch and into the weekly **feed-and-train walkthrough**:
+one monster per screen, food picker then `<TrainingPicker>` (extracted from
+`RanchView`, also reused nowhere else yet — the extraction is what made the move
+cheap). The reason they belong together: drill previews read the selected food
+through `previewWeekEffects`, so picking Prime Cut visibly moves Weight Training
+from **+6 → +8 STR** on the same screen. That coupling was invisible when the two
+lived on different screens.
+
+**The Ranch is now overview + tournaments**: stable strip, detail panel (stats,
+abilities, rank-up trial, Rite), a read-only **"This week's plan"** card, and the
+calendar at the bottom. The card links back into the walkthrough (`open it now`).
+
+### Sign-ups open a WEEK EARLY (`town.ts`)
+`SIGNUP_LEAD_WEEKS = 1`. Entering on the event week would overwrite the plan the
+player had just set in the walkthrough, so the roster is now decided *before* that
+window opens.
+
+> ⚠️ A week-early entry is a **RESERVATION, not a lock**. Three things had to agree
+> or it silently breaks:
+> - `signUp` only stamps `activity: 'compete'` when `tournamentAbsWeek === g.week`
+> - `stageCup` returns null unless `pendingCupIsThisWeek(g)` — else it fires early
+> - `advanceWeek` must **preserve** `pendingTournament` across the reservation week
+>   (it used to clear it unconditionally — the entry evaporated before its event)
+>
+> `pendingCupIsThisWeek(g)` is the single question everything asks. Anything new
+> that treats a sign-up as "competing now" must call it, **not** `!!pendingTournament`.
+
+Trial/Rite guards relaxed to match — a cup reserved for next week no longer blocks
+this week's arena event.
+
+### Rival teams are built to their gameplan
+The plan used to be rolled **after** the team was generated and stamped on top, so
+`bulwark` described rosters with no tanks. Now the plan is chosen first and shapes
+the roster (`compositionTemplate(size, plan)` — 6v6: rushdown 5/1, focusfire·zone
+4/2, attrition 3/3, bulwark 2/4), `equipForPlan` bends loadouts toward it, and each
+plan states its `winCon` in the scout panel.
+
+> ⚠️ `equipForPlan` **searches** for a combo the team can actually field rather than
+> assuming one. Only bleed/doom/burn/fear have `bonusVsStatus` finishers in the pool
+> — **poison and vulnerable have NONE** — so `attrition`/`focusfire` could never
+> assemble the combo their winCon promised. It now finds a status the team can both
+> set and cash, on two different members. Combos land on 60–74% of teams; they skew
+> burn (613/626) because Cinderburst is lv200 and every other payoff is lv780+.
+
+> ⚠️ `compositionTemplate`'s "one of each role" clamp was guarded on `teamSize > 1`,
+> so at **1v1** bulwark's 2/4 mix rounded to ZERO damage — a Wood/Copper rival
+> holding only Mend + Focus, no damage move at all. A solo monster has no team to
+> support: `teamSize === 1` always fields damage. Found only by playing at Wood;
+> the 925-team audit swept Tin→Apex, all sizes 2–6.
+
+### Known, not fixed (deliberate)
+~6% of Wood/Copper rivals roll every stat under 40 and so learn **nothing** (the
+pool's lowest `learnLevel` is 40), leaving an empty loadout — they can still use the
+free Attack. Pre-existing; first-league difficulty is a balance number and goes
+through the sim, not a unilateral edit.
+
+---
+
+## Prior state (v0.91)
 
 **v0.91 — signature skills + the combat-depth pass.** The largest single feature
 since fusion. Full ability design and the balance audit: `docs/SIGNATURE_DESIGN.md`.
