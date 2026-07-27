@@ -13,6 +13,7 @@ import {
   CHANNEL_CAST_TIME, CHANNEL_RANGE, DEPLOY_DEPTH,
 } from './types'
 import { desiredGoal, dist, norm, pickTarget, sub, traitsFor } from './decide'
+import { personalityOf, spendAbove } from './personality'
 
 // ── Geometry helpers ────────────────────────────────────────────────────────
 const insideObstacle = (p: Vec2, o: Obstacle, pad = 0) =>
@@ -87,18 +88,45 @@ function buildUnit(m: Monster, side: FieldSide, slot: number, pos: Vec2): FieldU
 const rangeOf = (mv: Move) => mv.range ?? CHANNEL_RANGE[mv.channel]
 const castOf = (mv: Move) => mv.castTime ?? CHANNEL_CAST_TIME[mv.channel]
 
+/** Rough damage this move would do to this target — for kill checks only. */
+function estimateDamage(u: FieldUnit, mv: Move, target: FieldUnit): number {
+  const atk = u.m.stats[mv.stat] ?? 0
+  const mit = mv.channel === 'melee' || mv.channel === 'ranged' ? target.m.stats.CON : target.m.stats.WIS
+  return Math.max(1, Math.round(mv.power * (1 + atk / 320) * (1 - Math.min(0.55, mit / 1400))))
+}
+
+/**
+ * PATIENCE: is this the moment to spend a big cooldown?
+ *
+ * Before this the engine simply fired the highest-power move that was off
+ * cooldown, so a signature move was a rotation rather than a decision — and
+ * dumping it into a full-health tank cost nothing. A patient monster holds it
+ * until the target is softened; an impulsive one fires the instant it is up.
+ * A guaranteed KILL always overrides the wait.
+ */
+function worthSpending(u: FieldUnit, mv: Move, target: FieldUnit, avgPower: number): boolean {
+  const isBig = mv.power > avgPower * 1.25
+  if (!isBig) return true
+  if (estimateDamage(u, mv, target) >= target.hp) return true // finish it
+  return target.hp / target.maxHp <= spendAbove(personalityOf(u.m))
+}
+
 /** The best move this unit can actually land on its target right now. */
 function chooseMove(u: FieldUnit, target: FieldUnit, obstacles: Obstacle[]): Move | null {
   const d = dist(u.pos, target.pos)
+  const dmgMoves = u.m.loadout.filter((mv) => mv.type === 'damage')
+  const avgPower = dmgMoves.length
+    ? dmgMoves.reduce((n, mv) => n + mv.power, 0) / dmgMoves.length
+    : 0
   let best: Move | null = null
   let bestScore = -Infinity
-  for (const mv of u.m.loadout) {
-    if (mv.type !== 'damage') continue
+  for (const mv of dmgMoves) {
     if ((u.cooldowns[mv.id] ?? 0) > 0) continue
     if (u.mp < manaCost(mv)) continue
     if (d > rangeOf(mv)) continue
     // Ranged and magic need to actually SEE the target — cover is real.
     if (mv.channel !== 'melee' && !hasLineOfSight(u.pos, target.pos, obstacles)) continue
+    if (!worthSpending(u, mv, target, avgPower)) continue
     const score = mv.power
     if (score > bestScore) { bestScore = score; best = mv }
   }

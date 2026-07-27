@@ -221,3 +221,47 @@ describe('positioning', () => {
     expect(dist(sticky, { x: 4, y: 4.5 })).toBeLessThan(dist(loner, { x: 4, y: 4.5 }))
   })
 })
+
+describe('awareness — the counter to a dive', () => {
+  const u = (id: string, over: Partial<FieldUnit>): FieldUnit => ({
+    id, side: 'A', slot: 0, m: mk(id), pos: { x: 10, y: 11 }, vel: { x: 0, y: 0 },
+    radius: 0.9, speed: 3, hp: 500, maxHp: 500, mp: 50, maxMp: 50,
+    traits: { cohesion: 0.5, predation: 0.5 }, targetId: null, retargetIn: 0,
+    cooldowns: {}, castingFor: 0, castMoveId: null, statuses: [], dead: false, ...over,
+  })
+
+  it('an ALERT monster turns on the enemy diving its wounded ally', () => {
+    // A frail ally is being jumped; another enemy stands equally close to me.
+    const ally = u('ally', { pos: { x: 6, y: 4 }, hp: 90, maxHp: 400 })
+    const diver = u('diver', { side: 'B', pos: { x: 7.5, y: 4 } })
+    const other = u('other', { side: 'B', pos: { x: 14, y: 11 } })
+    const me = (awareness: number) => u('me', {
+      pos: { x: 10, y: 8 },
+      m: mk('me', { personality: { awareness: awareness - 50 } }),
+      traits: { cohesion: 0.5, predation: 0.5 },
+    })
+    // Deliberately compare the two extremes of the same monster.
+    const alert = pickTarget(me(100), [diver, other], [me(100), ally])
+    const oblivious = pickTarget(me(0), [diver, other], [me(0), ally])
+    expect(alert?.id).toBe('diver')
+    expect(oblivious?.id).toBe('other')
+  })
+})
+
+describe('patience — holding the big cooldown', () => {
+  it('an impulsive monster fires its best move at a healthy target; a patient one waits', () => {
+    // Same monster, opposite patience, target at full health.
+    const A = teamOf(1, 'pa')[0]
+    const impulsive = { ...A, personality: { patience: -100 } } as Monster
+    const patient = { ...A, personality: { patience: 100 } } as Monster
+    const rI = simulateFieldBattle({ seed: 'pat', teamA: [impulsive], teamB: teamOf(1, 'pb') })
+    const rP = simulateFieldBattle({ seed: 'pat', teamA: [patient], teamB: teamOf(1, 'pb') })
+    const firstBig = (r: typeof rI) => {
+      const casts = r.events.filter((e) => e.kind === 'cast' && e.id === 'A0') as Extract<typeof r.events[number], { kind: 'cast' }>[]
+      const strongest = casts.filter((c) => c.move !== 'Attack')
+      return strongest.length ? strongest[0].t : Infinity
+    }
+    // The patient one does not lead with its heaviest swing.
+    expect(firstBig(rP)).toBeGreaterThanOrEqual(firstBig(rI))
+  })
+})

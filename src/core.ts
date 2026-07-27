@@ -222,7 +222,9 @@ export interface Personality {
   aggression: number // how early and how deep it commits
   teamplay: number // fights as a unit — shares focus, stays with the group
   mental: number // holds together under pressure; low panics and chases bait
-  temperament: number // executes well, and obeys coaching
+  temperament: number // biddable — how much of your coaching actually sticks
+  awareness: number // notices threats: a diver on the backline, an ally in trouble
+  patience: number // holds its big cooldowns for the right moment instead of dumping them
 }
 
 // --- Tactics (2026-07-25): pre-battle standing orders, Teamfight-Manager

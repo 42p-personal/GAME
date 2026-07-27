@@ -4,7 +4,7 @@
 // mutation — so it is directly unit-testable and the tick loop stays readable.
 import { Monster, Stat, roleOfClass } from '../core'
 import { FieldTraits, FieldUnit, Vec2, FIELD_W, FIELD_H, CHANNEL_RANGE } from './types'
-import { panicThreshold, personalityOf, resolvePersonality } from './personality'
+import { panicThreshold, personalityOf, resolvePersonality, threatRadius } from './personality'
 
 export const v = (x: number, y: number): Vec2 => ({ x, y })
 export const sub = (a: Vec2, b: Vec2): Vec2 => ({ x: a.x - b.x, y: a.y - b.y })
@@ -104,17 +104,41 @@ export function pickTarget(self: FieldUnit, enemies: FieldUnit[], allies: FieldU
 
     // A predator discounts distance (it will cross the field for the right
     // kill) and weights value heavily. A team player weights whatever its
-    // allies are already hitting.
+    // allies are already hitting. An AWARE monster answers whoever is diving
+    // its friends — without this term nothing ever punishes a dive, and the
+    // assassin archetype has no counter at all.
     const score =
       1.00 * proximity * (1 - 0.65 * predation) +
       0.85 * wounded * (0.5 + predation) +
       0.90 * value * predation +
       0.80 * focus * cohesion +
+      1.10 * diveThreat(self, e, allies) +
       priorityBias(self, e)
 
     if (score > bestScore) { bestScore = score; best = e }
   }
   return best
+}
+
+/**
+ * How badly this enemy needs answering: is it bearing down on a teammate who
+ * cannot survive it? Scaled by the observer's AWARENESS, so an oblivious
+ * bruiser keeps hitting whatever is in front of it while an alert one turns
+ * to intercept. This is the counterplay to Predation.
+ */
+export function diveThreat(self: FieldUnit, e: FieldUnit, allies: FieldUnit[]): number {
+  const p = personalityOf(self.m)
+  const radius = threatRadius(p)
+  let worst = 0
+  for (const a of allies) {
+    if (a.dead || a.id === self.id) continue
+    const d = dist(e.pos, a.pos)
+    if (d > radius) continue
+    // A squishy, valuable, already-hurt ally is the one worth turning for.
+    const stakes = valueOf(a) * (1.3 - clamp01(a.hp / a.maxHp) * 0.6)
+    worst = Math.max(worst, (1 - d / radius) * stakes)
+  }
+  return worst * (p.awareness / 100)
 }
 
 /** The player's explicit target order, as a nudge rather than an override. */
@@ -126,6 +150,9 @@ function priorityBias(self: FieldUnit, e: FieldUnit): number {
   if (p === 'focus') return e.m.marked ? 0.5 : 0
   return 0
 }
+
+/** How early a ranged monster starts giving ground — awareness buys distance. */
+const kiteAt = (u: FieldUnit): number => 0.45 + (personalityOf(u.m).awareness / 100) * 0.3
 
 // ── Positioning ─────────────────────────────────────────────────────────────
 /**
@@ -166,9 +193,10 @@ export function desiredGoal(self: FieldUnit, target: FieldUnit | null, allies: F
   let goal: Vec2
   if (d > standoff) {
     goal = add(self.pos, scale(toward, d - standoff))
-  } else if (reach > 3 && d < reach * 0.55) {
-    // KITING: a ranged unit backs off when something closes on it.
-    goal = add(self.pos, scale(toward, -(reach * 0.55 - d)))
+  } else if (reach > 3 && d < reach * kiteAt(self)) {
+    // KITING: a ranged unit backs off when something closes on it — and an
+    // AWARE one starts backing off earlier, before it is already in trouble.
+    goal = add(self.pos, scale(toward, -(reach * kiteAt(self) - d)))
   } else {
     goal = { ...self.pos }
   }

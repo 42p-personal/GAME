@@ -9,7 +9,7 @@ import { SPECIES } from '../species'
 const mk = (seed: string, over: Partial<Monster> = {}): Monster =>
   ({ ...generateMonster(seed, { train: 900 }), tactics: { ...DEFAULT_TACTICS }, ...over }) as Monster
 
-const AXES: (keyof Personality)[] = ['aggression', 'teamplay', 'mental', 'temperament']
+const AXES: (keyof Personality)[] = ['aggression', 'teamplay', 'mental', 'temperament', 'awareness', 'patience']
 
 describe('personality is derived, not rolled', () => {
   it('is stable for the same monster', () => {
@@ -95,8 +95,8 @@ describe('coaching is gated by temperament', () => {
 
 describe('mental decides when a monster breaks', () => {
   it('steadier monsters hold on longer', () => {
-    const steady = panicThreshold({ aggression: 50, teamplay: 50, mental: 100, temperament: 50 })
-    const flighty = panicThreshold({ aggression: 50, teamplay: 50, mental: 0, temperament: 50 })
+    const steady = panicThreshold({ aggression: 50, teamplay: 50, mental: 100, temperament: 50, awareness: 50, patience: 50 })
+    const flighty = panicThreshold({ aggression: 50, teamplay: 50, mental: 0, temperament: 50, awareness: 50, patience: 50 })
     expect(steady).toBeLessThan(flighty)
     expect(steady).toBeGreaterThanOrEqual(0)
     expect(flighty).toBeLessThanOrEqual(0.5)

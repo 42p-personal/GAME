@@ -42,6 +42,10 @@ function speciesBias(sp: Species): Personality {
     mental: 50 + (share(b.CON) + share(b.WIS) - share(b.DEX)) * 15,
     // Intellect and wisdom follow a plan.
     temperament: 50 + (share(b.INT) + share(b.WIS) - share(b.STR)) * 15,
+    // Quick eyes and a quick mind spot the flanker; bulk does not.
+    awareness: 50 + (share(b.DEX) + share(b.INT) - share(b.CON)) * 15,
+    // Deliberate and durable monsters wait for the moment; twitchy ones do not.
+    patience: 50 + (share(b.CON) + share(b.WIS) - share(b.DEX)) * 15,
   }
 }
 
@@ -60,6 +64,8 @@ export function basePersonality(seed: string, sp: Species): Personality {
     teamplay: clamp(bias.teamplay + vary()),
     mental: clamp(bias.mental + vary()),
     temperament: clamp(bias.temperament + vary()),
+    awareness: clamp(bias.awareness + vary()),
+    patience: clamp(bias.patience + vary()),
   }
 }
 
@@ -76,6 +82,8 @@ export function personalityOf(m: Monster): Personality {
     teamplay: clamp(base.teamplay + (drift.teamplay ?? 0)),
     mental: clamp(base.mental + (drift.mental ?? 0)),
     temperament: clamp(base.temperament + (drift.temperament ?? 0)),
+    awareness: clamp(base.awareness + (drift.awareness ?? 0)),
+    patience: clamp(base.patience + (drift.patience ?? 0)),
   }
 }
 
@@ -136,3 +144,17 @@ export function resolvePersonality(m: Monster): {
     teamplay: coachedValue(p.teamplay / 100, want.teamplay, p.temperament),
   }
 }
+
+/**
+ * How far out this monster notices a threat, in world units. An oblivious
+ * monster only reacts to what is already on top of it.
+ */
+export const threatRadius = (p: Personality): number => 3 + (p.awareness / 100) * 7
+
+/**
+ * How soft a target has to be before a PATIENT monster will spend one of its
+ * big cooldowns on it. At patience 0 it fires the moment the move is up; at
+ * 100 it waits until the target is at half health (a guaranteed kill always
+ * overrides this — see worthSpending).
+ */
+export const spendAbove = (p: Personality): number => 1 - (p.patience / 100) * 0.5
