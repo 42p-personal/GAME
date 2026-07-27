@@ -158,6 +158,14 @@ export interface Move {
   status?: MoveStatus
   element?: Element // magic moves carry an element (§8.5)
   effects?: MoveEffects
+  // ── Spatial fields (v0.93, field engine only) ────────────────────────────
+  // The turn-based engine in battle.ts NEVER reads these, so adding them cannot
+  // move a golden. Both are OPTIONAL and fall back to a channel-derived default
+  // (field/types.ts CHANNEL_RANGE / CHANNEL_CAST_TIME), which is what lets the
+  // field engine run against all 140 existing moves without a blocking data
+  // pass — author them per-move to refine reach as balance demands.
+  range?: number // world units the move can reach
+  castTime?: number // seconds the caster is rooted committing to it
   desc: string
 }
 

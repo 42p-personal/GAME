@@ -1,0 +1,134 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// FIELD BATTLE (v0.93) — a continuous-2D autobattler engine, in the Teamfight
+// Manager mould. Monsters occupy real positions, move under their own steering,
+// choose their own targets, and fight until one side is gone.
+//
+// ⚠️ This is a SECOND engine. `battle.ts` (turn-based) is untouched and remains
+// the shipping engine — the whole balance arc up to v0.92 is calibrated to it,
+// and its 12 golden battles still pin it exactly. Nothing in this folder is
+// imported by battle.ts, so the goldens cannot move. The two run side by side
+// until this one is tuned well enough to take over.
+// ─────────────────────────────────────────────────────────────────────────────
+import { Channel, Monster, StatusKind } from '../core'
+
+export interface Vec2 { x: number; y: number }
+
+// The arena in world units. Roughly 40x22 gives a wide pitch with room for two
+// deployment zones, a no-man's land, and cover in the middle.
+export const FIELD_W = 40
+export const FIELD_H = 22
+// A side deploys within this many units of its own edge.
+export const DEPLOY_DEPTH = 11
+
+// Simulation cadence. Fixed dt is what keeps the whole thing deterministic —
+// never derive movement from wall-clock time.
+export const TICK_HZ = 10
+export const DT = 1 / TICK_HZ
+export const MAX_SECONDS = 90
+export const MAX_TICKS = MAX_SECONDS * TICK_HZ
+// Re-picking a target every tick makes units jitter between equal-scoring foes.
+// They commit for this long unless the target dies or they are forced off it.
+export const RETARGET_EVERY = 0.6 // seconds
+
+export type FieldSide = 'A' | 'B'
+
+// Rectangular cover. Blocks movement AND line of sight, so a caster can shelter
+// behind a rock and a melee unit has to path around it.
+export interface Obstacle { x: number; y: number; w: number; h: number }
+
+// ── The two new stats the design calls for ──────────────────────────────────
+// Together they give four readable archetypes:
+//   high cohesion / low predation  → anchor: holds the line with the team
+//   high cohesion / high predation → coordinated dive: team focuses one target
+//   low cohesion  / low predation  → skirmisher: freelances, takes what's near
+//   low cohesion  / high predation → assassin: solo-dives the enemy backline
+export interface FieldTraits {
+  /** 0..1 — sticks with the team, shares focus, peels for allies. */
+  cohesion: number
+  /** 0..1 — hunts the highest-VALUE target regardless of danger or distance. */
+  predation: number
+}
+
+export interface FieldUnit {
+  id: string
+  side: FieldSide
+  slot: number // index within its own team — identity, for events and results
+  m: Monster
+  pos: Vec2
+  vel: Vec2
+  radius: number
+  /** world units per second */
+  speed: number
+  hp: number
+  maxHp: number
+  mp: number
+  maxMp: number
+  traits: FieldTraits
+  /** id of the unit it is currently committed to */
+  targetId: string | null
+  /** seconds until it may re-evaluate its target */
+  retargetIn: number
+  /** per-move cooldowns, keyed by move id, in seconds */
+  cooldowns: Record<string, number>
+  /** seconds left in a cast it has committed to (it is rooted while casting) */
+  castingFor: number
+  castMoveId: string | null
+  statuses: { kind: StatusKind; until: number }[]
+  dead: boolean
+}
+
+// What the renderer consumes. Positions are sampled once per tick so the view
+// can interpolate; discrete beats (a hit landing, a death) are their own events.
+export type FieldEvent =
+  | { t: number; kind: 'snapshot'; units: { id: string; x: number; y: number; hp: number; facing: number; state: UnitVisState }[] }
+  | { t: number; kind: 'cast'; id: string; targetId: string | null; move: string; channel: Channel }
+  | { t: number; kind: 'hit'; id: string; targetId: string; move: string; channel: Channel; dmg: number; crit: boolean }
+  | { t: number; kind: 'miss'; id: string; targetId: string; move: string }
+  | { t: number; kind: 'heal'; id: string; targetId: string; move: string; amount: number }
+  | { t: number; kind: 'status'; id: string; status: StatusKind }
+  | { t: number; kind: 'death'; id: string }
+  | { t: number; kind: 'end'; winner: FieldSide | 'draw' }
+
+/** Coarse pose for the renderer — drives which animation a sprite plays. */
+export type UnitVisState = 'idle' | 'move' | 'cast' | 'hurt' | 'dead'
+
+export interface FieldSetup {
+  seed: string
+  teamA: Monster[]
+  teamB: Monster[]
+  /** Optional explicit deployment. Omit a side to auto-deploy it. */
+  placeA?: Vec2[]
+  placeB?: Vec2[]
+  obstacles?: Obstacle[]
+}
+
+export interface FieldResult {
+  winner: FieldSide | 'draw'
+  events: FieldEvent[]
+  /** seconds the fight lasted */
+  duration: number
+  survivorsA: number
+  survivorsB: number
+}
+
+// ── Reach ───────────────────────────────────────────────────────────────────
+// The 140 authored moves carry no range (they were written for a turn-based
+// engine that had no space). Rather than a blocking data pass over all of them,
+// reach DERIVES from the channel and can be overridden per-move later — so the
+// engine runs today and authoring can refine it incrementally.
+export const CHANNEL_RANGE: Record<Channel, number> = {
+  melee: 1.6,
+  ranged: 8,
+  magic: 7,
+  voice: 5.5,
+  support: 6,
+}
+// Heavier casts root the caster briefly — that wind-up is what gives a dive a
+// window to punish a caster, and makes positioning matter.
+export const CHANNEL_CAST_TIME: Record<Channel, number> = {
+  melee: 0.15,
+  ranged: 0.3,
+  magic: 0.55,
+  voice: 0.45,
+  support: 0.4,
+}
