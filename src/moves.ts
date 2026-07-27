@@ -101,7 +101,13 @@ const POOLS: Record<Stat, Row[]> = {
     { name: 'Drain Spirit', learnLevel: 380, type: 'damage', channel: 'support', target: 'enemy', cooldown: 4, accuracy: 88, power: 20, effects: { manaBurn: 15, lifesteal: 0.3 }, desc: 'Drinks 15 MP and heals for part of the damage.' },
     { name: 'Tranquility', learnLevel: 430, type: 'buff', channel: 'support', target: 'ally', cooldown: 5, accuracy: 100, power: 32, desc: 'Deep restorative calm channelled into an ally: strong heal.' },
     { name: 'Field of Doom', learnLevel: 540, type: 'debuff', channel: 'support', target: 'enemy', cooldown: 5, accuracy: 95, power: 0, effects: { atkDebuff: 0.15, duration: 3 }, status: { kind: 'doom', chance: 28, duration: 4 }, desc: 'Dampening field: target deals −15% damage for 3 rounds; 28% chance to seal its Doom.' },
-    { name: 'Ward Against Ruin', learnLevel: 650, type: 'buff', channel: 'support', target: 'team', cooldown: 6, accuracy: 100, power: 0, effects: { cleanse: true, regenBuff: 3, duration: 3 }, desc: "Clears the whole team's ailments — confusion, charm, doom, silence, sleep, healblock, all of it — and steadies their focus for 3 rounds." },
+    // ⚠️ Ward Against Ruin's team heal is PAID FOR with cooldown 6 -> 7. Healing has
+    // NO AoE falloff (that applies to damage only), so a team heal scales linearly
+    // with team size: 18 each is 54 at 3v3 but 108 at 6v6 off a single cast. The
+    // modest per-head number plus the longer cooldown are what keep it from
+    // outclassing Tranquility (lv430, one ally, 32) and preserve the WIS healing
+    // ladder: self (Mend 14) -> one ally (Tranquility 32) -> whole team (18 each).
+    { name: 'Ward Against Ruin', learnLevel: 650, type: 'buff', channel: 'support', target: 'team', cooldown: 7, accuracy: 100, power: 18, effects: { cleanse: true, regenBuff: 3, duration: 3 }, desc: "Clears the whole team's ailments — confusion, charm, doom, silence, sleep, healblock, all of it — mends 18 HP each, and steadies their focus for 3 rounds." },
     { name: 'Mind Crush', learnLevel: 780, type: 'damage', channel: 'support', target: 'enemy', cooldown: 5, accuracy: 85, power: 36, effects: { manaBurn: 25, bonusVsStatus: { kind: 'doom', mult: 1.6, consume: true } }, desc: 'Heavy psychic blow; burns 25 MP. 1.6× and detonates the target\'s Doom early if it has one.' },
     { name: 'Providence', learnLevel: 850, type: 'buff', channel: 'support', target: 'self', cooldown: 7, accuracy: 100, power: 0, effects: { dodgeBuff: 12, accBuff: 12, duration: 4 }, desc: 'Sees what comes: +12% dodge and accuracy for 4 rounds.' },
     { name: 'Ascendance', learnLevel: 920, type: 'buff', channel: 'support', target: 'self', cooldown: 8, accuracy: 100, power: 0, effects: { atkBuff: 0.25, regenBuff: 4, duration: 4 }, desc: 'Transcendent state: +25% damage, +4 regen for 4 rounds.' },
