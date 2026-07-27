@@ -27,7 +27,7 @@ const FIELD_DIAG = Math.hypot(FIELD_W, FIELD_H)
 export function traitsFor(m: Monster): FieldTraits {
   // PERSONALITY FIRST, coaching second. resolvePersonality blends the monster's
   // innate aggression/teamplay with what your Tactics are asking for, weighted
-  // by its DISCIPLINE — so an undisciplined bruiser ordered to hold back still
+  // by its DISCIPLINE — so an untemperamentd bruiser ordered to hold back still
   // charges. These two numbers are the whole behavioural identity of the unit.
   const { aggression, teamplay } = resolvePersonality(m)
   let predation = aggression

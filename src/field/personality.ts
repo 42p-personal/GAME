@@ -3,7 +3,7 @@
 //
 // Four innate axes, 0..100. Your per-fight Tactics are COACHING laid on top;
 // DISCIPLINE decides how much of that coaching actually sticks. Order an
-// undisciplined bruiser to hold the line and it will charge anyway — which is
+// untemperamentd bruiser to hold the line and it will charge anyway — which is
 // the point. Coaching becomes a negotiation with a creature, not a switch.
 //
 // ⚠️ DERIVED FROM THE SEED, NEVER ROLLED IN generateMonster.
@@ -39,9 +39,9 @@ function speciesBias(sp: Species): Personality {
     // Presence and wisdom make a team player.
     teamplay: 50 + (share(b.CHA) + share(b.WIS) - share(b.STR)) * 15,
     // Toughness and wisdom keep their head.
-    composure: 50 + (share(b.CON) + share(b.WIS) - share(b.DEX)) * 15,
+    mental: 50 + (share(b.CON) + share(b.WIS) - share(b.DEX)) * 15,
     // Intellect and wisdom follow a plan.
-    discipline: 50 + (share(b.INT) + share(b.WIS) - share(b.STR)) * 15,
+    temperament: 50 + (share(b.INT) + share(b.WIS) - share(b.STR)) * 15,
   }
 }
 
@@ -58,8 +58,8 @@ export function basePersonality(seed: string, sp: Species): Personality {
   return {
     aggression: clamp(bias.aggression + vary()),
     teamplay: clamp(bias.teamplay + vary()),
-    composure: clamp(bias.composure + vary()),
-    discipline: clamp(bias.discipline + vary()),
+    mental: clamp(bias.mental + vary()),
+    temperament: clamp(bias.temperament + vary()),
   }
 }
 
@@ -74,8 +74,8 @@ export function personalityOf(m: Monster): Personality {
   return {
     aggression: clamp(base.aggression + (drift.aggression ?? 0)),
     teamplay: clamp(base.teamplay + (drift.teamplay ?? 0)),
-    composure: clamp(base.composure + (drift.composure ?? 0)),
-    discipline: clamp(base.discipline + (drift.discipline ?? 0)),
+    mental: clamp(base.mental + (drift.mental ?? 0)),
+    temperament: clamp(base.temperament + (drift.temperament ?? 0)),
   }
 }
 
@@ -96,28 +96,28 @@ function coachingTargets(t: Tactics | undefined): { aggression?: number; teampla
 /**
  * Blend innate disposition with coaching, weighted by DISCIPLINE.
  *
- * obey = discipline/100. At obey 1 the order lands in full; at obey 0 the
+ * obey = temperament/100. At obey 1 the order lands in full; at obey 0 the
  * monster ignores you and plays to its nature. This single line is what makes
  * a stable full of individuals feel different from a stable of settings.
  */
-export function coachedValue(innate01: number, coached01: number | undefined, discipline: number): number {
+export function coachedValue(innate01: number, coached01: number | undefined, temperament: number): number {
   if (coached01 === undefined) return innate01
-  const obey = clamp(discipline) / 100
+  const obey = clamp(temperament) / 100
   return innate01 * (1 - obey) + coached01 * obey
 }
 
-/** How readily this monster disengages when hurt — low composure panics early. */
+/** How readily this monster disengages when hurt — low mental panics early. */
 export function panicThreshold(p: Personality): number {
-  // 0.45 at no composure down to 0.10 at full composure.
-  return 0.45 - (p.composure / 100) * 0.35
+  // 0.45 at no mental down to 0.10 at full mental.
+  return 0.45 - (p.mental / 100) * 0.35
 }
 
 /**
  * How reliably it picks its BEST available move rather than just something
- * that is off cooldown. Discipline is execution as well as obedience.
+ * that is off cooldown. Temperament is execution as well as obedience.
  */
 export function executionQuality(p: Personality): number {
-  return 0.55 + (p.discipline / 100) * 0.45
+  return 0.55 + (p.temperament / 100) * 0.45
 }
 
 /** Everything the field engine needs, resolved once per fight. */
@@ -132,7 +132,7 @@ export function resolvePersonality(m: Monster): {
   const want = coachingTargets(m.tactics)
   return {
     p,
-    aggression: coachedValue(p.aggression / 100, want.aggression, p.discipline),
-    teamplay: coachedValue(p.teamplay / 100, want.teamplay, p.discipline),
+    aggression: coachedValue(p.aggression / 100, want.aggression, p.temperament),
+    teamplay: coachedValue(p.teamplay / 100, want.teamplay, p.temperament),
   }
 }

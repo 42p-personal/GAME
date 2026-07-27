@@ -111,25 +111,25 @@ describe('obstacles', () => {
 
 describe('the two new stats', () => {
   // ⚠️ Since v0.93 cohesion/predation come from PERSONALITY, coached by tactics
-  // and gated by discipline — they are no longer derived from tactics alone.
+  // and gated by temperament — they are no longer derived from tactics alone.
   // Temperament therefore coaches AGGRESSION only; team play is the monster's
   // own teamplay axis plus the explicit 'focus' order.
   it('temperament coaches predation (on a monster that listens)', () => {
-    const obedient = { personality: { discipline: 100 } } as Partial<Monster>
+    const obedient = { personality: { temperament: 100 } } as Partial<Monster>
     const agg = traitsFor(mk('t1', { ...obedient, tactics: { ...DEFAULT_TACTICS, temperament: 'aggressive' } }))
     const cau = traitsFor(mk('t1', { ...obedient, tactics: { ...DEFAULT_TACTICS, temperament: 'cautious' } }))
     expect(agg.predation).toBeGreaterThan(cau.predation)
   })
 
   it('an UNDISCIPLINED monster ignores the same order', () => {
-    const wild = { personality: { discipline: -100 } } as Partial<Monster> // floors discipline at 0
+    const wild = { personality: { temperament: -100 } } as Partial<Monster> // floors temperament at 0
     const agg = traitsFor(mk('t1', { ...wild, tactics: { ...DEFAULT_TACTICS, temperament: 'aggressive' } }))
     const cau = traitsFor(mk('t1', { ...wild, tactics: { ...DEFAULT_TACTICS, temperament: 'cautious' } }))
     expect(Math.abs(agg.predation - cau.predation)).toBeLessThan(0.02)
   })
 
   it('hunting casters raises predation; protecting raises cohesion', () => {
-    const obedient = { personality: { discipline: 100 } } as Partial<Monster>
+    const obedient = { personality: { temperament: 100 } } as Partial<Monster>
     const base = traitsFor(mk('t2', obedient))
     const hunter = traitsFor(mk('t2', { ...obedient, tactics: { ...DEFAULT_TACTICS, targetPriority: 'casters' } }))
     const guard = traitsFor(mk('t2', { ...obedient, protect: true }))

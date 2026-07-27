@@ -215,14 +215,14 @@ export interface Monster {
 }
 
 // Who a monster IS, as opposed to what you tell it to do (v0.93). 0..100 each.
-// Tactics are COACHING applied on top of this; `discipline` decides how much of
+// Tactics are COACHING applied on top of this; `temperament` decides how much of
 // that coaching actually sticks. Read by the field engine only — the
 // turn-based engine in battle.ts never looks at it, so goldens are unaffected.
 export interface Personality {
   aggression: number // how early and how deep it commits
   teamplay: number // fights as a unit — shares focus, stays with the group
-  composure: number // holds together under pressure; low panics and chases bait
-  discipline: number // executes well, and obeys coaching
+  mental: number // holds together under pressure; low panics and chases bait
+  temperament: number // executes well, and obeys coaching
 }
 
 // --- Tactics (2026-07-25): pre-battle standing orders, Teamfight-Manager
