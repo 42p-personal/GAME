@@ -33,12 +33,14 @@ const GOLDENS = [
     // so it ranks moves it used to undervalue. A wins FASTER and CLEANER — 126 →
     // 58 events, and slot 0 survives where it used to be KO'd. Better play, not
     // a balance change. Prior capture, v0.852: 126/93 (prestige base-stat bump).
-    winner: 'A', events: 58, logLines: 51,
+    // Recaptured again for the play-quality pass (lethality, ranked support):
+    // 58 -> 52 events. Fights keep getting shorter as the AI gets better.
+    winner: 'A', events: 52, logLines: 47,
     finals: [
-      { side: 'A', slot: 0, hp: 155, mana: 191, wasKOd: false },
-      { side: 'A', slot: 1, hp: 152, mana: 216, wasKOd: false },
+      { side: 'A', slot: 0, hp: 150, mana: 204, wasKOd: false },
+      { side: 'A', slot: 1, hp: 152, mana: 235, wasKOd: false },
       { side: 'B', slot: 0, hp: 0, mana: 226, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 324, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 326, wasKOd: true },
     ],
   },
   {
@@ -54,14 +56,17 @@ const GOLDENS = [
     // A 3v3 decided by one AoE caster flipping is a fair outcome, not a
     // regression — the long-haul sim was re-run and the economy held.
     // Prior captures: AoE-falloff 419/314; live-formation 376/274; v0.89 349/254.
-    winner: 'B', events: 404, logLines: 300,
+    // Recaptured again for the play-quality pass: 404 -> 347 events, and B's
+    // survivors finish far healthier (902/936 -> 1147/1158). A smarter AI ends
+    // fights sooner and takes less doing it.
+    winner: 'B', events: 347, logLines: 265,
     finals: [
       { side: 'A', slot: 0, hp: 0, mana: 716, wasKOd: true },
-      { side: 'A', slot: 1, hp: 0, mana: 333, wasKOd: true },
-      { side: 'A', slot: 2, hp: 0, mana: 756, wasKOd: true },
-      { side: 'B', slot: 0, hp: 0, mana: 733, wasKOd: true },
-      { side: 'B', slot: 1, hp: 902, mana: 750, wasKOd: false },
-      { side: 'B', slot: 2, hp: 936, mana: 11, wasKOd: false },
+      { side: 'A', slot: 1, hp: 0, mana: 330, wasKOd: true },
+      { side: 'A', slot: 2, hp: 0, mana: 763, wasKOd: true },
+      { side: 'B', slot: 0, hp: 0, mana: 739, wasKOd: true },
+      { side: 'B', slot: 1, hp: 1147, mana: 750, wasKOd: false },
+      { side: 'B', slot: 2, hp: 1158, mana: 9, wasKOd: false },
     ],
   },
 ] as const

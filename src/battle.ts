@@ -746,6 +746,64 @@ function effPower(mv: Move, foe: Combatant, self?: Combatant, foeCount = 1): num
   return p
 }
 
+// --- Play-quality helpers (v0.91) --------------------------------------------
+// effPower returns POWER units, which is fine for ranking but useless for the
+// one question that matters most: "does this kill?". This mirrors the
+// deterministic part of the real damage path (resolveDamageOnTarget) — stat
+// curve, mitigation, pierce, vulnerable, element — and deliberately skips
+// variance and crit so it reads as a conservative EXPECTED hit, never a
+// hopeful one.
+function estimateDamage(mv: Move, attacker: Combatant, target: Combatant, foeCount = 1): number {
+  if (mv.type !== 'damage' || mv.power <= 0) return 0
+  const spellStat = mv.channel === 'magic' || mv.channel === 'voice'
+  const atk = attackStat(attacker.m.stats, mv.channel) + (spellStat ? attacker.m.stats.WIS * 0.6 : 0)
+  const e = mv.effects
+  const hits = e?.hits ? (e.hits[0] + e.hits[1]) / 2 : 1
+  const targets = mv.target === 'allEnemies' ? foeCount
+    : mv.target === 'frontRow' ? Math.min(foeCount, frontRowCount(foeCount))
+      : mv.target === 'backRow' ? Math.max(1, foeCount - frontRowCount(foeCount)) : 1
+  let dmg = mv.power * hits * Math.pow(atk / 40, 0.8) * 0.5 * aoeFalloff(targets)
+  dmg *= happinessMultiplier(attacker.happiness) * attacker.staminaMult * attacker.innate.dmgMult * attacker.atkMod
+  if (attacker.hp / attacker.maxHp < 0.3) dmg *= attacker.innate.lowHpDmgMult
+  if (attacker.hp / attacker.maxHp > 0.7) dmg *= attacker.innate.highHpDmgMult
+  if (e?.hpScale) {
+    const f = Math.max(0, Math.min(1, attacker.hp / attacker.maxHp))
+    dmg *= e.hpScale.atEmpty + (e.hpScale.atFull - e.hpScale.atEmpty) * f
+  }
+  if (e?.consumeWard) dmg *= 1 + e.consumeWard * attacker.ward
+  if (e?.consumeThorns) dmg *= 1 + e.consumeThorns * attacker.thornsFlat
+  if (e?.execute && target.hp / target.maxHp <= e.execute) dmg *= 1.5
+  if (e?.bonusVsStatus && hasStatus(target, e.bonusVsStatus.kind)) dmg *= e.bonusVsStatus.mult
+  if (mv.element) dmg *= elementMultiplier(target.m.species.body, mv.element)
+  if (hasStatus(target, 'vulnerable')) dmg *= VULNERABLE_MULT
+  const mitig = (mv.channel === 'melee' || mv.channel === 'ranged')
+    ? target.m.stats.CON * 0.04 : target.m.stats.WIS * 0.04
+  dmg = Math.max(1, dmg - mitig * (1 - (e?.pierce ?? 0)) - target.defFlat)
+  if (e?.maxHpDmg) dmg += target.maxHp * e.maxHpDmg
+  return dmg * (mv.accuracy / 100)
+}
+
+// Would this cast finish the target? Ward soaks first, so it counts.
+const wouldKill = (mv: Move, attacker: Combatant, target: Combatant, foeCount = 1): boolean =>
+  estimateDamage(mv, attacker, target, foeCount) >= target.hp + target.ward
+
+// How much a heal is ACTUALLY worth right now — overhealing is wasted, so a
+// 60-point heal on a monster missing 10 HP is worth 10. Team heals sum across
+// everyone who needs it, which is what makes them scale with a hurt roster.
+function healValue(mv: Move, self: Combatant, allies: Combatant[]): number {
+  if (mv.power <= 0 && !mv.effects?.cleanse) return 0
+  const recipients = mv.target === 'team' ? [self, ...allies] : mv.target === 'ally' ? (allies.length ? allies : [self]) : [self]
+  let v = 0
+  for (const c of recipients) {
+    if (c.hp <= 0) continue
+    v += Math.min(mv.power, c.maxHp - c.hp)
+    // A cleanse is worth something only when there is something to clear.
+    if (mv.effects?.cleanse) v += c.statuses.filter((st) => SPREADABLE.has(st.kind)).length * 18
+  }
+  if (mv.effects?.hpRegenBuff) v += mv.effects.hpRegenBuff * (mv.effects.duration ?? 3) * recipients.length
+  return v
+}
+
 // Class battle personality (user spec 2026-07-21): each class tunes the SAME
 // policy tree below rather than getting a bespoke one — Tanks shield early and
 // block often, Sages heal at the first scratch, Wizards chain spells and
@@ -849,12 +907,37 @@ function chooseAction(self: Combatant, foe: Combatant, rng: RNG, allies: Combata
   const foeThreats = foe.m.loadout.filter((mv) => (foe.cooldowns[mv.id] ?? 0) <= 1 && moveCost(mv) <= foe.mana + manaRegen(foe.m.stats))
   const threat = Math.max(ATTACK_POWER, ...foeThreats.filter((mv) => mv.type === 'damage').map((mv) => effPower(mv, self, foe)))
 
+  // ⚡ FINISH IT (v0.91). Securing a kill is worth more than max expected damage:
+  // it removes an attacker permanently, so the exchange rate for the rest of the
+  // fight moves. The AI used to rank purely on output and would happily throw a
+  // bigger nuke at a full-health foe while a dying one swung back all round.
+  // Deliberately placed BELOW the emergency heal — a corpse that traded its own
+  // life for the kill has not played well — but above everything else.
+  const killer = ready.filter((mv) => mv.type === 'damage' && wouldKill(mv, self, foe, foeCount))
+    .sort((a, b) => moveCost(a) - moveCost(b))[0] // cheapest that does the job — bank the mana
+  if (killer && !(hpFrac < p.healAt && heals.length)) return { kind: 'skill', move: killer }
+
   // Emergency heal beats everything. Prefer a heal that can actually reach
   // SELF (self/team target) — an 'ally'-target heal goes to the neediest
   // teammate instead, which is no rescue for the dying caster; it's still the
   // fallback when it's all that's equipped (and in a solo fight it self-casts).
   if (hpFrac < p.healAt && heals.length) {
-    return { kind: 'skill', move: heals.find((mv) => mv.target !== 'ally') ?? heals[0] }
+    // Rank by EFFECTIVE healing, not loadout order — overhealing is wasted, so a
+    // 60-point heal on a monster missing 10 HP is worth 10. A self/team heal is
+    // preferred because an 'ally' target goes to the neediest teammate, which is
+    // no rescue for the dying caster; it stays the fallback when it is all there is.
+    const reach = heals.filter((mv) => mv.target !== 'ally')
+    const pool = reach.length ? reach : heals
+    return { kind: 'skill', move: [...pool].sort((a, b) => healValue(b, self, allies) - healValue(a, self, allies))[0] }
+  }
+
+  // 🩹 SUPPORT, not just triage (v0.91). A cleanse used to fire only as an
+  // emergency heal, so a Sage watching its team rot under doom/silence/poison
+  // would keep casting damage. Now a genuinely valuable support cast — heavy
+  // cleansing, or a team heal on a hurt line — competes on its own merits.
+  const bestSupport = [...heals].sort((a, b) => healValue(b, self, allies) - healValue(a, self, allies))[0]
+  if (bestSupport && healValue(bestSupport, self, allies) >= 45 && chance(rng, p.healAt * 100)) {
+    return { kind: 'skill', move: bestSupport }
   }
 
   // Hurt with a real hit incoming → guard up (how often is personality).
@@ -889,10 +972,20 @@ function chooseAction(self: Combatant, foe: Combatant, rng: RNG, allies: Combata
   }
 
   // Open with a buff (or shield up) while still healthy.
-  if (buffs.length && hpFrac > 0.6 && chance(rng, p.openBuff)) return { kind: 'skill', move: buffs[0] }
+  // Ranked, not first-in-loadout: prefer the buff whose effect is not already
+  // running on the caster, then the one with the most total magnitude.
+  if (buffs.length && hpFrac > 0.6 && chance(rng, p.openBuff)) {
+    const fresh = buffs.filter((mv) => !self.mods.some((m) => m.moveId === mv.id))
+    return { kind: 'skill', move: (fresh.length ? fresh : buffs)[0] }
+  }
 
   // Land a debuff / control move on a threatening foe.
-  if (hostiles.length && threat >= 18 && chance(rng, p.debuff)) return { kind: 'skill', move: hostiles[0] }
+  // Skip a debuff the foe is already carrying — recasting Taunt on a taunted
+  // target was a wasted turn the old ordering made regularly.
+  if (hostiles.length && threat >= 18 && chance(rng, p.debuff)) {
+    const useful = hostiles.filter((mv) => !(mv.status && hasStatus(foe, mv.status.kind)) && !foe.mods.some((m) => m.moveId === mv.id))
+    return { kind: 'skill', move: (useful.length ? useful : hostiles)[0] }
+  }
 
   // Work the combo (wave 2): payoff's status is live -> cash it NOW; not live
   // -> cast a setup for an equipped payoff, and HOLD the payoff itself out of
