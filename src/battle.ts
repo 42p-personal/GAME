@@ -559,6 +559,10 @@ const hasStatus = (c: Combatant, k: StatusKind) => c.statuses.some((s) => s.kind
 // target's actions, as opposed to damage-over-time (poison/burn/bleed) or pure
 // modifiers (vulnerable/haste/doom/healblock).
 const CC_KINDS = new Set<StatusKind>(['stun', 'sleep', 'fear', 'confusion', 'silence', 'charm', 'knockback', 'blind'])
+// CONTAGION (v0.91): which statuses a spreadStatus move may propagate. Every
+// hostile kind qualifies; 'haste' is excluded because it HELPS its carrier and
+// spreading it would hand the enemy team a buff.
+const SPREADABLE = new Set<StatusKind>(['blind', 'poison', 'burn', 'fear', 'confusion', 'stun', 'knockback', 'bleed', 'silence', 'vulnerable', 'sleep', 'doom', 'healblock', 'charm'])
 // Preserve tactic → the HP fraction below which a monster plays to survive.
 const PRESERVE_AT: Record<string, number> = { cautious: 0.4, defensive: 0.25 }
 
@@ -1072,6 +1076,32 @@ function resolveHostileUtilityOnTarget(attacker: Combatant, target: Combatant, m
   }
 }
 
+// CONTAGION (v0.91 signature effect). After the move lands, a hostile status the
+// PRIMARY target is carrying jumps to other living enemies. `kind` omitted means
+// "spread whatever it already has", so one move interacts with every setter in
+// the game — a teammate's burn, a pool move's poison, a signature's doom.
+// The copy inherits the source's REMAINING duration rather than refreshing it,
+// so contagion spreads a curse without extending it.
+// ⚠️ Gated behind spreadStatus, which no pool move sets — absent, this returns
+// before touching rng, so the engine's call order (and every golden) is intact.
+function spreadContagion(attacker: Combatant, source: Combatant | undefined, move: Move, ctx: BattleContext, rng: RNG, log: string[]): void {
+  const sp = move.effects?.spreadStatus
+  if (!sp || !source) return
+  const carried = source.statuses.filter((st) => SPREADABLE.has(st.kind) && (!sp.kind || st.kind === sp.kind))
+  if (!carried.length) return
+  const picked = carried[0]
+  const others = enemiesOf(ctx, attacker).filter((c) => c !== source && !hasStatus(c, picked.kind))
+  let spread = 0
+  for (const c of others) {
+    if (spread >= sp.targets) break
+    if (!chance(rng, sp.chance)) continue
+    if (applyStatus(c, picked.kind, picked.turns)) {
+      log.push(`  ☣ ${picked.kind} spreads from ${source.m.name} to ${c.m.name}!`)
+      spread++
+    }
+  }
+}
+
 // A single damage hit landing on one target — looped per fanned target for
 // 'allEnemies', each with its OWN independent accuracy/variance/crit/mitigation
 // roll (never one roll multiplied by target count). `openerEligible` is
@@ -1294,6 +1324,7 @@ function resolveMove(attacker: Combatant, ctx: BattleContext, move: Move, rng: R
     return
   }
   for (const t of targets) resolveDamageOnTarget(attacker, t, move, rng, log, ev, openerEligible, targets.length)
+  spreadContagion(attacker, targets[0], move, ctx, rng, log)
   // self-guard follow-up on a damage move stays targeted at the attacker
   // specifically (a "hit and raise a shield" rider), once per cast — not once
   // per fanned target.
