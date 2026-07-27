@@ -58,7 +58,22 @@ export const BODY_MINOR: Partial<Record<BodyType, Stat>> = {
 
 export type Channel = 'melee' | 'ranged' | 'magic' | 'voice' | 'support'
 export type MoveType = 'damage' | 'buff' | 'debuff' | 'status' | 'control'
-export type Target = 'enemy' | 'allEnemies' | 'self' | 'ally' | 'team'
+export type Target = 'enemy' | 'allEnemies' | 'frontRow' | 'backRow' | 'self' | 'ally' | 'team'
+// Row targets (v0.91) give the formation system real weight — before these, the
+// only rule rows had was "single-target melee can't reach the back".
+//   frontRow — sweeps/shockwaves: fewer targets than allEnemies, so they hit harder
+//   backRow  — the anti-turtle answer: reaches past the wall to the casters behind
+// Both fall back to the OTHER row when their own is empty, so a move never
+// fizzles for want of a target (see resolveTargets).
+
+// AoE FALLOFF (v0.91): every extra body a move splashes costs it 5% of its
+// power. Multi-target damage previously scaled perfectly linearly, so World
+// Ender was worth 56 at 1v1 and 336 at 6v6 — a large part of why the top-league
+// meta rewarded AoE casters. Charged per ADDITIONAL target, so a lone survivor
+// takes an undiminished hit.
+export const AOE_FALLOFF_PER_TARGET = 0.05
+export const aoeFalloff = (targetCount: number): number =>
+  Math.max(0.4, 1 - AOE_FALLOFF_PER_TARGET * Math.max(0, targetCount - 1))
 export type StatusKind = 'blind' | 'poison' | 'burn' | 'fear' | 'confusion' | 'stun' | 'knockback' | 'bleed' | 'silence' | 'vulnerable'
   | 'sleep' | 'doom' | 'healblock' | 'haste' | 'charm'
 

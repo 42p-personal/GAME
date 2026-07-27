@@ -43,20 +43,21 @@ const GOLDENS = [
     // (flat chip → % chip), CON coefficient trims, and WIS spell-power — the
     // clock now resolves a winner instead of wiping both.
     name: '3v3-high', a: ['gold-a5', 'gold-a6', 'gold-a7'], b: ['gold-b5', 'gold-b6', 'gold-b7'], train: 2000,
-    // recaptured v0.91: formation is now LIVE — when a front-liner falls the rank
-    // behind steps up, so melee finds targets it previously could not reach once
-    // the wall broke. Same winner and same KO pattern (all of B down, all of A
-    // standing); only the damage distribution moved, with A's slot 0 absorbing
-    // far more (1052 → 609) as more attacks got through.
-    // Prior capture, v0.89: events 349 / logLines 254 — league-cap curve change.
-    winner: 'A', events: 376, logLines: 274,
+    // recaptured v0.91 (SECOND move this cycle) — AoE falloff. gold-b5's Inferno
+    // hits 3 targets and now lands at 90% power, so the fight runs materially
+    // longer (376 → 419 events) and the round-35 sudden-death chip has time to
+    // bite: A still wins, but 3-0 untouched became 2-1 with the survivor on 9 HP.
+    // ⚠️ That length-then-chip chain is the systemic effect to watch — weaker AoE
+    // does not simply mean gentler fights, it means LONGER ones. Wants a sim pass.
+    // Prior captures: v0.91 live-formation 376/274; v0.89 league-curve 349/254.
+    winner: 'A', events: 419, logLines: 314,
     finals: [
-      { side: 'A', slot: 0, hp: 609, mana: 690, wasKOd: false },
-      { side: 'A', slot: 1, hp: 1298, mana: 53, wasKOd: false },
-      { side: 'A', slot: 2, hp: 1348, mana: 737, wasKOd: false },
-      { side: 'B', slot: 0, hp: 0, mana: 747, wasKOd: true },
+      { side: 'A', slot: 0, hp: 9, mana: 690, wasKOd: false },
+      { side: 'A', slot: 1, hp: 0, mana: 213, wasKOd: true },
+      { side: 'A', slot: 2, hp: 1117, mana: 756, wasKOd: false },
+      { side: 'B', slot: 0, hp: 0, mana: 741, wasKOd: true },
       { side: 'B', slot: 1, hp: 0, mana: 756, wasKOd: true },
-      { side: 'B', slot: 2, hp: 0, mana: 123, wasKOd: true },
+      { side: 'B', slot: 2, hp: 0, mana: 13, wasKOd: true },
     ],
   },
 ] as const

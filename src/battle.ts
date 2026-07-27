@@ -9,7 +9,7 @@
 // when this was strictly 1v1. `simulateBattle` (still exported) is a thin
 // team-of-1 wrapper over `simulateTeamBattle`, so every existing 1v1 call site
 // (Sandbox) keeps working unchanged.
-import { Ability, Channel, Element, ManaPolicy, Monster, Move, RNG, StatusKind, Temperament, chance, elementMultiplier, frontRowCount, happinessMultiplier, hashString, mulberry32, randInt } from './core'
+import { Ability, Channel, Element, ManaPolicy, Monster, Move, RNG, StatusKind, Temperament, chance, elementMultiplier, frontRowCount, aoeFalloff, happinessMultiplier, hashString, mulberry32, randInt } from './core'
 import {
   attackStat, critChance, debuffBonus, debuffReduction, dodgeChance, echoChance, hpRegen,
   manaCost, manaRegen, maxHp, maxMana, mitigationPierce, staminaDamageMult,
@@ -468,6 +468,13 @@ const frontLineOf = (living: Combatant[]): Combatant[] => {
   const front = living.slice(0, frontRowCount(living.length))
   return front.length ? front : living // never strand a caster with nothing to hit
 }
+// The ranks BEHIND the wall. Falls back to the front line when nobody is left
+// back there (user spec) — a back-row strike against a team that has been cut
+// down to its front line hits the front rather than fizzling.
+const backLineOf = (living: Combatant[]): Combatant[] => {
+  const back = living.slice(frontRowCount(living.length))
+  return back.length ? back : frontLineOf(living)
+}
 const enemiesOf = (ctx: BattleContext, c: Combatant) => livingTeamOf(ctx, c.side === 'A' ? 'B' : 'A')
 const alliesOf = (ctx: BattleContext, c: Combatant) => livingTeamOf(ctx, c.side).filter((x) => x !== c)
 
@@ -768,9 +775,9 @@ function chooseAction(self: Combatant, foe: Combatant, rng: RNG, allies: Combata
   // timed buffs not currently active (or about to expire — worth refreshing);
   // debuffs the foe isn't currently suffering from (or is about to shake off)
   const activeFor = (id: string) => (c: Combatant) => c.mods.find((m) => m.moveId === id)
-  const buffs = ready.filter((mv) => mv.type !== 'damage' && mv.power === 0 && mv.target !== 'enemy' && mv.target !== 'allEnemies'
+  const buffs = ready.filter((mv) => mv.type !== 'damage' && mv.power === 0 && mv.target !== 'enemy' && mv.target !== 'allEnemies' && mv.target !== 'frontRow' && mv.target !== 'backRow'
     && !(isTimedBuff(mv) && (activeFor(mv.id)(self)?.turnsLeft ?? 0) > 1))
-  const hostiles = ready.filter((mv) => mv.type !== 'damage' && (mv.target === 'enemy' || mv.target === 'allEnemies')
+  const hostiles = ready.filter((mv) => mv.type !== 'damage' && (mv.target === 'enemy' || mv.target === 'allEnemies' || mv.target === 'frontRow' || mv.target === 'backRow')
     && !(isDebuffMove(mv) && (activeFor(mv.id)(foe)?.turnsLeft ?? 0) > 1))
   const hpFrac = self.hp / self.maxHp
 
@@ -801,7 +808,7 @@ function chooseAction(self: Combatant, foe: Combatant, rng: RNG, allies: Combata
   // stun/sleep/silence/etc. on a threatening foe before committing to damage,
   // as long as the foe isn't already under it.
   if (self.m.tactics?.ccPriority && threat >= 12) {
-    const cc = ready.find((mv) => (mv.target === 'enemy' || mv.target === 'allEnemies')
+    const cc = ready.find((mv) => (mv.target === 'enemy' || mv.target === 'allEnemies' || mv.target === 'frontRow' || mv.target === 'backRow')
       && mv.status && CC_KINDS.has(mv.status.kind) && !hasStatus(foe, mv.status.kind))
     if (cc) return { kind: 'skill', move: cc }
   }
@@ -975,6 +982,14 @@ function resolveTargets(attacker: Combatant, ctx: BattleContext, move: Move, rng
       // back to self, preserving exactly today's Wood/Copper-league behavior
       return [allies.length ? pickAllyTarget(allies) : attacker]
     }
+    case 'frontRow': {
+      const foes = enemiesOf(ctx, attacker)
+      return foes.length ? frontLineOf(foes) : []
+    }
+    case 'backRow': {
+      const foes = enemiesOf(ctx, attacker)
+      return foes.length ? backLineOf(foes) : []
+    }
     case 'allEnemies':
       return enemiesOf(ctx, attacker) // may be empty if the enemy team just wiped this round
     case 'enemy':
@@ -1063,7 +1078,7 @@ function resolveHostileUtilityOnTarget(attacker: Combatant, target: Combatant, m
 // computed ONCE by the caller before the fan-out loop, so a multi-target
 // opening volley grants the bonus to every target it strikes, not just
 // whichever one happens to be processed first.
-function resolveDamageOnTarget(attacker: Combatant, target: Combatant, move: Move, rng: RNG, log: string[], ev: BattleEvent[], openerEligible: boolean): void {
+function resolveDamageOnTarget(attacker: Combatant, target: Combatant, move: Move, rng: RNG, log: string[], ev: BattleEvent[], openerEligible: boolean, targetCount = 1): void {
   const e = move.effects
   let acc = move.accuracy + attacker.innate.acc + attacker.accMod
   if (hasStatus(attacker, 'blind')) acc -= 25
@@ -1085,7 +1100,7 @@ function resolveDamageOnTarget(attacker: Combatant, target: Combatant, move: Mov
   const hits = e?.hits ? randInt(rng, e.hits[0], e.hits[1]) : 1
   // softened growth curve so high-stat monsters don't one-shot before defense
   // matters; stat multiplier halved pool-wide (user spec 2026-07-19)
-  let dmg = move.power * hits * Math.pow(atk / 40, 0.8) * 0.5 * variance
+  let dmg = move.power * hits * Math.pow(atk / 40, 0.8) * 0.5 * variance * aoeFalloff(targetCount)
   dmg *= happinessMultiplier(attacker.happiness) // happy monsters hit harder (§2.4)
   dmg *= attacker.staminaMult // fatigue: tired monsters hit softer, all channels
   dmg *= attacker.innate.dmgMult * attacker.atkMod
@@ -1240,7 +1255,7 @@ function resolveMove(attacker: Combatant, ctx: BattleContext, move: Move, rng: R
   if (!targets.length) return // e.g. the enemy team was already wiped by an earlier actor this round
 
   if (move.type !== 'damage') {
-    const hostile = move.target === 'enemy' || move.target === 'allEnemies'
+    const hostile = move.target === 'enemy' || move.target === 'allEnemies' || move.target === 'frontRow' || move.target === 'backRow'
     if (!hostile) { for (const t of targets) resolveUtilityOnTarget(attacker, t, move, rng, log, ev); return }
     for (const t of targets) resolveHostileUtilityOnTarget(attacker, t, move, rng, log, ev)
     // Self-guard rider on a HOSTILE utility (2026-07-25 review fix): this
@@ -1278,7 +1293,7 @@ function resolveMove(attacker: Combatant, ctx: BattleContext, move: Move, rng: R
     if (e.guard) applyBeneficialEffects(attacker, attacker, move, rng, log)
     return
   }
-  for (const t of targets) resolveDamageOnTarget(attacker, t, move, rng, log, ev, openerEligible)
+  for (const t of targets) resolveDamageOnTarget(attacker, t, move, rng, log, ev, openerEligible, targets.length)
   // self-guard follow-up on a damage move stays targeted at the attacker
   // specifically (a "hit and raise a shield" rider), once per cast — not once
   // per fanned target.
