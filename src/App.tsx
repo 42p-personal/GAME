@@ -1824,6 +1824,19 @@ function RanchView({ game, setGame, onBattleScreen }: {
     if (selectedTournamentId) entryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [selectedTournamentId])
 
+  // Same trap: the ability editor replaces the training row, which sits below
+  // the whole detail card, so it can open entirely off-screen — "Edit Abilities"
+  // looked like a dead button. Measured: at 375x812 it mounts ~1380px down (a
+  // 568px gap); even at 1280x720 it needed a 716px scroll. Worse on mobile,
+  // where the detailgrid stacks to one column, but NOT mobile-only.
+  // ⚠️ 'auto', NOT 'smooth' like entryRef above. An animated scroll is silently
+  // a NO-OP wherever scroll animations are suppressed, which would reproduce
+  // the exact bug this fixes. This one has to be guaranteed to land.
+  const abilityRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (abilityEditorFor) abilityRef.current?.scrollIntoView({ behavior: 'auto', block: 'nearest' })
+  }, [abilityEditorFor])
+
   // Scout-the-field rival teams (v0.861 memo): the field is deterministic per
   // (seed, week, tournament), but generating 3-5 full trained teams used to
   // re-run on EVERY RanchView render while an entry panel was open. Cached
@@ -2655,6 +2668,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
 
           {/* Ability editor OR training row */}
           {abilityEditorFor === selectedCareer.id ? (
+            <div ref={abilityRef}>
             <AbilitySelector
               m={selM}
               name={selectedCareer.name}
@@ -2662,6 +2676,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
               onSetInnate={(index) => setGame((g) => setActiveInnate(g, selectedCareer.id, index))}
               onClose={() => setAbilityEditorFor(null)}
             />
+            </div>
           ) : selectedCareer.retired ? (
             <div className="retired">🏁 {selectedCareer.name} has retired and can no longer train.</div>
           ) : (game.pendingTournament?.monsterIds.includes(selectedCareer.id) || game.pendingTrial?.monsterIds.includes(selectedCareer.id)) ? (

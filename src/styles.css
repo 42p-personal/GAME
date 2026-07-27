@@ -330,7 +330,9 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
 .abilityslot { cursor: pointer; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; min-height: 44px; }
 .abilityslot.selected { border-color: var(--accent2); box-shadow: inset 0 0 0 1px var(--accent2); }
 .abilitychips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
-.abilitychip { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--panel2); color: var(--ink); border: 1px solid var(--line); cursor: pointer; }
+/* min-height 24px: WCAG 2.5.8 minimum hit area, same rule the range sliders
+   follow above. These chips were 22px — thumb-hostile on a phone. */
+.abilitychip { font-size: 11px; font-weight: 700; padding: 4px 10px; min-height: 24px; border-radius: 999px; background: var(--panel2); color: var(--ink); border: 1px solid var(--line); cursor: pointer; }
 .abilitychip.on { background: var(--accent); color: var(--btn-ink); border-color: var(--accent); }
 .abilitypool { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; max-height: 300px; overflow-y: auto; }
 .abilitypool .move { cursor: pointer; }
@@ -728,7 +730,7 @@ button.signup:disabled { opacity: .4; cursor: not-allowed; }
    shared by tactic options and the innate-active card, so "selected" reads the
    same everywhere the player picks one of several. */
 .tacticopt.on { background: color-mix(in srgb, var(--accent) 20%, var(--panel2)); border-color: var(--accent); color: var(--ink); font-weight: 800; }
-.tacticopt.small { width: auto; padding: 3px 10px; font-size: 12px; border-radius: 6px; }
+.tacticopt.small { width: auto; padding: 3px 10px; min-height: 24px; font-size: 12px; border-radius: 6px; }
 .tacticopt.lockedopt { opacity: .35; cursor: not-allowed; }
 .tactic-desc { font-size: 12px; line-height: 1.5; border-top: 1px solid var(--line); padding-top: 8px; margin-top: 2px; }
 .protectrow { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; font-size: 12px; }
