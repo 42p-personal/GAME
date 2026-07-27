@@ -696,7 +696,7 @@ type Action = { kind: 'skill'; move: Move } | { kind: 'attack' } | { kind: 'bloc
 // kills nothing sooner — so an AoE is not simply worth N times a single hit.
 const AOE_VALUE_DISCOUNT = 0.7
 
-function effPower(mv: Move, foe: Combatant, self?: Combatant, foeCount = 1): number {
+function effPower(mv: Move, foe: Combatant, self?: Combatant, foeCount = 1, foes?: Combatant[]): number {
   const e = mv.effects
   const avgHits = e?.hits ? (e.hits[0] + e.hits[1]) / 2 : 1
   let p = mv.power * avgHits
@@ -734,6 +734,30 @@ function effPower(mv: Move, foe: Combatant, self?: Combatant, foeCount = 1): num
     const carries = foe.statuses.some((st) => SPREADABLE.has(st.kind) && (!e.spreadStatus!.kind || st.kind === e.spreadStatus!.kind))
     const willSet = mv.status && SPREADABLE.has(mv.status.kind) // this cast may create the status it then spreads
     if (carries || willSet) p *= 1 + Math.min(foeCount - 1, e.spreadStatus.targets) * (e.spreadStatus.chance / 100) * 0.5
+  }
+  // 🔀 REPOSITIONING (v0.91). Judged against the actual enemy line, because
+  // "is moving them good?" is a board question, not a move question.
+  //   drag-to-front  — worth it when someone SQUISHIER is sheltering at the back
+  //                    than the wall in front of them; that is a caster you can
+  //                    suddenly reach.
+  //   shove-to-back   — worth it when the front-liner is TOUGHER than the line
+  //                    behind it; shoving the wall aside exposes what it guards.
+  // Both are worth nothing at all when there is no back line to trade with, and
+  // the AI now correctly ignores them in a 1v1.
+  if (e?.displace && foes && foes.length > 1) {
+    const line = inFormation(foes.filter((c) => c.hp > 0))
+    const cut = frontRowCount(line.length)
+    const front = line.slice(0, cut), back = line.slice(cut)
+    if (front.length && back.length) {
+      const bulk = (cs: Combatant[]) => cs.reduce((t, c) => t + c.m.stats.CON, 0) / cs.length
+      // BOTH directions share one condition, which is why there is no branch
+      // here: a tough wall hiding something soft. Drag pulls the soft one out;
+      // shove pushes the wall aside. Either way the payoff is the same gap, so
+      // splitting this into a ternary would be two identical arms pretending to
+      // be a decision.
+      const gap = bulk(front) - bulk(back)
+      if (gap > 0) p *= 1 + Math.min(0.6, gap / 400) * (e.displace.chance / 100)
+    }
   }
   // Multi-target reach. The AI used to rank an allEnemies move at its FACE
   // power, so a 6-target sweep looked weaker than a single-target hit of the
@@ -870,7 +894,7 @@ const CLASS_PERSONALITY: Record<string, Partial<ClassPersonality>> = {
 // per class via CLASS_PERSONALITY above. Takes a single representative `foe`
 // (the AI's primary threat read) — target FAN-OUT for the move it picks is
 // resolved separately once the move is actually cast (see resolveTargets).
-function chooseAction(self: Combatant, foe: Combatant, rng: RNG, allies: Combatant[] = [], foeCount = 1): Action {
+function chooseAction(self: Combatant, foe: Combatant, rng: RNG, allies: Combatant[] = [], foeCount = 1, foes: Combatant[] = []): Action {
   const p = personalityFor(self)
   // Silenced: skills are sealed — Attack, or Block if something heavy is coming.
   if (hasStatus(self, 'silence')) {
@@ -893,7 +917,7 @@ function chooseAction(self: Combatant, foe: Combatant, rng: RNG, allies: Combata
   // order, so a monster carrying Purge AND Vital Surge could "emergency heal"
   // for 10 when 46 was equally ready).
   const heals = ready.filter((mv) => mv.type !== 'damage' && mv.power > 0).sort((a, b) => b.power - a.power)
-  const dmgs = ready.filter((mv) => mv.type === 'damage').sort((a, b) => effPower(b, foe, self, foeCount) - effPower(a, foe, self, foeCount))
+  const dmgs = ready.filter((mv) => mv.type === 'damage').sort((a, b) => effPower(b, foe, self, foeCount, foes) - effPower(a, foe, self, foeCount, foes))
   // timed buffs not currently active (or about to expire — worth refreshing);
   // debuffs the foe isn't currently suffering from (or is about to shake off)
   const activeFor = (id: string) => (c: Combatant) => c.mods.find((m) => m.moveId === id)
@@ -965,10 +989,25 @@ function chooseAction(self: Combatant, foe: Combatant, rng: RNG, allies: Combata
   // enemy's single-target attacks onto itself, ahead of its usual buff/debuff
   // instincts. No rng consumed when no protect target exists, so battles
   // without the tactic replay identically.
+  const alreadyTaunting = foe.tauntedBy && foe.tauntedBy.side === self.side && foe.tauntedBy.slot === self.slot
   const ward = allies.find((a) => a.m.protect && a.hp > 0 && a.hp / a.maxHp < 0.6)
-  if (ward && !(foe.tauntedBy && foe.tauntedBy.side === self.side && foe.tauntedBy.slot === self.slot)) {
+  if (ward && !alreadyTaunting) {
     const taunt = ready.find((mv) => mv.effects?.tauntForce)
     if (taunt) return { kind: 'skill', move: taunt }
+  }
+  // 🛡 GUARDIAN INSTINCT (v0.91). A taunt used to fire ONLY for a monster the
+  // player had explicitly flagged with `protect`, so a tank holding Bulwark's
+  // Challenge would watch an unflagged teammate die with the move off cooldown.
+  // Any ally in real danger is now reason enough — provided the taunter is
+  // healthier than whoever it is covering, so this never trades a dying tank for
+  // a hurt one. Gated on having a taunt AND a hurt ally, so a solo fight or a
+  // team without one consumes no rng and replays identically.
+  if (!alreadyTaunting && self.hp / self.maxHp > 0.45) {
+    const endangered = allies.find((a) => a.hp > 0 && a.hp / a.maxHp < 0.5 && a.hp / a.maxHp < self.hp / self.maxHp)
+    if (endangered) {
+      const taunt = ready.find((mv) => mv.effects?.tauntForce)
+      if (taunt && chance(rng, 70)) return { kind: 'skill', move: taunt }
+    }
   }
 
   // Open with a buff (or shield up) while still healthy.
@@ -1007,8 +1046,8 @@ function chooseAction(self: Combatant, foe: Combatant, rng: RNG, allies: Combata
   // A damage skill is worth its MP if it clearly out-hits a basic Attack, or if
   // it carries a status/debuff rider that a plain Attack never could. Aggro
   // (negative for damage classes) widens what counts as "worth it."
-  const worthIt = dmgPool.filter((mv) => effPower(mv, foe, self, foeCount) >= ATTACK_POWER + 4 + p.aggro
-    || ((mv.status !== undefined || isDebuffMove(mv) || mv.effects?.manaBurn !== undefined) && effPower(mv, foe, self, foeCount) >= ATTACK_POWER - 4 + p.aggro))
+  const worthIt = dmgPool.filter((mv) => effPower(mv, foe, self, foeCount, foes) >= ATTACK_POWER + 4 + p.aggro
+    || ((mv.status !== undefined || isDebuffMove(mv) || mv.effects?.manaBurn !== undefined) && effPower(mv, foe, self, foeCount, foes) >= ATTACK_POWER - 4 + p.aggro))
   if (worthIt.length) return { kind: 'skill', move: worthIt[0] }
 
   // Nothing affordable, but one more turn of regen unlocks a skill → block to charge.
@@ -1571,7 +1610,7 @@ function takeTurn(attacker: Combatant, ctx: BattleContext, rng: RNG, log: string
   const tameness = attacker.m.tameness
   const action = (tameness !== undefined && chance(rng, 100 - tameness))
     ? wildAction(attacker, rng)
-    : chooseAction(attacker, primaryFoe, rng, alliesOf(ctx, attacker), enemiesOf(ctx, attacker).length)
+    : chooseAction(attacker, primaryFoe, rng, alliesOf(ctx, attacker), enemiesOf(ctx, attacker).length, enemiesOf(ctx, attacker))
   if (attacker.openerQueue.length) attacker.openerQueue.shift() // spend one opener step per action, cast or not
   if (action.kind === 'block') {
     attacker.blockAvoid = blockValue(attacker)

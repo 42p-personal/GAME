@@ -56,17 +56,22 @@ const GOLDENS = [
     // A 3v3 decided by one AoE caster flipping is a fair outcome, not a
     // regression — the long-haul sim was re-run and the economy held.
     // Prior captures: AoE-falloff 419/314; live-formation 376/274; v0.89 349/254.
-    // Recaptured again for the play-quality pass: 404 -> 347 events, and B's
-    // survivors finish far healthier (902/936 -> 1147/1158). A smarter AI ends
-    // fights sooner and takes less doing it.
-    winner: 'B', events: 347, logLines: 265,
+    // ⚠️ Recaptured for the guardian-taunt pass, and the winner flipped BACK to A.
+    // Not noise: side A fields TWO Tortavos, both carrying Bulwark's Challenge.
+    // Taunts previously fired only for a monster explicitly flagged `protect`, so
+    // those tanks sat on the move while teammates died. Letting a guardian cover
+    // any endangered ally is precisely the kit this unlocks — a tank-heavy team
+    // getting its tanks back is the change working, not a coin landing differently.
+    // Captures this cycle: B 347 (play-quality) <- B 404 (AoE-aware AI) <-
+    // A 419 (AoE falloff) <- A 376 (live formation) <- A 349 (v0.89 league curve).
+    winner: 'A', events: 406, logLines: 317,
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 716, wasKOd: true },
-      { side: 'A', slot: 1, hp: 0, mana: 330, wasKOd: true },
-      { side: 'A', slot: 2, hp: 0, mana: 763, wasKOd: true },
-      { side: 'B', slot: 0, hp: 0, mana: 739, wasKOd: true },
-      { side: 'B', slot: 1, hp: 1147, mana: 750, wasKOd: false },
-      { side: 'B', slot: 2, hp: 1158, mana: 9, wasKOd: false },
+      { side: 'A', slot: 0, hp: 350, mana: 709, wasKOd: false },
+      { side: 'A', slot: 1, hp: 0, mana: 242, wasKOd: true },
+      { side: 'A', slot: 2, hp: 874, mana: 737, wasKOd: false },
+      { side: 'B', slot: 0, hp: 0, mana: 743, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 746, wasKOd: true },
+      { side: 'B', slot: 2, hp: 0, mana: 23, wasKOd: true },
     ],
   },
 ] as const
