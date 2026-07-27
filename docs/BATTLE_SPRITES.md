@@ -18,20 +18,32 @@ Teamfight Manager does exactly this split.
 
 ## Frames
 
-Four per species, `public/battle/<id>-<frame>.png`:
+Six per species, `public/battle/<id>-<frame>.png`. The engine's own
+`UnitVisState` is `idle | move | cast | hurt | dead`, and the art has to cover
+the first three convincingly — a monster crossing a 40-unit field spends most
+of the fight in `move`, so the walk is the frame set that carries the whole
+look.
 
 | Frame | Purpose | Direction |
 |---|---|---|
 | `idle` | standing, between actions | facing right |
-| `walk1` | stride, near leg forward | facing right |
-| `walk2` | stride, far leg forward | facing right |
+| `walk1` | contact — near leg forward, weight down | facing right |
+| `walk2` | pass — legs together, body at its highest | facing right |
+| `walk3` | contact — far leg forward, weight down | facing right |
+| `walk4` | pass — legs together, opposite arm lead | facing right |
 | `strike` | committing an attack | facing right |
 
-`walk1`/`walk2` alternate for the walk cycle. Everything else is done in code
-rather than art:
+**Why four walk frames, not two.** Two alternating contacts read as a shuffle,
+because the body never rises. A four-frame cycle (contact → pass → contact →
+pass) gives the vertical bob that makes it read as walking, and it is still the
+minimum that does. If generation cost forces a cut, drop to `walk1`/`walk3`
+(the two contacts) and let code add the bob — worse, but serviceable.
+
+Everything else is done in code rather than art:
 
 - **facing left** — `scaleX(-1)`, so no mirrored art is generated
 - **hurt** — a red tint + shake on the idle
+- **run** — the walk cycle played faster; no separate art
 - **KO** — rotate and fade the idle
 - **cast wind-up** — hold `strike` for the move's `castTime`
 
@@ -65,14 +77,21 @@ Appended to every subject prompt so the set stays coherent:
 ## Pipeline
 
 1. `codex exec` one frame at a time (see `image-gen-codex` skill)
-2. `python3 tools/battle_sprite.py <raw> <out>` — white→transparent, trim,
-   **foot-anchor**, pad to 128×128
+2. `python3 tools/battle_sprite.py <id> <idle> <walk1> <walk2> <walk3> <walk4> <strike>`
+   — white→transparent, trim, ONE SHARED SCALE, **foot-anchor**, pad to 128×128
 3. Read the output and check it against its siblings before accepting
+
+## Cost
+
+6 frames × 65 species = **390 images**, ~1–3 min each via Route B ≈ 7–20 hours
+of wall clock. Batch it in the background overnight; do not block on it. The
+Mammal group alone is 5 species = 30 images ≈ 30–90 min, which is the right
+first bite.
 
 ## Known risk
 
 Each frame is generated independently, so consistency between frames is the
 thing most likely to fail — colour drift, size drift, a different number of
-limbs. That is exactly what the Kongrath pilot is for: if drift is bad at four
-frames, the fallback is fewer frames (idle + strike only) with more of the
-motion done procedurally in code.
+limbs. That is exactly what the Kongrath pilot is for. If drift is bad, the
+fallbacks in order are: (1) cut to the two contact frames and add the bob in
+code, (2) cut to idle + strike and do all motion procedurally.

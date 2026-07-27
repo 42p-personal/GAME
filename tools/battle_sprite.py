@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Post-process a species' battle-sprite frames into an animation-ready set.
 
-    python3 tools/battle_sprite.py <id> <idle.png> <walk1.png> <walk2.png> <strike.png>
+    python3 tools/battle_sprite.py <id> <idle> <walk1> <walk2> <walk3> <walk4> <strike>
     python3 tools/battle_sprite.py --check <id>        # inspect a finished set
 
 White background -> transparent, trim, then place every frame on a 128x128
@@ -18,7 +18,7 @@ portrait pipeline does:
 2. ONE SCALE FOR THE WHOLE SPECIES, taken from the largest frame. Scaling each
    frame independently to "fill the canvas" makes the monster visibly grow and
    shrink as it animates — a lunging strike frame is wider than an idle, so
-   fitting each one alone would shrink the strike. All four are measured
+   fitting each one alone would shrink the strike. All six are measured
    together, then scaled by the same factor.
 """
 import sys
@@ -28,7 +28,7 @@ SIZE = 128
 BASELINE = 0.94   # feet sit this far down the canvas
 FILL = 0.88       # the largest frame occupies this much of the canvas
 THRESH = 26       # how close to white counts as background
-FRAMES = ('idle', 'walk1', 'walk2', 'strike')
+FRAMES = ('idle', 'walk1', 'walk2', 'walk3', 'walk4', 'strike')
 OUT_DIR = 'public/battle'
 
 

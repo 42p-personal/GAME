@@ -768,6 +768,8 @@ and in memory:
 | `src/validate.ts` | Design consistency checks — `designProblems()` feeds both the dev console and the test suite |
 | `src/*.test.ts` | Vitest suite (`npm test`): design consistency, loadout invariants, status rules, golden battles |
 | `docs/LOOP_DESIGN.md` | The fun-loop design + phase plan (events/rivals/gameplans/report/meta) |
+| `docs/ART_PIPELINE.md` | **How every image in the game gets made** — both routes, their failure modes, post-processing. Read this BEFORE concluding art can't be generated. |
+| `docs/BATTLE_SPRITES.md` | The 128x128 side-profile battle sprite set (6 frames/species) + why it's separate from the portraits |
 | `docs/BESTIARY.md` / `docs/ABILITIES.md` | Full lore doc / full 90-move reference |
 | `docs/GAME_DESIGN.md` | Original design doc — stale in places; CLAUDE.md + code are more current |
 
