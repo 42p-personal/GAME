@@ -4,7 +4,7 @@
 // mutation — so it is directly unit-testable and the tick loop stays readable.
 import { Monster, Stat, roleOfClass } from '../core'
 import { FieldTraits, FieldUnit, Vec2, FIELD_W, FIELD_H, CHANNEL_RANGE } from './types'
-import { panicThreshold, personalityOf, resolvePersonality, threatRadius } from './personality'
+import { coachedValue, panicThreshold, personalityOf, resolvePersonality, threatRadius } from './personality'
 
 export const v = (x: number, y: number): Vec2 => ({ x, y })
 export const sub = (a: Vec2, b: Vec2): Vec2 => ({ x: a.x - b.x, y: a.y - b.y })
@@ -154,12 +154,56 @@ function priorityBias(self: FieldUnit, e: FieldUnit): number {
 /** How early a ranged monster starts giving ground — awareness buys distance. */
 const kiteAt = (u: FieldUnit): number => 0.45 + (personalityOf(u.m).awareness / 100) * 0.3
 
+
+// ── SPATIAL ORDERS (v0.93) ──────────────────────────────────────────────────
+// Coaching that only means anything on real ground. Each is applied in
+// proportion to the monster's TEMPERAMENT, exactly like every other order: a
+// wilful monster told to hold the line still wanders forward.
+
+/** How far out to fight, as a multiplier on the unit's natural stand-off. */
+export function engageMult(u: FieldUnit): number {
+  const order = u.m.tactics?.engageRange
+  if (!order) return 1
+  // skirmish = fight at the edge of reach; brawl = get in its face.
+  const want = order === 'skirmish' ? 1.3 : order === 'brawl' ? 0.55 : 1
+  return coachedValue(1, want, personalityOf(u.m).temperament)
+}
+
+/** Personal-space radius. Spread fans out against AoE; tight clumps to focus. */
+export function spacingRadius(u: FieldUnit): number {
+  const order = u.m.tactics?.spacing
+  const base = u.radius * 2
+  if (!order) return base
+  const want = order === 'spread' ? base * 2.6 : base * 0.75
+  return coachedValue(base, want, personalityOf(u.m).temperament)
+}
+
+/**
+ * Will this monster chase past the enemy front line? A 'hold' order caps how
+ * far into enemy ground it is willing to go — the answer to a team that keeps
+ * over-extending into a counter-attack.
+ */
+export function commitLimit(u: FieldUnit): number {
+  const order = u.m.tactics?.commit
+  // ⚠️ The "no limit" sentinel MUST be side-aware. Side A clamps with min() and
+  // side B with max(), so a single shared sentinel of FIELD_W pinned every B
+  // unit to the far edge and they could never advance at all.
+  if (order !== 'hold') return u.side === 'A' ? FIELD_W : 0
+  // Refuse to go much past the halfway line.
+  const cap = u.side === 'A' ? FIELD_W * 0.58 : FIELD_W * 0.42
+  return coachedValue(u.side === 'A' ? FIELD_W : 0, cap, personalityOf(u.m).temperament)
+}
+
 // ── Positioning ─────────────────────────────────────────────────────────────
 /**
  * Where this unit wants to be standing. Returns a world point; the engine
  * steers toward it and handles collision.
  */
-export function desiredGoal(self: FieldUnit, target: FieldUnit | null, allies: FieldUnit[], enemies: FieldUnit[]): Vec2 {
+export function desiredGoal(
+  self: FieldUnit, target: FieldUnit | null, allies: FieldUnit[], enemies: FieldUnit[],
+  /** injected by the engine so this file stays free of geometry imports */
+  losFn?: (a: Vec2, b: Vec2) => boolean,
+): Vec2 {
   const liveAllies = allies.filter((a) => !a.dead && a.id !== self.id)
   const liveEnemies = enemies.filter((e) => !e.dead)
   const homeX = self.side === 'A' ? 2 : FIELD_W - 2
@@ -189,7 +233,7 @@ export function desiredGoal(self: FieldUnit, target: FieldUnit | null, allies: F
 
   // Stand-off point: just inside reach, so a ranged unit does not walk into a
   // melee unit's face and a melee unit does close all the way.
-  const standoff = Math.max(0.8, reach * 0.85)
+  const standoff = Math.max(0.8, reach * 0.85 * engageMult(self))
   let goal: Vec2
   if (d > standoff) {
     goal = add(self.pos, scale(toward, d - standoff))
@@ -210,6 +254,30 @@ export function desiredGoal(self: FieldUnit, target: FieldUnit | null, allies: F
     const pull = self.traits.cohesion * 0.35
     goal = { x: goal.x * (1 - pull) + c.x * pull, y: goal.y * (1 - pull) + c.y * pull }
   }
+  // USE COVER: sample a ring around the intended spot and prefer ground where
+  // an obstacle breaks the enemies' line to us while our own target stays
+  // reachable. Cover you cannot shoot from is just hiding.
+  if (self.m.tactics?.useCover && losFn && liveEnemies.length) {
+    const threat = centroid(liveEnemies)
+    const obey = personalityOf(self.m).temperament / 100
+    if (obey > 0.25 && losFn(goal, threat)) {
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2
+        const c = { x: goal.x + Math.cos(a) * 3.5, y: goal.y + Math.sin(a) * 3.5 }
+        if (c.x < 1 || c.x > FIELD_W - 1 || c.y < 1 || c.y > FIELD_H - 1) continue
+        if (losFn(c, threat)) continue           // still exposed
+        if (dist(c, target.pos) > reach) continue // cannot shoot from there
+        goal = c
+        break
+      }
+    }
+  }
+
+  // COMMIT: a 'hold' order refuses to over-extend past the halfway line.
+  const limit = commitLimit(self)
+  if (self.side === 'A') goal.x = Math.min(goal.x, limit)
+  else goal.x = Math.max(goal.x, limit)
+
   return {
     x: Math.min(FIELD_W - 0.5, Math.max(0.5, goal.x)),
     y: Math.min(FIELD_H - 0.5, Math.max(0.5, goal.y)),

@@ -12,7 +12,7 @@ import {
   MAX_TICKS, Obstacle, RETARGET_EVERY, UnitVisState, Vec2,
   CHANNEL_CAST_TIME, CHANNEL_RANGE, DEPLOY_DEPTH,
 } from './types'
-import { desiredGoal, dist, norm, pickTarget, sub, traitsFor } from './decide'
+import { desiredGoal, dist, norm, pickTarget, spacingRadius, sub, traitsFor } from './decide'
 import { personalityOf, spendAbove } from './personality'
 import { spatialOf } from './spatial'
 
@@ -265,7 +265,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       // A ROOTED unit may still act — it simply cannot travel, which is what
       // makes a root a genuine answer to a fast diver rather than a stun.
       if (u.rootedFor > 0) { vis.set(u.id, 'idle'); continue }
-      const goal = desiredGoal(u, target, mates, foes)
+      const goal = desiredGoal(u, target, mates, foes, (a, b) => hasLineOfSight(a, b, obstacles))
       stepToward(u, goal, mates, obstacles)
       vis.set(u.id, 'move')
     }
@@ -388,11 +388,13 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
 
   function stepToward(u: FieldUnit, goal: Vec2, mates: FieldUnit[], obs: Obstacle[]) {
     let dir = norm(sub(goal, u.pos))
-    // Separation: don't pile into the same square metre as an ally.
+    // Separation: don't pile into the same square metre as an ally. The
+    // SPACING order widens (spread, vs AoE) or tightens (focus-fire) this.
+    const personal = spacingRadius(u)
     for (const a of mates) {
       if (a.dead || a.id === u.id) continue
       const d = dist(u.pos, a.pos)
-      if (d < u.radius + a.radius && d > 1e-6) {
+      if (d < personal && d > 1e-6) {
         const push = norm(sub(u.pos, a.pos))
         dir = { x: dir.x + push.x * 0.9, y: dir.y + push.y * 0.9 }
       }

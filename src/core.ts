@@ -266,6 +266,15 @@ export interface Tactics {
   openerIds?: string[] // scripted opening SEQUENCE (v0.81): up to 2 equipped move ids, played in order on the first actions
   preserve?: Preserve // absent = 'off' — below the threshold, play to survive (block, drop self-harm moves)
   ccPriority?: boolean // lead with a hard control status (stun/sleep/silence/…) before committing to damage
+  // ── SPATIAL ORDERS (v0.93, field engine only) ────────────────────────────
+  // Orders that only mean anything once monsters occupy real ground. All
+  // optional and read ONLY by src/field — battle.ts ignores them, so adding
+  // them cannot move a golden. Like every other order they are COACHING: how
+  // much of each actually lands is gated by the monster's temperament.
+  engageRange?: 'skirmish' | 'brawl' | 'hold' // fight at max reach / close in / stay put
+  spacing?: 'spread' | 'tight' // fan out against AoE, or clump to focus-fire
+  useCover?: boolean // prefer ground where an obstacle breaks enemy line of sight
+  commit?: 'dive' | 'hold' // chase past the enemy front line, or refuse to over-extend
 }
 export const DEFAULT_TACTICS: Tactics = { temperament: 'balanced', targetPriority: 'weakest' }
 
