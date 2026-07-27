@@ -998,11 +998,18 @@ export const SIGNATURE_RITE_LEVEL = 6 // trainer level that unlocks the rite
 // caps signatures at one per year per stable no matter how deep the roster.
 export const RITE_COOLDOWN_WEEKS = WEEKS_PER_YEAR
 // HARDER THAN THE RANK-UP TRIAL at every rung (user spec). Expressed as a delta
-// over trialChampionMult rather than a flat number so it inherits that
-// function's summit relief automatically — a flat multiplier compounds with the
-// climbing rival budget into an unwinnable wall at the top, which is exactly the
-// bug v0.89 had to fix for Tamer Elite.
-export const RITE_EXTRA_MULT = 0.15
+// over trialChampionMult so it inherits that function's summit relief — a flat
+// multiplier compounds with the climbing rival budget into an unwinnable wall,
+// the bug v0.89 had to fix for Tamer Elite.
+// ⚠️ SIM-TUNED 0.15 -> 0.05. At +0.15 the long-haul bot went 0 for 13 across 45
+// simulated years: unwinnable, not merely hard. The reason is the whole-roster
+// rule — the challenger side matches the roster ONE FOR ONE at full budget, so
+// entering with six monsters means your two benchwarmers face champions too,
+// while your average drags. Measured roster strength peaked at 0.69 of the
+// challenger budget. At +0.05 it is winnable but rare (1 in 12 for a bot that
+// attempts at 60% readiness), which is the right shape for a once-a-year gamble
+// a PLAYER can time better than the bot does.
+export const RITE_EXTRA_MULT = 0.05
 export const riteChampionMult = (leagueIndex: number): number => trialChampionMult(leagueIndex) + RITE_EXTRA_MULT
 // The rite is fought by the WHOLE active roster (user spec) — not a picked team.
 export const riteRoster = (g: GameState): Career[] => g.stable.filter((c) => !c.retired)
@@ -2237,10 +2244,16 @@ function stageRite(g: GameState, stable: Career[]): { activeCup: ActiveCup } | n
   if (careers.some((c) => !c || c.retired)) return null
   const size = pending.monsterIds.length
   if (size === 0) return null
-  // The opposing side matches the roster ONE FOR ONE and is built harder than a
-  // rank-up champion, so bringing more monsters is never a way to cheapen it.
+  // ⚠️ The challenger side is capped at the LEAGUE's team size, not the roster's.
+  // Matching the roster one-for-one was tried and is a trap: it makes a deep
+  // stable strictly worse, because your two benchwarmers are forced in against
+  // champions while your average drags. The long-haul bot went 0 for 13 that way.
+  // Capping the opposition means a full roster is what it should be — an
+  // advantage you earned — while each individual challenger stays harder than a
+  // rank-up champion, which is the part the spec actually asked for.
+  const foeSize = Math.min(size, teamSizeForLeague(LEAGUES[g.licenseIndex].name))
   const budget = LEAGUES[g.licenseIndex].cap * rivalBudgetMult(g.licenseIndex) * riteChampionMult(g.licenseIndex)
-  const raw = generateRivalTeam(g.seed + ':' + g.week + ':rite:' + g.licenseIndex, size, budget, g.licenseIndex >= leagueIndexOf('Silver'))
+  const raw = generateRivalTeam(g.seed + ':' + g.week + ':rite:' + g.licenseIndex, foeSize, budget, g.licenseIndex >= leagueIndexOf('Silver'))
   const team = applyGameplan(raw, gameplanForRivalTeam(g.seed, g.week, 'rite-' + g.licenseIndex, 0))
   return { activeCup: { kind: 'rite', tournamentId: 'rite-' + g.licenseIndex + '-' + g.week, week: g.week, playerMonsterIds: pending.monsterIds, rivalTeams: [team], matchOrders: {}, doneThrough: -1 } }
 }

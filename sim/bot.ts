@@ -27,10 +27,12 @@
 // NOT part of the app build (tsconfig `include` is ["src"]) — it drives the
 // real exported game functions, so it stays in sync with the mechanics.
 
+import { signatureChoicesFor } from '../src/signatureMoves'
 import {
   GameState, advanceWeek, buyLicense, buyMonster, eligibleForTournament, finalizeCup, finalizeTrial,
   freezeToLab, breed, leagueIndexOf, monthOfWeek, newGame, nextLicenseCost, resolveEvent as resolveWeeklyEvent,
   roundRobinSchedule, signUp, startTrial, teamSizeForLeague, tournamentCalendarFor, trialStatus, weekOfMonth, yearOfWeek, WeekPlanEntry,
+  finalizeRite, riteStatus, riteRoster, startRite, claimSignature, rivalBudgetMult, riteChampionMult,
   buySpecialLicense, canBuySpecialLicense, buyEliteLicense, canBuyEliteLicense,
   buyExtremeManual, EXTREME_MANUAL_COST, buyDiverseManual, DIVERSE_MANUAL_COST, buyMarketCoach, canBuyMarketCoach, coachCost,
   buyMarketSlot, marketSlotCost, buyMarketScout, scoutCost, setScoutPick, upgradeBarn, barnCost, effectiveBarnCap,
@@ -109,12 +111,12 @@ function resolveEvent(g: GameState): GameState {
   const ac = g.activeCup
   if (!ac) return g
   const team = ac.playerMonsterIds.map((id) => g.stable.find((c) => c.id === id)).filter((c): c is Career => !!c)
-  const oppOrder = ac.kind === 'trial' ? [0]
+  const oppOrder = ac.kind === 'trial' || ac.kind === 'rite' ? [0]
     : roundRobinSchedule(ac.rivalTeams.length + 1).filter(([i, j]) => i === 0 || j === 0).map(([i, j]) => (i === 0 ? j : i) - 1)
   const matchOrders: Record<number, MatchOrders> = {}
   oppOrder.forEach((oi, k) => { matchOrders[k] = coachOrders(team, ac.rivalTeams[oi]) })
   const g2: GameState = { ...g, activeCup: { ...ac, matchOrders, doneThrough: oppOrder.length - 1 } }
-  return ac.kind === 'trial' ? finalizeTrial(g2).game : finalizeCup(g2)
+  return ac.kind === 'rite' ? finalizeRite(g2).game : ac.kind === 'trial' ? finalizeTrial(g2).game : finalizeCup(g2)
 }
 
 // --- Training brain ----------------------------------------------------------
@@ -300,6 +302,7 @@ interface Report {
 function playGame(seed: string, years: number, DRILLS: DrillLite[]): Report {
   let g = newGame(seed, { tutorialEnabled: false })
   let cupsEntered = 0, podiums = 0, wins = 0, trialsWon = 0, peakLicense = 0, peakYear = 0, breeds = 0, fusions = 0
+  let ritesAttempted = 0, ritesWon = 0, sigsHeld = 0, sigsInherited = 0
   const seenDynasty = new Set<string>()
   const endWeek = years * WEEKS_PER_YEAR
   while (g.week < endWeek) {
@@ -346,6 +349,20 @@ function playGame(seed: string, years: number, DRILLS: DrillLite[]): Report {
       const elig = g.stable.filter(healthy).sort((a, b) => total(b.stats) - total(a.stats))
       if (elig.length >= size) g = startTrial(g, elig.slice(0, size).map((c) => c.id))
     }
+    // 4b) THE SIGNATURE RITE (v0.91). Once a year, whole roster, harder than a
+    // rank-up champion. The bot attempts it whenever the gate is open AND the
+    // stable is actually competitive — the challenger budget is
+    // cap x rivalBudgetMult x riteChampionMult, so throwing an underpowered
+    // stable at it burns the entire year's attempt for nothing.
+    if (!g.pendingTrial && !g.pendingTournament && riteStatus(g).ok) {
+      const roster = riteRoster(g)
+      const avg = roster.reduce((s2, c) => s2 + total(c.stats), 0) / Math.max(1, roster.length)
+      const target = LEAGUES[g.licenseIndex].cap * rivalBudgetMult(g.licenseIndex) * riteChampionMult(g.licenseIndex)
+      // The rite is ANNUAL, so waiting is free — hold out for a roster worth
+      // spending the year's single attempt on. 0.65 sits just under the 0.69 peak
+      // the bot actually reaches, so it fires near its own best moment.
+      if (roster.length > 0 && avg >= target * 0.65) { g = startRite(g); ritesAttempted++ }
+    }
     // 5) Otherwise the best cup at (or one below) our league.
     if (!g.pendingTrial && !g.pendingTournament) {
       const cups = tournamentCalendarFor(g.seed, yearOfWeek(g.week))
@@ -363,7 +380,7 @@ function playGame(seed: string, years: number, DRILLS: DrillLite[]): Report {
       }
     }
     // 6) Weekly plans for everyone not competing (competing is forced in advanceWeek).
-    const competing = new Set([...(g.pendingTournament?.monsterIds ?? []), ...(g.pendingTrial?.monsterIds ?? [])])
+    const competing = new Set([...(g.pendingTournament?.monsterIds ?? []), ...(g.pendingTrial?.monsterIds ?? []), ...(g.pendingRite?.monsterIds ?? [])])
     const weekPlans: Record<string, WeekPlanEntry> = { ...g.weekPlans }
     for (const c of g.stable) if (!c.retired && !competing.has(c.id)) weekPlans[c.id] = planFor(c, g, DRILLS)
     g = { ...g, weekPlans }
@@ -378,13 +395,30 @@ function playGame(seed: string, years: number, DRILLS: DrillLite[]): Report {
         else { if (lb.playerPlacement === 1) wins++; if (lb.playerPlacement <= 3) podiums++ }
       }
     }
+    // 8) CLAIM THE RITE PRIZE (v0.91). Winning banks the reward rather than
+    // forging it, so an unclaimed prize would silently sit there forever. The bot
+    // gives it to the entrant with the highest total stats that has none, and
+    // picks the highest-power move that monster's body offers — a crude but
+    // honest proxy, and enough to prove the whole flow runs unattended.
+    if (g.riteReward) {
+      ritesWon++
+      const cands = g.stable.filter((c) => g.riteReward!.monsterIds.includes(c.id) && !c.retired && !c.signature)
+      const star = cands.sort((a, b) => total(b.stats) - total(a.stats))[0]
+      if (star) {
+        const choices = signatureChoicesFor(star.species.body).sort((a, b) => b.power - a.power)
+        if (choices.length) g = claimSignature(g, star.id, choices[0].id)
+      }
+      if (g.riteReward) g = { ...g, riteReward: null } // nobody eligible — do not stall
+    }
     if (g.licenseIndex > peakLicense) { peakLicense = g.licenseIndex; peakYear = Math.floor(g.week / WEEKS_PER_YEAR) + 1 }
   }
+  sigsHeld = [...g.stable, ...(g.labFrozen ?? [])].filter((c) => c.signature).length
+  sigsInherited = [...g.stable, ...(g.labFrozen ?? [])].filter((c) => (c.signature?.inherited ?? 0) > 0).length
   const everyone = [...g.stable, ...(g.labFrozen ?? [])]
   const gen = Math.max(1, ...everyone.map((c) => c.generation ?? 1))
   const bestStat = Math.max(0, ...everyone.map((c) => Math.max(...STATS.map((k) => c.stats[k]))))
   const prestigeOwned = everyone.filter((c) => isPrestigeBody(c.species.body)).length
-  return { seed, peak: LEAGUES[peakLicense].name, peakYear, gold: g.gold, gen, bestStat, cupsEntered, podiums, wins, trialsWon, breeds, fusions, coach: g.marketCoach ?? 0, prestigeOwned }
+  return { seed, peak: LEAGUES[peakLicense].name, peakYear, gold: g.gold, gen, bestStat, cupsEntered, podiums, wins, trialsWon, breeds, fusions, coach: g.marketCoach ?? 0, prestigeOwned, ritesAttempted, ritesWon, sigsHeld, sigsInherited }
 }
 
 // --- Runner -----------------------------------------------------------------
@@ -397,9 +431,11 @@ async function main() {
   const rows: Report[] = []
   for (let s = 0; s < seeds; s++) rows.push(playGame('bot-seed-' + s, years, DRILLS))
   const pad = (v: unknown, n: number) => String(v).padEnd(n)
-  console.log(pad('seed', 14) + pad('peak', 12) + pad('@yr', 5) + pad('gold', 8) + pad('best', 6) + pad('gen', 4) + pad('cups', 6) + pad('1st', 5) + pad('trials', 7) + pad('breed', 6) + pad('fuse', 5) + pad('coach', 6) + 'prestige')
-  for (const r of rows) console.log(pad(r.seed, 14) + pad(r.peak, 12) + pad(r.peakYear, 5) + pad(r.gold, 8) + pad(r.bestStat, 6) + pad(r.gen, 4) + pad(r.cupsEntered, 6) + pad(r.wins, 5) + pad(r.trialsWon, 7) + pad(r.breeds, 6) + pad(r.fusions, 5) + pad(r.coach, 6) + r.prestigeOwned)
+  console.log(pad('seed', 14) + pad('peak', 12) + pad('@yr', 5) + pad('gold', 8) + pad('best', 6) + pad('gen', 4) + pad('cups', 6) + pad('1st', 5) + pad('trials', 7) + pad('breed', 6) + pad('fuse', 5) + pad('rite', 6) + pad('sigs', 6) + pad('coach', 6) + 'prestige')
+  for (const r of rows) console.log(pad(r.seed, 14) + pad(r.peak, 12) + pad(r.peakYear, 5) + pad(r.gold, 8) + pad(r.bestStat, 6) + pad(r.gen, 4) + pad(r.cupsEntered, 6) + pad(r.wins, 5) + pad(r.trialsWon, 7) + pad(r.breeds, 6) + pad(r.fusions, 5) + pad(r.ritesWon + '/' + r.ritesAttempted, 6) + pad(r.sigsHeld + '+' + r.sigsInherited, 6) + pad(r.coach, 6) + r.prestigeOwned)
   const peakIdx = rows.map((r) => LEAGUES.findIndex((l) => l.name === r.peak))
   console.log(`\npeak leagues: ${rows.map((r) => r.peak).join(' / ')}  (best ${LEAGUES[Math.max(...peakIdx)].name})`)
+  const sum = (f: (r: Report) => number) => rows.reduce((a, r) => a + f(r), 0)
+  console.log(`rites: ${sum((r) => r.ritesWon)} won of ${sum((r) => r.ritesAttempted)} attempted · signatures ${sum((r) => r.sigsHeld)} held (${sum((r) => r.sigsInherited)} inherited)`)
 }
 main()
