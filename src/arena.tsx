@@ -274,6 +274,33 @@ function MoveFx({ fx }: { fx: Fx }) {
   return <>{base}<Overlays fx={fx} /></>
 }
 
+// Field geometry, extracted as a PURE function so it can be unit-tested without
+// a browser (the visual layer cannot be asserted in CI, but the maths can).
+// Returns a post in PERCENT of the field box.
+//
+// ⚠️ Mirrors the engine's `formationRank`: a monster's row is its index among
+// still-LIVING teammates, so when a front-liner drops the one behind is promoted
+// and visibly walks forward into the gap.
+export const FIELD_LANES = { frontA: 35, backA: 17, frontB: 65, backB: 83 }
+export function fieldPostFor(
+  side: BattleSide, slot: number, livingSlots: number[], teamSize: number,
+): { x: number; y: number } {
+  const fallen = !livingSlots.includes(slot)
+  // A KO'd monster keeps the post it died on rather than snapping elsewhere.
+  const order = fallen ? Array.from({ length: teamSize }, (_, i) => i) : livingSlots
+  const rank = Math.max(0, order.indexOf(slot))
+  const front = frontRowCount(order.length)
+  const isFront = rank < front
+  const rowCount = isFront ? Math.min(front, order.length) : order.length - front
+  const idxInRow = isFront ? rank : rank - front
+  const x = side === 'A'
+    ? (isFront ? FIELD_LANES.frontA : FIELD_LANES.backA)
+    : (isFront ? FIELD_LANES.frontB : FIELD_LANES.backB)
+  const span = 54
+  const y = rowCount <= 1 ? 50 : 50 - span / 2 + (idxInRow * span) / (rowCount - 1)
+  return { x, y }
+}
+
 export function ArenaBattle({ teamA, teamB, result, league, playerSide, onDone }: { teamA: Monster[]; teamB: Monster[]; result: BattleResult; league?: string; playerSide?: BattleSide; onDone?: () => void }) {
   const is1v1 = teamA.length === 1 && teamB.length === 1
   const events = result.events
@@ -607,7 +634,62 @@ export function ArenaBattle({ teamA, teamB, result, league, playerSide, onDone }
     )
   }
 
-  // ---------- Team battles: compact roster rows ----------
+  // ---------- Team battles: a 2D battlefield ----------
+  // Presentation ONLY. Every position here is DERIVED from the resolved event
+  // stream and the engine's own formation rule — nothing on this field feeds
+  // back into the sim, so the goldens cannot move. The rule to keep: never
+  // invent a spatial fact the engine does not share (e.g. never walk a melee
+  // attacker past the front line — the engine walls it there).
+
+  // The field is measured, and posts are emitted in PIXELS. Percentages are a
+  // trap here: a % inside `transform` resolves against the element's own box,
+  // not the field. Measuring once and doing the arithmetic in JS keeps the
+  // geometry unambiguous and the motion on `transform` (GPU-composited).
+  const fieldRef = useRef<HTMLDivElement>(null)
+  const [fieldBox, setFieldBox] = useState({ w: 0, h: 0 })
+  useEffect(() => {
+    const el = fieldRef.current
+    if (!el) return
+    const measure = () => setFieldBox({ w: el.clientWidth, h: el.clientHeight })
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  // Who is still standing, per side. Drives BOTH the live formation and the
+  // idle behaviour, so it is computed once per render.
+  const livingSlots = (side: BattleSide) =>
+    teamOf(side).map((_, i) => i).filter((i) => (bars[barKey(side, i)]?.hp ?? 1) > 0)
+
+  // A slot's post on the field, in % of the field box.
+  // ⚠️ Mirrors the ENGINE's `formationRank`: a monster's row is its index among
+  // still-LIVING teammates. So when a front-liner drops, the one behind is
+  // promoted by the engine and here literally WALKS FORWARD into the gap — the
+  // animation is a real mechanic surfacing, not decoration.
+  const fieldPos = (side: BattleSide, slot: number): { x: number; y: number } =>
+    fieldPostFor(side, slot, livingSlots(side), teamOf(side).length)
+
+  // Personality, read off the SAME Tactics the engine's AI actually uses — so
+  // how a monster carries itself on the field is an honest tell, not flavour.
+  const postureOf = (side: BattleSide, slot: number): string => {
+    const t = teamOf(side)[slot]?.tactics
+    const bar = bars[barKey(side, slot)]
+    const hurt = bar && bar.hp > 0 && bar.hp / maxHp(teamOf(side)[slot].stats) < 0.35
+    const bits: string[] = []
+    // temperament drives the resting stance: aggressive crowds the line,
+    // defensive gives ground, balanced holds.
+    bits.push('temper-' + (t?.temperament ?? 'balanced'))
+    // 'preserve' below its threshold means the AI is genuinely playing to
+    // survive — show it backing off rather than only saying so in the log.
+    if (hurt && t?.preserve && t.preserve !== 'off') bits.push('guarding')
+    if (hurt) bits.push('hurt')
+    if (bar?.statuses.includes('haste')) bits.push('hasted')
+    if (bar?.statuses.some((s) => s === 'fear' || s === 'confusion')) bits.push('shaken')
+    if (bar?.statuses.some((s) => s === 'stun' || s === 'sleep')) bits.push('downed')
+    return bits.join(' ')
+  }
+
   const renderTile = (side: BattleSide, slot: number) => {
     const m = teamOf(side)[slot]
     const bar = bars[barKey(side, slot)]
@@ -627,12 +709,40 @@ export function ArenaBattle({ teamA, teamB, result, league, playerSide, onDone }
     if (buffed) cls += ' buffed'
     // a move's colour rides along as a CSS custom property so acting/impact
     // don't need a hand-written rule per kind just to pick up the right tint
-    const fxStyle: Record<string, string> | undefined = buffed
+    const fxStyle: Record<string, string> = buffed
       ? { '--glow-color': buffGlowColor(fx!.overlays) }
-      : ((acting || impacted) && fx?.color ? { '--fx-color': fx.color } : undefined)
+      : ((acting || impacted) && fx?.color ? { '--fx-color': fx.color } : {})
+
+    // --- Where this monster stands right now ---
+    const home = fieldPos(side, slot)
+    let { x, y } = home
+    // MELEE CLOSES THE DISTANCE. On a 'lunge' fx the attacker travels to just
+    // short of its target and back; the CSS transition does the interpolation,
+    // so the walk is free. Ranged/magic ('proj') hold their post and throw.
+    if (acting && fx!.struct === 'lunge' && fx!.targetSide && fx!.targetSlot !== undefined) {
+      const t = fieldPos(fx!.targetSide, fx!.targetSlot)
+      x = t.x + (side === 'A' ? -8 : 8) // stop at arm's length, never overlap
+      y = t.y
+    }
+    if (!koed) cls += ' ' + postureOf(side, slot)
+    // Side A looks right, side B looks left; an attacker mid-lunge keeps facing
+    // the way it is travelling.
+    const facing = side === 'A' ? 1 : -1
+    // ⚠️ The transform is written out in full here rather than assembled from
+    // custom properties in CSS. `var()` inside translate3d() did NOT resolve in
+    // testing (the tile silently stayed at 0,0 while the variable read back
+    // correctly) — a whole debugging session was lost to it. An explicit string
+    // has no indirection to go wrong, and the transition still comes from CSS.
+    const px = ((x / 100) * fieldBox.w).toFixed(1)
+    const py = ((y / 100) * fieldBox.h).toFixed(1)
+    Object.assign(fxStyle, {
+      transform: `translate3d(${px}px, ${py}px, 0) translate(-50%, -50%)`,
+      '--face': String(facing),
+    })
+
     return (
       <div className={cls} key={slot} title={m.name} style={fxStyle}>
-        <Sprite species={m.species} size={60} bare />
+        <div className="rt-body"><Sprite species={m.species} size={60} bare /></div>
         <div className="rt-name">{m.name}</div>
         <div className="rt-class dim">{m.className}</div>
         <div className="rt-bar hp"><i style={{ width: `${Math.max(0, (bar.hp / hpMax) * 100)}%` }} /></div>
@@ -652,21 +762,32 @@ export function ArenaBattle({ teamA, teamB, result, league, playerSide, onDone }
 
       <div className={'arena-floor team-floor'} style={{ backgroundImage: `url(${bgImage})` }}>
         <div className="arena-floor-scrim" />
-        {/* Formation (wave 2): tiles grouped into front/back lines, mirroring
-            the engine's rowOfSlot split — the back line sits slightly offset
-            so the formation reads at a glance. */}
-        <div className="roster roster-a">
-          <div className="roster-line">{teamA.slice(0, frontRowCount(teamA.length)).map((_, i) => renderTile('A', i))}</div>
-          {teamA.length > frontRowCount(teamA.length) && (
-            <div className="roster-line back">{teamA.slice(frontRowCount(teamA.length)).map((_, i) => renderTile('A', i + frontRowCount(teamA.length)))}</div>
-          )}
-        </div>
-        <div className="roster-vs">vs</div>
-        <div className="roster roster-b">
-          <div className="roster-line">{teamB.slice(0, frontRowCount(teamB.length)).map((_, i) => renderTile('B', i))}</div>
-          {teamB.length > frontRowCount(teamB.length) && (
-            <div className="roster-line back">{teamB.slice(frontRowCount(teamB.length)).map((_, i) => renderTile('B', i + frontRowCount(teamB.length)))}</div>
-          )}
+        {/* THE FIELD. Every combatant is absolutely placed from fieldPos, which
+            reads the engine's own living-formation rule — so the front line, the
+            promotion when someone drops, and who a melee attacker can reach all
+            match the sim exactly. */}
+        <div className="battlefield" ref={fieldRef}>
+          {teamA.map((_, i) => renderTile('A', i))}
+          {teamB.map((_, i) => renderTile('B', i))}
+          {/* A ranged/magic cast throws a real projectile across the lane,
+              travelling from the caster's post to the target's. */}
+          {fx && fx.struct === 'proj' && fx.targetSide && fx.targetSlot !== undefined && (() => {
+            const from = fieldPos(fx.side, fx.slot)
+            const to = fieldPos(fx.targetSide, fx.targetSlot)
+            return (
+              <span
+                key={fx.id}
+                className={'field-shot shot-' + (fx.kind ?? 'proj')}
+                style={{
+                  '--fx-color': fx.color ?? '#fff',
+                  '--x0': ((from.x / 100) * fieldBox.w).toFixed(1) + 'px',
+                  '--y0': ((from.y / 100) * fieldBox.h).toFixed(1) + 'px',
+                  '--x1': ((to.x / 100) * fieldBox.w).toFixed(1) + 'px',
+                  '--y1': ((to.y / 100) * fieldBox.h).toFixed(1) + 'px',
+                } as Record<string, string>}
+              />
+            )
+          })()}
         </div>
         {done && (
           <div className="winner-banner">
