@@ -4,6 +4,7 @@
 // mutation — so it is directly unit-testable and the tick loop stays readable.
 import { Monster, Stat, roleOfClass } from '../core'
 import { FieldTraits, FieldUnit, Vec2, FIELD_W, FIELD_H, CHANNEL_RANGE } from './types'
+import { panicThreshold, personalityOf, resolvePersonality } from './personality'
 
 export const v = (x: number, y: number): Vec2 => ({ x, y })
 export const sub = (a: Vec2, b: Vec2): Vec2 => ({ x: a.x - b.x, y: a.y - b.y })
@@ -24,30 +25,18 @@ const FIELD_DIAG = Math.hypot(FIELD_W, FIELD_H)
 // They are first-class fields on the unit, so they can later be authored,
 // trained, or bred without changing any of the logic that consumes them.
 export function traitsFor(m: Monster): FieldTraits {
-  const t = m.tactics
-  const role = roleOfClass(m.className)
-  let cohesion = 0.5
-  let predation = 0.5
+  // PERSONALITY FIRST, coaching second. resolvePersonality blends the monster's
+  // innate aggression/teamplay with what your Tactics are asking for, weighted
+  // by its DISCIPLINE — so an undisciplined bruiser ordered to hold back still
+  // charges. These two numbers are the whole behavioural identity of the unit.
+  const { aggression, teamplay } = resolvePersonality(m)
+  let predation = aggression
+  let cohesion = teamplay
 
-  // Temperament is the strongest signal — it is literally how the player told
-  // this monster to carry itself.
-  if (t?.temperament === 'aggressive') { predation += 0.25; cohesion -= 0.2 }
-  if (t?.temperament === 'cautious') { predation -= 0.2; cohesion += 0.2 }
-
-  // Who it was told to hunt.
-  if (t?.targetPriority === 'casters') predation += 0.2 // dive the squishy backline
-  if (t?.targetPriority === 'weakest') predation += 0.1 // finish off the wounded
-  if (t?.targetPriority === 'tanks') predation -= 0.15 // happy to grind the front
-  if (t?.targetPriority === 'focus') cohesion += 0.15 // everyone on one mark
-
-  // A support's whole job is to be near the people it is supporting.
-  if (role === 'support') cohesion += 0.2
-  else predation += 0.05
-
-  // Playing to survive means staying with the group, not chasing kills.
-  if (t?.preserve && t.preserve !== 'off') { cohesion += 0.1; predation -= 0.1 }
-  // Someone ordered to protect an ally is by definition a team player.
-  if (m.protect) { cohesion += 0.15; predation -= 0.1 }
+  // Small role/order nudges on top of who it is.
+  if (roleOfClass(m.className) === 'support') cohesion += 0.12
+  if (m.protect) cohesion += 0.12 // told to guard someone: by definition a team player
+  if (m.tactics?.targetPriority === 'tanks') predation -= 0.1 // content to grind the front
 
   return { cohesion: clamp01(cohesion), predation: clamp01(predation) }
 }
@@ -150,8 +139,13 @@ export function desiredGoal(self: FieldUnit, target: FieldUnit | null, allies: F
 
   // Playing to survive: below its threshold it disengages toward its own edge.
   const hpFrac = self.hp / self.maxHp
+  // COMPOSURE decides when it breaks. A steady monster holds until it is
+  // nearly done; a flighty one bails early. An explicit 'preserve' order raises
+  // the floor on top of that.
   const preserve = self.m.tactics?.preserve ?? 'off'
-  const retreatAt = preserve === 'defensive' ? 0.4 : preserve === 'cautious' ? 0.25 : 0
+  const innatePanic = panicThreshold(personalityOf(self.m))
+  const ordered = preserve === 'defensive' ? 0.4 : preserve === 'cautious' ? 0.25 : 0
+  const retreatAt = Math.max(innatePanic, ordered)
   if (retreatAt > 0 && hpFrac < retreatAt && liveEnemies.length) {
     const away = norm(sub(self.pos, centroid(liveEnemies)))
     return {

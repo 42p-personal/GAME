@@ -207,6 +207,22 @@ export interface Monster {
   tactics?: Tactics // standing battle orders (2026-07-25); absent = DEFAULT_TACTICS (rivals, legacy saves)
   protect?: boolean // team-event "protect target" designation — allies guard/heal this monster first
   marked?: boolean // team-event kill order on an ENEMY monster (set via scouting) — the whole opposing team strikes it first while reachable
+  // PERSONALITY DRIFT (v0.93). The innate block is DERIVED from `seed` (see
+  // field/personality.ts) so it costs no generation rng and every existing save
+  // already has one. This optional field is only the drift earned afterwards
+  // through training, care or breeding — absent means "still exactly as born".
+  personality?: Partial<Personality>
+}
+
+// Who a monster IS, as opposed to what you tell it to do (v0.93). 0..100 each.
+// Tactics are COACHING applied on top of this; `discipline` decides how much of
+// that coaching actually sticks. Read by the field engine only — the
+// turn-based engine in battle.ts never looks at it, so goldens are unaffected.
+export interface Personality {
+  aggression: number // how early and how deep it commits
+  teamplay: number // fights as a unit — shares focus, stays with the group
+  composure: number // holds together under pressure; low panics and chases bait
+  discipline: number // executes well, and obeys coaching
 }
 
 // --- Tactics (2026-07-25): pre-battle standing orders, Teamfight-Manager
