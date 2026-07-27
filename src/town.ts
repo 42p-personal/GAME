@@ -3,7 +3,7 @@
 import {
   ActiveCup, BodyType, ClassRole, Food, GAMEPLANS, INNATE_SECONDARY_LEVEL, LEAGUES, MatchOrders, MAX_HAPPINESS, Monster, Rival, RivalPersonality, Sex, Species, Stat, STATS, Stats, TeamGameplan, classForStats, foodDiscountGroup, hashString,
   isFusionBody, isPrestigeBody, mulberry32, roleOfClass,
-  Move,
+  Move, StatusKind,
 } from './core'
 import { SPECIES } from './species'
 import { GenOptions, generateMonster, maxHp, maxMana } from './monster'
@@ -2116,24 +2116,48 @@ function generateRivalTeam(seedBase: string, teamSize: number, targetTotal: numb
 function equipForPlan(team: Monster[], plan: TeamGameplan): void {
   const wants = GAMEPLANS[plan].wants
   if (!wants) return
+  const used = new Set<Monster>() // at most ONE swapped slot per monster
   const swapIn = (m: Monster, pick: (mv: Move) => boolean): boolean => {
-    if (m.loadout.some(pick)) return true // already covered
+    if (m.loadout.some(pick)) return true // already covered — costs no slot
+    if (used.has(m)) return false
     const candidate = m.learned.filter(pick).sort((a, b) => b.power - a.power)[0]
     if (!candidate) return false
     const worst = [...m.loadout].sort((a, b) => a.power - b.power)[0]
     m.loadout = m.loadout.map((mv) => (mv === worst ? candidate : mv))
+    used.add(m)
     return true
   }
-  // One member carries the SETTER, a different one carries the PAYOFF that cashes
-  // it — the combo has to span the team or it is not a team strategy.
+  const isSetter = (kind: StatusKind) => (mv: Move) => mv.status?.kind === kind
+  const isPayoff = (kind: StatusKind) => (mv: Move) => mv.effects?.bonusVsStatus?.kind === kind
+
+  // The plan's flavour status — attrition poisons, zone burns — placed first so
+  // a scouted plan reads true even when no finisher for it exists.
   let setterOn: Monster | null = null
   if (wants.status) {
-    for (const m of team) if (swapIn(m, (mv) => mv.status?.kind === wants.status)) { setterOn = m; break }
+    for (const m of team) if (swapIn(m, isSetter(wants.status))) { setterOn = m; break }
   }
-  if (wants.payoff && wants.status) {
-    for (const m of team) {
-      if (m === setterOn) continue
-      if (swapIn(m, (mv) => mv.effects?.bonusVsStatus?.kind === wants.status)) break
+
+  // ⚠️ The setup→payoff combo is searched, not assumed. Only bleed/doom/burn/fear
+  // have `bonusVsStatus` finishers in the pool — poison and vulnerable have NONE
+  // — so a plan naming one of those could never assemble the combo it promised.
+  // Instead: find a status this team can genuinely BOTH set and cash, on two
+  // different members, preferring the plan's own status when it qualifies.
+  if (wants.payoff) {
+    const kinds: StatusKind[] = []
+    for (const m of team) for (const mv of m.learned) {
+      const k = mv.effects?.bonusVsStatus?.kind
+      if (k && !kinds.includes(k)) kinds.push(k)
+    }
+    if (wants.status && kinds.includes(wants.status)) kinds.sort((a) => (a === wants.status ? -1 : 0))
+    outer: for (const kind of kinds) {
+      for (const payer of team) {
+        if (!payer.learned.some(isPayoff(kind))) continue
+        // a DIFFERENT member has to be able to apply it, or the finisher is inert
+        const setter = setterOn?.loadout.some(isSetter(kind)) ? setterOn
+          : team.find((m) => m !== payer && (m.loadout.some(isSetter(kind)) || m.learned.some(isSetter(kind))))
+        if (!setter || setter === payer) continue
+        if (swapIn(setter, isSetter(kind)) && swapIn(payer, isPayoff(kind))) break outer
+      }
     }
   }
   // Someone brings a team buff, so the roster fights as a unit rather than five
