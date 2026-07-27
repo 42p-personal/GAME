@@ -319,6 +319,19 @@ export interface GameplanInfo {
   counter: string
   tactics: Tactics
   protectCarry?: boolean // guard the team's top damage dealer (bulwark)
+  // --- TEAM BUILDING (v0.91). Before this, a gameplan was picked at random and
+  // STAMPED ON a team that had already been generated half-damage/half-support —
+  // so 'bulwark' regularly landed on a roster with no tanks and 'attrition' on
+  // one with no sustain. The plan never shaped the roster it was supposedly
+  // describing. These fields make the archetype BUILD the team.
+  winCon: string // the plain-English thing this team is trying to do — shown when scouted
+  mix: { damage: number; support: number } // relative weights for the role split
+  wants?: {
+    status?: StatusKind // a status the team actively tries to apply and build on
+    payoff?: boolean // reserve a slot for a bonusVsStatus finisher that cashes `status`
+    teamBuff?: boolean // reserve a slot for a team-target buff on at least one member
+    aoe?: boolean // prefer multi-target damage over single-target
+  }
 }
 export const GAMEPLANS: Record<TeamGameplan, GameplanInfo> = {
   rushdown: {
@@ -326,6 +339,8 @@ export const GAMEPLANS: Record<TeamGameplan, GameplanInfo> = {
     tell: 'Fast, aggressive, no support — all pressure.',
     counter: "They rush your softest monster and spend big early. Put a tank up front, or burst them before they snowball.",
     tactics: { temperament: 'aggressive', targetPriority: 'weakest', manaPolicy: 'burst' },
+    winCon: 'Kill something in the first three rounds and snowball the numbers advantage.',
+    mix: { damage: 5, support: 1 },
   },
   bulwark: {
     name: 'Bulwark', icon: '🛡',
@@ -333,24 +348,36 @@ export const GAMEPLANS: Record<TeamGameplan, GameplanInfo> = {
     counter: "They turtle and guard one damage dealer. Grind the wall down, or focus the protected monster before its guards react.",
     tactics: { temperament: 'cautious', targetPriority: 'weakest', manaPolicy: 'conserve' },
     protectCarry: true,
+    winCon: 'Keep one carry alive behind a wall until it out-damages everything you have left.',
+    mix: { damage: 1, support: 3 },
+    wants: { teamBuff: true },
   },
   attrition: {
     name: 'Attrition', icon: '☠',
     tell: 'Poison, bleed and stall — out-lasts you.',
     counter: "They drag the fight long and out-sustain you. End it fast, or bring cleanse and healing to weather it.",
     tactics: { temperament: 'cautious', targetPriority: 'weakest', manaPolicy: 'conserve', comboDiscipline: true },
+    winCon: 'Stack poison on everything and outlive the clock.',
+    mix: { damage: 2, support: 2 },
+    wants: { status: 'poison', payoff: true, teamBuff: true },
   },
   focusfire: {
     name: 'Focus-Fire', icon: '🎯',
     tell: 'High burst — the whole team piles on one target.',
     counter: "They assassinate one of your monsters early. Protect your carry, or spread durability so no single loss breaks you.",
     tactics: { temperament: 'aggressive', targetPriority: 'focus' },
+    winCon: 'Mark one monster Vulnerable and delete it before it acts twice.',
+    mix: { damage: 3, support: 2 },
+    wants: { status: 'vulnerable', payoff: true },
   },
   zone: {
     name: 'Zone', icon: '🌩',
     tell: 'Back-row casters hunting your fragile monsters.',
     counter: "They hunt your casters. Shield your back line, or lead with a durable front they have to chew through first.",
     tactics: { temperament: 'balanced', targetPriority: 'casters' },
+    winCon: 'Blanket the whole team in area damage and burn, and never trade one-for-one.',
+    mix: { damage: 3, support: 2 },
+    wants: { status: 'burn', aoe: true },
   },
 }
 

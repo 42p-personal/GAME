@@ -2857,6 +2857,10 @@ function RanchView({ game, setGame, onBattleScreen }: {
                                 {tier ? (
                                   <div className="gameplan">
                                     <div className="gp-h">{gp.icon} {gp.name} <span className="dim">· {gp.tell}</span></div>
+                                    {/* The WIN CONDITION (v0.91): the team is now BUILT to this plan —
+                                        composition and loadouts both — so telling the player what it is
+                                        trying to do is honest information they can actually play against. */}
+                                    <div className="dim" style={{ fontSize: 11 }}>🏁 Their plan: {gp.winCon}</div>
                                     <div className="gp-counter">💡 {gp.counter}</div>
                                   </div>
                                 ) : (

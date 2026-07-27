@@ -3,6 +3,7 @@
 import {
   ActiveCup, BodyType, ClassRole, Food, GAMEPLANS, INNATE_SECONDARY_LEVEL, LEAGUES, MatchOrders, MAX_HAPPINESS, Monster, Rival, RivalPersonality, Sex, Species, Stat, STATS, Stats, TeamGameplan, classForStats, foodDiscountGroup, hashString,
   isFusionBody, isPrestigeBody, mulberry32, roleOfClass,
+  Move,
 } from './core'
 import { SPECIES } from './species'
 import { GenOptions, generateMonster, maxHp, maxMana } from './monster'
@@ -2046,9 +2047,25 @@ export function rivalBudgetMult(leagueIndex: number): number {
 // Rival team composition (user spec 2026-07-21): "a mixture of support and
 // damage dealing classes, with more damage dealing classes in the case of an
 // odd number" — even sizes split 50/50, odd sizes lean damage.
-export function compositionTemplate(teamSize: number): ClassRole[] {
-  const damage = Math.ceil(teamSize / 2)
-  return Array.from({ length: teamSize }, (_, i): ClassRole => (i < damage ? 'damage' : 'support'))
+export function compositionTemplate(teamSize: number, plan?: TeamGameplan): ClassRole[] {
+  // Without a plan this is the historical half-and-half split (kept so any
+  // caller that has no archetype still gets a sane team).
+  if (!plan) {
+    const damage = Math.ceil(teamSize / 2)
+    return Array.from({ length: teamSize }, (_, i): ClassRole => (i < damage ? 'damage' : 'support'))
+  }
+  // ARCHETYPE-DRIVEN (v0.91). The gameplan used to be rolled AFTER the team was
+  // built and simply stamped on top, so 'bulwark' regularly described a roster
+  // with no tanks and 'attrition' one with no sustain. The plan now decides the
+  // roster it is going to run, which is what makes a scouted tell honest.
+  const { mix } = GAMEPLANS[plan]
+  const total = mix.damage + mix.support
+  // At least one of each whenever the team is big enough to hold both, so a
+  // rushdown still has someone to keep it standing and a bulwark still has a
+  // carry to protect — an archetype with no win condition is just a worse team.
+  let dmg = Math.round((teamSize * mix.damage) / total)
+  if (teamSize > 1) dmg = Math.max(1, Math.min(teamSize - 1, dmg))
+  return Array.from({ length: teamSize }, (_, i): ClassRole => (i < dmg ? 'damage' : 'support'))
 }
 
 // A rival monster appropriate to a target stat total AND a battle role: scaled
@@ -2078,13 +2095,56 @@ function generateRivalMonster(seedBase: string, targetTotal: number, allowExclus
 
 // A full rival TEAM: role slots from the composition template, each member
 // independently scaled to the same per-monster budget.
-function generateRivalTeam(seedBase: string, teamSize: number, targetTotal: number, allowExclusive: boolean): Monster[] {
-  const team = compositionTemplate(teamSize).map((role, i) => generateRivalMonster(seedBase + ':m' + i, targetTotal, allowExclusive, role))
+function generateRivalTeam(seedBase: string, teamSize: number, targetTotal: number, allowExclusive: boolean, plan?: TeamGameplan): Monster[] {
+  const team = compositionTemplate(teamSize, plan).map((role, i) => generateRivalMonster(seedBase + ':m' + i, targetTotal, allowExclusive, role))
+  if (plan) equipForPlan(team, plan)
   // Formation (wave 2): roster order is the formation (front half = front
   // line), so rivals sort sturdiest-first — walls up front, casters shielded
   // behind them — instead of the arbitrary generation order. Deterministic
   // (stable sort on CON), so scouting still previews the exact real team.
   return team.sort((a, b) => b.stats.CON - a.stats.CON)
+}
+
+// Bend each member's LOADOUT toward the team's win condition (v0.91). Rival
+// loadouts are auto-picked by chooseLoadout, which ranks by raw output and knows
+// nothing about what the team is trying to do — so an 'attrition' team would
+// field zero poison and a 'focusfire' team no way to actually mark a target.
+//
+// This swaps at most ONE slot per monster, and only for a move that monster has
+// genuinely learned, so a rival never fields something a player of the same
+// stats could not. The weakest existing move makes way.
+function equipForPlan(team: Monster[], plan: TeamGameplan): void {
+  const wants = GAMEPLANS[plan].wants
+  if (!wants) return
+  const swapIn = (m: Monster, pick: (mv: Move) => boolean): boolean => {
+    if (m.loadout.some(pick)) return true // already covered
+    const candidate = m.learned.filter(pick).sort((a, b) => b.power - a.power)[0]
+    if (!candidate) return false
+    const worst = [...m.loadout].sort((a, b) => a.power - b.power)[0]
+    m.loadout = m.loadout.map((mv) => (mv === worst ? candidate : mv))
+    return true
+  }
+  // One member carries the SETTER, a different one carries the PAYOFF that cashes
+  // it — the combo has to span the team or it is not a team strategy.
+  let setterOn: Monster | null = null
+  if (wants.status) {
+    for (const m of team) if (swapIn(m, (mv) => mv.status?.kind === wants.status)) { setterOn = m; break }
+  }
+  if (wants.payoff && wants.status) {
+    for (const m of team) {
+      if (m === setterOn) continue
+      if (swapIn(m, (mv) => mv.effects?.bonusVsStatus?.kind === wants.status)) break
+    }
+  }
+  // Someone brings a team buff, so the roster fights as a unit rather than five
+  // individuals who happen to share a side.
+  if (wants.teamBuff) {
+    for (const m of team) if (swapIn(m, (mv) => mv.target === 'team' && mv.type === 'buff')) break
+  }
+  // Zone teams actually bring area damage.
+  if (wants.aoe) {
+    for (const m of team) if (swapIn(m, (mv) => mv.type === 'damage' && (mv.target === 'allEnemies' || mv.target === 'frontRow' || mv.target === 'backRow'))) break
+  }
 }
 
 // Every rival team a tournament will field, purely a function of (seed, week,
@@ -2138,9 +2198,10 @@ export function generateRivalTeamsForTournament(g: GameState, t: Tournament): Mo
   return Array.from({ length: rivalCount }, (_, r) => {
     const bandRng = mulberry32(hashString(g.seed + ':' + g.week + ':' + t.id + ':band:r' + r))
     const teamBudget = leagueBudget * (RIVAL_BAND_MIN + bandRng() * (RIVAL_BAND_MAX - RIVAL_BAND_MIN))
-    const team = generateRivalTeam(g.seed + ':' + g.week + ':' + t.id + ':r' + r, teamSize, teamBudget, allowExclusive)
-    // The seated rival runs THEIR personality's gameplan — scoutable identity.
+    // ⚠️ The plan is chosen BEFORE the team is generated, so it can shape the
+    // roster and the loadouts. It used to be rolled afterwards and stamped on.
     const gp = r === seated ? RIVAL_PERSONALITY_GAMEPLAN[g.rivals[0].personality] : gameplanForRivalTeam(g.seed, g.week, t.id, r)
+    const team = generateRivalTeam(g.seed + ':' + g.week + ':' + t.id + ':r' + r, teamSize, teamBudget, allowExclusive, gp)
     return applyGameplan(team, gp)
   })
 }
@@ -2253,8 +2314,9 @@ function stageRite(g: GameState, stable: Career[]): { activeCup: ActiveCup } | n
   // rank-up champion, which is the part the spec actually asked for.
   const foeSize = Math.min(size, teamSizeForLeague(LEAGUES[g.licenseIndex].name))
   const budget = LEAGUES[g.licenseIndex].cap * rivalBudgetMult(g.licenseIndex) * riteChampionMult(g.licenseIndex)
-  const raw = generateRivalTeam(g.seed + ':' + g.week + ':rite:' + g.licenseIndex, foeSize, budget, g.licenseIndex >= leagueIndexOf('Silver'))
-  const team = applyGameplan(raw, gameplanForRivalTeam(g.seed, g.week, 'rite-' + g.licenseIndex, 0))
+  const ritePlan = gameplanForRivalTeam(g.seed, g.week, 'rite-' + g.licenseIndex, 0)
+  const raw = generateRivalTeam(g.seed + ':' + g.week + ':rite:' + g.licenseIndex, foeSize, budget, g.licenseIndex >= leagueIndexOf('Silver'), ritePlan)
+  const team = applyGameplan(raw, ritePlan)
   return { activeCup: { kind: 'rite', tournamentId: 'rite-' + g.licenseIndex + '-' + g.week, week: g.week, playerMonsterIds: pending.monsterIds, rivalTeams: [team], matchOrders: {}, doneThrough: -1 } }
 }
 
@@ -2268,8 +2330,9 @@ function stageTrial(g: GameState, stable: Career[]): { activeCup: ActiveCup } | 
   const teamSize = teamSizeForLeague(league)
   const ids = pending.monsterIds.slice(0, teamSize)
   const champBudget = LEAGUES[g.licenseIndex].cap * rivalBudgetMult(g.licenseIndex) * trialChampionMult(g.licenseIndex)
-  const champRaw = generateRivalTeam(g.seed + ':' + g.week + ':trial:' + g.licenseIndex, teamSize, champBudget, g.licenseIndex >= leagueIndexOf('Silver'))
-  const champTeam = applyGameplan(champRaw, gameplanForRivalTeam(g.seed, g.week, 'trial-' + g.licenseIndex, 0))
+  const trialPlan = gameplanForRivalTeam(g.seed, g.week, 'trial-' + g.licenseIndex, 0)
+  const champRaw = generateRivalTeam(g.seed + ':' + g.week + ':trial:' + g.licenseIndex, teamSize, champBudget, g.licenseIndex >= leagueIndexOf('Silver'), trialPlan)
+  const champTeam = applyGameplan(champRaw, trialPlan)
   return { activeCup: { kind: 'trial', tournamentId: 'trial-' + g.licenseIndex, week: g.week, playerMonsterIds: ids, rivalTeams: [champTeam], matchOrders: {}, doneThrough: -1 } }
 }
 
