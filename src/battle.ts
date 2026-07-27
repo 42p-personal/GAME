@@ -691,7 +691,12 @@ type Action = { kind: 'skill'; move: Move } | { kind: 'attack' } | { kind: 'bloc
 // when the foe is CARRYING the status they exploit, so the policy tree
 // naturally cashes combos without a bespoke branch. maxHpDmg tools likewise
 // rank by what they'd actually add against THIS foe.
-function effPower(mv: Move, foe: Combatant): number {
+// How much of a move's value comes from splashing rather than focusing. Spread
+// damage is worth LESS than the same total on one target — it wastes overkill and
+// kills nothing sooner — so an AoE is not simply worth N times a single hit.
+const AOE_VALUE_DISCOUNT = 0.7
+
+function effPower(mv: Move, foe: Combatant, self?: Combatant, foeCount = 1): number {
   const e = mv.effects
   const avgHits = e?.hits ? (e.hits[0] + e.hits[1]) / 2 : 1
   let p = mv.power * avgHits
@@ -706,6 +711,38 @@ function effPower(mv: Move, foe: Combatant): number {
   // First-strike tools ranked at their real value when the foe hasn't acted
   // yet this round (the hit resolves immediately, so live state is correct).
   if (e?.firstStrikeMult && !foe.actedThisRound) p *= e.firstStrikeMult
+
+  // --- v0.91 effects. Before this the AI was blind to all of them, so a tank
+  // holding Shatterguard would fire it with no shield up and waste the move,
+  // and a vigor strike ranked the same at 10% HP as at full. ---
+  if (self) {
+    // Resource strikes are worth exactly what the caster is currently holding —
+    // which is nothing at all when the shield is down, so the AI now naturally
+    // waits until it has something to spend.
+    if (e?.consumeWard) p *= 1 + e.consumeWard * self.ward
+    if (e?.consumeThorns) p *= 1 + e.consumeThorns * self.thornsFlat
+    // Vigor/desperation: rank the move at what it would ACTUALLY hit for right
+    // now, so a fresh monster favours vigor tools and a wounded one drops them.
+    if (e?.hpScale) {
+      const f = Math.max(0, Math.min(1, self.hp / self.maxHp))
+      p *= e.hpScale.atEmpty + (e.hpScale.atFull - e.hpScale.atEmpty) * f
+    }
+  }
+  // Contagion is only worth something when there is somewhere for it to spread
+  // AND the target is carrying something spreadable to send.
+  if (e?.spreadStatus && foeCount > 1) {
+    const carries = foe.statuses.some((st) => SPREADABLE.has(st.kind) && (!e.spreadStatus!.kind || st.kind === e.spreadStatus!.kind))
+    const willSet = mv.status && SPREADABLE.has(mv.status.kind) // this cast may create the status it then spreads
+    if (carries || willSet) p *= 1 + Math.min(foeCount - 1, e.spreadStatus.targets) * (e.spreadStatus.chance / 100) * 0.5
+  }
+  // Multi-target reach. The AI used to rank an allEnemies move at its FACE
+  // power, so a 6-target sweep looked weaker than a single-target hit of the
+  // same number — badly undervaluing AoE in the leagues where it matters most.
+  const hitCount = mv.target === 'allEnemies' ? foeCount
+    : mv.target === 'frontRow' ? Math.min(foeCount, frontRowCount(foeCount))
+      : mv.target === 'backRow' ? Math.max(1, foeCount - frontRowCount(foeCount))
+        : e?.randomTargets && e.hits ? Math.min(foeCount, avgHits) : 1
+  if (hitCount > 1) p *= hitCount * aoeFalloff(Math.round(hitCount)) * AOE_VALUE_DISCOUNT
   return p
 }
 
@@ -775,12 +812,12 @@ const CLASS_PERSONALITY: Record<string, Partial<ClassPersonality>> = {
 // per class via CLASS_PERSONALITY above. Takes a single representative `foe`
 // (the AI's primary threat read) — target FAN-OUT for the move it picks is
 // resolved separately once the move is actually cast (see resolveTargets).
-function chooseAction(self: Combatant, foe: Combatant, rng: RNG, allies: Combatant[] = []): Action {
+function chooseAction(self: Combatant, foe: Combatant, rng: RNG, allies: Combatant[] = [], foeCount = 1): Action {
   const p = personalityFor(self)
   // Silenced: skills are sealed — Attack, or Block if something heavy is coming.
   if (hasStatus(self, 'silence')) {
     const silencedThreats = foe.m.loadout.filter((mv) => (foe.cooldowns[mv.id] ?? 0) <= 1 && moveCost(mv) <= foe.mana)
-    const incoming = Math.max(ATTACK_POWER, ...silencedThreats.filter((mv) => mv.type === 'damage').map((mv) => effPower(mv, self)))
+    const incoming = Math.max(ATTACK_POWER, ...silencedThreats.filter((mv) => mv.type === 'damage').map((mv) => effPower(mv, self, foe)))
     if (self.hp / self.maxHp < p.healAt && incoming >= 20 && chance(rng, p.blockWhenHurt)) return { kind: 'block' }
     return { kind: 'attack' }
   }
@@ -798,7 +835,7 @@ function chooseAction(self: Combatant, foe: Combatant, rng: RNG, allies: Combata
   // order, so a monster carrying Purge AND Vital Surge could "emergency heal"
   // for 10 when 46 was equally ready).
   const heals = ready.filter((mv) => mv.type !== 'damage' && mv.power > 0).sort((a, b) => b.power - a.power)
-  const dmgs = ready.filter((mv) => mv.type === 'damage').sort((a, b) => effPower(b, foe) - effPower(a, foe))
+  const dmgs = ready.filter((mv) => mv.type === 'damage').sort((a, b) => effPower(b, foe, self, foeCount) - effPower(a, foe, self, foeCount))
   // timed buffs not currently active (or about to expire — worth refreshing);
   // debuffs the foe isn't currently suffering from (or is about to shake off)
   const activeFor = (id: string) => (c: Combatant) => c.mods.find((m) => m.moveId === id)
@@ -810,7 +847,7 @@ function chooseAction(self: Combatant, foe: Combatant, rng: RNG, allies: Combata
 
   // What the foe can plausibly throw next turn (AI may peek — it's a sim).
   const foeThreats = foe.m.loadout.filter((mv) => (foe.cooldowns[mv.id] ?? 0) <= 1 && moveCost(mv) <= foe.mana + manaRegen(foe.m.stats))
-  const threat = Math.max(ATTACK_POWER, ...foeThreats.filter((mv) => mv.type === 'damage').map((mv) => effPower(mv, self)))
+  const threat = Math.max(ATTACK_POWER, ...foeThreats.filter((mv) => mv.type === 'damage').map((mv) => effPower(mv, self, foe)))
 
   // Emergency heal beats everything. Prefer a heal that can actually reach
   // SELF (self/team target) — an 'ally'-target heal goes to the neediest
@@ -877,8 +914,8 @@ function chooseAction(self: Combatant, foe: Combatant, rng: RNG, allies: Combata
   // A damage skill is worth its MP if it clearly out-hits a basic Attack, or if
   // it carries a status/debuff rider that a plain Attack never could. Aggro
   // (negative for damage classes) widens what counts as "worth it."
-  const worthIt = dmgPool.filter((mv) => effPower(mv, foe) >= ATTACK_POWER + 4 + p.aggro
-    || ((mv.status !== undefined || isDebuffMove(mv) || mv.effects?.manaBurn !== undefined) && effPower(mv, foe) >= ATTACK_POWER - 4 + p.aggro))
+  const worthIt = dmgPool.filter((mv) => effPower(mv, foe, self, foeCount) >= ATTACK_POWER + 4 + p.aggro
+    || ((mv.status !== undefined || isDebuffMove(mv) || mv.effects?.manaBurn !== undefined) && effPower(mv, foe, self, foeCount) >= ATTACK_POWER - 4 + p.aggro))
   if (worthIt.length) return { kind: 'skill', move: worthIt[0] }
 
   // Nothing affordable, but one more turn of regen unlocks a skill → block to charge.
@@ -1441,7 +1478,7 @@ function takeTurn(attacker: Combatant, ctx: BattleContext, rng: RNG, log: string
   const tameness = attacker.m.tameness
   const action = (tameness !== undefined && chance(rng, 100 - tameness))
     ? wildAction(attacker, rng)
-    : chooseAction(attacker, primaryFoe, rng, alliesOf(ctx, attacker))
+    : chooseAction(attacker, primaryFoe, rng, alliesOf(ctx, attacker), enemiesOf(ctx, attacker).length)
   if (attacker.openerQueue.length) attacker.openerQueue.shift() // spend one opener step per action, cast or not
   if (action.kind === 'block') {
     attacker.blockAvoid = blockValue(attacker)

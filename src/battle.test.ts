@@ -29,12 +29,16 @@ const GOLDENS = [
   },
   {
     name: '2v2-mid', a: ['gold-a3', 'gold-a4'], b: ['gold-b3', 'gold-b4'], train: 700,
-    winner: 'A', events: 126, logLines: 93, // recaptured v0.852: gold-a3 Wisdomkeeper / gold-b3 Stormlerath (prestige base-stat bump)
+    // recaptured v0.91: the AI now understands multi-target reach and contagion,
+    // so it ranks moves it used to undervalue. A wins FASTER and CLEANER — 126 →
+    // 58 events, and slot 0 survives where it used to be KO'd. Better play, not
+    // a balance change. Prior capture, v0.852: 126/93 (prestige base-stat bump).
+    winner: 'A', events: 58, logLines: 51,
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 489, wasKOd: true },
-      { side: 'A', slot: 1, hp: 121, mana: 98, wasKOd: false },
-      { side: 'B', slot: 0, hp: 0, mana: 201, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 183, wasKOd: true },
+      { side: 'A', slot: 0, hp: 155, mana: 191, wasKOd: false },
+      { side: 'A', slot: 1, hp: 152, mana: 216, wasKOd: false },
+      { side: 'B', slot: 0, hp: 0, mana: 226, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 324, wasKOd: true },
     ],
   },
   {
@@ -43,21 +47,21 @@ const GOLDENS = [
     // (flat chip → % chip), CON coefficient trims, and WIS spell-power — the
     // clock now resolves a winner instead of wiping both.
     name: '3v3-high', a: ['gold-a5', 'gold-a6', 'gold-a7'], b: ['gold-b5', 'gold-b6', 'gold-b7'], train: 2000,
-    // recaptured v0.91 (SECOND move this cycle) — AoE falloff. gold-b5's Inferno
-    // hits 3 targets and now lands at 90% power, so the fight runs materially
-    // longer (376 → 419 events) and the round-35 sudden-death chip has time to
-    // bite: A still wins, but 3-0 untouched became 2-1 with the survivor on 9 HP.
-    // ⚠️ That length-then-chip chain is the systemic effect to watch — weaker AoE
-    // does not simply mean gentler fights, it means LONGER ones. Wants a sim pass.
-    // Prior captures: v0.91 live-formation 376/274; v0.89 league-curve 349/254.
-    winner: 'A', events: 419, logLines: 314,
+    // ⚠️ recaptured v0.91 (THIRD move this cycle) — WINNER FLIPPED A → B, after the
+    // AI learned multi-target reach. Both sides got the same upgrade; B's kit
+    // (gold-b5 Archmage-Aleph runs Inferno) simply gains more from an AI that
+    // finally ranks a 3-target sweep above a single hit of the same face power.
+    // A 3v3 decided by one AoE caster flipping is a fair outcome, not a
+    // regression — the long-haul sim was re-run and the economy held.
+    // Prior captures: AoE-falloff 419/314; live-formation 376/274; v0.89 349/254.
+    winner: 'B', events: 404, logLines: 300,
     finals: [
-      { side: 'A', slot: 0, hp: 9, mana: 690, wasKOd: false },
-      { side: 'A', slot: 1, hp: 0, mana: 213, wasKOd: true },
-      { side: 'A', slot: 2, hp: 1117, mana: 756, wasKOd: false },
-      { side: 'B', slot: 0, hp: 0, mana: 741, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 756, wasKOd: true },
-      { side: 'B', slot: 2, hp: 0, mana: 13, wasKOd: true },
+      { side: 'A', slot: 0, hp: 0, mana: 716, wasKOd: true },
+      { side: 'A', slot: 1, hp: 0, mana: 333, wasKOd: true },
+      { side: 'A', slot: 2, hp: 0, mana: 756, wasKOd: true },
+      { side: 'B', slot: 0, hp: 0, mana: 733, wasKOd: true },
+      { side: 'B', slot: 1, hp: 902, mana: 750, wasKOd: false },
+      { side: 'B', slot: 2, hp: 936, mana: 11, wasKOd: false },
     ],
   },
 ] as const
