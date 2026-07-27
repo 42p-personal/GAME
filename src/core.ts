@@ -96,6 +96,18 @@ export interface MoveEffects {
   lifesteal?: number // 0..1 — fraction of damage dealt returned as HP
   recoil?: number // 0..1 — fraction of damage dealt taken by the user (max 0.15 in practice)
   hits?: [number, number] // multi-hit: strikes N times; `power` is per hit
+  // RESOURCE STRIKES (v0.91): spend a defensive buff the CASTER is holding to
+  // power the blow. Both are consumed on cast, once, however many targets the
+  // move fans to — the bonus is a multiplier so an AoE cannot launder one ward
+  // into six full-value hits. A tank's shield becomes ammunition.
+  consumeWard?: number // +this much damage multiplier PER POINT of the caster's remaining ward, then the ward is spent (0.012 x ward 45 = +54%)
+  consumeThorns?: number // as consumeWard, but spends the caster's thorns buffs (0.05 x thorns 9 = +45%)
+  // VIGOR / DESPERATION (v0.91): damage scales continuously with the CASTER's
+  // remaining HP, lerped by hp fraction. atFull 1.6 / atEmpty 0.7 rewards
+  // fighting fresh; reverse the two for a last-stand move. The innate system had
+  // this as a cliff (Frenzy below 30%, Statue Stance above 70%) — this is the
+  // smooth, per-move version.
+  hpScale?: { atFull: number; atEmpty: number }
   spreadStatus?: { kind?: StatusKind; targets: number; chance: number } // CONTAGION (v0.91): when this move lands, a hostile status the victim is CARRYING jumps to `targets` other living enemies at `chance`% each. Omit `kind` to spread whatever it already has — so one move interacts with every setter in the game, pool or signature. Gated: no pool move sets it, so the engine's rng order is untouched.
   randomTargets?: boolean // with `hits`: each strike picks a LIVING ENEMY AT RANDOM (re-rolled per hit, repeats allowed) and resolves as its own independent attack, instead of `hits` multiplying damage onto one target. Signature-move effect (v0.91) — no pool move sets it, so the engine's existing rng call order is untouched.
   execute?: number // 0..1 — 1.5× damage when target HP is below this fraction

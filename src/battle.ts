@@ -1108,7 +1108,7 @@ function spreadContagion(attacker: Combatant, source: Combatant | undefined, mov
 // computed ONCE by the caller before the fan-out loop, so a multi-target
 // opening volley grants the bonus to every target it strikes, not just
 // whichever one happens to be processed first.
-function resolveDamageOnTarget(attacker: Combatant, target: Combatant, move: Move, rng: RNG, log: string[], ev: BattleEvent[], openerEligible: boolean, targetCount = 1): void {
+function resolveDamageOnTarget(attacker: Combatant, target: Combatant, move: Move, rng: RNG, log: string[], ev: BattleEvent[], openerEligible: boolean, targetCount = 1, resourceMult = 1): boolean {
   const e = move.effects
   let acc = move.accuracy + attacker.innate.acc + attacker.accMod
   if (hasStatus(attacker, 'blind')) acc -= 25
@@ -1117,7 +1117,7 @@ function resolveDamageOnTarget(attacker: Combatant, target: Combatant, move: Mov
     if (target.blockAvoid > 0) log.push(`  🛡 ${target.m.name} blocks ${attacker.m.name}'s ${move.name}!`)
     else log.push(`  ${attacker.m.name}'s ${move.name} misses ${target.m.name}.`)
     ev.push({ kind: 'miss', side: attacker.side, slot: attacker.slot, targetSide: target.side, targetSlot: target.slot, move: move.name, channel: move.channel, blocked: target.blockAvoid > 0 })
-    return
+    return false // the cast did not land — the caller must not spend resources
   }
 
   // WIS is the caster FOUNDATION (2026-07-22 balance): magic (INT) and voice
@@ -1131,6 +1131,16 @@ function resolveDamageOnTarget(attacker: Combatant, target: Combatant, move: Mov
   // softened growth curve so high-stat monsters don't one-shot before defense
   // matters; stat multiplier halved pool-wide (user spec 2026-07-19)
   let dmg = move.power * hits * Math.pow(atk / 40, 0.8) * 0.5 * variance * aoeFalloff(targetCount)
+  // Resource strike: the ward/thorns the caster spent on this cast (computed and
+  // consumed ONCE by the caller, so an AoE can't launder one shield into six).
+  dmg *= resourceMult
+  // Vigor / desperation: smooth scaling on the CASTER's remaining HP, lerped
+  // between atEmpty and atFull. Distinct from the innate cliffs below, which
+  // stay as they are.
+  if (e?.hpScale) {
+    const f = Math.max(0, Math.min(1, attacker.hp / attacker.maxHp))
+    dmg *= e.hpScale.atEmpty + (e.hpScale.atFull - e.hpScale.atEmpty) * f
+  }
   dmg *= happinessMultiplier(attacker.happiness) // happy monsters hit harder (§2.4)
   dmg *= attacker.staminaMult // fatigue: tired monsters hit softer, all channels
   dmg *= attacker.innate.dmgMult * attacker.atkMod
@@ -1272,6 +1282,7 @@ function resolveDamageOnTarget(attacker: Combatant, target: Combatant, move: Mov
     log.push(`    ${target.m.name} is afflicted with ${soh.kind}!`)
     ev.push({ kind: 'status', side: target.side, slot: target.slot, status: soh.kind })
   }
+  return true // the cast landed — the caller may now spend any staked ward/thorns
 }
 
 // Orchestrator: resolve targets once, pay the cost once, then fan the move out
@@ -1312,18 +1323,45 @@ function resolveMove(attacker: Combatant, ctx: BattleContext, move: Move, rng: R
   // ⚠️ Strictly gated behind `randomTargets`, which NO pool move sets. When it
   // is absent this branch never runs and not one extra rng() call happens, so
   // every existing matchup — and every golden — stays byte-identical.
+  // Resource strikes (v0.91): spend the caster's own ward / thorns to power the
+  // blow. Charged ONCE per cast, before any fan-out, and expressed as a
+  // multiplier so a six-target sweep gets the same total value a single hit does.
+  // ⚠️ Gated: absent, nothing here runs and no rng is touched.
+  // The bonus is worked out UP FRONT, but the resource is only actually SPENT if
+  // the cast lands. Losing a 45-point ward to a dodged swing reads as a bug, not
+  // as risk — found exactly that way in testing.
+  const wardSpend = e?.consumeWard && attacker.ward > 0 ? e.consumeWard * attacker.ward : 0
+  const thornSpend = e?.consumeThorns && attacker.thornsFlat > 0 ? e.consumeThorns * attacker.thornsFlat : 0
+  const resourceMult = 1 + wardSpend + thornSpend
+  const spendResources = (landed: boolean): void => {
+    if (!landed) return
+    if (wardSpend) {
+      log.push(`  🛡➜⚔ ${attacker.m.name} shatters its own ${Math.round(attacker.ward)} ward into the blow!`)
+      attacker.ward = 0
+    }
+    if (thornSpend) {
+      log.push(`  🌵➜⚔ ${attacker.m.name} rips its barbs free and drives them home!`)
+      attacker.mods = attacker.mods.filter((m) => !m.thorns)
+      recomputeMods(attacker)
+    }
+  }
+
   if (e?.randomTargets && e.hits) {
     const strikes = randInt(rng, e.hits[0], e.hits[1])
     const single: Move = { ...move, effects: { ...e, hits: undefined, randomTargets: undefined } }
+    let landedAny = false
     for (let i = 0; i < strikes; i++) {
       const live = enemiesOf(ctx, attacker)
       if (!live.length) break // the line was wiped mid-flurry
-      resolveDamageOnTarget(attacker, live[Math.floor(rng() * live.length)], single, rng, log, ev, openerEligible)
+      if (resolveDamageOnTarget(attacker, live[Math.floor(rng() * live.length)], single, rng, log, ev, openerEligible, 1, resourceMult)) landedAny = true
     }
+    spendResources(landedAny)
     if (e.guard) applyBeneficialEffects(attacker, attacker, move, rng, log)
     return
   }
-  for (const t of targets) resolveDamageOnTarget(attacker, t, move, rng, log, ev, openerEligible, targets.length)
+  let landed = false
+  for (const t of targets) if (resolveDamageOnTarget(attacker, t, move, rng, log, ev, openerEligible, targets.length, resourceMult)) landed = true
+  spendResources(landed)
   spreadContagion(attacker, targets[0], move, ctx, rng, log)
   // self-guard follow-up on a damage move stays targeted at the attacker
   // specifically (a "hit and raise a shield" rider), once per cast — not once
