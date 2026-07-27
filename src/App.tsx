@@ -2577,7 +2577,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
                 return (
                   <div className="trial-panel" style={{ borderColor: 'var(--cha)' }}>
                     <div className="section-title">★ Signature Rite won — claim the prize</div>
-                    <div className="dim">Choose which monster steps forward, then the move it takes. Its current {'{'}stat{'}'} becomes the bar its heirs must reach to awaken an inherited copy — so a signature taken late is a harder legacy to live up to.</div>
+                    <div className="dim">Choose which monster steps forward, then the move it takes. Whatever it currently has in that move&apos;s stat becomes the bar its heirs must reach to awaken an inherited copy — so a signature taken late is a harder legacy to live up to.</div>
                     <div className="carerow" style={{ flexWrap: 'wrap', marginTop: 6 }}>
                       {winners.map((c) => (
                         <button key={c.id} className={'tacticopt small' + (c.id === pick.id ? ' on' : '')} onClick={() => setSigPick(c.id)}>
@@ -2595,7 +2595,9 @@ function RanchView({ game, setGame, onBattleScreen }: {
                         </button>
                       ))}
                     </div>
-                    <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>Awaken bar would be {pick.stats[choices[0]?.stat ?? 'STR']}+ in the chosen move&apos;s stat.</div>
+                    <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>
+                      Awaken bar by stat: {[...new Set(choices.map((m) => m.stat))].map((st) => `${st} ${pick.stats[st]}`).join(' · ')}
+                    </div>
                   </div>
                 )
               })()}
@@ -2616,6 +2618,10 @@ function RanchView({ game, setGame, onBattleScreen }: {
                 if (!gate.ok) return <div className="hint" style={{ marginTop: 10 }}>★ Signature Rite: {gate.reason}</div>
                 const roster = riteRoster(game)
                 const size = roster.length
+                // ⚠️ The challenger side is CAPPED at the league's team size — see
+                // stageRite. Labelling this NvN off the roster alone advertised a
+                // 3v3 at Wood when the real fight is 3v1; a browser pass caught it.
+                const foeSize = Math.min(size, teamSizeForLeague(LEAGUES[game.licenseIndex].name))
                 const foeTarget = LEAGUES[game.licenseIndex].cap * rivalBudgetMult(game.licenseIndex) * riteChampionMult(game.licenseIndex)
                 const teamAvg = roster.reduce((s2, c) => s2 + STATS.reduce((t, k) => t + c.stats[k], 0), 0) / size
                 const ratio = teamAvg / foeTarget
@@ -2624,9 +2630,9 @@ function RanchView({ game, setGame, onBattleScreen }: {
                 const heirTop = [...STATS].sort((x, y) => heir.stats[y] - heir.stats[x])[0]
                 return (
                   <div className="trial-panel">
-                    <div className="section-title">★ The Signature Rite — {size}v{size}</div>
+                    <div className="section-title">★ The Signature Rite — {size}v{foeSize}</div>
                     <div className="dim">
-                      Your <b>whole active stable</b> ({size}) fights a field built harder than a rank-up champion. Win and one monster forges a <b>signature skill</b> — its own move, which its children inherit dormant and awaken by matching its stat. <b>Once a year, win or lose</b>; the fight takes everyone&apos;s week and all of them come home needing rest.
+                      Your <b>whole active stable</b> ({size}) fights <b>{foeSize}</b> challenger{foeSize === 1 ? '' : 's'}, each built harder than a rank-up champion{size > foeSize ? ' — you outnumber them, which is what a deep stable buys you' : ''}. Win and one monster forges a <b>signature skill</b> — its own move, which its children inherit dormant and awaken by matching its stat. <b>Once a year, win or lose</b>; the fight takes everyone&apos;s week and all of them come home needing rest.
                     </div>
                     <div className="dim" style={{ fontSize: 12 }}>
                       On a win the signature goes to <b>{heir.name}</b> (highest total without one) — themed on <b style={{ color: STAT_COLOR[heirTop] }}>{heirTop}</b>.

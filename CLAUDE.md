@@ -8,7 +8,100 @@ nudge a value gently, sim it, read the result, adjust again. The sim is the arbi
 `docs/BALANCING.md` for the working ledger. This applies to every economy/difficulty/
 progression number, always.
 
-## Current state (v0.90)
+## Current state (v0.91)
+
+**v0.91 — signature skills + the combat-depth pass.** The largest single feature
+since fusion. Full ability design and the balance audit: `docs/SIGNATURE_DESIGN.md`.
+
+### Signature skills — the one move a monster EARNS
+Won at **THE SIGNATURE RITE** (`town.ts`), an on-demand event modelled on the
+rank-up trial: no calendar slot, fought by the **whole active roster**, allowed
+**once a year win or lose**, and gated on **trainer level 6** — not on the
+monster, so a first season never sees it. Winning **BANKS** the prize
+(`GameState.riteReward`); the player then chooses which monster steps forward
+AND which of its body's moves it takes (`claimSignature`). The chosen monster's
+current value in that move's stat becomes the **awaken bar**.
+
+**50 authored moves in 8 lists** (`signatureMoves.ts`): six base bodies get 6
+each, **Draconic and Abyssal SHARE a list of 8**, Mythical gets 6. Fusion bodies
+author none — they resolve to their recipe's parent lists, so every fusion picks
+from 12 and **Primeval from 14**.
+
+> ⚠️ Sharing the prestige list is **load-bearing**. Primeval has TWO recipes
+> (Mythical+Draconic, Mythical+Abyssal), so its body type alone never revealed
+> which pair produced a monster. One shared list makes its pool identical either
+> way — which is why nothing has to record fused parentage.
+
+**Inherited DORMANT**: a bred child is born knowing the move at 60% power with
+effects AND status stripped, and awakens it by training that stat to the
+ancestor's peak. If both parents hold one, the child takes the copy **closest to
+its origin** (lowest `inherited` depth).
+
+**Costs a normal loadout slot** — `careerMonster` appends it to the learned pool,
+so the ability selector, auto-pick and the battle engine need no knowledge of
+signatures at all. That is what kept the feature small.
+
+### Five new engine mechanics (all gated, all golden-safe by construction)
+| Effect | What it does |
+|---|---|
+| `randomTargets` | multi-hit where each strike picks a random living enemy — **ignores the front-row wall** |
+| `frontRow` / `backRow` | row-wide targets; each falls back to the other row when its own is empty |
+| `spreadStatus` | contagion — a status jumps to N other enemies; omit `kind` to spread whatever they carry |
+| `consumeWard` / `consumeThorns` | spend a defensive buff to power the blow (⚠️ only ON A LANDED CAST) |
+| `hpScale` | damage lerps on the CASTER's remaining HP — the smooth version of Frenzy/Statue Stance |
+| `displace` | drag a target to the front or shove it to the back |
+
+**AoE FALLOFF** — `−5%` per *additional* target (100/95/90/85/80/75%), floored at
+40%. Multi-target damage used to scale linearly, so World Ender was worth 56 at
+1v1 and **336 at 6v6**. Charged per additional target so a lone survivor takes an
+undiminished hit — and so single-target AoE casts don't move.
+
+**FORMATION IS LIVE.** Rows were stamped at setup, so a team that lost its front
+line kept a permanently unreachable back line. A monster's row is now its index
+among **still-living** teammates via `Combatant.formationRank`. Front line is 2,
+**3 at 6v6**.
+
+> ⚠️ `formationRank` is deliberately separate from `slot` (identity — events and
+> finals key off it) and from `ctx.all` order (the **initiative tie-break**).
+> Reordering `ctx.all` to move someone up the line would silently change turn
+> order.
+
+**Melee reach rule**: single-target melee is walled to the front line; melee AoE
+and melee scatter ignore rows entirely. That exemption is what makes them the
+answer to a turtled back line.
+
+### Balance discipline that emerged (read before touching numbers)
+- **A signature may exceed a pool ceiling on ONE axis by ~15–20%**, and must sit
+  at or under on every other. 37 numbers were cut in audit for breaching two or
+  three at once.
+- **Contagion is paid for** — a lower spread chance, or cooldown. ⚠️ **Ember was
+  REJECTED** as a contagion carrier: it is the most-equipped move in the game
+  (8/14 goldens) and adding a spread moved three goldens including two winner
+  flips. Contagion belongs on moves a player CHOOSES, not the default.
+- **On cheap, frequently-equipped moves, tune the new effect down rather than
+  taxing the old one.** Paying for Piercing Shot's spread with cooldown 2→3
+  flipped a golden by itself.
+- ⚠️ **Non-consuming payoffs only work when cooldown ≤ status duration.** Fear
+  lasts 2 rounds, so a cd5 non-consuming fear payoff is INERT — it would ship
+  doing nothing. Only Cinderburst (cd3, 3-round burn) qualifies today.
+- ⚠️ **UNITS ARE NOT UNIFORM.** `atkBuff`/`pierce`/`execute` are FRACTIONS;
+  `dodgeBuff`/`accBuff`/`accDebuff`/`defBuff` are percentage POINTS. `accBuff:
+  0.15` compiles, runs and does nothing. `validate.ts` now guards both directions.
+
+### Sim findings
+The rite was **UNWINNABLE** at first: 0 wins from 13 attempts over 45 simulated
+years. Cause was a rule that was never specified — the challenger side matched the
+roster one-for-one, so a deep stable was *strictly worse*. Capping the challenger
+at the league's team size fixed it: **7 won of 47, 11 signatures, 4 inherited**.
+`RITE_EXTRA_MULT` sim-tuned 0.15 → 0.05.
+
+⚠️ `Static Chain` (reshape to a chaining debuff) and `Cinderburst` (non-consuming)
+are **parked pending a sim** — both are good design but sit in 3/14 and 9/14
+golden loadouts respectively.
+
+---
+
+## Prior state (v0.90)
 
 **v0.90 — the training-tier rebalance + the toolchain fix.** Shipped on top of the v0.89
 endgame arc (documented immediately below, still current). Validated against `sim/bot.ts`;
