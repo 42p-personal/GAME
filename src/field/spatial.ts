@@ -36,18 +36,50 @@ export const SPATIAL_MOVES: Record<string, MoveSpatial> = {
   // standing on your healer. Both are counterplay, not just damage.
   'Pin Down': { pull: 5, root: 1.2 },
   'Snipe': { pull: 0, slow: { mult: 0.6, duration: 1.5 } }, // crippling shot
-  'Deep Freeze': { root: 1.6 },
   'Glacial Prison': { root: 2.0 },
   'Sonic Boom': { push: 4 },
-  'Earthshaker': { push: 3.5, slow: { mult: 0.6, duration: 2 } },
-  'Rain of Arrows': { push: 3 }, // already a knockback move
 
   // ── MOVEMENT DENIAL ───────────────────────────────────────────────────────
   // Rooting a fast monster is worth more than damaging it — this is where DEX
   // as move speed finally has a real counter.
   'Lullaby': { slow: { mult: 0.45, duration: 2.5 } },
   'Captivate': { slow: { mult: 0.55, duration: 3 } },
-  'Static Chain': { slow: { mult: 0.6, duration: 2 } },
+
+  // ── AREA SHAPES ───────────────────────────────────────────────────────────
+  // The 14 moves that used to target `frontRow` / `backRow` / `allEnemies`.
+  // Those targets described a formation the field does not have, so they hit
+  // everyone regardless of position — which made spreading out pointless and
+  // AoE unavoidable. Real geometry restores the decision on both sides.
+  //
+  // ⚠️ CENTRE MATTERS. A shout radiates from the CASTER (you cannot aim a
+  // scream at a spot); a bombardment lands on the TARGET. Getting this wrong
+  // makes a support monster nuke its own feet.
+
+  // Melee sweeps — a wedge in front of the attacker.
+  'Cleave': { area: { shape: 'cone', centre: 'self', angle: 100, range: 3.6 } },
+
+  // Shockwaves — a ring centred on the one who stamped.
+  'Earthshaker': { push: 3.5, slow: { mult: 0.6, duration: 2 }, area: { shape: 'circle', centre: 'self', radius: 5.5 } },
+
+  // Bombardments — land on a spot, so they punish clumping hardest.
+  'Rain of Arrows': { push: 3, area: { shape: 'circle', centre: 'target', radius: 4.2 } },
+  'Needle Storm': { area: { shape: 'circle', centre: 'target', radius: 3.8 } },
+  'Inferno': { area: { shape: 'circle', centre: 'target', radius: 5 } },
+  'Deep Freeze': { root: 1.6, area: { shape: 'circle', centre: 'target', radius: 4.4 } },
+  'World Ender': { area: { shape: 'circle', centre: 'target', radius: 7 } }, // the biggest in the game
+
+  // Chained lightning — a line that pierces everything in its path.
+  'Static Chain': { slow: { mult: 0.6, duration: 2 }, area: { shape: 'line', centre: 'self', range: 9, width: 2.2 } },
+
+  // Voice — radiates from the caster. Reaching further than a shout should is
+  // the classic way a support accidentally becomes the best damage in the game,
+  // so these stay deliberately tight.
+  'Screech': { area: { shape: 'circle', centre: 'self', radius: 5.5 } },
+  'Cacophony': { area: { shape: 'circle', centre: 'self', radius: 5 } },
+  'Crescendo': { area: { shape: 'circle', centre: 'self', radius: 5.5 } },
+  'Grand Mockery': { area: { shape: 'circle', centre: 'self', radius: 6 } },
+  'Demoralize': { area: { shape: 'circle', centre: 'self', radius: 5.5 } },
+  "Bulwark's Challenge": { area: { shape: 'circle', centre: 'self', radius: 6.5 } }, // a taunt must reach
 }
 
 /** The spatial behaviour of a move, if it has one. */

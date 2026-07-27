@@ -28,7 +28,7 @@ describe('the spatial table is honest', () => {
 
   it('every entry does something', () => {
     for (const [name, sp] of Object.entries(SPATIAL_MOVES)) {
-      const does = !!(sp.move || sp.pull || sp.push || sp.root || sp.slow || sp.backstab)
+      const does = !!(sp.move || sp.pull || sp.push || sp.root || sp.slow || sp.backstab || sp.area)
       expect(does, `${name} declares nothing`).toBe(true)
     }
   })
@@ -114,5 +114,60 @@ describe('mechanics fire in a real fight', () => {
         }
       }
     }
+  })
+})
+
+describe('area shapes replace the row targets', () => {
+  it('every former row / allEnemies move now has real geometry', () => {
+    // These 14 targeted `frontRow` / `backRow` / `allEnemies` — formations the
+    // field does not have. Without a shape they would hit everyone regardless
+    // of where anyone stood, which is exactly what made spacing pointless.
+    const rowMoves = ALL_MOVES.filter((m: Move) =>
+      m.target === 'allEnemies' || m.target === 'frontRow' || m.target === 'backRow')
+    expect(rowMoves.length).toBe(14)
+    const missing = rowMoves.filter((m: Move) => !spatialOf(m.name)?.area).map((m: Move) => m.name)
+    expect(missing).toEqual([])
+  })
+
+  it('a shout radiates from the CASTER, a bombardment lands on the TARGET', () => {
+    // Getting this backwards makes a support nuke its own feet.
+    for (const n of ['Screech', 'Cacophony', 'Crescendo', 'Grand Mockery', 'Demoralize', "Bulwark's Challenge", 'Cleave', 'Earthshaker']) {
+      expect(spatialOf(n)!.area!.centre, n).toBe('self')
+    }
+    for (const n of ['Rain of Arrows', 'Needle Storm', 'Inferno', 'Deep Freeze', 'World Ender']) {
+      expect(spatialOf(n)!.area!.centre, n).toBe('target')
+    }
+  })
+
+  it('every shape carries the dimensions its kind needs', () => {
+    for (const [name, sp] of Object.entries(SPATIAL_MOVES)) {
+      const a = sp.area
+      if (!a) continue
+      if (a.shape === 'circle') expect(a.radius, name).toBeGreaterThan(0)
+      if (a.shape === 'cone') { expect(a.angle, name).toBeGreaterThan(0); expect(a.range, name).toBeGreaterThan(0) }
+      if (a.shape === 'line') { expect(a.width, name).toBeGreaterThan(0); expect(a.range, name).toBeGreaterThan(0) }
+    }
+  })
+
+  it('World Ender is the widest blast in the game', () => {
+    const radii = Object.entries(SPATIAL_MOVES)
+      .filter(([, sp]) => sp.area?.shape === 'circle')
+      .map(([n, sp]) => [n, sp.area!.radius!] as const)
+    const biggest = radii.reduce((a, b) => (b[1] > a[1] ? b : a))
+    expect(biggest[0]).toBe('World Ender')
+  })
+
+  it('POSITION now decides who an AoE catches', () => {
+    // The whole point: the same cast hits fewer monsters when they spread out.
+    const clumped = simulateFieldBattle({
+      seed: 'aoe', teamA: [mk('qa0'), mk('qa1'), mk('qa2')], teamB: [mk('qb0'), mk('qb1'), mk('qb2')],
+      placeB: [{ x: 30, y: 11 }, { x: 31, y: 11.4 }, { x: 30.5, y: 10.6 }],
+    })
+    const spread = simulateFieldBattle({
+      seed: 'aoe', teamA: [mk('qa0'), mk('qa1'), mk('qa2')], teamB: [mk('qb0'), mk('qb1'), mk('qb2')],
+      placeB: [{ x: 30, y: 3 }, { x: 31, y: 11 }, { x: 30.5, y: 19 }],
+    })
+    // Different formations must produce genuinely different fights.
+    expect(JSON.stringify(clumped.events)).not.toBe(JSON.stringify(spread.events))
   })
 })

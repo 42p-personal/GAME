@@ -188,6 +188,26 @@ export interface MoveSpatial {
   root?: number // seconds the target cannot move (it may still act)
   slow?: { mult: number; duration: number } // multiply the target's speed
   backstab?: number // damage multiplier when striking from BEHIND the target
+  area?: MoveArea // real geometry instead of "hits everyone"
+}
+
+// ── AREA SHAPES (v0.93) ─────────────────────────────────────────────────────
+// `allEnemies` / `frontRow` / `backRow` were written for an engine with rows.
+// The field has none, so those targets are meaningless on it — a move tagged
+// "hits everyone" ignored where anybody was standing, which made the `spacing`
+// order pointless and AoE unavoidable.
+//
+// Real shapes fix both: an AoE now catches whoever is actually inside it, so
+// spreading out is a genuine answer and clumping is a genuine risk.
+export interface MoveArea {
+  shape: 'circle' | 'cone' | 'line'
+  /** Where the shape originates. A shout radiates from the CASTER; a meteor
+   *  lands on the TARGET. Defaults to 'target'. */
+  centre?: 'self' | 'target'
+  radius?: number // circle
+  angle?: number // cone, total degrees of the wedge
+  range?: number // cone / line reach
+  width?: number // line thickness
 }
 
 export interface Ability { name: string; desc: string }

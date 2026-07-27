@@ -5,7 +5,7 @@
 // depends on `simulateFieldBattle` being a pure function of
 // (monsters + placement + obstacles + seed). So: fixed dt, fixed unit order,
 // one seeded rng stream, and no wall-clock or Math.random anywhere.
-import { Channel, Monster, Move, MoveSpatial, Stat, mulberry32, hashString } from '../core'
+import { Channel, Monster, Move, MoveArea, MoveSpatial, Stat, aoeFalloff, mulberry32, hashString } from '../core'
 import { manaCost, maxHp, maxMana } from '../monster'
 import {
   DT, FIELD_H, FIELD_W, FieldEvent, FieldResult, FieldSetup, FieldSide, FieldUnit,
@@ -295,13 +295,69 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
   }
 
   // ── inner helpers (close over rng/events/units) ───────────────────────────
+  /**
+   * Everyone an AREA move actually catches, in fixed unit order so the result
+   * stays deterministic. A shape centred on 'self' radiates from the caster (a
+   * scream cannot be aimed at a spot); one centred on 'target' lands where the
+   * victim is standing, which is what makes clumping dangerous.
+   */
+  function areaVictims(u: FieldUnit, target: FieldUnit, area: MoveArea): FieldUnit[] {
+    const origin = area.centre === 'self' ? u.pos : target.pos
+    const foes = units.filter((x) => x.side !== u.side && !x.dead)
+    if (area.shape === 'circle') {
+      const r = area.radius ?? 4
+      return foes.filter((f) => dist(origin, f.pos) <= r + f.radius)
+    }
+    if (area.shape === 'cone') {
+      const reach = area.range ?? 4
+      const half = ((area.angle ?? 90) / 2) * (Math.PI / 180)
+      const facing = norm(sub(target.pos, u.pos))
+      return foes.filter((f) => {
+        const d = dist(origin, f.pos)
+        if (d > reach + f.radius || d < 1e-6) return false
+        const to = norm(sub(f.pos, origin))
+        return Math.acos(Math.max(-1, Math.min(1, to.x * facing.x + to.y * facing.y))) <= half
+      })
+    }
+    // line: everything within `width` of the segment from the caster outward.
+    const reach = area.range ?? 8
+    const halfW = (area.width ?? 2) / 2
+    const dir = norm(sub(target.pos, u.pos))
+    return foes.filter((f) => {
+      const rel = sub(f.pos, u.pos)
+      const along = rel.x * dir.x + rel.y * dir.y
+      if (along < 0 || along > reach) return false
+      const perp = Math.abs(rel.x * -dir.y + rel.y * dir.x)
+      return perp <= halfW + f.radius
+    })
+  }
+
   function resolveHit(u: FieldUnit, target: FieldUnit, moveId: string) {
     const mv = u.m.loadout.find((x) => x.id === moveId) ?? basicAttack(u)
     u.castMoveId = null
     const t2 = +(tick * DT).toFixed(2)
+    // AREA MOVES fan out to whoever is genuinely inside the shape, each hit
+    // discounted by the existing AoE falloff so splashing six bodies is not
+    // six times a single-target cast.
+    const areaSpec = spatialOf(mv.name)?.area
+    if (areaSpec) {
+      const victims = areaVictims(u, target, areaSpec)
+      if (!victims.length) {
+        events.push({ t: t2, kind: 'miss', id: u.id, targetId: target.id, move: mv.name })
+        return
+      }
+      const falloff = aoeFalloff(victims.length)
+      for (const v of victims) strike(u, v, mv, t2, falloff)
+      return
+    }
+    strike(u, target, mv, t2, 1)
+  }
+
+  function strike(u: FieldUnit, target: FieldUnit, mv: Move, t2: number, falloff: number) {
     if (target.dead) return
-    // Out of range by the time it lands (the target walked away) — a real miss.
-    if (dist(u.pos, target.pos) > rangeOf(mv) * 1.25) {
+    // Out of range by the time it lands (the target walked away) — a real
+    // miss. Area moves already resolved their own geometry, so they skip this.
+    if (falloff === 1 && dist(u.pos, target.pos) > rangeOf(mv) * 1.25) {
       events.push({ t: t2, kind: 'miss', id: u.id, targetId: target.id, move: mv.name })
       return
     }
@@ -316,7 +372,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     // is worth a slot. It only pays if the caster is genuinely on the far side.
     const sp = spatialOf(mv.name)
     const behind = sp?.backstab && isBehind(u, target) ? sp.backstab : 1
-    const raw = mv.power * (1 + atk / 320) * (crit ? 1.5 : 1) * behind
+    const raw = mv.power * (1 + atk / 320) * (crit ? 1.5 : 1) * behind * falloff
     const dmg = Math.max(1, Math.round(raw * (1 - Math.min(0.55, mitigation / 1400))))
     target.hp -= dmg
     events.push({ t: t2, kind: 'hit', id: u.id, targetId: target.id, move: mv.name, channel: mv.channel, dmg, crit })
