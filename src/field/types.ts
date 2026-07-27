@@ -76,6 +76,8 @@ export interface FieldUnit {
   statuses: { kind: StatusKind; until: number }[]
   /** seconds left unable to MOVE (it may still act) — from a root */
   rootedFor: number
+  /** wall-clock time until which this unit is hard to notice (a Fade) */
+  fadedUntil: number
   /** speed multiplier and the time it expires — from a slow */
   slowMult: number
   slowFor: number

@@ -11,6 +11,7 @@
 // that was keeping you safe, drag a caster out from behind cover, or pin the
 // assassin that just landed on your healer.
 import { MoveSpatial } from '../core'
+import { ALL_FIELD_MOVES } from './fieldMoves'
 
 export const SPATIAL_MOVES: Record<string, MoveSpatial> = {
   // ── GAP CLOSERS ───────────────────────────────────────────────────────────
@@ -82,5 +83,12 @@ export const SPATIAL_MOVES: Record<string, MoveSpatial> = {
   "Bulwark's Challenge": { area: { shape: 'circle', centre: 'self', radius: 6.5 } }, // a taunt must reach
 }
 
+// Field moves carry their spatial block inline (they are nothing WITHOUT it),
+// so they are folded in here rather than duplicated in the table above.
+const FIELD_SPATIAL: Record<string, MoveSpatial> = Object.fromEntries(
+  ALL_FIELD_MOVES.filter((m) => m.spatial).map((m) => [m.name, m.spatial!]),
+)
+
 /** The spatial behaviour of a move, if it has one. */
-export const spatialOf = (moveName: string): MoveSpatial | undefined => SPATIAL_MOVES[moveName]
+export const spatialOf = (moveName: string): MoveSpatial | undefined =>
+  SPATIAL_MOVES[moveName] ?? FIELD_SPATIAL[moveName]

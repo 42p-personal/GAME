@@ -91,6 +91,7 @@ function buildUnit(m: Monster, side: FieldSide, slot: number, pos: Vec2): FieldU
     castMoveId: null,
     statuses: [],
     rootedFor: 0,
+    fadedUntil: 0,
     slowMult: 1,
     slowFor: 0,
     dead: false,
@@ -190,6 +191,9 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
   ]
   const byId = new Map(units.map((u) => [u.id, u]))
   const events: FieldEvent[] = []
+  // Persistent patches of ground. The arena's own contribution to tactics: a
+  // zone denies SPACE rather than damaging a body.
+  const zones: { x: number; y: number; r: number; until: number; effect: 'damage' | 'slow' | 'heal'; power: number; side: FieldSide }[] = []
   const vis = new Map<string, UnitVisState>(units.map((u) => [u.id, 'idle']))
 
   const living = (side: FieldSide) => units.filter((u) => u.side === side && !u.dead)
@@ -221,7 +225,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       // Commit to a target for RETARGET_EVERY, unless it died.
       const cur = u.targetId ? byId.get(u.targetId) : null
       if (!cur || cur.dead || u.retargetIn <= 0) {
-        const pick = pickTarget(u, foes, mates)
+        const pick = pickTarget(u, foes, mates, t)
         u.targetId = pick?.id ?? null
         u.retargetIn = RETARGET_EVERY
       }
@@ -255,6 +259,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
         u.mp = Math.max(0, u.mp - manaCost(mv))
         events.push({ t, kind: 'cast', id: u.id, targetId: target.id, move: mv.name, channel: mv.channel })
         applyCasterMovement(u, target, mv, t, obstacles)
+        applySelfEffects(u, target, mv, t)
         vis.set(u.id, 'cast')
         // Instant moves land the same tick they are cast.
         if (u.castingFor <= 0) { resolveHit(u, target, mv.id); u.castMoveId = null }
@@ -268,6 +273,30 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       const goal = desiredGoal(u, target, mates, foes, (a, b) => hasLineOfSight(a, b, obstacles))
       stepToward(u, goal, mates, obstacles)
       vis.set(u.id, 'move')
+    }
+
+    // ZONES tick on everyone standing in them, friend or foe as appropriate.
+    for (let i = zones.length - 1; i >= 0; i--) {
+      const z = zones[i]
+      if (t >= z.until) { zones.splice(i, 1); continue }
+      for (const u of units) {
+        if (u.dead || dist(u.pos, z) > z.r + u.radius) continue
+        if (z.effect === 'heal') {
+          if (u.side !== z.side) continue
+          u.hp = Math.min(u.maxHp, u.hp + z.power * DT)
+        } else if (z.effect === 'slow') {
+          if (u.side === z.side) continue
+          u.slowMult = Math.min(u.slowMult, z.power)
+          u.slowFor = Math.max(u.slowFor, 0.4)
+        } else {
+          if (u.side === z.side) continue
+          u.hp -= z.power * DT
+          if (u.hp <= 0) {
+            u.hp = 0; u.dead = true; vis.set(u.id, 'dead')
+            events.push({ t, kind: 'death', id: u.id })
+          }
+        }
+      }
     }
 
     // One positional snapshot per tick for the renderer to interpolate.
@@ -421,6 +450,35 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       events.push({ t, kind: 'blink', id: u.id,
         fromX: +from.x.toFixed(2), fromY: +from.y.toFixed(2),
         toX: +dest.x.toFixed(2), toY: +dest.y.toFixed(2) })
+    }
+  }
+
+  /**
+   * Effects that land on the CASTER or its own side the instant it commits —
+   * fading from notice, hauling an ally clear, dropping a zone.
+   */
+  function applySelfEffects(u: FieldUnit, target: FieldUnit, mv: Move, t: number) {
+    const sp = spatialOf(mv.name)
+    if (!sp) return
+    if (sp.fade) u.fadedUntil = t + sp.fade.duration
+    if (sp.zone) {
+      const c = sp.zone.centre === 'target' ? target.pos : u.pos
+      zones.push({ x: c.x, y: c.y, r: sp.zone.radius, until: t + sp.zone.duration,
+        effect: sp.zone.effect, power: sp.zone.power, side: u.side })
+    }
+    if (sp.haulAlly) {
+      // Pull the ally in the worst trouble — lowest HP fraction — to the caster.
+      const mates = units.filter((x) => x.side === u.side && !x.dead && x.id !== u.id)
+      const worst = mates.sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0]
+      if (worst && dist(worst.pos, u.pos) > 2) {
+        const dir = norm(sub(u.pos, worst.pos))
+        const step = Math.min(sp.haulAlly, dist(worst.pos, u.pos) - 1.6)
+        const dest = clampToField({ x: worst.pos.x + dir.x * step, y: worst.pos.y + dir.y * step })
+        if (!obstacles.some((o) => insideObstacle(dest, o, worst.radius * 0.6))) {
+          worst.pos = dest
+          events.push({ t, kind: 'shove', id: worst.id, by: u.id, kind2: 'pull' })
+        }
+      }
     }
   }
 

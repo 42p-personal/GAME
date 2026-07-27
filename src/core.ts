@@ -189,6 +189,15 @@ export interface MoveSpatial {
   slow?: { mult: number; duration: number } // multiply the target's speed
   backstab?: number // damage multiplier when striking from BEHIND the target
   area?: MoveArea // real geometry instead of "hits everyone"
+  /** Leave a persistent patch of ground behind. The arena's own contribution to
+   *  tactics: a zone denies SPACE rather than damaging a body, so it is worth
+   *  most against a team that has to hold a position. */
+  zone?: { radius: number; duration: number; effect: 'damage' | 'slow' | 'heal'; power: number; centre?: 'self' | 'target' }
+  /** Drop off the enemy's radar for a moment — the anti-taunt. While faded, a
+   *  monster scores far lower as a target, so attackers look elsewhere. */
+  fade?: { duration: number }
+  /** Haul an ALLY to the caster, in world units — a rescue, not an attack. */
+  haulAlly?: number
 }
 
 // ── AREA SHAPES (v0.93) ─────────────────────────────────────────────────────

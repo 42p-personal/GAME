@@ -80,7 +80,7 @@ export const centroid = (us: FieldUnit[]): Vec2 => {
 // A weighted score per enemy. The weights themselves are bent by the unit's
 // traits, which is what makes an assassin and an anchor behave differently while
 // running identical code.
-export function pickTarget(self: FieldUnit, enemies: FieldUnit[], allies: FieldUnit[]): FieldUnit | null {
+export function pickTarget(self: FieldUnit, enemies: FieldUnit[], allies: FieldUnit[], now = 0): FieldUnit | null {
   const live = enemies.filter((e) => !e.dead)
   if (!live.length) return null
   const { cohesion, predation } = self.traits
@@ -115,7 +115,13 @@ export function pickTarget(self: FieldUnit, enemies: FieldUnit[], allies: FieldU
       1.10 * diveThreat(self, e, allies) +
       priorityBias(self, e)
 
-    if (score > bestScore) { bestScore = score; best = e }
+    // FADE is the anti-taunt: while it holds, this monster is simply not worth
+    // looking at, so attackers drift onto someone else. A heavy multiplier
+    // rather than true untargetability, so a lone faded survivor is still
+    // eventually found and the fight cannot stall.
+    const faded = e.fadedUntil > now ? 0.15 : 1
+    const final = score * faded
+    if (final > bestScore) { bestScore = final; best = e }
   }
   return best
 }
