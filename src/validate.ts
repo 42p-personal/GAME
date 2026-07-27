@@ -8,12 +8,64 @@
 import { BODY_ELEMENT, BodyType, CLASSES, GAMEPLANS, LEAGUES, STATS, STATUS_INFO, StatusKind, TARGET_PRIORITY_INFO, TEMPERAMENT_INFO, classForStats } from './core'
 import { SPECIES } from './species'
 import { ALL_MOVES } from './moves'
+import { ALL_SIGNATURE_MOVES, SIGNATURE_LISTS, signatureChoicesFor } from './signatureMoves'
 import { LEAGUE_TOP_GOLD, trainingProfileFor } from './game'
 import { activeQuartersFor, BREEDING_BONUS, CIRCUIT_REWARDS, EVENTS, LICENSE_COSTS, MAX_POTENTIAL, PRESTIGE_EVENTS, TEAM_SIZE_BY_LEAGUE, breedPotential, tournamentCalendarFor } from './town'
 import { INNATE_EFFECTS } from './battle'
 
 export function designProblems(): string[] {
   const problems: string[] = []
+
+  // ─── SIGNATURE SKILLS (v0.91) ─────────────────────────────────────────────
+  // ⚠️ UNIT GUARD. These fields are PERCENTAGE POINTS, not fractions — writing
+  // `accBuff: 0.15` compiles, runs, and does nothing measurable, which is exactly
+  // how it slipped through design review twice. Anything below 1 is a fraction
+  // that was meant to be points.
+  const POINT_FIELDS = ['dodgeBuff', 'accBuff', 'accDebuff', 'defBuff', 'defDebuff', 'regenBuff', 'hpRegenBuff', 'thorns', 'ward', 'guard', 'manaBurn'] as const
+  // ...and these are FRACTIONS, so anything above 1 is points that were meant to
+  // be a fraction (`atkBuff: 25` would be +2500% damage).
+  const FRACTION_FIELDS = ['pierce', 'lifesteal', 'recoil', 'execute', 'maxHpDmg', 'atkBuff', 'atkDebuff'] as const
+  for (const mv of [...ALL_MOVES, ...ALL_SIGNATURE_MOVES]) {
+    const e = mv.effects as Record<string, unknown> | undefined
+    if (!e) continue
+    for (const f of POINT_FIELDS) {
+      const v = e[f]
+      if (typeof v === 'number' && v > 0 && v < 1) problems.push(`${mv.name}: ${f}=${v} looks like a FRACTION but this field is percentage POINTS (did you mean ${Math.round(v * 100)}?)`)
+    }
+    for (const f of FRACTION_FIELDS) {
+      const v = e[f]
+      if (typeof v === 'number' && v > 1) problems.push(`${mv.name}: ${f}=${v} looks like POINTS but this field is a fraction (did you mean ${v / 100}?)`)
+    }
+  }
+
+  // Signature ids must be unique — a collision would make signatureMoveById
+  // silently resolve the wrong move for a persisted loadout.
+  const sigIds = new Set<string>()
+  for (const mv of ALL_SIGNATURE_MOVES) {
+    if (sigIds.has(mv.id)) problems.push(`duplicate signature id ${mv.id} (${mv.name})`)
+    sigIds.add(mv.id)
+    if (ALL_MOVES.some((p) => p.id === mv.id)) problems.push(`signature id ${mv.id} collides with a pool move id`)
+  }
+
+  // Signature POWER must stay under the pool's ceiling for its target shape.
+  // Signatures are meant to be strong-and-EARLY, never strictly better — see
+  // docs/SIGNATURE_DESIGN.md. Row targets are compared against the pool's
+  // allEnemies ceiling because no pool move originally targeted a row.
+  const poolMax = (f: (m: typeof ALL_MOVES[number]) => boolean) => Math.max(...ALL_MOVES.filter(f).map((m) => m.power), 0)
+  const capSingle = poolMax((m) => m.type === 'damage' && m.target === 'enemy' && !m.effects?.hits)
+  const capAoE = poolMax((m) => m.type === 'damage' && m.target === 'allEnemies')
+  for (const mv of ALL_SIGNATURE_MOVES) {
+    if (mv.type !== 'damage') continue
+    const cap = mv.target === 'enemy' && !mv.effects?.hits ? capSingle : capAoE
+    if (mv.power > cap) problems.push(`signature ${mv.name} power ${mv.power} exceeds the pool ceiling ${cap} for its shape`)
+  }
+
+  // Every body must be able to earn a signature, and the fusion bodies must
+  // resolve to their recipe's parent lists rather than authoring their own.
+  for (const sp of SPECIES) {
+    if (signatureChoicesFor(sp.body).length === 0) problems.push(`${sp.body} has no signature moves — ${sp.name} could never claim a rite prize`)
+  }
+  if (SIGNATURE_LISTS.Prestige.length !== 8) problems.push(`the shared Draconic/Abyssal list should hold 8 moves, found ${SIGNATURE_LISTS.Prestige.length}`)
 
   // Class table: primary/secondary pairs must be unique or later entries are unreachable.
   const seenPairs = new Map<string, string>()

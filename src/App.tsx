@@ -12,6 +12,8 @@ import { Sprite } from './Sprite'
 import { SPECIES } from './species'
 import { BIOS } from './bestiary'
 import { ALL_DRILLS, BASIC_DRILLS, DIVERSE_DRILLS, DIVERSE_GAIN, Drill, EXTREME_COST, EXTREME_DRILLS, EXTREME_GAIN, INTENSIVE_DRILLS } from './drills'
+import { signatureName } from './signature'
+import { signatureChoicesFor } from './signatureMoves'
 import {
   Career, EXTREME_DRILL_STAMINA, DIVERSE_DRILL_STAMINA, drillStamina, MAX_STAMINA, canRankUp, careerMonster, careerSpanYears, statCapFor,
   dateLabel, foodName, FORAGE_STAMINA_COST, FORAGE_HAPPINESS_COST, WILD_GEN1_CAP, previewWeekEffects, stageInfo, trainingProfileFor,
@@ -30,7 +32,7 @@ import {
   fuse, fusionSpin, fusionRecipeFor, fusablePairIn, freezeToLab, thawFromLab, expandLab, labExpandCost, LAB_SLOTS_BASE, FUSION_COST,
   generateRival, newGame, offerMonster, renameMonster, rewardMultiplier, setActiveInnate, setLoadout, signUp,
   applyMarkToOpponent, buildEventPlayerTeam, finalizeCup, finalizeRite, finalizeTrial, roundRobinSchedule,
-  riteStatus, riteEligible, riteRoster, startRite, cancelRite, riteChampionMult, SIGNATURE_RITE_LEVEL,
+  riteStatus, riteEligible, riteRoster, startRite, cancelRite, riteChampionMult, claimSignature, SIGNATURE_RITE_LEVEL,
   tournamentCalendarFor, upgradeBarn, visibleLeagueCount, weekOfMonth, yearOfWeek,
 } from './town'
 import { AREA_BACKGROUND, AreaArtKey, TOWN_AREA_ART } from './areaArt'
@@ -1801,6 +1803,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
   // `scouted` above (paying again at the bracket is match-day re-intel).
   const [fieldScout, setFieldScout] = useState<Record<string, 'basic' | 'full'>>({})
   const [trialPick, setTrialPick] = useState<string[]>([]) // rank-up trial roster picks (v0.5)
+  const [sigPick, setSigPick] = useState<string | null>(null) // which monster is selected in the rite-prize claim panel (v0.91)
   const [selectedMonsterId, setSelectedMonsterId] = useState(() => game.stable.find((c) => !c.retired)?.id ?? game.stable[0]?.id ?? '')
   const [abilityEditorFor, setAbilityEditorFor] = useState<string | null>(null)
   const [showHistoryFor, setShowHistoryFor] = useState<string | null>(null)
@@ -2428,7 +2431,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
               {selectedCareer.signature && (
                 <div className="dim" style={{ fontSize: 11 }}>
                   {selectedCareer.signature.awakened ? '★' : '☆'} Signature:{' '}
-                  <b style={{ color: STAT_COLOR[selectedCareer.signature.stat] }}>{selectedCareer.signature.name}</b>
+                  <b style={{ color: STAT_COLOR[selectedCareer.signature.stat] }}>{signatureName(selectedCareer.signature)}</b>
                   {selectedCareer.signature.inherited > 0
                     ? <> · inherited from {selectedCareer.signature.forgedBy} ({selectedCareer.signature.eventName})</>
                     : <> · forged at {selectedCareer.signature.eventName}</>}
@@ -2559,6 +2562,40 @@ function RanchView({ game, setGame, onBattleScreen }: {
                       onClick={() => { setGame((g) => startTrial(g, trialPick)); setTrialPick([]) }}>
                       ⚔ Challenge ({trialPick.length}/{size} picked)
                     </button>
+                  </div>
+                )
+              })()}
+              {/* Rite prize unclaimed (v0.91). Winning banks the reward rather than
+                  forging it, because the PLAYER chooses which monster steps forward
+                  and which of its body's moves it takes. Shown until claimed, so it
+                  cannot be missed by clicking past the results screen. */}
+              {game.riteReward && (() => {
+                const winners = game.stable.filter((c) => game.riteReward!.monsterIds.includes(c.id) && !c.retired && !c.signature)
+                if (!winners.length) return null
+                const pick = winners.find((c) => c.id === sigPick) ?? winners[0]
+                const choices = signatureChoicesFor(pick.species.body)
+                return (
+                  <div className="trial-panel" style={{ borderColor: 'var(--cha)' }}>
+                    <div className="section-title">★ Signature Rite won — claim the prize</div>
+                    <div className="dim">Choose which monster steps forward, then the move it takes. Its current {'{'}stat{'}'} becomes the bar its heirs must reach to awaken an inherited copy — so a signature taken late is a harder legacy to live up to.</div>
+                    <div className="carerow" style={{ flexWrap: 'wrap', marginTop: 6 }}>
+                      {winners.map((c) => (
+                        <button key={c.id} className={'tacticopt small' + (c.id === pick.id ? ' on' : '')} onClick={() => setSigPick(c.id)}>
+                          {c.name} <span className="dim">· {c.species.body}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="dim" style={{ fontSize: 11, marginTop: 6 }}>{pick.name} may take one of {choices.length}:</div>
+                    <div className="carerow" style={{ flexWrap: 'wrap', marginTop: 4 }}>
+                      {choices.map((mv) => (
+                        <button key={mv.id} className="tacticopt small" title={mv.desc}
+                          onClick={() => { setGame((g) => claimSignature(g, pick.id, mv.id)); setSigPick(null) }}>
+                          <b style={{ color: STAT_COLOR[mv.stat] }}>{mv.name}</b>
+                          <span className="dim"> · {mv.stat} {mv.power > 0 ? mv.power : '—'} · {mv.target}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>Awaken bar would be {pick.stats[choices[0]?.stat ?? 'STR']}+ in the chosen move&apos;s stat.</div>
                   </div>
                 )
               })()}
@@ -3084,6 +3121,7 @@ function sanitizeAndMigrate(raw: string): GameState | null {
     if (typeof g.battleAnalyst !== 'boolean') g.battleAnalyst = false
     // v0.91 Signature Rite — absent on every pre-v0.91 save
     if (g.pendingRite === undefined) g.pendingRite = null
+    if (g.riteReward === undefined) g.riteReward = null
     if (typeof g.riteCooldownUntil !== 'number') g.riteCooldownUntil = 0
     // v0.7 Lab freezer (separate from the stud farm)
     if (!Array.isArray(g.labFrozen)) g.labFrozen = []

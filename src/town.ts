@@ -12,7 +12,8 @@ import {
   WILD_GEN1_CAP, careerMonster, careerSpanYears, forageFeed, newCareer, rollMarket, statCapFor, trainingProfileFor,
 } from './game'
 import { ALL_DRILLS } from './drills'
-import { SIGNATURE_LEAGUES, Signature, forgeSignature, inheritSignature } from './signature'
+import { Signature, forgeSignature, inheritSignature, signatureName } from './signature'
+import { signatureChoicesFor } from './signatureMoves'
 import { learnedMoves } from './monster'
 
 export type Area = 'town' | 'ranch'
@@ -520,7 +521,8 @@ export interface GameState {
   // An on-demand rank-up trial signed up for THIS week (consumes the entered
   // monsters' weekly action, like a cup). Resolved in advanceWeek.
   pendingTrial: { monsterIds: string[] } | null
-  pendingRite: { monsterIds: string[] } | null // Signature Rite (v0.91) — on-demand, WHOLE roster, annual, unlocks at trainer LV6
+  pendingRite: { monsterIds: string[] } | null
+  riteReward: { monsterIds: string[]; league: string } | null // won the rite, signature not yet chosen — the player picks the monster AND the move // Signature Rite (v0.91) — on-demand, WHOLE roster, annual, unlocks at trainer LV6
   riteCooldownUntil: number
   // Week gate after a FAILED trial — no re-attempt until g.week >= this.
   trialCooldownUntil: number
@@ -602,6 +604,7 @@ export function newGame(seed = 'start', opts?: { trainerName?: string; tutorialE
     pendingTrial: null,
     trialCooldownUntil: 0,
     pendingRite: null,
+    riteReward: null,
     riteCooldownUntil: 0,
     comfortOwned: [],
     trainingGear: {},
@@ -785,14 +788,17 @@ export function breed(g: GameState, aId: string, bId: string): GameState {
   // its ancestor had on the day the move was forged. If BOTH parents hold one
   // the higher-tier marquee wins — the line carries its proudest day forward,
   // not merely the most recent. See signature.ts and the awakening in applyWeek.
+  // If BOTH parents hold one, take the copy CLOSEST to its origin (lowest
+  // `inherited` depth) — the line carries the freshest link to the monster that
+  // actually won it, rather than a copy of a copy.
   const heirloom = [a.signature, b.signature].filter((s): s is Signature => !!s)
-    .sort((x, y) => y.tier - x.tier)[0]
+    .sort((x, y) => (x.inherited ?? 0) - (y.inherited ?? 0))[0]
   if (heirloom) baby.signature = inheritSignature(heirloom)
   baby.comfortWeeks = comfortWeeksFor(g)
   baby.wildCap = wildCapFor(g)
   const stars = '★'.repeat(Math.max(0, Math.round((potential - 1) / 0.05)))
   baby.log = [`${baby.name} is born — Gen ${generation} ${stars}, child of ${a.name} & ${b.name} (potential ×${potential.toFixed(2)}, heritage: ${baby.heritageStat}).`]
-  if (baby.signature) baby.log.push(`  ☆ Inherits ${baby.signature.name}, dormant — ${baby.signature.forgedBy} forged it winning ${baby.signature.eventName}. Train ${baby.signature.stat} to ${baby.signature.awakenStat} to awaken it.`)
+  if (baby.signature) baby.log.push(`  ☆ Inherits ${signatureName(baby.signature)}, dormant — ${baby.signature.forgedBy} forged it winning ${baby.signature.eventName}. Train ${baby.signature.stat} to ${baby.signature.awakenStat} to awaken it.`)
   return {
     ...g,
     gold: g.gold - BREED_COST,
@@ -998,10 +1004,6 @@ export const RITE_COOLDOWN_WEEKS = WEEKS_PER_YEAR
 // bug v0.89 had to fix for Tamer Elite.
 export const RITE_EXTRA_MULT = 0.15
 export const riteChampionMult = (leagueIndex: number): number => trialChampionMult(leagueIndex) + RITE_EXTRA_MULT
-// Which of the six signature tiers this player's league earns. licenseIndex
-// 0-1 -> tier 0 ... 10 -> tier 5, so the reward scales with how far you have
-// climbed rather than with the (fixed) unlock level.
-export const riteTierFor = (licenseIndex: number): number => Math.max(0, Math.min(SIGNATURE_LEAGUES.length - 1, Math.floor(licenseIndex / 2)))
 // The rite is fought by the WHOLE active roster (user spec) — not a picked team.
 export const riteRoster = (g: GameState): Career[] => g.stable.filter((c) => !c.retired)
 // ...but only a monster without a signature can be the one to receive it.
@@ -2507,29 +2509,13 @@ export function finalizeRite(g: GameState): { game: GameState; won: boolean } {
   // one that has the highest total stats — deterministic, and it reads as the
   // stable's champion stepping forward. Monsters that already carry a signature
   // are excluded rather than overwritten, so a deep legacy is never lost.
-  let forgedOn: string | null = null
+  // A WIN does not forge anything here. The player chooses which monster steps
+  // forward AND which of its body's signature moves it takes (user spec), so the
+  // reward is BANKED on GameState and claimed from the UI via claimSignature.
   const updated = playerCareers.map((c) => ({ ...c, stats: { ...c.stats }, log: [...c.log] }))
-  if (won) {
-    const eligible = updated.filter((c) => !c.signature)
-    if (eligible.length > 0) {
-      const star = eligible.reduce((best, c) =>
-        STATS.reduce((t, k) => t + c.stats[k], 0) > STATS.reduce((t, k) => t + best.stats[k], 0) ? c : best)
-      const topStat = [...STATS].sort((x, y) => star.stats[y] - star.stats[x])[0]
-      star.signature = forgeSignature({
-        stat: topStat,
-        tier: riteTierFor(g.licenseIndex),
-        atStat: star.stats[topStat],
-        eventName: `the Signature Rite (${league})`,
-        forgedBy: star.name,
-        seed: ac.tournamentId,
-      })
-      forgedOn = star.name
-      star.log.push(`  ★ SIGNATURE FORGED — the stable passes the rite and ${star.name} steps forward: ${star.signature.name} (${topStat}). Heirs inherit it dormant and awaken it at ${star.signature.awakenStat} ${topStat}.`)
-    }
-  }
   updated.forEach((nc) => {
     if (!won) nc.log.push(`  ✖ The rite goes unanswered — the challengers hold. The site reopens next year.`)
-    else if (nc.name !== forgedOn) nc.log.push(`  ★ Fought in the winning rite — ${forgedOn ?? 'the stable'} takes the signature.`)
+    else nc.log.push(`  ★ The stable passes the rite — one of you will carry a signature.`)
     const injRng = mulberry32(hashString(g.seed + ':' + ac.week + ':rite:injury:' + nc.id))
     nc.hp = Math.max(1, Math.round(maxHp(nc.stats) * injRng() * 0.5))
     nc.mp = Math.round(maxMana(nc.stats) * injRng() * 0.5)
@@ -2547,9 +2533,34 @@ export function finalizeRite(g: GameState): { game: GameState; won: boolean } {
     // The clock runs WIN OR LOSE — the rite is an annual event, not a
     // retry-until-it-lands grind.
     riteCooldownUntil: g.week + RITE_COOLDOWN_WEEKS,
+    riteReward: won ? { monsterIds: ac.playerMonsterIds, league } : null,
     trainerXp: (g.trainerXp ?? 0) + (won ? 40 : 0),
   }
   return { game, won }
+}
+
+// Claim the rite prize: the chosen monster forges the chosen move. Its CURRENT
+// value in that move's stat becomes the bar every heir must clear to awaken an
+// inherited copy, so a signature earned late is a harder legacy to live up to.
+export function claimSignature(g: GameState, monsterId: string, moveId: string): GameState {
+  const reward = g.riteReward
+  if (!reward || !reward.monsterIds.includes(monsterId)) return g
+  const idx = g.stable.findIndex((c) => c.id === monsterId)
+  if (idx < 0 || g.stable[idx].retired || g.stable[idx].signature) return g
+  const c = g.stable[idx]
+  const move = signatureChoicesFor(c.species.body).find((m) => m.id === moveId)
+  if (!move) return g // not a move this body may take
+  const nc: Career = { ...c, log: [...c.log] }
+  nc.signature = forgeSignature({
+    moveId,
+    stat: move.stat,
+    atStat: c.stats[move.stat],
+    eventName: `the Signature Rite (${reward.league})`,
+    forgedBy: c.name,
+  })
+  nc.log = [...nc.log, `  ★ SIGNATURE FORGED — ${c.name} takes ${move.name}. Heirs inherit it dormant and awaken it at ${nc.signature.awakenStat} ${move.stat}.`].slice(-40)
+  const stable = g.stable.map((x, i) => (i === idx ? nc : x))
+  return { ...g, stable, riteReward: null }
 }
 
 export function healAtInfirmary(g: GameState, id: string): GameState {

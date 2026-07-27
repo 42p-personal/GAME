@@ -6,7 +6,7 @@ import {
 } from './core'
 import { ALL_DRILLS } from './drills'
 import { GenOptions, chooseLoadout, generateMonster, learnedMoves, maxHp, maxMana } from './monster'
-import { Signature, canAwaken, signatureMove } from './signature'
+import { Signature, canAwaken, signatureMove, signatureName } from './signature'
 
 export const WEEKS_PER_MONTH = 4
 export const MONTHS_PER_YEAR = 12
@@ -474,7 +474,8 @@ export function careerMonster(c: Career): Monster {
   // competes for one of the three loadout slots exactly like a pool move (user
   // spec) — and every downstream consumer (ability selector, auto-pick, the
   // battle engine) needs no knowledge of signatures at all.
-  const learned = c.signature ? [...learnedMoves(c.stats), signatureMove(c.signature)] : learnedMoves(c.stats)
+  const sigMove = c.signature ? signatureMove(c.signature) : null
+  const learned = sigMove ? [...learnedMoves(c.stats), sigMove] : learnedMoves(c.stats)
   const persisted = c.loadout
     .map((id) => learned.find((mv) => mv.id === id))
     .filter((mv): mv is Move => !!mv)
@@ -640,7 +641,7 @@ export function applyWeek(c: Career, action: WeeklyAction, gold: number, rental 
   // preview exact (see the RNG discipline note in CLAUDE.md).
   if (n.signature && canAwaken(n.signature, n.stats)) {
     n.signature = { ...n.signature, awakened: true }
-    n.log.push(`  ★ ${n.signature.name} AWAKENS — ${n.name} matches ${n.signature.forgedBy}'s ${n.signature.stat} and the bloodline's signature is theirs in full.`)
+    n.log.push(`  ★ ${signatureName(n.signature)} AWAKENS — ${n.name} matches ${n.signature.forgedBy}'s ${n.signature.stat} and the bloodline's signature is theirs in full.`)
   }
 
   applyStageTransition(n, stage)
