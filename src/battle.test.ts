@@ -43,14 +43,20 @@ const GOLDENS = [
     // (flat chip → % chip), CON coefficient trims, and WIS spell-power — the
     // clock now resolves a winner instead of wiping both.
     name: '3v3-high', a: ['gold-a5', 'gold-a6', 'gold-a7'], b: ['gold-b5', 'gold-b6', 'gold-b7'], train: 2000,
-    winner: 'A', events: 349, logLines: 254, // recaptured v0.89: the league-cap curve changed (Masters 900→1000, TE 1000→1200) and boostConstitution derives its CON target from the league cap, so a train:2000 roll lands differently
+    // recaptured v0.91: formation is now LIVE — when a front-liner falls the rank
+    // behind steps up, so melee finds targets it previously could not reach once
+    // the wall broke. Same winner and same KO pattern (all of B down, all of A
+    // standing); only the damage distribution moved, with A's slot 0 absorbing
+    // far more (1052 → 609) as more attacks got through.
+    // Prior capture, v0.89: events 349 / logLines 254 — league-cap curve change.
+    winner: 'A', events: 376, logLines: 274,
     finals: [
-      { side: 'A', slot: 0, hp: 1052, mana: 709, wasKOd: false },
-      { side: 'A', slot: 1, hp: 1298, mana: 57, wasKOd: false },
-      { side: 'A', slot: 2, hp: 1348, mana: 763, wasKOd: false },
+      { side: 'A', slot: 0, hp: 609, mana: 690, wasKOd: false },
+      { side: 'A', slot: 1, hp: 1298, mana: 53, wasKOd: false },
+      { side: 'A', slot: 2, hp: 1348, mana: 737, wasKOd: false },
       { side: 'B', slot: 0, hp: 0, mana: 747, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 766, wasKOd: true },
-      { side: 'B', slot: 2, hp: 0, mana: 137, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 756, wasKOd: true },
+      { side: 'B', slot: 2, hp: 0, mana: 123, wasKOd: true },
     ],
   },
 ] as const

@@ -9,7 +9,7 @@
 // when this was strictly 1v1. `simulateBattle` (still exported) is a thin
 // team-of-1 wrapper over `simulateTeamBattle`, so every existing 1v1 call site
 // (Sandbox) keeps working unchanged.
-import { Ability, Channel, Element, ManaPolicy, Monster, Move, RNG, StatusKind, Temperament, chance, elementMultiplier, happinessMultiplier, hashString, mulberry32, randInt, rowOfSlot } from './core'
+import { Ability, Channel, Element, ManaPolicy, Monster, Move, RNG, StatusKind, Temperament, chance, elementMultiplier, frontRowCount, happinessMultiplier, hashString, mulberry32, randInt } from './core'
 import {
   attackStat, critChance, debuffBonus, debuffReduction, dodgeChance, echoChance, hpRegen,
   manaCost, manaRegen, maxHp, maxMana, mitigationPierce, staminaDamageMult,
@@ -322,7 +322,6 @@ interface Combatant {
   m: Monster
   side: BattleSide
   slot: number // 0-based position within its own team's roster array
-  row: 'front' | 'back' // formation (wave 2): from roster order via rowOfSlot — melee can only reach the front line while it stands
   openerQueue: string[] // scripted opening SEQUENCE (tactics.openerIds) — the front id is tried on each of the monster's first actions; one is spent per action, cast or not
   hp: number
   maxHp: number
@@ -416,13 +415,12 @@ export interface BattleResult {
   finals: { side: BattleSide; slot: number; hp: number; mana: number; wasKOd: boolean }[]
 }
 
-function makeCombatant(m: Monster, happiness: number, side: BattleSide, slot: number, teamSize: number): Combatant {
+function makeCombatant(m: Monster, happiness: number, side: BattleSide, slot: number): Combatant {
   const self = innateEffects(m)
   return {
     m,
     side,
     slot,
-    row: rowOfSlot(slot, teamSize), // formation (wave 2): roster order IS the formation
     // Opening sequence: prefer the new openerIds list, fall back to the legacy
     // single openerId. Up to 2 ids play in order on the first actions.
     openerQueue: (m.tactics?.openerIds?.length ? m.tactics.openerIds : (m.tactics?.openerId ? [m.tactics.openerId] : [])).slice(0, 2),
@@ -461,6 +459,15 @@ function makeCombatant(m: Monster, happiness: number, side: BattleSide, slot: nu
 // tactic reads it so teammates can pile onto one victim together. ---
 interface BattleContext { all: Combatant[]; focus: Record<BattleSide, { side: BattleSide; slot: number } | null> }
 const livingTeamOf = (ctx: BattleContext, side: BattleSide) => ctx.all.filter((c) => c.side === side && c.hp > 0)
+// FORMATION IS LIVE (user spec 2026-07-27). A monster's row is its position
+// among its STILL-LIVING teammates, not a rank stamped on it at setup — so when
+// a front-liner falls, whoever stands behind steps up into the wall. ctx.all is
+// built in slot order and filtering preserves it, so index === rank.
+// Returns the front line of an already-living, slot-ordered group.
+const frontLineOf = (living: Combatant[]): Combatant[] => {
+  const front = living.slice(0, frontRowCount(living.length))
+  return front.length ? front : living // never strand a caster with nothing to hit
+}
 const enemiesOf = (ctx: BattleContext, c: Combatant) => livingTeamOf(ctx, c.side === 'A' ? 'B' : 'A')
 const alliesOf = (ctx: BattleContext, c: Combatant) => livingTeamOf(ctx, c.side).filter((x) => x !== c)
 
@@ -984,9 +991,7 @@ function resolveTargets(attacker: Combatant, ctx: BattleContext, move: Move, rng
       // Formation (wave 2): single-target MELEE can only reach the front line
       // while it stands; every other channel shoots straight over it. AoE and
       // compulsions (above) are untouched.
-      const reachable = move.channel === 'melee'
-        ? (foes.some((f) => f.row === 'front') ? foes.filter((f) => f.row === 'front') : foes)
-        : foes
+      const reachable = move.channel === 'melee' ? frontLineOf(foes) : foes
       // Mark (wave 2): the coach's kill order — a scouted-and-marked enemy is
       // every teammate's first choice while it lives and can be reached.
       const marked = reachable.find((f) => f.m.marked)
@@ -1367,8 +1372,8 @@ function turnOrderCompare(x: Combatant, y: Combatant): number {
 export function simulateTeamBattle(teamA: Monster[], teamB: Monster[], happA: number[] = [], happB: number[] = []): BattleResult {
   const seedKey = teamA.map((m) => m.seed).join(',') + '|' + teamB.map((m) => m.seed).join(',') + '|vs'
   const rng = mulberry32(hashString(seedKey))
-  const A = teamA.map((m, i) => makeCombatant(m, happA[i] ?? 0, 'A', i, teamA.length))
-  const B = teamB.map((m, i) => makeCombatant(m, happB[i] ?? 0, 'B', i, teamB.length))
+  const A = teamA.map((m, i) => makeCombatant(m, happA[i] ?? 0, 'A', i))
+  const B = teamB.map((m, i) => makeCombatant(m, happB[i] ?? 0, 'B', i))
   const ctx: BattleContext = { all: [...A, ...B], focus: { A: null, B: null } }
   recomputeInnateAuras(ctx)
   const log: string[] = []

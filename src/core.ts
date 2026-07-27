@@ -218,17 +218,22 @@ export interface ActiveCup {
 // MELEE attacks (including a melee-channel basic Attack) can only reach the
 // front line while it stands; ranged/magic/voice ignore rows entirely, and
 // AoE always hits everyone. A solo team is all front line.
-// The front line is the first TWO monsters in roster order, at every team size
-// (user spec 2026-07-27) — it was ceil(teamSize/2), which made the "front row"
-// mean something different in every league: 1 of 2 at Tin, 3 of 6 at Apex.
-// A fixed 2 makes formation a real, constant decision — at 6v6 you are choosing
-// two shields for four protected slots, not splitting the roster down the middle.
+// The front line is the first TWO monsters in roster order — THREE at 6v6
+// (user spec 2026-07-27). It was ceil(teamSize/2), which made "front row" mean
+// something different in every league; pinning it makes formation a legible,
+// near-constant decision, with the top league widening the wall by one because
+// six bodies behind two shields left the back far too safe.
+//
+// ⚠️ Rows are LIVE, not fixed at setup: a combatant's row is its index among its
+// STILL-LIVING teammates, so when a front-liner falls the rank behind steps up
+// (see rowOfLiving in battle.ts). This function answers "how wide is the front
+// line for a team of this many SURVIVORS".
 //
 // What the front line gates: single-target MELEE can only reach it while it
 // stands. Melee AoE (allEnemies) and melee scattering strikes (randomTargets)
 // deliberately IGNORE it and can hit anyone — that exemption is what makes those
 // moves the answer to a turtled back line.
-export const frontRowCount = (teamSize: number) => Math.min(2, teamSize)
+export const frontRowCount = (teamSize: number) => (teamSize >= 6 ? 3 : Math.min(2, teamSize))
 export const rowOfSlot = (slot: number, teamSize: number): 'front' | 'back' =>
   slot < frontRowCount(teamSize) ? 'front' : 'back'
 
