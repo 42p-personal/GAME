@@ -108,6 +108,13 @@ export interface MoveEffects {
   // this as a cliff (Frenzy below 30%, Statue Stance above 70%) — this is the
   // smooth, per-move version.
   hpScale?: { atFull: number; atEmpty: number }
+  // DISPLACE (v0.91): drag a target to the FRONT of its line or shove it to the
+  // BACK. The formation rules make this bite — melee is walled to the front two
+  // (three at 6v6), and frontRow/backRow moves cut at one rank — so pulling a
+  // sheltered caster forward or shoving a tank out of the way is real counterplay
+  // against a turtled line, not just a debuff. Instantaneous, so it is an effect
+  // rather than a StatusKind.
+  displace?: { toRow: 'front' | 'back'; chance: number }
   spreadStatus?: { kind?: StatusKind; targets: number; chance: number } // CONTAGION (v0.91): when this move lands, a hostile status the victim is CARRYING jumps to `targets` other living enemies at `chance`% each. Omit `kind` to spread whatever it already has — so one move interacts with every setter in the game, pool or signature. Gated: no pool move sets it, so the engine's rng order is untouched.
   randomTargets?: boolean // with `hits`: each strike picks a LIVING ENEMY AT RANDOM (re-rolled per hit, repeats allowed) and resolves as its own independent attack, instead of `hits` multiplying damage onto one target. Signature-move effect (v0.91) — no pool move sets it, so the engine's existing rng call order is untouched.
   execute?: number // 0..1 — 1.5× damage when target HP is below this fraction

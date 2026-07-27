@@ -330,6 +330,7 @@ interface Combatant {
   cooldowns: Record<string, number> // moveId -> turns remaining
   statuses: ActiveStatus[]
   guard: number // temporary flat damage reduction until next action (guard effects)
+  formationRank: number // POSITION IN THE LINE, seeded from slot. Separate from `slot` (which is identity — events and finals key off it) and from ctx.all order (which is the initiative tie-break). Only `displace` changes it, so dragging a caster forward cannot silently reshuffle turn order.
   ward: number // absorb shield HP — soaks damage before health (ward effects)
   blockAvoid: number // Block stance: bonus % chance to avoid hits until next action
   mods: ActiveMod[] // active timed buffs/debuffs (round-limited)
@@ -432,6 +433,7 @@ function makeCombatant(m: Monster, happiness: number, side: BattleSide, slot: nu
     cooldowns: {},
     statuses: [],
     guard: 0,
+    formationRank: slot,
     ward: self.startWard, // e.g. Ward (Nautilux) — opens every battle behind a shell shield
     blockAvoid: 0,
     mods: [],
@@ -464,15 +466,36 @@ const livingTeamOf = (ctx: BattleContext, side: BattleSide) => ctx.all.filter((c
 // a front-liner falls, whoever stands behind steps up into the wall. ctx.all is
 // built in slot order and filtering preserves it, so index === rank.
 // Returns the front line of an already-living, slot-ordered group.
+const inFormation = (living: Combatant[]): Combatant[] => [...living].sort((a, b) => a.formationRank - b.formationRank || a.slot - b.slot)
 const frontLineOf = (living: Combatant[]): Combatant[] => {
-  const front = living.slice(0, frontRowCount(living.length))
-  return front.length ? front : living // never strand a caster with nothing to hit
+  const ordered = inFormation(living)
+  const front = ordered.slice(0, frontRowCount(ordered.length))
+  return front.length ? front : ordered // never strand a caster with nothing to hit
+}
+// Drag to the front of the line, or shove to the back. Returns false when it
+// would change nothing (already at that end, or nobody to trade places with),
+// so the caller can stay quiet instead of logging a no-op.
+function displaceCombatant(ctx: BattleContext, target: Combatant, toRow: 'front' | 'back'): boolean {
+  const team = livingTeamOf(ctx, target.side)
+  if (team.length < 2) return false
+  const ranks = team.map((c) => c.formationRank)
+  if (toRow === 'front') {
+    const min = Math.min(...ranks)
+    if (target.formationRank === min) return false
+    target.formationRank = min - 1
+  } else {
+    const max = Math.max(...ranks)
+    if (target.formationRank === max) return false
+    target.formationRank = max + 1
+  }
+  return true
 }
 // The ranks BEHIND the wall. Falls back to the front line when nobody is left
 // back there (user spec) — a back-row strike against a team that has been cut
 // down to its front line hits the front rather than fizzling.
 const backLineOf = (living: Combatant[]): Combatant[] => {
-  const back = living.slice(frontRowCount(living.length))
+  const ordered = inFormation(living)
+  const back = ordered.slice(frontRowCount(ordered.length))
   return back.length ? back : frontLineOf(living)
 }
 const enemiesOf = (ctx: BattleContext, c: Combatant) => livingTeamOf(ctx, c.side === 'A' ? 'B' : 'A')
@@ -1076,6 +1099,17 @@ function resolveHostileUtilityOnTarget(attacker: Combatant, target: Combatant, m
   }
 }
 
+// Roll a move's displace rider against one target. Shared by the damage and the
+// hostile-utility resolvers so a pure "drag them out" move needs no damage.
+function applyDisplace(attacker: Combatant, target: Combatant, move: Move, ctx: BattleContext, rng: RNG, log: string[]): void {
+  const d = move.effects?.displace
+  if (!d || !chance(rng, d.chance)) return
+  if (!displaceCombatant(ctx, target, d.toRow)) return
+  log.push(d.toRow === 'front'
+    ? `  ⇤ ${attacker.m.name} hauls ${target.m.name} out of formation to the FRONT!`
+    : `  ⇥ ${attacker.m.name} drives ${target.m.name} back behind its own line!`)
+}
+
 // CONTAGION (v0.91 signature effect). After the move lands, a hostile status the
 // PRIMARY target is carrying jumps to other living enemies. `kind` omitted means
 // "spread whatever it already has", so one move interacts with every setter in
@@ -1108,7 +1142,7 @@ function spreadContagion(attacker: Combatant, source: Combatant | undefined, mov
 // computed ONCE by the caller before the fan-out loop, so a multi-target
 // opening volley grants the bonus to every target it strikes, not just
 // whichever one happens to be processed first.
-function resolveDamageOnTarget(attacker: Combatant, target: Combatant, move: Move, rng: RNG, log: string[], ev: BattleEvent[], openerEligible: boolean, targetCount = 1, resourceMult = 1): boolean {
+function resolveDamageOnTarget(attacker: Combatant, target: Combatant, move: Move, ctx: BattleContext, rng: RNG, log: string[], ev: BattleEvent[], openerEligible: boolean, targetCount = 1, resourceMult = 1): boolean {
   const e = move.effects
   let acc = move.accuracy + attacker.innate.acc + attacker.accMod
   if (hasStatus(attacker, 'blind')) acc -= 25
@@ -1282,6 +1316,7 @@ function resolveDamageOnTarget(attacker: Combatant, target: Combatant, move: Mov
     log.push(`    ${target.m.name} is afflicted with ${soh.kind}!`)
     ev.push({ kind: 'status', side: target.side, slot: target.slot, status: soh.kind })
   }
+  applyDisplace(attacker, target, move, ctx, rng, log)
   return true // the cast landed — the caller may now spend any staked ward/thorns
 }
 
@@ -1298,7 +1333,7 @@ function resolveMove(attacker: Combatant, ctx: BattleContext, move: Move, rng: R
   if (move.type !== 'damage') {
     const hostile = move.target === 'enemy' || move.target === 'allEnemies' || move.target === 'frontRow' || move.target === 'backRow'
     if (!hostile) { for (const t of targets) resolveUtilityOnTarget(attacker, t, move, rng, log, ev); return }
-    for (const t of targets) resolveHostileUtilityOnTarget(attacker, t, move, rng, log, ev)
+    for (const t of targets) { resolveHostileUtilityOnTarget(attacker, t, move, rng, log, ev); applyDisplace(attacker, t, move, ctx, rng, log) }
     // Self-guard rider on a HOSTILE utility (2026-07-25 review fix): this
     // branch used to return without it, so Bulwark's Challenge — a 'debuff'
     // move whose whole design is "mass taunt AND brace behind guard 20" —
@@ -1353,14 +1388,14 @@ function resolveMove(attacker: Combatant, ctx: BattleContext, move: Move, rng: R
     for (let i = 0; i < strikes; i++) {
       const live = enemiesOf(ctx, attacker)
       if (!live.length) break // the line was wiped mid-flurry
-      if (resolveDamageOnTarget(attacker, live[Math.floor(rng() * live.length)], single, rng, log, ev, openerEligible, 1, resourceMult)) landedAny = true
+      if (resolveDamageOnTarget(attacker, live[Math.floor(rng() * live.length)], single, ctx, rng, log, ev, openerEligible, 1, resourceMult)) landedAny = true
     }
     spendResources(landedAny)
     if (e.guard) applyBeneficialEffects(attacker, attacker, move, rng, log)
     return
   }
   let landed = false
-  for (const t of targets) if (resolveDamageOnTarget(attacker, t, move, rng, log, ev, openerEligible, targets.length, resourceMult)) landed = true
+  for (const t of targets) if (resolveDamageOnTarget(attacker, t, move, ctx, rng, log, ev, openerEligible, targets.length, resourceMult)) landed = true
   spendResources(landed)
   spreadContagion(attacker, targets[0], move, ctx, rng, log)
   // self-guard follow-up on a damage move stays targeted at the attacker
