@@ -158,7 +158,7 @@ describe('target selection', () => {
     id, side: 'B', slot: 0, m: mk(id), pos: { x: 20, y: 11 }, vel: { x: 0, y: 0 },
     radius: 0.9, speed: 3, hp: 500, maxHp: 500, mp: 50, maxMp: 50,
     traits: { cohesion: 0.5, predation: 0.5 }, targetId: null, retargetIn: 0,
-    cooldowns: {}, castingFor: 0, castMoveId: null, statuses: [],
+    cooldowns: {}, castingFor: 0, castMoveId: null, castTargetId: null, statuses: [], mods: [], forcedTargetId: null, forcedUntil: 0,
     rootedFor: 0, fadedUntil: 0, slowMult: 1, slowFor: 0, dead: false, ...over,
   })
 
@@ -196,7 +196,7 @@ describe('positioning', () => {
     id: 'u', side: 'A', slot: 0, m: mk('p'), pos: { x: 6, y: 11 }, vel: { x: 0, y: 0 },
     radius: 0.9, speed: 3, hp: 500, maxHp: 500, mp: 50, maxMp: 50,
     traits: { cohesion: 0.5, predation: 0.5 }, targetId: null, retargetIn: 0,
-    cooldowns: {}, castingFor: 0, castMoveId: null, statuses: [],
+    cooldowns: {}, castingFor: 0, castMoveId: null, castTargetId: null, statuses: [], mods: [], forcedTargetId: null, forcedUntil: 0,
     rootedFor: 0, fadedUntil: 0, slowMult: 1, slowFor: 0, dead: false, ...over,
   })
 
@@ -229,7 +229,7 @@ describe('awareness — the counter to a dive', () => {
     id, side: 'A', slot: 0, m: mk(id), pos: { x: 10, y: 11 }, vel: { x: 0, y: 0 },
     radius: 0.9, speed: 3, hp: 500, maxHp: 500, mp: 50, maxMp: 50,
     traits: { cohesion: 0.5, predation: 0.5 }, targetId: null, retargetIn: 0,
-    cooldowns: {}, castingFor: 0, castMoveId: null, statuses: [],
+    cooldowns: {}, castingFor: 0, castMoveId: null, castTargetId: null, statuses: [], mods: [], forcedTargetId: null, forcedUntil: 0,
     rootedFor: 0, fadedUntil: 0, slowMult: 1, slowFor: 0, dead: false, ...over,
   })
 

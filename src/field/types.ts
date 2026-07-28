@@ -29,6 +29,20 @@ export const MAX_TICKS = MAX_SECONDS * TICK_HZ
 // Re-picking a target every tick makes units jitter between equal-scoring foes.
 // They commit for this long unless the target dies or they are forced off it.
 export const RETARGET_EVERY = 0.6 // seconds
+// Move statuses author their duration in ROUNDS, a unit the field has no
+// concept of. A turn-based round — everyone acting once — is worth roughly
+// this many seconds here. One constant, so restating it is impossible.
+export const SECONDS_PER_ROUND = 2.0
+
+// SUDDEN DEATH. ⚠️ Without it, the moment buffs and debuffs became real on the
+// field, draws went from 4 to 11 in 40 fights — two teams shaving each other's
+// damage down until the 90s cap ran out. The turn engine solved this exact
+// problem at round 35 with escalating %-of-maxHp chip, and for the same reason
+// it must be a FRACTION of max HP: flat chip lets raw CON win the clock, which
+// double-dips a stat that already buys health.
+export const SUDDEN_DEATH_AT = 55 // seconds
+export const SUDDEN_DEATH_BASE = 0.010 // fraction of maxHp per second at onset
+export const SUDDEN_DEATH_RAMP = 0.004 // added per further second
 
 export type FieldSide = 'A' | 'B'
 
@@ -73,7 +87,20 @@ export interface FieldUnit {
   /** seconds left in a cast it has committed to (it is rooted while casting) */
   castingFor: number
   castMoveId: string | null
-  statuses: { kind: StatusKind; until: number }[]
+  /** Who the in-flight cast is aimed at. Not always the combat target — a heal
+   *  or a haul aims at an ALLY while the unit is still fighting an enemy. */
+  castTargetId: string | null
+  /** Live afflictions. `from` is the unit that applied it — fear flees FROM it
+   *  and charm is drawn TOWARD it, so the source has to be remembered. */
+  statuses: { kind: StatusKind; until: number; from: string }[]
+  /** Timed multipliers from buff/debuff moves. Kept as a list rather than two
+   *  scalars so several can overlap and expire independently — the turn engine
+   *  models these as round-limited `Combatant.mods` and this is its analogue. */
+  mods: { atk?: number; dmgTaken?: number; until: number }[]
+  /** TAUNT. While this holds, the unit must attack the taunter — the one thing
+   *  that lets a tank protect a back line it is not standing on. */
+  forcedTargetId: string | null
+  forcedUntil: number
   /** seconds left unable to MOVE (it may still act) — from a root */
   rootedFor: number
   /** wall-clock time until which this unit is hard to notice (a Fade) */
@@ -92,7 +119,7 @@ export type FieldEvent =
   | { t: number; kind: 'hit'; id: string; targetId: string; move: string; channel: Channel; dmg: number; crit: boolean }
   | { t: number; kind: 'miss'; id: string; targetId: string; move: string }
   | { t: number; kind: 'heal'; id: string; targetId: string; move: string; amount: number }
-  | { t: number; kind: 'status'; id: string; status: StatusKind }
+  | { t: number; kind: 'status'; id: string; by: string; status: StatusKind }
   | { t: number; kind: 'blink'; id: string; fromX: number; fromY: number; toX: number; toY: number }
   | { t: number; kind: 'shove'; id: string; by: string; kind2: 'pull' | 'push' }
   | { t: number; kind: 'death'; id: string }

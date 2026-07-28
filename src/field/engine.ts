@@ -5,16 +5,18 @@
 // depends on `simulateFieldBattle` being a pure function of
 // (monsters + placement + obstacles + seed). So: fixed dt, fixed unit order,
 // one seeded rng stream, and no wall-clock or Math.random anywhere.
-import { Channel, Monster, Move, MoveArea, MoveSpatial, Stat, aoeFalloff, mulberry32, hashString } from '../core'
+import { Channel, Monster, Move, MoveArea, MoveSpatial, Stat, aoeFalloff, mulberry32, hashString, StatusKind } from '../core'
 import { manaCost, maxHp, maxMana } from '../monster'
 import {
   DT, FIELD_H, FIELD_W, FieldEvent, FieldResult, FieldSetup, FieldSide, FieldUnit,
   MAX_TICKS, Obstacle, RETARGET_EVERY, UnitVisState, Vec2,
-  CHANNEL_CAST_TIME, CHANNEL_RANGE, DEPLOY_DEPTH,
+  CHANNEL_CAST_TIME, CHANNEL_RANGE, DEPLOY_DEPTH, SECONDS_PER_ROUND,
+  SUDDEN_DEATH_AT, SUDDEN_DEATH_BASE, SUDDEN_DEATH_RAMP,
 } from './types'
 import { desiredGoal, dist, norm, pickTarget, spacingRadius, sub, traitsFor } from './decide'
 import { personalityOf, spendAbove } from './personality'
 import { spatialOf } from './spatial'
+import { FIELD_STATUS, BENEFICIAL, CONFUSION_VEER } from './status'
 
 // ── Geometry helpers ────────────────────────────────────────────────────────
 const insideObstacle = (p: Vec2, o: Obstacle, pad = 0) =>
@@ -89,7 +91,11 @@ function buildUnit(m: Monster, side: FieldSide, slot: number, pos: Vec2): FieldU
     cooldowns: {},
     castingFor: 0,
     castMoveId: null,
+    castTargetId: null,
     statuses: [],
+    mods: [],
+    forcedTargetId: null,
+    forcedUntil: 0,
     rootedFor: 0,
     fadedUntil: 0,
     slowMult: 1,
@@ -148,6 +154,144 @@ function chooseMove(u: FieldUnit, target: FieldUnit, obstacles: Obstacle[]): Mov
 }
 
 /**
+ * ⚠️ NON-DAMAGE MOVES USED TO BE DEAD WEIGHT. `chooseMove` filtered
+ * `type === 'damage'`, so a monster holding Mend, Bastion, Hallowed Ground or
+ * any of the six movement abilities simply never cast them — the whole field
+ * move set, and every support kit in the game, was inert on the field. This is
+ * the half of move selection that was missing.
+ *
+ * The score is expressed on the SAME scale as damage (a move's `power`, roughly
+ * 12–68 across the pool), so utility and damage compete honestly in one
+ * comparison rather than needing a priority order. A utility cast wins when the
+ * situation makes it genuinely worth more than hitting something.
+ *
+ * ⚠️ It returns 0 — never cast — for effects the field engine does not model:
+ * ward, guard, thorns and the round-based stat buffs have no representation
+ * here. Scoring them anyway would have monsters spending casts on nothing.
+ * Making them real is a separate piece of work, not something to fake.
+ */
+interface UtilityAim { mv: Move; aim: FieldUnit; score: number }
+
+/** Below this an effect is not worth a cast, a cooldown, or the mana. */
+const UTILITY_FLOOR = 8
+
+function utilityScore(
+  u: FieldUnit, mv: Move, mates: FieldUnit[], foes: FieldUnit[],
+): UtilityAim | null {
+  const sp = spatialOf(mv.name)
+  const live = (xs: FieldUnit[]) => xs.filter((x) => !x.dead)
+  const allies = [u, ...live(mates).filter((x) => x.id !== u.id)]
+  const enemies = live(foes)
+  if (!enemies.length) return null
+
+  let best: UtilityAim | null = null
+  const offer = (score: number, aim: FieldUnit) => {
+    if (score > 0 && (!best || score > best.score)) best = { mv, aim, score }
+  }
+
+  // ── HEALING ───────────────────────────────────────────────────────────────
+  // Worth what it actually restores, not its printed number: a 60-point heal on
+  // someone missing 10 HP is worth 10. Same rule as `battle.ts:healValue`, so
+  // the two engines agree about when a Sage should heal.
+  if (mv.power > 0 && (mv.type === 'buff' || mv.type === 'control')
+      && (mv.target === 'self' || mv.target === 'ally' || mv.target === 'team')) {
+    const pool = mv.target === 'self' ? [u] : allies
+    const patient = [...pool].sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0]
+    if (patient) {
+      const restored = mv.target === 'team'
+        ? pool.reduce((n, c) => n + Math.min(mv.power, c.maxHp - c.hp), 0)
+        : Math.min(mv.power, patient.maxHp - patient.hp)
+      // Face value is what it restores, but a heal is worth MORE than its
+      // number when it denies a kill — scored flat, healing simply never won a
+      // comparison against damage and no monster ever healed anyone.
+      const urgency = 1 + (1 - patient.hp / patient.maxHp) * 1.5
+      offer(restored * urgency, patient)
+    }
+  }
+
+  if (sp) {
+    // ── ESCAPE ──────────────────────────────────────────────────────────────
+    // Fading or dashing clear is worth exactly as much as the danger you are
+    // in. With nothing near, both score zero, so a healthy monster never wastes
+    // the cooldown — the cost of getting this wrong is that Fade becomes a tic.
+    if (sp.fade || sp.move?.to === 'awayFromTarget') {
+      const near = enemies.filter((e) => dist(u.pos, e.pos) < 5).length
+      const hurt = 1 - u.hp / u.maxHp
+      offer(near * 16 + hurt * 40 - 10, u)
+    }
+
+    // ── ZONES ───────────────────────────────────────────────────────────────
+    // A patch of ground is worth the bodies standing on it. Aimed zones look at
+    // the best enemy cluster; self-centred ones at who is already beside you.
+    if (sp.zone) {
+      const z = sp.zone
+      const hostile = z.effect !== 'heal'
+      const crowd = hostile ? enemies : allies
+      const rate = z.power * z.duration * (hostile ? 0.5 : 0.35)
+      if (z.centre === 'target') {
+        for (const c of enemies) {
+          const caught = crowd.filter((x) => dist(c.pos, x.pos) <= z.radius).length
+          if (dist(u.pos, c.pos) <= rangeOf(mv)) offer(caught * rate * 0.5, c)
+        }
+      } else {
+        const caught = crowd.filter((x) => dist(u.pos, x.pos) <= z.radius
+          && (hostile || x.hp < x.maxHp)).length
+        offer(caught * rate * 0.5, u)
+      }
+    }
+
+    // ── HAULING AN ALLY OUT ─────────────────────────────────────────────────
+    // Only worth a cast when someone is genuinely in trouble AND far enough
+    // away that dragging them changes anything.
+    if (sp.haulAlly) {
+      const worst = allies.filter((a) => a.id !== u.id)
+        .sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0]
+      if (worst && worst.hp / worst.maxHp < 0.5 && dist(worst.pos, u.pos) > 4) {
+        offer((1 - worst.hp / worst.maxHp) * 60, worst)
+      }
+    }
+  }
+
+  // ── CONTROL AND DEBUFFS ───────────────────────────────────────────────────
+  // ⚠️ ONLY what the field genuinely implements. A first cut scored every
+  // `type: 'debuff'` move, and the AI immediately spent 86 casts on Taunt
+  // across 25 fights back when taunt did nothing — the exact "spending casts on
+  // nothing" failure this scorer exists to avoid. Anything unmodelled (cleanse,
+  // accuracy and dodge mods, ward, thorns) must score zero until it is real.
+  const fx = mv.effects
+  const modelled = !!(mv.status || sp?.root || sp?.slow || sp?.pull || sp?.push
+    || fx?.atkDebuff || fx?.tauntForce)
+  if (modelled) {
+    const chance = (mv.status?.chance ?? 100) / 100
+    for (const e of enemies) {
+      if (dist(u.pos, e.pos) > rangeOf(mv)) continue
+      // ⚠️ REFRESHING SOMETHING ALREADY RUNNING IS NEARLY WORTHLESS. Without
+      // this the AI re-cast the same debuff the instant its cooldown returned —
+      // War Cry alone took 129 of 242 utility casts, most of them onto a buff
+      // that had not expired. Same principle as overhealing being wasted.
+      const already = (mv.status && e.statuses.some((st) => st.kind === mv.status!.kind))
+        || (fx?.atkDebuff && e.mods.some((m) => (m.atk ?? 1) < 1))
+        || (fx?.tauntForce && e.forcedTargetId === u.id)
+      // Control is worth most on whoever is most dangerous and least dead —
+      // stunning something about to die wastes it.
+      offer(34 * chance * (e.hp / e.maxHp) * (already ? 0.1 : 1), e)
+    }
+  }
+
+  // ── SELF AND TEAM BUFFS ───────────────────────────────────────────────────
+  // Only the two the field reads. A flat worth, discounted so a buff never
+  // outbids a real nuke, and scaled by how many allies it actually reaches.
+  if ((fx?.atkBuff || fx?.defBuff) && (mv.target === 'self' || mv.target === 'ally' || mv.target === 'team')) {
+    const reach = mv.target === 'team' ? allies.length : 1
+    const running = (fx.atkBuff && u.mods.some((m) => (m.atk ?? 1) > 1))
+      || (fx.defBuff && u.mods.some((m) => (m.dmgTaken ?? 1) < 1))
+    offer(((fx.atkBuff ?? 0) * 55 * reach + (fx.defBuff ?? 0) * 0.5 * reach) * (running ? 0.1 : 1), u)
+  }
+
+  return best
+}
+
+/**
  * The free universal attack. Every unit needs one it can use AT ITS OWN REACH:
  * a first pass gave everyone a melee-only swing, so an archer whose skills were
  * all on cooldown simply stood at range doing nothing — 6 units managed one hit
@@ -176,6 +320,44 @@ function basicAttack(u: FieldUnit): Move {
     desc: 'A basic strike.',
   }
 }
+
+// ── Status accessors ────────────────────────────────────────────────────────
+// A unit can carry several afflictions at once, so every query is an aggregate
+// over the whole list rather than a lookup of one. Flags OR together, penalties
+// add, multipliers multiply — stating that once here is what stops each call
+// site inventing its own stacking rule.
+const hasStatus = (u: FieldUnit, k: StatusKind) => u.statuses.some((s) => s.kind === k)
+
+type StatusFlag = 'incapacitates' | 'noSkills' | 'noAttack' | 'blockHeal' | 'turncoat'
+const statusFlag = (u: FieldUnit, key: StatusFlag) =>
+  u.statuses.some((s) => FIELD_STATUS[s.kind][key])
+
+const statusAccPenalty = (u: FieldUnit) =>
+  u.statuses.reduce((n, s) => n + (FIELD_STATUS[s.kind].accPenalty ?? 0), 0)
+
+const statusSpeedMult = (u: FieldUnit) =>
+  u.statuses.reduce((n, s) => n * (FIELD_STATUS[s.kind].speedMult ?? 1), 1)
+
+const statusDamageTaken = (u: FieldUnit) =>
+  u.statuses.reduce((n, s) => n * (FIELD_STATUS[s.kind].damageTakenMult ?? 1), 1)
+
+const modAtk = (u: FieldUnit) => u.mods.reduce((n, m) => n * (m.atk ?? 1), 1)
+const modDmgTaken = (u: FieldUnit) => u.mods.reduce((n, m) => n * (m.dmgTaken ?? 1), 1)
+
+/** The affliction currently driving this unit's feet, if any. First wins. */
+const steeringStatus = (u: FieldUnit) => {
+  for (const s of u.statuses) {
+    const st = FIELD_STATUS[s.kind].steer
+    if (st) return { steer: st, from: s.from }
+  }
+  return null
+}
+
+// A confused monster veers consistently for the whole fight rather than
+// jittering: which way it leans is derived from its id, so a replay of the same
+// battle traces the same wrong path. Randomising it here would spend rng draws
+// and break the determinism the field contract rests on.
+const veerSign = (u: FieldUnit) => (hashString(u.id) % 2 === 0 ? 1 : -1)
 
 // ── The loop ────────────────────────────────────────────────────────────────
 export function simulateFieldBattle(setup: FieldSetup): FieldResult {
@@ -218,9 +400,28 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       u.slowFor = Math.max(0, u.slowFor - DT)
       if (u.slowFor <= 0) u.slowMult = 1
       u.mp = Math.min(u.maxMp, u.mp + (u.m.stats.WIS / 300) * DT)
+      tickStatuses(u, t)
+      if (u.dead) { vis.set(u.id, 'dead'); continue }
 
-      const foes = units.filter((x) => x.side !== u.side)
-      const mates = units.filter((x) => x.side === u.side)
+      // HARD CONTROL. A stun does not merely stop the next action — it BREAKS
+      // the cast in progress, which is the whole counterplay to a long wind-up
+      // like Meteor. Without the interrupt, control would be strictly worse
+      // against the moves it most needs to answer.
+      if (statusFlag(u, 'incapacitates')) {
+        u.castingFor = 0
+        u.castMoveId = null
+        vis.set(u.id, 'idle')
+        continue
+      }
+
+      // CHARM turns a monster on its own side: the list it treats as hostile is
+      // swapped wholesale, so targeting, steering and threat all follow without
+      // any of them needing to know charm exists.
+      const charmed = statusFlag(u, 'turncoat')
+      const own = units.filter((x) => x.side === u.side)
+      const opp = units.filter((x) => x.side !== u.side)
+      const foes = charmed ? own.filter((x) => x.id !== u.id) : opp
+      const mates = charmed ? opp : own
 
       // Commit to a target for RETARGET_EVERY, unless it died.
       const cur = u.targetId ? byId.get(u.targetId) : null
@@ -229,14 +430,21 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
         u.targetId = pick?.id ?? null
         u.retargetIn = RETARGET_EVERY
       }
+      // A TAUNT outranks the unit's own judgement — that is the whole point of
+      // one. Charm wins over it, because charm already swapped which side
+      // counts as hostile and a taunter on the far team is no longer reachable.
+      const forced = u.forcedTargetId ? byId.get(u.forcedTargetId) : null
+      if (forced && !forced.dead && foes.includes(forced)) u.targetId = forced.id
       const target = u.targetId ? byId.get(u.targetId) ?? null : null
 
       // A committed cast roots the unit — this is the window a diver punishes.
       if (u.castingFor > 0) {
         u.castingFor -= DT
         vis.set(u.id, 'cast')
-        if (u.castingFor <= 0 && u.castMoveId && target && !target.dead) {
-          resolveHit(u, target, u.castMoveId)
+        if (u.castingFor <= 0 && u.castMoveId) {
+          const aim = byId.get(u.castTargetId ?? '') ?? target
+          if (aim && !aim.dead) resolveHit(u, aim, u.castMoveId)
+          else { u.castMoveId = null; u.castTargetId = null }
         }
         continue
       }
@@ -245,24 +453,44 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
 
       // Act if something is in range; otherwise reposition.
       // real skill first, else the basic attack if the target is within ITS reach
-      let mv = chooseMove(u, target, obstacles)
-      if (!mv) {
+      // FEAR is a rout, not a stun: the victim keeps moving — away — but cannot
+      // bring itself to turn and fight. SILENCE locks the skills only, leaving
+      // the free attack, so a silenced monster is diminished rather than absent.
+      const routed = statusFlag(u, 'noAttack')
+      const silenced = statusFlag(u, 'noSkills')
+      // Settle the DAMAGE option first — best skill, else the free attack —
+      // then let utility try to beat it. ⚠️ Scoring utility against the skill
+      // alone made the bar zero whenever every skill was on cooldown, so a
+      // near-worthless buff pre-empted the basic attack and War Cry took 137 of
+      // 254 utility casts. The bar is whatever the unit would otherwise DO.
+      let mv: Move | null = routed || silenced ? null : chooseMove(u, target, obstacles)
+      if (!mv && !routed) {
         const ba = basicAttack(u)
         const inReach = dist(u.pos, target.pos) <= (ba.range ?? CHANNEL_RANGE.melee)
         const canSee = ba.channel === 'melee' || hasLineOfSight(u.pos, target.pos, obstacles)
         if (inReach && canSee && (u.cooldowns.basic ?? 0) <= 0) mv = ba
       }
+      let aim: FieldUnit = target
+      if (!routed && !silenced) {
+        // Utility competes with damage on the SAME scale, so the better answer
+        // to the situation wins outright — no priority order to get wrong. The
+        // floor stops a unit with nothing better to do burning cooldowns on
+        // effects worth almost nothing.
+        const best = bestUtility(u, target, mates, foes, obstacles)
+        if (best && best.score > Math.max(UTILITY_FLOOR, mv?.power ?? 0)) { mv = best.mv; aim = best.aim }
+      }
       if (mv) {
         u.castingFor = castOf(mv)
         u.castMoveId = mv.id
+        u.castTargetId = aim.id
         u.cooldowns[mv.id] = mv.cooldown * 0.9 + castOf(mv)
         u.mp = Math.max(0, u.mp - manaCost(mv))
-        events.push({ t, kind: 'cast', id: u.id, targetId: target.id, move: mv.name, channel: mv.channel })
-        applyCasterMovement(u, target, mv, t, obstacles)
-        applySelfEffects(u, target, mv, t)
+        events.push({ t, kind: 'cast', id: u.id, targetId: aim.id, move: mv.name, channel: mv.channel })
+        applyCasterMovement(u, aim, mv, t, obstacles)
+        applySelfEffects(u, aim, mv, t)
         vis.set(u.id, 'cast')
         // Instant moves land the same tick they are cast.
-        if (u.castingFor <= 0) { resolveHit(u, target, mv.id); u.castMoveId = null }
+        if (u.castingFor <= 0) { resolveHit(u, aim, mv.id); u.castMoveId = null; u.castTargetId = null }
         continue
       }
 
@@ -270,7 +498,29 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       // A ROOTED unit may still act — it simply cannot travel, which is what
       // makes a root a genuine answer to a fast diver rather than a stun.
       if (u.rootedFor > 0) { vis.set(u.id, 'idle'); continue }
-      const goal = desiredGoal(u, target, mates, foes, (a, b) => hasLineOfSight(a, b, obstacles))
+      let goal = desiredGoal(u, target, mates, foes, (a, b) => hasLineOfSight(a, b, obstacles))
+      // THE THREE SPATIAL STATUSES. On the field these words can mean something
+      // a turn counter cannot express, so they hijack the goal outright rather
+      // than rolling a chance to misbehave.
+      const steer = steeringStatus(u)
+      if (steer) {
+        const src = byId.get(steer.from)
+        if (steer.steer === 'flee' && src) {
+          // Run. Straight away from whatever frightened it, to the field edge.
+          const away = norm(sub(u.pos, src.pos))
+          goal = clampToField({ x: u.pos.x + away.x * FIELD_W, y: u.pos.y + away.y * FIELD_W })
+        } else if (steer.steer === 'toSource' && src) {
+          goal = { ...src.pos }
+        } else if (steer.steer === 'veer') {
+          // Walk the wrong way: the heading is rotated, so it still travels
+          // with purpose — it is simply mistaken about where it is going.
+          const d = sub(goal, u.pos)
+          const a = CONFUSION_VEER * veerSign(u)
+          const rx = d.x * Math.cos(a) - d.y * Math.sin(a)
+          const ry = d.x * Math.sin(a) + d.y * Math.cos(a)
+          goal = clampToField({ x: u.pos.x + rx, y: u.pos.y + ry })
+        }
+      }
       stepToward(u, goal, mates, obstacles)
       vis.set(u.id, 'move')
     }
@@ -283,6 +533,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
         if (u.dead || dist(u.pos, z) > z.r + u.radius) continue
         if (z.effect === 'heal') {
           if (u.side !== z.side) continue
+          if (statusFlag(u, 'blockHeal')) continue
           u.hp = Math.min(u.maxHp, u.hp + z.power * DT)
         } else if (z.effect === 'slow') {
           if (u.side === z.side) continue
@@ -295,6 +546,20 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
             u.hp = 0; u.dead = true; vis.set(u.id, 'dead')
             events.push({ t, kind: 'death', id: u.id })
           }
+        }
+      }
+    }
+
+    // SUDDEN DEATH — the clock itself starts killing, harder every second, so
+    // no pair of teams can stall each other past the cap.
+    if (t >= SUDDEN_DEATH_AT) {
+      const rate = SUDDEN_DEATH_BASE + (t - SUDDEN_DEATH_AT) * SUDDEN_DEATH_RAMP
+      for (const u of units) {
+        if (u.dead) continue
+        u.hp -= u.maxHp * rate * DT
+        if (u.hp <= 0) {
+          u.hp = 0; u.dead = true; vis.set(u.id, 'dead')
+          events.push({ t, kind: 'death', id: u.id })
         }
       }
     }
@@ -361,10 +626,151 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     })
   }
 
+  /** The best utility cast available to this unit right now, if any. */
+  function bestUtility(u: FieldUnit, target: FieldUnit, mates: FieldUnit[], foes: FieldUnit[], obs: Obstacle[]) {
+    let best: { mv: Move; aim: FieldUnit; score: number } | null = null
+    for (const mv of u.m.loadout) {
+      if (mv.type === 'damage') continue
+      if ((u.cooldowns[mv.id] ?? 0) > 0) continue
+      if (u.mp < manaCost(mv)) continue
+      const got = utilityScore(u, mv, mates, foes)
+      if (!got) continue
+      // Same reach and cover rules as a damage cast — a support cannot heal
+      // through a rock any more than a mage can burn through one.
+      if (dist(u.pos, got.aim.pos) > rangeOf(mv)) continue
+      if (mv.channel !== 'melee' && got.aim.id !== u.id && !hasLineOfSight(u.pos, got.aim.pos, obs)) continue
+      if (!best || got.score > best.score) best = got
+    }
+    void target
+    return best
+  }
+
+  /** How a non-damage cast lands: healing, then its spatial and status riders. */
+  function resolveUtility(u: FieldUnit, aim: FieldUnit, mv: Move, t2: number) {
+    const sp = spatialOf(mv.name)
+    const friendly = aim.side === u.side
+    const fx = mv.effects
+    // ⚠️ UNITS ARE NOT UNIFORM (see CLAUDE.md): `atkBuff`/`atkDebuff` are
+    // FRACTIONS, `defBuff` is percentage POINTS. Reading either as the other
+    // compiles, runs, and is wrong by a factor of a hundred.
+    const until = t2 + (fx?.duration ?? 3) * SECONDS_PER_ROUND
+    if (fx?.atkBuff && friendly) {
+      const crowd = mv.target === 'team' ? units.filter((x) => x.side === u.side && !x.dead) : [aim]
+      for (const v of crowd) v.mods.push({ atk: 1 + fx.atkBuff, until })
+    }
+    if (fx?.defBuff && friendly) {
+      const crowd = mv.target === 'team' ? units.filter((x) => x.side === u.side && !x.dead) : [aim]
+      for (const v of crowd) v.mods.push({ dmgTaken: Math.max(0.4, 1 - fx.defBuff / 100), until })
+    }
+    if (friendly && mv.power > 0 && !statusFlag(aim, 'blockHeal')) {
+      const healed = Math.min(mv.power, aim.maxHp - aim.hp)
+      if (healed > 0) {
+        aim.hp += healed
+        events.push({ t: t2, kind: 'heal', id: u.id, targetId: aim.id, move: mv.name, amount: Math.round(healed) })
+      }
+    }
+    if (!friendly) {
+      // Debuffs respect their area shape exactly as damage does, so a shout
+      // that should catch a cluster does, and a single-target root does not.
+      const victims = sp?.area ? areaVictims(u, aim, sp.area)
+        : mv.target === 'allEnemies' ? units.filter((x) => x.side !== u.side && !x.dead)
+        : [aim]
+      for (const v of victims) {
+        if (v.dead) continue
+        if (fx?.atkDebuff) v.mods.push({ atk: Math.max(0.4, 1 - fx.atkDebuff), until })
+        // TAUNT: forced onto the taunter, which is what makes a tank able to
+        // defend a back line it is not physically standing in front of.
+        if (fx?.tauntForce) { v.forcedTargetId = u.id; v.forcedUntil = until }
+        if (sp) applyOnTarget(u, v, sp, t2)
+        if (mv.status && !BENEFICIAL.has(mv.status.kind) && rng() * 100 < mv.status.chance) {
+          applyFieldStatus(u, v, mv.status.kind, mv.status.duration, t2)
+        }
+      }
+    } else if (mv.status && BENEFICIAL.has(mv.status.kind)) {
+      // The pool's two haste moves are team buffs — the only way haste is ever
+      // handed out, so without this branch the status would never once appear.
+      const crowd = mv.target === 'team' ? units.filter((x) => x.side === u.side && !x.dead) : [aim]
+      for (const v of crowd) applyFieldStatus(u, v, mv.status.kind, mv.status.duration, t2)
+    }
+  }
+
+  /**
+   * Land an affliction. Duration is authored in ROUNDS by every move in the
+   * game; this is the ONE place it becomes seconds, so the conversion can never
+   * be restated inconsistently elsewhere.
+   *
+   * Bleed stacks (up to 3, each ticking its own damage) — everything else
+   * refreshes, exactly as `battle.ts:applyStatus` does. Two engines disagreeing
+   * on whether a status stacks would be a genuine balance divergence.
+   */
+  function applyFieldStatus(from: FieldUnit, target: FieldUnit, kind: StatusKind, rounds: number, t: number) {
+    if (target.dead) return
+    const until = t + rounds * SECONDS_PER_ROUND
+    const rule = FIELD_STATUS[kind]
+    if (rule.maxStacks) {
+      if (target.statuses.filter((s) => s.kind === kind).length >= rule.maxStacks) return
+      target.statuses.push({ kind, until, from: from.id })
+    } else {
+      const existing = target.statuses.find((s) => s.kind === kind)
+      if (existing) {
+        existing.until = Math.max(existing.until, until)
+        existing.from = from.id // whoever most recently applied it is what fear runs from
+      } else {
+        target.statuses.push({ kind, until, from: from.id })
+      }
+    }
+    if (rule.lurchToSource) {
+      const dir = norm(sub(from.pos, target.pos))
+      const step = Math.min(rule.lurchToSource, Math.max(0, dist(from.pos, target.pos) - 1.6))
+      const dest = clampToField({ x: target.pos.x + dir.x * step, y: target.pos.y + dir.y * step })
+      if (step > 0 && !obstacles.some((o) => insideObstacle(dest, o, target.radius * 0.6))) {
+        target.pos = dest
+        events.push({ t, kind: 'shove', id: target.id, by: from.id, kind2: 'pull' })
+      }
+    }
+    events.push({ t, kind: 'status', id: target.id, by: from.id, status: kind })
+  }
+
+  /** Attrition, expiry, and the one status that pays out ON expiry. */
+  function tickStatuses(u: FieldUnit, t: number) {
+    if (u.mods.length) u.mods = u.mods.filter((m) => t < m.until)
+    if (u.forcedTargetId && (t >= u.forcedUntil || byId.get(u.forcedTargetId)?.dead)) {
+      u.forcedTargetId = null
+    }
+    if (!u.statuses.length) return
+    let lost = 0
+    for (const s of u.statuses) {
+      const rule = FIELD_STATUS[s.kind]
+      if (rule.hpPerSec) lost += u.maxHp * rule.hpPerSec * DT
+      if (rule.mpPerSec) u.mp = Math.max(0, u.mp - u.maxMp * rule.mpPerSec * DT)
+    }
+    // DOOM is a countdown, not a drip: it does nothing until its timer runs
+    // out, and then hits for a quarter of the victim's health. Cleansing or
+    // killing the caster in time is the counterplay, so it MUST resolve on
+    // expiry rather than being silently dropped by the filter below.
+    const expired = u.statuses.filter((s) => t >= s.until)
+    for (const s of expired) {
+      const det = FIELD_STATUS[s.kind].detonate
+      if (det) lost += u.maxHp * det
+    }
+    if (expired.length) u.statuses = u.statuses.filter((s) => t < s.until)
+    if (lost > 0) {
+      u.hp -= lost
+      if (u.hp <= 0) {
+        u.hp = 0; u.dead = true; vis.set(u.id, 'dead')
+        events.push({ t, kind: 'death', id: u.id })
+      }
+    }
+  }
+
   function resolveHit(u: FieldUnit, target: FieldUnit, moveId: string) {
     const mv = u.m.loadout.find((x) => x.id === moveId) ?? basicAttack(u)
     u.castMoveId = null
+    u.castTargetId = null
     const t2 = +(tick * DT).toFixed(2)
+    // A NON-DAMAGE move does not go through `strike` at all — it would roll
+    // accuracy and mitigation against a friend. It restores, or it controls.
+    if (mv.type !== 'damage') { resolveUtility(u, target, mv, t2); return }
     // AREA MOVES fan out to whoever is genuinely inside the shape, each hit
     // discounted by the existing AoE falloff so splashing six bodies is not
     // six times a single-target cast.
@@ -390,7 +796,9 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       events.push({ t: t2, kind: 'miss', id: u.id, targetId: target.id, move: mv.name })
       return
     }
-    if (rng() * 100 > mv.accuracy) {
+    // BLIND and CONFUSION bite here — the accuracy penalty is the same one the
+    // turn engine applies, so a blinded monster is worth the same in either.
+    if (rng() * 100 > mv.accuracy - statusAccPenalty(u)) {
       events.push({ t: t2, kind: 'miss', id: u.id, targetId: target.id, move: mv.name })
       return
     }
@@ -401,10 +809,19 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     // is worth a slot. It only pays if the caster is genuinely on the far side.
     const sp = spatialOf(mv.name)
     const behind = sp?.backstab && isBehind(u, target) ? sp.backstab : 1
-    const raw = mv.power * (1 + atk / 320) * (crit ? 1.5 : 1) * behind * falloff
-    const dmg = Math.max(1, Math.round(raw * (1 - Math.min(0.55, mitigation / 1400))))
+    const raw = mv.power * (1 + atk / 320) * (crit ? 1.5 : 1) * behind * falloff * modAtk(u)
+    const dmg = Math.max(1, Math.round(raw * (1 - Math.min(0.55, mitigation / 1400)) * statusDamageTaken(target) * modDmgTaken(target)))
     target.hp -= dmg
     events.push({ t: t2, kind: 'hit', id: u.id, targetId: target.id, move: mv.name, channel: mv.channel, dmg, crit })
+    // SLEEP breaks the moment it is hit — otherwise it would be a stun with a
+    // longer duration and no drawback, and there would be no reason to run one.
+    if (hasStatus(target, 'sleep')) target.statuses = target.statuses.filter((st) => st.kind !== 'sleep')
+    // The move's own rider. Rolled AFTER the hit lands, so a miss applies
+    // nothing — and never onto an ally, since a few statuses are beneficial.
+    if (mv.status && u.side !== target.side && !BENEFICIAL.has(mv.status.kind)
+        && rng() * 100 < mv.status.chance) {
+      applyFieldStatus(u, target, mv.status.kind, mv.status.duration, t2)
+    }
     if (sp) applyOnTarget(u, target, sp, t2)
     if (target.hp <= 0) {
       target.hp = 0
@@ -514,7 +931,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       }
     }
     dir = norm(dir)
-    const step = u.speed * u.slowMult * DT
+    const step = u.speed * u.slowMult * statusSpeedMult(u) * DT
     const tryMove = (nx: number, ny: number) => {
       const p = { x: nx, y: ny }
       if (obs.some((o) => insideObstacle(p, o, u.radius * 0.6))) return false

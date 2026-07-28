@@ -60,13 +60,24 @@ export function valueOf(u: FieldUnit): number {
 }
 
 /** The reach of the longest-ranged damaging move this unit can currently use. */
+/**
+ * The range this monster wants to FIGHT at.
+ *
+ * ⚠️ DAMAGE MOVES ONLY. Scanning the whole loadout meant a melee bruiser
+ * carrying any support move — a war cry, a heal, a taunt, all of which reach
+ * 5–6 — took its stand-off distance from that and parked outside its own
+ * swinging range, never landing a blow all fight. A support move's reach
+ * governs when that move can be cast (checked separately), never where the
+ * monster chooses to stand.
+ */
 export function reachOf(u: FieldUnit): number {
-  let best = CHANNEL_RANGE.melee
+  let best = 0
   for (const mv of u.m.loadout) {
+    if (mv.type !== 'damage') continue
     const r = mv.range ?? CHANNEL_RANGE[mv.channel]
     if (r > best) best = r
   }
-  return best
+  return best || CHANNEL_RANGE.melee
 }
 
 export const centroid = (us: FieldUnit[]): Vec2 => {
