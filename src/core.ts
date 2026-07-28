@@ -161,7 +161,7 @@ export interface Move {
   // ── Spatial fields (v0.93, field engine only) ────────────────────────────
   // The turn-based engine in battle.ts NEVER reads these, so adding them cannot
   // move a golden. Both are OPTIONAL and fall back to a channel-derived default
-  // (field/types.ts CHANNEL_RANGE / CHANNEL_CAST_TIME), which is what lets the
+  // (tamerengine/types.ts CHANNEL_RANGE / CHANNEL_CAST_TIME), which is what lets the
   // field engine run against all 140 existing moves without a blocking data
   // pass — author them per-move to refine reach as balance demands.
   range?: number // world units the move can reach
@@ -258,7 +258,7 @@ export interface Monster {
   protect?: boolean // team-event "protect target" designation — allies guard/heal this monster first
   marked?: boolean // team-event kill order on an ENEMY monster (set via scouting) — the whole opposing team strikes it first while reachable
   // PERSONALITY DRIFT (v0.93). The innate block is DERIVED from `seed` (see
-  // field/personality.ts) so it costs no generation rng and every existing save
+  // tamerengine/personality.ts) so it costs no generation rng and every existing save
   // already has one. This optional field is only the drift earned afterwards
   // through training, care or breeding — absent means "still exactly as born".
   personality?: Partial<Personality>

@@ -104,7 +104,7 @@ verify in the morning rather than blocking on it.
 
 ## Route C — draw it in code (no art service at all)
 
-When both routes above are down, small pixel art can be **computed**. `src/field/
+When both routes above are down, small pixel art can be **computed**. `src/tamerengine/
 pixelRig.ts` builds each creature from parts — torso, head, two arms, two legs,
 tail — and animates it by rotating the joints, so arms genuinely swing and legs
 genuinely stride. Six animations × 8 frames per species, generated into a sprite

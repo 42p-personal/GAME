@@ -1,8 +1,8 @@
-# The field engine (branch `3doverhal`)
+# tamerengine — the 2D battlefield engine (branch `3doverhal`)
 
 A continuous 2D battlefield — Teamfight-Manager style — running alongside the
 turn-based engine, **not replacing it**. `simulateTeamBattle` and its 12 golden
-tests are untouched; nothing in `src/field/` is imported by the shipping game
+tests are untouched; nothing in `src/tamerengine/` is imported by the shipping game
 loop yet.
 
 > ⚠️ **This is a test branch.** Nothing here goes to `main` until the whole
@@ -136,7 +136,7 @@ the same over its lifetime in either engine.
 | healing | 34 heals, 507 HP restored |
 | statuses | ~135 applications per 20 fights, every fight sees some |
 
-Tests: `src/field/status.test.ts` (19), plus `field.test.ts`, `spatial.test.ts`,
+Tests: `src/tamerengine/status.test.ts` (19), plus `field.test.ts`, `spatial.test.ts`,
 `tactics.test.ts`. Whole suite 112/112 including all 12 goldens.
 
 ## Battlefield art (v0.94)
