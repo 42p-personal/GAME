@@ -64,15 +64,48 @@ Everything else is done in code rather than art:
 5. **No ground shadow, no scenery, no border.** The engine draws its own
    shadow so it can move with the sprite.
 
-## Style wrapper
+## Style: PIXEL ART, matched to the portrait (v0.94)
 
-Appended to every subject prompt so the set stays coherent:
+The battle set is **pixel art**, and each sprite must depict the **same
+creature** as that species' painted portrait in `public/sprites/`. Those two
+requirements are met by one technique, validated on the Mammal pilot:
 
-> simple 2D game sprite of a single creature in STRICT SIDE PROFILE facing
-> RIGHT, full body, standing on flat ground, chunky readable silhouette, bold
-> clean dark outline, flat cel-shaded colours, minimal interior detail,
-> small-scale mobile battler sprite, plain solid pure-white background, no
-> text, no logo, no border, no ground shadow, no scenery
+**Generate each sprite by referencing the species' PORTRAIT (`--ref
+public/sprites/<id>.png`) with an explicit pixel-art prompt.** The portrait
+carries the design — colours, armour, markings, build — and the prompt converts
+the rendering to pixel art. Referencing the portrait (not a fresh description)
+is what makes it MATCH; the pixel-art wording is what makes it pixel art.
+
+⚠️ **Describe the portrait's actual design, not the plain animal.** Two of the
+five pilots failed the first pass because the hint fought the reference:
+- **Maneleo** is an *upright anthropomorphic lion warrior in red-and-gold
+  regalia*, not a naturalistic lion — "proud male lion" gave a plain lion and
+  dropped the armour and bipedal stance.
+- **Grivvel** is a *black honey-badger with a pale silver back-stripe*, not a
+  brown wolverine — the generic hint came out brown and bear-like.
+Both were fixed by describing the portrait's real design and adding a negative
+("NOT brown, NOT a bear"). When in doubt, say little beyond "redraw THIS exact
+creature as pixel art" and let the reference lead.
+
+⚠️ **Downscale-to-pixelate does NOT work.** Shrinking a smooth render to 64px
+and quantising gives a muddy blurry miniature, not pixel art — tested and
+rejected. Generate native pixel art.
+
+### The two reference stages
+1. **Idle** — reference the PORTRAIT, prompt pixel-art side-profile. Establishes
+   the pixel look and the matched design.
+2. **Motion frames (walk/strike)** — reference the finished PIXEL IDLE
+   (`px/<id>-idle.png`), not the portrait. This keeps BOTH the identity and the
+   pixel style across the cycle; referencing the painted portrait again would
+   re-introduce the smooth style.
+
+## Style wrapper (the pixel-art prompt, appended to every subject)
+
+> DETAILED PIXEL ART game battler sprite in STRICT SIDE PROFILE facing RIGHT,
+> full body, crisp hard pixel edges, limited palette, visible square pixels,
+> clean dark pixel outline, subtle dithering, retro 16-bit RPG style, bold
+> readable silhouette, plain solid pure-white background, no scenery, no
+> shadow, no border, no text
 
 ## Pipeline
 

@@ -32,6 +32,60 @@ FRAMES = ('idle', 'walk1', 'walk2', 'walk3', 'walk4', 'strike')
 OUT_DIR = 'public/battle'
 
 
+def fill_interior_white(im, thresh=THRESH):
+    """Repaint near-white pixels that are NOT connected to the border.
+
+    The generator sometimes renders the GAP between a creature's legs (or a
+    pass-pose's gathered legs) as a white shape sealed inside the silhouette.
+    The border flood-fill leaves it, because it isn't reachable from the edge,
+    so it survives as a bright hole. This grows the surrounding colour inward to
+    close it — a leg-gap is bordered by dark legs, so it fills dark and vanishes.
+    Runs BEFORE to_transparent so the closed region is treated as body.
+    """
+    from collections import deque
+    im = im.convert('RGBA')
+    w, h = im.size
+    px = im.load()
+
+    def is_white(p):
+        return p[0] >= 255 - thresh and p[1] >= 255 - thresh and p[2] >= 255 - thresh
+
+    # mark border-connected white (the real background)
+    outside = [[False] * h for _ in range(w)]
+    q = deque([(x, 0) for x in range(w)] + [(x, h - 1) for x in range(w)]
+              + [(0, y) for y in range(h)] + [(w - 1, y) for y in range(h)])
+    while q:
+        x, y = q.popleft()
+        if not (0 <= x < w and 0 <= y < h) or outside[x][y] or not is_white(px[x, y]):
+            continue
+        outside[x][y] = True
+        q.extend([(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)])
+
+    interior = [(x, y) for x in range(w) for y in range(h)
+                if is_white(px[x, y]) and not outside[x][y]]
+    if not interior:
+        return im, 0
+
+    # iteratively pull in the nearest non-white neighbour colour
+    interior_set = set(interior)
+    for _ in range(max(w, h)):
+        if not interior_set:
+            break
+        filled = []
+        for (x, y) in interior_set:
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                nx, ny = x + dx, y + dy
+                if 0 <= nx < w and 0 <= ny < h and not is_white(px[nx, ny]) and px[nx, ny][3] > 0:
+                    px[x, y] = px[nx, ny]
+                    filled.append((x, y))
+                    break
+        if not filled:
+            break
+        for f in filled:
+            interior_set.discard(f)
+    return im, len(interior)
+
+
 def to_transparent(im: Image.Image, thresh: int = THRESH) -> Image.Image:
     """Flood-fill the background inward from the border, so white INSIDE the
     creature (an eye, a tusk) survives."""
@@ -65,7 +119,13 @@ def build(species_id: str, paths: list[str]) -> int:
 
     cut = []
     for p in paths:
-        im = to_transparent(Image.open(p))
+        # Close any sealed white gaps (leg-gap artifacts) BEFORE the background
+        # flood-fill, so they read as body rather than as holes punched in the
+        # silhouette. Then remove the true (border-connected) background.
+        raw, closed = fill_interior_white(Image.open(p))
+        if closed:
+            print(f'  {p}: closed {closed} interior white px')
+        im = to_transparent(raw)
         bbox = im.getbbox()
         if not bbox:
             print(f'ERROR: {p} is empty after background removal')

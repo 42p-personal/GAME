@@ -150,3 +150,6 @@
 @media (prefers-reduced-motion: reduce) {
   .bs-px { animation: none !important; background-position-x: 0% !important; }
 }
+
+/* Generated battle frames scale up with hard pixel edges, never smoothed. */
+.bs-px-img { image-rendering: pixelated; }

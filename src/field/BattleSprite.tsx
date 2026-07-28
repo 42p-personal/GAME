@@ -28,6 +28,7 @@
 //   .bs-anim   what it is doing        (the keyframes)
 // Collapsing these fights: a keyframe that sets `transform` wipes the facing
 // flip, and the sprite silently snaps to facing right mid-animation.
+import { useEffect, useRef, useState } from 'react'
 import { UnitVisState } from './types'
 import { FRAME, FRAMES_PER_ANIM, RIG_ANIMS, RigAnim, sheetUrl } from './pixelRig'
 
@@ -43,7 +44,31 @@ export type SpriteAction = UnitVisState | 'hurt' | 'attack'
  * `pixel` draws the creature from parts at 48px and rotates the joints, so arms
  * genuinely swing and legs genuinely stride. See `pixelRig.ts`.
  */
-export type SpriteMode = 'portrait' | 'pixel'
+export type SpriteMode = 'portrait' | 'pixel' | 'sheet'
+
+/**
+ * Species that have a real generated battle-frame set in `public/battle/`
+ * (idle · walk1-4 · strike), matched to their portrait. As more groups are
+ * generated, add their ids here — `frameFor` and the renderer key off this set,
+ * so a species without frames automatically falls back to the portrait path
+ * and nothing else needs to change.
+ */
+export const BATTLE_SPRITE_SET = new Set<string>([
+  'kongrath', 'aegisox', 'maneleo', 'grivvel', 'ursath', // Mammal
+])
+
+/** The four contact/pass frames a `move` cycles through. */
+const WALK_CYCLE = ['walk1', 'walk2', 'walk3', 'walk4'] as const
+
+/** Which battle frame a given action shows (before any walk-cycling). */
+function battleFrameName(action: SpriteAction): string {
+  switch (action) {
+    case 'move': return 'walk1'      // cycled by the renderer
+    case 'attack':
+    case 'cast': return 'strike'
+    default: return 'idle'           // idle · hurt · dead all base on idle
+  }
+}
 
 export interface BattleSpriteProps {
   /** Species id — resolves to `public/sprites/<id>.png`. */
@@ -64,13 +89,17 @@ export interface BattleSpriteProps {
 }
 
 /**
- * The art for one frame of one action.
+ * The art URL for one action of one species.
  *
- * Today every action resolves to the same portrait and the motion comes from
- * CSS. This indirection is the seam: when the 6-frame sets exist, this function
- * starts returning `<id>-<frame>.png` and nothing above it changes.
+ * A species WITH a generated battle set serves its real `<id>-<frame>.png`; one
+ * WITHOUT falls back to the single portrait (animated by CSS in `portrait`
+ * mode). This is the seam the whole system turns on — nothing above it needs to
+ * know which species have frames yet.
  */
-export function frameFor(speciesId: string, _action: SpriteAction): string {
+export function frameFor(speciesId: string, action: SpriteAction): string {
+  if (BATTLE_SPRITE_SET.has(speciesId)) {
+    return `/battle/${speciesId}-${battleFrameName(action)}.png`
+  }
   return `/sprites/${speciesId}.png`
 }
 
@@ -78,6 +107,17 @@ export function BattleSprite({
   speciesId, action, facing, size = 96, x, y, hpFrac = 1, label, mode = 'portrait',
 }: BattleSpriteProps) {
   const positioned = x !== undefined && y !== undefined
+  // A species with a real battle-frame set plays those, unless the caller has
+  // deliberately forced a different mode. This is what makes the generated
+  // pixel art the default the moment its frames exist.
+  if (mode === 'sheet' || (mode === 'portrait' && BATTLE_SPRITE_SET.has(speciesId))) {
+    return (
+      <SheetSprite
+        speciesId={speciesId} action={action} facing={facing} size={size}
+        x={x} y={y} hpFrac={hpFrac} label={label}
+      />
+    )
+  }
   if (mode === 'pixel') {
     return (
       <PixelSprite
@@ -176,3 +216,81 @@ function PixelSprite({
 }
 
 export { FRAME as PIXEL_FRAME }
+
+/**
+ * The generated pixel-art battle sprite: plays the real `public/battle` frames.
+ *
+ * A `move` cycles the four walk frames; everything else is a single frame
+ * (`idle`, or `strike` for an attack/cast). One `requestAnimationFrame` loop
+ * advances the walk index and swaps the `<img src>` — the frames are ~2KB each
+ * and the browser caches them after first paint, so this is just an attribute
+ * change per step, not a re-render of anything expensive.
+ *
+ * ⚠️ `image-rendering: pixelated`, like the rig, so the 128px art scales up with
+ * hard edges instead of being smoothed to mush.
+ */
+function SheetSprite({
+  speciesId, action, facing, size, x, y, hpFrac = 1, label,
+}: Omit<BattleSpriteProps, 'mode'> & { size: number }) {
+  const [walkIx, setWalkIx] = useState(0)
+  const raf = useRef(0)
+  const acc = useRef(0)
+  const last = useRef(0)
+
+  const cycling = action === 'move'
+  useEffect(() => {
+    if (!cycling) return
+    // ~11 fps: two footfalls over ~0.36s reads as a walk without strobing.
+    const step = (t: number) => {
+      if (!last.current) last.current = t
+      acc.current += (t - last.current) / 1000
+      last.current = t
+      if (acc.current >= 0.09) {
+        acc.current = 0
+        setWalkIx((i) => (i + 1) % WALK_CYCLE.length)
+      }
+      raf.current = requestAnimationFrame(step)
+    }
+    raf.current = requestAnimationFrame(step)
+    return () => { cancelAnimationFrame(raf.current); last.current = 0 }
+  }, [cycling, speciesId])
+
+  const frame = cycling ? WALK_CYCLE[walkIx] : battleFrameName(action)
+  const src = `/battle/${speciesId}-${frame}.png`
+  const positioned = x !== undefined && y !== undefined
+
+  // hurt flashes brighter, dead topples and fades — both over the idle frame,
+  // matching the portrait path's tells so the two renderers read the same.
+  const extra =
+    action === 'dead' ? 'bs-dead'
+    : action === 'hurt' ? 'bs-hurt'
+    : ''
+
+  return (
+    <div
+      className={`bs${positioned ? ' bs-abs' : ''}`}
+      style={{
+        width: size, height: size,
+        ...(positioned ? { transform: `translate3d(${x! - size / 2}px, ${y! - size}px, 0)` } : null),
+      }}
+      title={label}
+    >
+      <div className="bs-shadow" />
+      <div className="bs-face" style={{ transform: `scaleX(${facing})` }}>
+        <div className={`bs-anim ${extra}`}>
+          <img
+            className="bs-px-img"
+            src={src}
+            alt={label ?? speciesId}
+            draggable={false}
+            style={{
+              width: '100%', height: '100%',
+              objectFit: 'contain', objectPosition: '50% 100%',
+              filter: hpFrac < 1 ? `saturate(${0.35 + hpFrac * 0.65})` : undefined,
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
