@@ -139,6 +139,17 @@ the same over its lifetime in either engine.
 Tests: `src/field/status.test.ts` (19), plus `field.test.ts`, `spatial.test.ts`,
 `tactics.test.ts`. Whole suite 112/112 including all 12 goldens.
 
+## Battlefield art (v0.94)
+
+Pixel-art field assets in `public/field/`, matched to the battle sprites:
+- `arena-grass.jpg` — detailed 16-bit grassy ground, tiled across the field.
+- `boulder.png` — a mossy pixel boulder, drawn at each `Obstacle` box.
+
+Both are codex-generated (see `docs/CODEX_IMAGE_GEN.md`). The preview renderer
+draws the ground tiled, a boulder per obstacle, the battle sprites walking the
+`public/battle` cycles, and — off the engine's own `cast`/`hit` events — ranged
+arrows and magic bolts flying to their targets with impact sparks on landing.
+
 ## Open work
 
 - Ward / guard / thorns / cleanse / dodge / accuracy have no field representation.
