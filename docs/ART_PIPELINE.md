@@ -11,7 +11,8 @@ scratch; check here before assuming anything is impossible.
 | Species portraits | 65 | 320×320 RGBA, transparent, adult-only, 3/4 hero pose | `public/sprites/<id>.png` |
 | League arena backdrops | 10 | 1400×788 JPEG, painterly matte | `public/backgrounds/` |
 | Area backdrops | 8 | 1400×788 JPEG, same look | `public/backgrounds/` |
-| **Battle sprites** | **0 of 260** | 128×128 RGBA, side profile, 4 frames | `public/battle/<id>-<frame>.png` |
+| **Battle sprites** (generated) | **0 of 260** | 128×128 RGBA, side profile, 4 frames | `public/battle/<id>-<frame>.png` |
+| **Rigged pixel sprites** (Route C) | **all 65, computed** | 48×48, 6 anims × 8 frames | none — built at runtime |
 
 The first three sets are done. Battle sprites are specified
 (`docs/BATTLE_SPRITES.md`) and tooled (`tools/battle_sprite.py`) but **not yet
@@ -86,12 +87,46 @@ with `run_in_background: true` and post-process each raw as it lands. 65 species
 × 4 frames = 260 images ≈ 4–13 hours of wall clock, so batch overnight and
 verify in the morning rather than blocking on it.
 
-## Status — 2026-07-27
+## Route C — draw it in code (no art service at all)
 
-Battle sprite generation is **blocked**. Both routes verified failing today:
+When both routes above are down, small pixel art can be **computed**. `src/field/
+pixelRig.ts` builds each creature from parts — torso, head, two arms, two legs,
+tail — and animates it by rotating the joints, so arms genuinely swing and legs
+genuinely stride. Six animations × 8 frames per species, generated into a sprite
+sheet at load and cached.
+
+Colour is **inherited, not invented**: `tools/sample_ramp.py` derives a 5-step
+ramp from each species' existing portrait, so a rigged sprite still looks like
+the creature the player knows.
+
+```bash
+python3 tools/sample_ramp.py kongrath aegisox maneleo grivvel ursath
+```
+
+⚠️ Three failures worth not repeating, none of them visible in a still frame:
+- **Hue by circular mean gives a purple gorilla.** A silverback has warm fur AND
+  a cool silver back; averaging two opposite hues lands between them and matches
+  neither. Use the peak of a saturation-weighted hue histogram.
+- **No saturation floor.** Forcing a minimum saturation onto a near-achromatic
+  creature invents a colour it does not have.
+- **Ramp floor matters as much as its ceiling.** Starting at 0.34 of the
+  creature's lightness put its darkest mass within a few points of the
+  battlefield background and the silhouette dissolved.
+
+## Status — 2026-07-28
+
+Battle sprite GENERATION is still **blocked**. Both routes re-verified today on
+a trivial prompt (a red circle) with valid credentials — `codex login status`
+reports "Logged in using ChatGPT", and the last successful generation was
+2026-07-26:
 
 - Route A → `billing_hard_limit_reached`
 - Route B → `http 403 Forbidden` from the image service
+
+Nothing about the prompt affects either. This is an account/entitlement issue on
+the ChatGPT subscription and cannot be worked around from the repo.
+
+**Route C ships in the meantime** — rigged pixel sprites, no art service needed.
 
 The spec, the processor and its verification all exist and are proven against
 real art (`kongrath.png` run through the pipeline as four frames produced a
