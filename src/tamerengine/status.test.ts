@@ -98,11 +98,16 @@ describe('field statuses — the three that gained geometry', () => {
   const enemy = () => [mk('vic')]
 
   it('FEAR routs the victim — it moves away from what frightened it', () => {
-    // ⚠️ Assert fear's OWN mechanic, not a gap-vs-control comparison: hard
-    // collision now also separates the control fight, so "further apart than the
-    // control" is confounded. A routed victim should INCREASE its distance from
-    // the attacker over the window right after fear lands.
-    const r = run([mk('ka', [certain('Screech')])], enemy(), 'fear')
+    // ⚠️ Assert fear's OWN mechanic. Two robustness fixes over the naive version:
+    // (1) don't compare against a control fight — hard collision now separates
+    // that one too, confounding it; (2) PLACE the two units within Screech's
+    // reach at the start, so the voice cast reliably lands. A lone weak screamer
+    // left to chase a ranged kiter across the field never closes to cast at all.
+    const screamer = mk('ka', [certain('Screech')])
+    const r = simulateFieldBattle({
+      seed: 'fear', teamA: [screamer], teamB: enemy(),
+      placeA: [{ x: 18, y: 11 }], placeB: [{ x: 21, y: 11 }], // 3 apart, inside voice reach
+    })
     const feared = of(r.events, 'status').filter((e) => e.status === 'fear')
     expect(feared.length).toBeGreaterThan(0)
     const t0 = feared[0].t

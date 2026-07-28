@@ -13,7 +13,7 @@ import {
   CHANNEL_CAST_TIME, CHANNEL_RANGE, DEPLOY_DEPTH, SECONDS_PER_ROUND,
   SUDDEN_DEATH_AT, SUDDEN_DEATH_BASE, SUDDEN_DEATH_RAMP,
 } from './types'
-import { desiredGoal, dist, norm, pickTarget, spacingRadius, sub, traitsFor } from './decide'
+import { archetypeOf, desiredGoal, dist, norm, pickTarget, spacingRadius, sub, traitsFor } from './decide'
 import { personalityOf, spendAbove } from './personality'
 import { spatialOf } from './spatial'
 import { FIELD_STATUS, BENEFICIAL, CONFUSION_VEER } from './status'
@@ -106,6 +106,7 @@ function buildUnit(m: Monster, side: FieldSide, slot: number, pos: Vec2): FieldU
     fadedUntil: 0,
     slowMult: 1,
     slowFor: 0,
+    disengageFor: 0,
     dead: false,
   }
 }
@@ -401,10 +402,14 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
   // zone denies SPACE rather than damaging a body.
   const zones: { x: number; y: number; r: number; until: number; effect: 'damage' | 'slow' | 'heal'; power: number; side: FieldSide }[] = []
   const vis = new Map<string, UnitVisState>(units.map((u) => [u.id, 'idle']))
-  // Total damage each side has dealt — the fair, deterministic tiebreak when a
-  // fight ends in a true simultaneous double-death (both sides' last unit dying
-  // the same tick, which hard collision made possible by keeping fights closer).
+  // Total damage each side has dealt, and the side that landed the most recent
+  // blow — the fair, deterministic tiebreaks when a fight ends in a simultaneous
+  // double-death (both sides' last unit dying the same tick, which hard collision
+  // made more likely by keeping fights closer). Damage decides first; a perfect
+  // damage tie falls to whoever struck last (hits resolve in unit order, so this
+  // is always well-defined and effectively never ties).
   const dmgDealt = { A: 0, B: 0 }
+  let lastAggressor: FieldSide | null = null
 
   const living = (side: FieldSide) => units.filter((u) => u.side === side && !u.dead)
   let tick = 0
@@ -430,6 +435,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       u.retargetIn -= DT
       u.rootedFor = Math.max(0, u.rootedFor - DT)
       u.slowFor = Math.max(0, u.slowFor - DT)
+      u.disengageFor = Math.max(0, u.disengageFor - DT)
       if (u.slowFor <= 0) u.slowMult = 1
       u.mp = Math.min(u.maxMp, u.mp + (u.m.stats.WIS / 300) * DT)
       tickStatuses(u, t)
@@ -553,6 +559,14 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
           goal = clampToField({ x: u.pos.x + rx, y: u.pos.y + ry })
         }
       }
+      // SUDDEN DEATH FORCES THE FIGHT. Once the clock turns lethal, kiting and
+      // archetype spacing are overridden — every unit (not being steered by a
+      // status) drives straight at its target. Without this, two teams that both
+      // want distance can stand off until the chip wipes them simultaneously — a
+      // zero-engagement draw no tiebreak can resolve. The walls close in.
+      if (t >= SUDDEN_DEATH_AT && target && !steer) {
+        goal = { ...target.pos }
+      }
       stepToward(u, goal, mates, obstacles)
       vis.set(u.id, 'move')
     }
@@ -628,6 +642,8 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
   if (winner === 'draw' && dmgDealt.A !== dmgDealt.B) {
     winner = dmgDealt.A > dmgDealt.B ? 'A' : 'B'
   }
+  // Last resort — a perfect damage tie: the side that landed the final blow.
+  if (winner === 'draw' && lastAggressor) winner = lastAggressor
   events.push({ t: +(tick * DT).toFixed(2), kind: 'end', winner })
 
   return {
@@ -862,6 +878,11 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     const dmg = Math.max(1, Math.round(raw * (1 - Math.min(0.55, mitigation / 1400)) * statusDamageTaken(target) * modDmgTaken(target)))
     target.hp -= dmg
     dmgDealt[u.side] += dmg
+    lastAggressor = u.side
+    // An assassin breaks off after landing a blow (melee only — a ranged unit
+    // is already at distance and kites by its own reach). This is the state the
+    // 'assassin' archetype reads to dart back out before diving again.
+    if (mv.channel === 'melee' && archetypeOf(u) === 'assassin') u.disengageFor = 1.4
     events.push({ t: t2, kind: 'hit', id: u.id, targetId: target.id, move: mv.name, channel: mv.channel, dmg, crit })
     // SLEEP breaks the moment it is hit — otherwise it would be a stun with a
     // longer duration and no drawback, and there would be no reason to run one.
@@ -1013,7 +1034,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
    */
   function resolveCollisions() {
     const live = units.filter((u) => !u.dead)
-    for (let iter = 0; iter < 3; iter++) {
+    for (let iter = 0; iter < 6; iter++) {
       for (let i = 0; i < live.length; i++) {
         for (let j = i + 1; j < live.length; j++) {
           const a = live[i], b = live[j]

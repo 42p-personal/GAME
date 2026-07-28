@@ -290,6 +290,42 @@ export function desiredGoal(
     }
   }
 
+  // ── ARCHETYPE POSITIONING ───────────────────────────────────────────────
+  // On top of the reach-driven standoff/kite above, each role wants a different
+  // PLACE on the field. Artillery already kites (reach > 3); this adds the other
+  // three. Blended, not absolute, so the personality axes and tactics still bend
+  // it — a coached 'brawl' anchor still gets in deeper than a timid one.
+  const enemyDir = self.side === 'A' ? 1 : -1
+  switch (archetypeOf(self)) {
+    case 'anchor': {
+      // Hold the FRONT of the line: nudge toward the nearest enemy so the tank
+      // is the body between the team and the threat.
+      goal.x += enemyDir * 1.0
+      break
+    }
+    case 'support': {
+      // Stay BEHIND the line — pull back toward home and toward the ally in the
+      // most trouble, so heals land and the support isn't caught out front.
+      goal.x -= enemyDir * 1.3
+      if (liveAllies.length) {
+        const worst = [...liveAllies].sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0]
+        goal = { x: goal.x * 0.7 + worst.pos.x * 0.3, y: goal.y * 0.7 + worst.pos.y * 0.3 }
+      }
+      break
+    }
+    case 'assassin': {
+      // After a strike the diver breaks off — dart back toward safety for a beat
+      // (`disengageFor`, set by the engine on the assassin's hit) before diving
+      // again. This is the in-and-out that makes an assassin read differently
+      // from a bruiser that just parks on the target.
+      if (self.disengageFor > 0 && liveEnemies.length) {
+        const away = norm(sub(self.pos, centroid(liveEnemies)))
+        goal = { x: self.pos.x + away.x * 7, y: self.pos.y + away.y * 7 }
+      }
+      break
+    }
+  }
+
   // COMMIT: a 'hold' order refuses to over-extend past the halfway line.
   const limit = commitLimit(self)
   if (self.side === 'A') goal.x = Math.min(goal.x, limit)
@@ -299,4 +335,24 @@ export function desiredGoal(
     x: Math.min(FIELD_W - 0.5, Math.max(0.5, goal.x)),
     y: Math.min(FIELD_H - 0.5, Math.max(0.5, goal.y)),
   }
+}
+
+/** Field positioning archetypes, derived from stats + reach + personality. */
+export type Archetype = 'anchor' | 'artillery' | 'assassin' | 'support' | 'skirmisher'
+export function archetypeOf(u: FieldUnit): Archetype {
+  if (roleOfClass(u.m.className) === 'support') return 'support'
+  // Artillery = a genuine RANGED or MAGIC single-target reach. ⚠️ Voice reach
+  // does NOT count: a voice AoE radiates from the CASTER, so a screamer wants to
+  // be AMONG the enemies, not kiting at range — treating it as artillery makes
+  // it back off and whiff its own AoE.
+  const longRanged = u.m.loadout.some(
+    (mv) => mv.type === 'damage'
+      && (mv.channel === 'ranged' || mv.channel === 'magic')
+      && (mv.range ?? CHANNEL_RANGE[mv.channel]) > 3,
+  )
+  if (longRanged) return 'artillery'
+  const s = u.m.stats
+  if (s.CON >= s.STR && s.CON >= s.DEX && s.CON >= s.INT) return 'anchor' // tanky → front
+  if (s.DEX >= s.STR && personalityOf(u.m).aggression > 52) return 'assassin' // fast + eager
+  return 'skirmisher'
 }

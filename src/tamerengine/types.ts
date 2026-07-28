@@ -108,6 +108,9 @@ export interface FieldUnit {
   /** speed multiplier and the time it expires — from a slow */
   slowMult: number
   slowFor: number
+  /** seconds an assassin will break off and dart to safety after a strike,
+   *  before diving back in — the in-and-out of the assassin archetype. */
+  disengageFor: number
   dead: boolean
 }
 
