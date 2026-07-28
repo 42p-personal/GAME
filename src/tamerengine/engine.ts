@@ -50,6 +50,12 @@ const clampToField = (p: Vec2): Vec2 => ({
 export const hasLineOfSight = (a: Vec2, b: Vec2, obstacles: Obstacle[]): boolean =>
   !obstacles.some((o) => segmentHitsRect(a, b, o))
 
+// Non-overlap uses this fraction of the sum of visual radii, so two monsters
+// settle ~1.19 units apart (0.66 × 1.8) — inside the 1.28 basic-melee reach, so
+// melee still connects, but far enough that the sprites read as adjacent, never
+// stacked. Must stay below (CHANNEL_RANGE.melee × 0.8) / (2 × radius) = 0.71.
+const COLLISION_R_FRAC = 0.66
+
 // ── Setup ───────────────────────────────────────────────────────────────────
 /** Default cover: a symmetric pair of blocks so neither side is advantaged. */
 export const DEFAULT_OBSTACLES: Obstacle[] = [
@@ -328,6 +334,24 @@ function basicAttack(u: FieldUnit): Move {
 // site inventing its own stacking rule.
 const hasStatus = (u: FieldUnit, k: StatusKind) => u.statuses.some((s) => s.kind === k)
 
+/**
+ * The unit's active effects, split into buff/debuff icon keys for the renderer's
+ * two rows. Statuses map by sign (`BENEFICIAL` → buff, the rest → debuff); the
+ * timed `mods` become `atkUp`/`atkDown`/`defUp`. De-duped so a stack of the same
+ * kind shows one icon. Active-only, so both lists are usually 0–3.
+ */
+function effectIcons(u: FieldUnit): { buffs: string[]; debuffs: string[] } {
+  const buffs = new Set<string>()
+  const debuffs = new Set<string>()
+  for (const s of u.statuses) (BENEFICIAL.has(s.kind) ? buffs : debuffs).add(s.kind)
+  for (const m of u.mods) {
+    if (m.atk && m.atk > 1) buffs.add('atkUp')
+    else if (m.atk && m.atk < 1) debuffs.add('atkDown')
+    if (m.dmgTaken && m.dmgTaken < 1) buffs.add('defUp')
+  }
+  return { buffs: [...buffs], debuffs: [...debuffs] }
+}
+
 type StatusFlag = 'incapacitates' | 'noSkills' | 'noAttack' | 'blockHeal' | 'turncoat'
 const statusFlag = (u: FieldUnit, key: StatusFlag) =>
   u.statuses.some((s) => FIELD_STATUS[s.kind][key])
@@ -377,10 +401,18 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
   // zone denies SPACE rather than damaging a body.
   const zones: { x: number; y: number; r: number; until: number; effect: 'damage' | 'slow' | 'heal'; power: number; side: FieldSide }[] = []
   const vis = new Map<string, UnitVisState>(units.map((u) => [u.id, 'idle']))
+  // Total damage each side has dealt — the fair, deterministic tiebreak when a
+  // fight ends in a true simultaneous double-death (both sides' last unit dying
+  // the same tick, which hard collision made possible by keeping fights closer).
+  const dmgDealt = { A: 0, B: 0 }
 
   const living = (side: FieldSide) => units.filter((u) => u.side === side && !u.dead)
   let tick = 0
   let winner: FieldSide | 'draw' = 'draw'
+
+  // Enforce non-overlap at SETUP too: a custom placement (hex deployment) or a
+  // tight auto-placement must not start two monsters on the same spot.
+  resolveCollisions()
 
   for (; tick < MAX_TICKS; tick++) {
     const t = +(tick * DT).toFixed(2)
@@ -525,6 +557,12 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       vis.set(u.id, 'move')
     }
 
+    // HARD COLLISION. `stepToward`'s separation is only a soft steering force, so
+    // units still overlap when they converge. This pass runs once everyone has
+    // moved and pushes overlapping pairs apart until no two share space — a
+    // monster pinned by several attackers settles adjacent to all of them.
+    resolveCollisions()
+
     // ZONES tick on everyone standing in them, friend or foe as appropriate.
     for (let i = zones.length - 1; i >= 0; i--) {
       const z = zones[i]
@@ -567,17 +605,28 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     // One positional snapshot per tick for the renderer to interpolate.
     events.push({
       t, kind: 'snapshot',
-      units: units.map((u) => ({
-        id: u.id, x: +u.pos.x.toFixed(2), y: +u.pos.y.toFixed(2),
-        hp: Math.round(u.hp),
-        facing: u.side === 'A' ? 1 : -1,
-        state: vis.get(u.id) ?? 'idle',
-      })),
+      units: units.map((u) => {
+        const fx = effectIcons(u)
+        return {
+          id: u.id, x: +u.pos.x.toFixed(2), y: +u.pos.y.toFixed(2),
+          facing: u.side === 'A' ? 1 : -1,
+          state: vis.get(u.id) ?? 'idle',
+          hp: Math.round(u.hp), maxHp: Math.round(u.maxHp),
+          mp: Math.round(u.mp), maxMp: Math.round(u.maxMp),
+          buffs: fx.buffs, debuffs: fx.debuffs,
+        }
+      }),
     })
   }
 
   if (winner === 'draw' && living('A').length !== living('B').length) {
     winner = living('A').length > living('B').length ? 'A' : 'B'
+  }
+  // Still a draw = a genuine simultaneous wipe. Break it by who dealt more total
+  // damage — the side that was fighting harder takes it. Deterministic, and only
+  // a perfect damage tie (vanishingly rare) stays a draw.
+  if (winner === 'draw' && dmgDealt.A !== dmgDealt.B) {
+    winner = dmgDealt.A > dmgDealt.B ? 'A' : 'B'
   }
   events.push({ t: +(tick * DT).toFixed(2), kind: 'end', winner })
 
@@ -812,6 +861,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     const raw = mv.power * (1 + atk / 320) * (crit ? 1.5 : 1) * behind * falloff * modAtk(u)
     const dmg = Math.max(1, Math.round(raw * (1 - Math.min(0.55, mitigation / 1400)) * statusDamageTaken(target) * modDmgTaken(target)))
     target.hp -= dmg
+    dmgDealt[u.side] += dmg
     events.push({ t: t2, kind: 'hit', id: u.id, targetId: target.id, move: mv.name, channel: mv.channel, dmg, crit })
     // SLEEP breaks the moment it is hit — otherwise it would be a stun with a
     // longer duration and no drawback, and there would be no reason to run one.
@@ -947,5 +997,47 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       tryMove(u.pos.x + dir.y * step, u.pos.y - dir.x * step)
     }
     u.vel = { x: dir.x * step, y: dir.y * step }
+  }
+
+  /**
+   * HARD NON-OVERLAP. After every unit has moved, push apart any pair closer
+   * than the sum of their radii, half the overlap each, a few iterations for
+   * stability. No two living monsters may share space — they end up adjacent,
+   * and several attackers converging on one target settle around it (surround)
+   * rather than stacking on top of it.
+   *
+   * ⚠️ Deterministic: fixed unit order, no rng. The exact-overlap case (two units
+   * on the same point) is separated along a FIXED axis derived from id order, so
+   * a replay reproduces. A push that would land inside an obstacle is skipped for
+   * that unit — the next iteration resolves it from the other side.
+   */
+  function resolveCollisions() {
+    const live = units.filter((u) => !u.dead)
+    for (let iter = 0; iter < 3; iter++) {
+      for (let i = 0; i < live.length; i++) {
+        for (let j = i + 1; j < live.length; j++) {
+          const a = live[i], b = live[j]
+          // ⚠️ COLLISION RADIUS < VISUAL RADIUS. A monster's `radius` (0.9) is its
+          // steering/footprint size, but the sum of two full radii (1.8) exceeds
+          // the basic MELEE reach (CHANNEL_RANGE.melee × 0.8 = 1.28) — so if
+          // collision kept them 1.8 apart, melee attackers could NEVER close to
+          // hit and every melee fight would stall. Non-overlap uses a smaller
+          // physical radius so units settle just inside melee reach: adjacent,
+          // touching, never stacked, and still able to swing. Must stay below
+          // half the basic melee reach.
+          const min = (a.radius + b.radius) * COLLISION_R_FRAC
+          let dx = b.pos.x - a.pos.x, dy = b.pos.y - a.pos.y
+          let d = Math.hypot(dx, dy)
+          if (d >= min) continue
+          if (d < 1e-6) { dx = 1; dy = 0; d = 1 } // exact overlap → fixed axis
+          const push = (min - d) / 2
+          const nx = dx / d, ny = dy / d
+          const aDest = clampToField({ x: a.pos.x - nx * push, y: a.pos.y - ny * push })
+          const bDest = clampToField({ x: b.pos.x + nx * push, y: b.pos.y + ny * push })
+          if (!obstacles.some((o) => insideObstacle(aDest, o, a.radius * 0.6))) a.pos = aDest
+          if (!obstacles.some((o) => insideObstacle(bDest, o, b.radius * 0.6))) b.pos = bDest
+        }
+      }
+    }
   }
 }

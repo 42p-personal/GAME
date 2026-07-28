@@ -114,7 +114,16 @@ export interface FieldUnit {
 // What the renderer consumes. Positions are sampled once per tick so the view
 // can interpolate; discrete beats (a hit landing, a death) are their own events.
 export type FieldEvent =
-  | { t: number; kind: 'snapshot'; units: { id: string; x: number; y: number; hp: number; facing: number; state: UnitVisState }[] }
+  | {
+      t: number; kind: 'snapshot'
+      units: {
+        id: string; x: number; y: number; facing: number; state: UnitVisState
+        hp: number; maxHp: number; mp: number; maxMp: number
+        // Active-effect icon keys, split by sign so the renderer draws its two
+        // rows (debuffs above buffs, above the HP bar) directly. Usually 0–3.
+        buffs: string[]; debuffs: string[]
+      }[]
+    }
   | { t: number; kind: 'cast'; id: string; targetId: string | null; move: string; channel: Channel }
   | { t: number; kind: 'hit'; id: string; targetId: string; move: string; channel: Channel; dmg: number; crit: boolean }
   | { t: number; kind: 'miss'; id: string; targetId: string; move: string }
