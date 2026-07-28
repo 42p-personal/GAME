@@ -59,7 +59,7 @@ describe('tamerengine — tactics drive behaviour', () => {
     const set = (t: Partial<Monster['tactics']>) =>
       base.map((m) => ({ ...m, tactics: { ...DEFAULT_TACTICS, ...t } }) as Monster)
 
-    const brawl = simulateFieldBattle({ seed: 'tac', teamA: set({ engageRange: 'brawl', commit: 'push' }), teamB: foe })
+    const brawl = simulateFieldBattle({ seed: 'tac', teamA: set({ engageRange: 'brawl', commit: 'dive' }), teamB: foe })
     const skirmish = simulateFieldBattle({ seed: 'tac', teamA: set({ engageRange: 'skirmish', commit: 'hold', preserve: 'cautious' }), teamB: foe })
 
     // Some observable of the fight must differ — duration, winner, or survivors.

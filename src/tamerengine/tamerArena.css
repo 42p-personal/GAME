@@ -1,0 +1,96 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   TAMER ARENA (M4) — the mounted field renderer's presentation.
+   Bar layout per the spec, top → bottom: debuffs · buffs · HP · MP.
+   ───────────────────────────────────────────────────────────────────────────── */
+.ta-wrap { --teamA:#5ab0ff; --teamB:#ff7259; max-width:1160px; margin:0 auto; }
+
+.ta-stage {
+  position:relative; border-radius:12px; overflow:hidden;
+  border:1px solid rgba(0,0,0,.25); box-shadow:0 12px 44px rgba(0,0,0,.4);
+}
+.ta-field {
+  position:relative; width:100%; aspect-ratio:40/22; isolation:isolate;
+  image-rendering:pixelated; background-size:auto 34%; background-repeat:repeat;
+}
+/* soft vignette so the edges read as an arena, not a tiled texture */
+.ta-field::after {
+  content:""; position:absolute; inset:0; pointer-events:none; z-index:6;
+  background:radial-gradient(ellipse 85% 70% at 50% 60%, transparent 60%, rgba(0,0,0,.34));
+}
+.ta-fx { position:absolute; inset:0; z-index:7; pointer-events:none; }
+.ta-hud {
+  position:absolute; top:10px; left:12px; z-index:8; color:#eef2f8;
+  font:11px/1 ui-monospace, Consolas, monospace; letter-spacing:.03em;
+  text-shadow:0 1px 3px #000; font-variant-numeric:tabular-nums;
+}
+
+.ta-rock { position:absolute; image-rendering:pixelated; pointer-events:none; z-index:2; }
+.ta-rock img { width:100%; height:100%; object-fit:fill; image-rendering:pixelated;
+  filter:drop-shadow(0 5px 5px rgba(0,0,0,.45)); }
+
+/* ── a unit ─────────────────────────────────────────────────────────────── */
+.ta-unit { position:absolute; left:0; top:0; z-index:5; will-change:transform; }
+.ta-shadow {
+  position:absolute; left:50%; bottom:0; width:52%; height:9px; transform:translateX(-50%);
+  border-radius:50%; pointer-events:none;
+  background:radial-gradient(ellipse, rgba(0,0,0,.5), transparent 72%);
+}
+.ta-face { transform-origin:50% 100%; }
+.ta-face img { display:block; image-rendering:pixelated; transform-origin:50% 100%; }
+
+/* the HUD stack, centred above the sprite */
+.ta-over {
+  position:absolute; left:50%; top:2px; transform:translateX(-50%);
+  display:flex; flex-direction:column; align-items:center; gap:2px; pointer-events:none;
+}
+.ta-icons { display:flex; gap:1px; height:13px; font-size:12px; line-height:13px; }
+.ta-debuffs { filter:drop-shadow(0 0 1px #b0322a); }
+.ta-buffs { filter:drop-shadow(0 0 1px #2f7d46); }
+
+/* fixed-width notched bars — more power = more, tighter notches */
+.ta-bar {
+  position:relative; width:46px; height:5px; border-radius:2px;
+  background:rgba(0,0,0,.62); outline:1px solid rgba(0,0,0,.5); overflow:hidden;
+}
+.ta-bar .ta-fill { height:100%; width:100%; transition:width .1s linear; }
+.ta-hp .ta-fill { background:var(--teamA); }
+.teamB .ta-hp .ta-fill { background:var(--teamB); }
+.ta-mp { height:4px; }
+.ta-mp .ta-fill { background:#c9a6ff; }
+.ta-notch {
+  position:absolute; top:0; bottom:0; width:1px; background:rgba(0,0,0,.55);
+  transform:translateX(-0.5px);
+}
+
+.ta-banner {
+  position:absolute; inset:0; z-index:9; display:flex; align-items:center; justify-content:center;
+  pointer-events:none; animation:ta-fade .4s ease both;
+}
+.ta-banner span {
+  font:800 clamp(26px,5vw,50px)/1 ui-sans-serif, system-ui, sans-serif; letter-spacing:-.02em;
+  padding:14px 30px; border-radius:12px; background:rgba(0,0,0,.6); color:#fff;
+  text-shadow:0 2px 8px rgba(0,0,0,.6);
+}
+@keyframes ta-fade { from { opacity:0 } to { opacity:1 } }
+
+/* ── controls ───────────────────────────────────────────────────────────── */
+.ta-controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; align-items:center; }
+.ta-btn {
+  font:600 12px/1 ui-monospace, Consolas, monospace; letter-spacing:.05em; text-transform:uppercase;
+  color:var(--ink,#e9ecf3); background:var(--panel,#1b1f2a); border:1px solid var(--line,#2c3342);
+  border-radius:6px; padding:10px 13px; cursor:pointer;
+  transition:border-color .14s, color .14s, background-color .14s;
+}
+.ta-btn:hover { border-color:#f0a23a; color:#f0a23a; }
+.ta-btn[aria-pressed="true"], .ta-primary { background:#f0a23a; color:#12141b; border-color:#f0a23a; }
+.ta-btn:focus-visible { outline:2px solid #f0a23a; outline-offset:2px; }
+.ta-speeds { display:inline-flex; gap:4px; margin-left:auto; align-items:center; }
+.ta-lbl { font:600 11px/1 ui-monospace, Consolas, monospace; letter-spacing:.08em; text-transform:uppercase; color:var(--muted,#8a93a7); margin-right:2px; }
+.ta-legend { display:flex; gap:20px; margin-top:12px; font-size:13px; color:var(--muted,#8a93a7); flex-wrap:wrap; }
+.ta-legend i { display:inline-block; width:10px; height:10px; border-radius:50%; vertical-align:middle; margin-right:5px; }
+.ta-dotA { background:var(--teamA); } .ta-dotB { background:var(--teamB); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ta-banner { animation:none; }
+  .ta-bar .ta-fill { transition:none; }
+}
