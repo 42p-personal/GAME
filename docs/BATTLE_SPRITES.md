@@ -111,8 +111,28 @@ rejected. Generate native pixel art.
 
 1. `codex exec` one frame at a time (see `image-gen-codex` skill)
 2. `python3 tools/battle_sprite.py <id> <idle> <walk1> <walk2> <walk3> <walk4> <strike>`
-   — white→transparent, trim, ONE SHARED SCALE, **foot-anchor**, pad to 128×128
+   — close sealed white gaps (see below), white→transparent, trim, ONE SHARED
+   SCALE, **foot-anchor**, pad to 128×128
 3. Read the output and check it against its siblings before accepting
+
+### ⚠️ Sealed interior white — `fill_interior_white()` in the processor
+
+The generator often renders the GAP between a creature's legs (worst in the
+pass poses, `walk2`/`walk4`, where the legs gather under the body) as a **white
+shape sealed inside the silhouette**. The background flood-fill removes only
+white reachable from the image border, so a sealed gap survives as a bright
+**hole punched in the body** — visible in the Aegisox pilot's belly.
+
+`fill_interior_white()` runs BEFORE the background removal: it finds near-white
+pixels NOT connected to the border and grows the surrounding colour inward, so a
+leg-gap (bordered by dark legs) fills dark and vanishes.
+
+**Why it doesn't eat real markings.** It only closes SMALL enclosed pockets. A
+large intended white marking — Grivvel's silver back-stripe, Kongrath's silver
+saddle — reaches the silhouette edge and is border-connected, so it is treated
+as body and left completely alone. Verified: Grivvel's stripe survives intact
+while the Aegisox leg-gap closes. If a future species ever loses a marking to
+this, the fix is a size cap on what may be filled, not disabling it.
 
 ## Cost
 
