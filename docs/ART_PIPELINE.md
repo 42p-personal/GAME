@@ -34,6 +34,11 @@ When you see it, switch to Route B.
 
 ## Route B — Codex CLI (the billing-cap workaround)
 
+> **📖 Full process: [`CODEX_IMAGE_GEN.md`](CODEX_IMAGE_GEN.md).** This is the
+> route the project actually uses. Start there, and always run
+> `python3 tools/codex_check.py` BEFORE anything else.
+
+
 The `codex` CLI has a built-in `image_gen` tool authenticated by the **ChatGPT
 subscription**, which bypasses the API billing cap entirely. This is how all 65
 portraits and all 18 backdrops were actually made.
@@ -57,9 +62,19 @@ codex exec --skip-git-repo-check \
 
 **Known failure:** `image generation failed: http 403 Forbidden`. The codex
 agent itself still works (it answers, burns tokens) — only the image service
-refuses. Seen 2026-07-27 despite the same command succeeding 2026-07-26 16:45,
-so treat it as a subscription image quota/entitlement issue rather than a
-broken prompt. Nothing about the prompt fixes it.
+refuses.
+
+⚠️ **CAUSE FOUND 2026-07-28: the ChatGPT Plus subscription EXPIRED at
+2026-07-27T15:39Z** — one day after the last successful image on 2026-07-26.
+This was originally logged here as a guess ("quota/entitlement") and then
+re-investigated twice as a prompt problem and a missing-flag problem. It is
+neither, and `--enable image_generation` does not fix it.
+
+The reason it misleads: **`codex login status` still says "Logged in using
+ChatGPT"**, because the OAuth token remains valid — only the entitlement behind
+it lapsed. `python3 tools/codex_check.py` reads
+`chatgpt_subscription_active_until` out of the token and says so in one line.
+**Run it before forming any theory.**
 
 ## Post-processing
 
@@ -115,18 +130,19 @@ python3 tools/sample_ramp.py kongrath aegisox maneleo grivvel ursath
 
 ## Status — 2026-07-28
 
-Battle sprite GENERATION is still **blocked**. Both routes re-verified today on
-a trivial prompt (a red circle) with valid credentials — `codex login status`
-reports "Logged in using ChatGPT", and the last successful generation was
-2026-07-26:
+Battle sprite GENERATION is **blocked, and the cause is now known**:
 
-- Route A → `billing_hard_limit_reached`
-- Route B → `http 403 Forbidden` from the image service
+- Route A → `billing_hard_limit_reached` — OpenAI API account hard-capped.
+- Route B → `403 Forbidden` — **the ChatGPT Plus subscription expired
+  2026-07-27T15:39Z.** Renew it and Route B works again immediately; nothing in
+  the repo needs to change.
 
-Nothing about the prompt affects either. This is an account/entitlement issue on
-the ChatGPT subscription and cannot be worked around from the repo.
+Confirm with `python3 tools/codex_check.py`.
 
-**Route C ships in the meantime** — rigged pixel sprites, no art service needed.
+**Route C exists as a fallback** — rigged pixel sprites, no art service needed —
+but it is NOT good enough to ship: procedural capsules and ellipses produce a
+generic beast that does not read as the specific creature. Use it only as a
+placeholder. Real art comes from Route B once the subscription is live.
 
 The spec, the processor and its verification all exist and are proven against
 real art (`kongrath.png` run through the pipeline as four frames produced a
