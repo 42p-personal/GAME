@@ -1,12 +1,14 @@
-// A standalone demo of the TamerArena renderer — builds two mammal teams, runs a
-// real simulateFieldBattle over a rich obstacle set, and plays it back. Reachable
-// via the `?tamerarena` dev route (see App.tsx). NOT part of the tournament flow.
+// A standalone demo of the tamerengine flow — DEPLOY on hexes, then watch a real
+// simulateFieldBattle play back in the TamerArena. Reachable via the `?tamerarena`
+// dev route (see main.tsx). NOT part of the tournament flow.
 import { useMemo, useState } from 'react'
 import { generateMonster } from '../monster'
 import { simulateFieldBattle } from './engine'
-import { FIELD_W, FIELD_H, Obstacle } from './types'
+import { FIELD_W, FIELD_H, Obstacle, Vec2 } from './types'
+import { autoDeployByRole } from './hex'
 import { Monster } from '../core'
 import { TamerArena } from './TamerArena'
+import { Deploy, DeployMonster } from './Deploy'
 
 const OBSTACLES: Obstacle[] = [
   { x: FIELD_W / 2 - 1.4, y: 4.5, w: 2.8, h: 4.0 },
@@ -18,21 +20,35 @@ const OBSTACLES: Obstacle[] = [
 ]
 const A_SPECIES = ['kongrath', 'maneleo', 'grivvel']
 const B_SPECIES = ['aegisox', 'ursath', 'kongrath']
-const mk = (sp: string, seed: string): Monster => generateMonster(seed, { speciesId: sp, train: 850 }) as Monster
+const NAME: Record<string, string> = { kongrath: 'Kongrath', maneleo: 'Maneleo', grivvel: 'Grivvel', aegisox: 'Aegisox', ursath: 'Ursath' }
+const build = (sp: string, seed: string): Monster => generateMonster(seed, { speciesId: sp, train: 850 }) as Monster
 
 export function TamerArenaDemo() {
   const [n, setN] = useState(1)
-  const fight = useMemo(() => {
+  const [placeA, setPlaceA] = useState<Vec2[] | null>(null)
+
+  const teams = useMemo(() => {
     const seed = 'demo' + n
-    const teamA = A_SPECIES.map((s, i) => mk(s, seed + 'a' + i))
-    const teamB = B_SPECIES.map((s, i) => mk(s, seed + 'b' + i))
+    const teamA = A_SPECIES.map((s, i) => build(s, seed + 'a' + i))
+    const teamB = B_SPECIES.map((s, i) => build(s, seed + 'b' + i))
+    return { seed, teamA, teamB }
+  }, [n])
+
+  const deployTeam: DeployMonster[] = A_SPECIES.map((s, i) => ({ id: 'A' + i, name: NAME[s], species: s }))
+
+  const fight = useMemo(() => {
+    if (!placeA) return null
+    const { seed, teamA, teamB } = teams
+    // Enemy auto-deploys on its own hexes by role (sturdier = front).
+    const placeB = autoDeployByRole('B', teamB.map((m) => ({ front: m.stats.CON + m.stats.STR - m.stats.INT - m.stats.WIS })))
     const speciesById: Record<string, string> = {}
     A_SPECIES.forEach((s, i) => (speciesById['A' + i] = s))
     B_SPECIES.forEach((s, i) => (speciesById['B' + i] = s))
-    const result = simulateFieldBattle({ seed, teamA, teamB, obstacles: OBSTACLES })
+    const result = simulateFieldBattle({ seed, teamA, teamB, obstacles: OBSTACLES, placeA, placeB })
     return { result, speciesById }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [n])
+  }, [placeA, teams])
+
+  const reset = () => { setPlaceA(null); setN((v) => v + 1) }
 
   return (
     <div style={{ minHeight: '100vh', background: '#12141b', color: '#e9ecf3', padding: '24px 16px' }}>
@@ -40,25 +56,28 @@ export function TamerArenaDemo() {
         <p style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', color: '#8a93a7', margin: '0 0 6px' }}>
           tamerengine · dev route
         </p>
-        <h1 style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-.03em', margin: '0 0 4px' }}>TamerArena</h1>
+        <h1 style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-.03em', margin: '0 0 4px' }}>
+          {fight ? 'TamerArena' : 'Deploy your team'}
+        </h1>
         <p style={{ color: '#8a93a7', margin: '0 0 18px', maxWidth: '62ch' }}>
-          A real <code>simulateFieldBattle</code> played back with notched HP/MP bars, buff &amp; debuff
-          rows, per-ability animations and collision. Standalone — not wired into the game yet.
+          {fight
+            ? 'A real simulateFieldBattle from your formation — notched HP/MP bars, buff/debuff rows, per-ability animations, hard collision.'
+            : 'Drop each monster onto a hex to set your formation, then start the fight. Standalone — not wired into the game yet.'}
         </p>
-        <TamerArena
-          key={n}
-          result={fight.result}
-          speciesById={fight.speciesById}
-          obstacles={OBSTACLES}
-          teamAName="Team A"
-          teamBName="Team B"
-        />
-        <button
-          onClick={() => setN((v) => v + 1)}
-          style={{ marginTop: 12, font: '600 12px/1 ui-monospace, monospace', letterSpacing: '.05em', textTransform: 'uppercase', color: '#e9ecf3', background: '#1b1f2a', border: '1px solid #2c3342', borderRadius: 6, padding: '10px 14px', cursor: 'pointer' }}
-        >
-          ⚔ New fight
-        </button>
+
+        {!fight && <Deploy team={deployTeam} onStart={(pa) => setPlaceA(pa)} />}
+
+        {fight && (
+          <>
+            <TamerArena result={fight.result} speciesById={fight.speciesById} obstacles={OBSTACLES} />
+            <button
+              onClick={reset}
+              style={{ marginTop: 12, font: '600 12px/1 ui-monospace, monospace', letterSpacing: '.05em', textTransform: 'uppercase', color: '#e9ecf3', background: '#1b1f2a', border: '1px solid #2c3342', borderRadius: 6, padding: '10px 14px', cursor: 'pointer' }}
+            >
+              ⚔ New fight — redeploy
+            </button>
+          </>
+        )}
       </div>
     </div>
   )

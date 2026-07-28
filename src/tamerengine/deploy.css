@@ -1,0 +1,53 @@
+/* Deployment screen (tamerengine M5). */
+.dp-wrap { --teamA:#5ab0ff; --teamB:#ff7259; max-width:1160px; margin:0 auto; }
+.dp-stage {
+  position:relative; border-radius:12px; overflow:hidden;
+  border:1px solid rgba(0,0,0,.25); box-shadow:0 12px 44px rgba(0,0,0,.4);
+}
+.dp-field {
+  position:relative; width:100%; aspect-ratio:40/22; image-rendering:pixelated;
+  background-size:auto 34%; background-repeat:repeat;
+}
+.dp-field::after {
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background:radial-gradient(ellipse 85% 70% at 50% 60%, transparent 60%, rgba(0,0,0,.3));
+}
+
+/* pointy-top hexagon via clip-path */
+.dp-hex {
+  position:absolute; clip-path:polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  display:flex; align-items:flex-end; justify-content:center;
+}
+.dp-enemy { background:rgba(255,114,89,.14); box-shadow:inset 0 0 0 1px rgba(255,114,89,.4); }
+.dp-mine  { background:rgba(90,176,255,.14); box-shadow:inset 0 0 0 1px rgba(90,176,255,.45); cursor:pointer;
+  transition:background-color .12s; }
+.dp-mine:hover { background:rgba(90,176,255,.28); }
+.dp-open  { background:rgba(90,176,255,.22); box-shadow:inset 0 0 0 1px rgba(120,200,255,.8); }
+.dp-filled { background:rgba(90,176,255,.30); }
+.dp-sprite { image-rendering:pixelated; pointer-events:none; margin-bottom:-6%; }
+
+.dp-tray {
+  display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:14px;
+}
+.dp-lbl { font:600 11px/1 ui-monospace, Consolas, monospace; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--muted,#8a93a7); margin-right:6px; }
+.dp-chip {
+  display:inline-flex; align-items:center; gap:6px; position:relative;
+  background:var(--panel,#1b1f2a); border:1px solid var(--line,#2c3342); border-radius:8px;
+  padding:6px 12px 6px 6px; cursor:pointer; color:var(--ink,#e9ecf3);
+  font:600 12px/1 ui-monospace, Consolas, monospace; letter-spacing:.04em;
+  transition:border-color .12s;
+}
+.dp-chip img { width:28px; height:28px; image-rendering:pixelated; }
+.dp-chip:hover { border-color:#5ab0ff; }
+.dp-chip.dp-picked { border-color:#5ab0ff; box-shadow:0 0 0 2px rgba(90,176,255,.35); }
+.dp-chip.dp-done { opacity:.7; }
+.dp-tick { color:#5ab0ff; font-style:normal; margin-left:2px; }
+
+.dp-start {
+  margin-left:auto; font:700 12px/1 ui-monospace, Consolas, monospace; letter-spacing:.06em;
+  text-transform:uppercase; color:#12141b; background:#f0a23a; border:1px solid #f0a23a;
+  border-radius:8px; padding:11px 16px; cursor:pointer;
+}
+.dp-start:disabled { background:#2c3342; color:#6b7280; border-color:#2c3342; cursor:not-allowed; }
+.dp-hint { margin-top:10px; font-size:13px; color:var(--muted,#8a93a7); max-width:64ch; }
