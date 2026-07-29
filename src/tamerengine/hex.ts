@@ -31,7 +31,7 @@ export function deployZone(side: 'A' | 'B'): { x0: number; x1: number; y0: numbe
  * ~1.19 non-overlap gap, i.e. cells are spaced wider than that so a placed
  * formation never starts overlapping.
  */
-export function hexCells(side: 'A' | 'B', size = 2.0): HexCell[] {
+export function hexCells(side: 'A' | 'B', size = 2.6): HexCell[] {
   const z = deployZone(side)
   const w = Math.sqrt(3) * size       // horizontal spacing between columns
   const h = (3 / 2) * size            // vertical spacing between rows
@@ -53,7 +53,7 @@ export function hexCells(side: 'A' | 'B', size = 2.0): HexCell[] {
 export function autoDeployByRole(
   side: 'A' | 'B',
   team: { front: number }[], // `front` = CON+STR vs INT+WIS score; higher = more front-line
-  size = 2.0,
+  size = 2.6,
 ): Vec2[] {
   const cells = hexCells(side, size)
   // Front column = the one nearest the enemy (max cx for A, min cx for B).
