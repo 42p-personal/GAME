@@ -80,6 +80,16 @@ export function reachOf(u: FieldUnit): number {
   return best || CHANNEL_RANGE.melee
 }
 
+/**
+ * MELEE = "can only hit what's adjacent". Its best damaging reach is short, so it
+ * has no way to pick the enemy back line and therefore targets the NEAREST foe —
+ * which means an enemy front-liner screens the squishies behind it for free. A
+ * unit carrying a genuine ranged move (a weapon-throw, a bolt) reads as non-melee
+ * and keeps free target choice, since it CAN reach past the wall. Threshold 3
+ * matches archetypeOf's ranged cutoff (melee 1.6 vs voice 5.5+).
+ */
+export const isMelee = (u: FieldUnit): boolean => reachOf(u) <= 3
+
 export const centroid = (us: FieldUnit[]): Vec2 => {
   if (!us.length) return v(FIELD_W / 2, FIELD_H / 2)
   let x = 0, y = 0
@@ -94,6 +104,22 @@ export const centroid = (us: FieldUnit[]): Vec2 => {
 export function pickTarget(self: FieldUnit, enemies: FieldUnit[], allies: FieldUnit[], now = 0): FieldUnit | null {
   const live = enemies.filter((e) => !e.dead)
   if (!live.length) return null
+
+  // MELEE targets the NEAREST enemy — it cannot reach past the front line, so it
+  // engages whatever is in front of it and the enemy's wall shields its back row.
+  // FADE still nudges attackers off a fading unit (treated as further away) so a
+  // Fade reads the same for both target modes. No value/priority chase here: that
+  // cross-map hunt is exactly what made melee race around the map.
+  if (isMelee(self)) {
+    let best: FieldUnit | null = null
+    let bestD = Infinity
+    for (const e of live) {
+      const d = dist(self.pos, e.pos) + (e.fadedUntil > now ? 6 : 0)
+      if (d < bestD) { bestD = d; best = e }
+    }
+    return best
+  }
+
   const { cohesion, predation } = self.traits
 
   // How many allies are already committed to each enemy — the focus-fire signal.

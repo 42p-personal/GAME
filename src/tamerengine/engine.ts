@@ -13,7 +13,7 @@ import {
   CHANNEL_CAST_TIME, CHANNEL_RANGE, DEPLOY_DEPTH, SECONDS_PER_ROUND,
   SUDDEN_DEATH_AT, SUDDEN_DEATH_BASE, SUDDEN_DEATH_RAMP,
 } from './types'
-import { archetypeOf, desiredGoal, dist, norm, pickTarget, spacingRadius, sub, traitsFor } from './decide'
+import { archetypeOf, desiredGoal, dist, isMelee, norm, pickTarget, reachOf, spacingRadius, sub, traitsFor } from './decide'
 import { personalityOf, spendAbove } from './personality'
 import { spatialOf } from './spatial'
 import { FIELD_STATUS, BENEFICIAL, CONFUSION_VEER } from './status'
@@ -462,8 +462,15 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       const mates = charmed ? opp : own
 
       // Commit to a target for RETARGET_EVERY, unless it died.
+      // ── STICKY ENGAGEMENT ──────────────────────────────────────────────────
+      // A melee unit that is already ON its target does not go target-shopping
+      // when the window elapses — it stays and trades until the target falls (or
+      // a taunt/charm/fear forces it off). This is what turns the fight from a
+      // churn of re-picked targets into a committed brawl. Non-melee, and any
+      // unit not yet in contact, re-evaluate normally.
       const cur = u.targetId ? byId.get(u.targetId) : null
-      if (!cur || cur.dead || u.retargetIn <= 0) {
+      const engaged = !!cur && !cur.dead && isMelee(u) && dist(u.pos, cur.pos) <= reachOf(u) + 1.5
+      if (!cur || cur.dead || (u.retargetIn <= 0 && !engaged)) {
         const pick = pickTarget(u, foes, mates, t)
         u.targetId = pick?.id ?? null
         u.retargetIn = RETARGET_EVERY
@@ -1034,7 +1041,11 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
    */
   function resolveCollisions() {
     const live = units.filter((u) => !u.dead)
-    for (let iter = 0; iter < 6; iter++) {
+    // ⚠️ 10 iterations, not 6: sticky nearest-targeting makes several melee
+    // converge and SURROUND one enemy, a tighter pack than the old churn ever
+    // produced. Six passes left a squeezed pair ~1.00 apart (inside the 1.19
+    // floor); ten fully separates the crowd. Still O(n²·iter), trivial at ≤12.
+    for (let iter = 0; iter < 10; iter++) {
       for (let i = 0; i < live.length; i++) {
         for (let j = i + 1; j < live.length; j++) {
           const a = live[i], b = live[j]
