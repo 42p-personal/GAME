@@ -12,7 +12,12 @@ describe('the field pool is separate from the main pool', () => {
   it('⚠️ adds NOTHING to ALL_MOVES — that pool feeds chooseLoadout and the goldens', () => {
     const main = new Set(ALL_MOVES.map((m: Move) => m.name))
     for (const m of ALL_FIELD_MOVES) expect(main.has(m.name), m.name).toBe(false)
-    expect(ALL_MOVES.length).toBe(90)
+    // The loop above IS the invariant; this count is the secondary guard that
+    // catches ALL_FIELD_MOVES being spread into POOLS wholesale. ⚠️ 90 -> 100 is
+    // the approved pool GROWTH (the class-kit gap fixes: CON team buffs + roots/
+    // slows, INT's first buffs, CHA self-protection) — not a leak. Update it
+    // deliberately when the pool grows; never to silence a leak.
+    expect(ALL_MOVES.length).toBe(100)
   })
 
   it('has unique ids and names', () => {

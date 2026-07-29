@@ -76,14 +76,36 @@ const POOLS: Record<Stat, Row[]> = {
     { name: 'Brace', learnLevel: 40, type: 'buff', channel: 'support', target: 'self', cooldown: 2, accuracy: 100, power: 0, effects: { guard: 6 }, desc: 'Small flat damage reduction until next action.' },
     { name: 'Second Wind', learnLevel: 40, type: 'buff', channel: 'support', target: 'self', cooldown: 3, accuracy: 100, power: 16, desc: 'Catch a breath: heal a little HP.' },
     { name: 'Taunt', learnLevel: 90, type: 'debuff', channel: 'support', target: 'enemy', cooldown: 4, accuracy: 100, power: 0, effects: { atkDebuff: 0.1, duration: 3, tauntForce: true }, desc: 'Enrages and forces the target to attack the taunter for 3 rounds (−10% damage while enraged).' },
-    { name: 'Barbed Carapace', learnLevel: 120, type: 'buff', channel: 'support', target: 'self', cooldown: 5, accuracy: 100, power: 0, effects: { defBuff: 4, thorns: 6, duration: 3 }, desc: 'Hardened, spiked hide: +4 mitigation and reflects 6 damage per hit for 3 rounds.' },
+    // ⚠️ CON's four TEAM/ALLY buffs. The stat had TEN buffs and every one was
+    // `self`, so a Tank or Spellshield literally could not protect anybody — the
+    // biggest hole the class-kit audit found. These are the same effects pointed
+    // outward, and they are UNCAPPED (every ally, no target limit) with the
+    // authored `mana` doing the pricing instead. See ABILITY_REWORK.md §3c.
+    { name: 'Barbed Carapace', learnLevel: 120, type: 'buff', channel: 'support', target: 'team', cooldown: 5, accuracy: 100, power: 0, mana: 24, effects: { defBuff: 4, thorns: 6, duration: 3 }, desc: 'The whole line bristles: +4 mitigation and reflects 6 damage per hit for 3 rounds.' },
     { name: 'Body Slam', learnLevel: 160, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 2, accuracy: 90, power: 20, status: { kind: 'knockback', chance: 40, duration: 2 }, desc: 'Throws its bulk into the target; 40% chance to send it reeling — knocked back, it acts last.' },
-    { name: 'Steady Vigil', learnLevel: 200, type: 'buff', channel: 'support', target: 'self', cooldown: 4, accuracy: 100, power: 20, effects: { hpRegenBuff: 5, duration: 3 }, desc: 'Knit flesh: solid heal, then +5 HP regen/turn for 3 rounds.' },
+    { name: 'Steady Vigil', learnLevel: 200, type: 'buff', channel: 'support', target: 'ally', cooldown: 4, accuracy: 100, power: 20, mana: 18, effects: { hpRegenBuff: 5, duration: 3 }, desc: 'Stands over a wounded ally: solid heal, then +5 HP regen/turn for 3 rounds.' },
+    // ⚠️ SEIZE — CON's grab. `pull` + `root` are registered in
+    // tamerengine/spatial.ts, NOT inline: `spatialOf` only reads the name-keyed
+    // table, so an inline `spatial` on a POOL move is silently inert (the exact
+    // way 8 spatial entries once did nothing). Rename here => rename there.
+    { name: 'Seize', learnLevel: 160, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 3, accuracy: 90, power: 14, mana: 14, status: { kind: 'knockback', chance: 55, duration: 2 }, desc: 'Clamps on and hauls the target in, pinning it in place for a moment — it can still fight, but it cannot leave.' },
     { name: 'Bastion', learnLevel: 240, type: 'buff', channel: 'support', target: 'self', cooldown: 4, accuracy: 100, power: 0, effects: { ward: 25 }, desc: 'Raise a 25 HP absorb shield.' },
     { name: 'Purge', learnLevel: 330, type: 'buff', channel: 'support', target: 'self', cooldown: 4, accuracy: 100, power: 10, effects: { cleanse: true }, desc: 'Shrug off ailments and mend a little.' },
     { name: 'Shell Slam', learnLevel: 380, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 3, accuracy: 85, power: 26, effects: { recoil: 0.1, hpScale: { atFull: 1.4, atEmpty: 0.8 } }, desc: 'Full-body crash; slight recoil. Hits hardest while the shell is whole, and weakens as its own health fails.' },
-    { name: 'Fortify', learnLevel: 430, type: 'buff', channel: 'support', target: 'self', cooldown: 5, accuracy: 100, power: 0, effects: { ward: 40 }, desc: 'Raise a 40 HP absorb shield.' },
-    { name: 'Stone Wall', learnLevel: 540, type: 'buff', channel: 'support', target: 'self', cooldown: 6, accuracy: 100, power: 0, effects: { defBuff: 8, duration: 3 }, desc: 'Living rampart: +8 mitigation for 3 rounds.' },
+    { name: 'Fortify', learnLevel: 430, type: 'buff', channel: 'support', target: 'team', cooldown: 5, accuracy: 100, power: 0, mana: 44, effects: { ward: 40 }, desc: 'Raise a 40 HP absorb shield on every ally.' },
+    // ⚠️ SHIELD WALL — the Warden's ground denial. A `zone` is placed by
+    // applySelfEffects at CAST time, so unlike root/slow it works on a utility
+    // that never "hits". Zone `power` for a slow zone is the speed MULTIPLIER
+    // (0.55 = 55% speed), not a magnitude — see the zone tick in engine.ts.
+    // ⚠️ First authored with NO `effects` at all — its whole payload was the
+    // spatial zone, which made it inert in the TURN engine (which has no zones)
+    // and invisible to every loadout predicate, since those read `effects`. A
+    // move must carry its identity in the shared data, not only in a field-only
+    // side table. The guard is what a shield wall obviously is; the zone is the
+    // field's extra expression of it.
+    { name: 'Shield Wall', learnLevel: 240, type: 'buff', channel: 'support', target: 'self', cooldown: 6, accuracy: 100, power: 0, mana: 30, effects: { guard: 14 }, desc: 'Plants a wall of shields and holds it: +14 flat mitigation, and the ground around this monster becomes a slog for anything that closes in.' },
+    { name: 'Stone Wall', learnLevel: 540, type: 'buff', channel: 'support', target: 'team', cooldown: 6, accuracy: 100, power: 0, mana: 48, effects: { defBuff: 8, duration: 3 }, desc: 'Living rampart: +8 mitigation for the whole team for 3 rounds.' },
+    { name: 'Quagmire Stomp', learnLevel: 300, type: 'damage', channel: 'melee', target: 'allEnemies', cooldown: 5, accuracy: 85, power: 22, mana: 30, status: { kind: 'knockback', chance: 45, duration: 2 }, desc: 'Stomps hard enough to churn the footing out from under the whole enemy line — they wade for a while afterwards.' },
     { name: "Bulwark's Challenge", learnLevel: 650, type: 'debuff', channel: 'support', target: 'allEnemies', cooldown: 6, accuracy: 100, power: 0, effects: { guard: 20, tauntForce: true, duration: 2 }, desc: 'Plants its feet and roars a challenge: massive guard, and forces the WHOLE enemy team to attack it for 2 rounds.' },
     { name: 'Vital Surge', learnLevel: 780, type: 'buff', channel: 'support', target: 'self', cooldown: 6, accuracy: 100, power: 46, effects: { cleanse: true }, desc: 'Big heal + cleanse ailments.' },
     { name: 'Colossus Crash', learnLevel: 850, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 5, accuracy: 85, power: 36, effects: { guard: 10, maxHpDmg: 0.03, consumeWard: 0.015 }, desc: 'Crushing advance that braces after the hit; extra damage scaled off the target\'s own max HP.' },
@@ -123,12 +145,20 @@ const POOLS: Record<Stat, Row[]> = {
     // Contagion belongs on moves a player CHOOSES, not on the default.,
     { name: 'Frost Shard', learnLevel: 90, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 2, accuracy: 90, power: 18, element: 'water', desc: 'Icy dart.' },
     { name: 'Fracturing Stones', learnLevel: 120, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 2, accuracy: 90, power: 16, element: 'earth', status: { kind: 'vulnerable', chance: 30, duration: 3 }, desc: 'A stinging barrage of stone shards; 30% chance to crack their guard, leaving them Vulnerable.' },
+    // ⚠️ INT's first non-damage moves ever. The pool was 15/15 damage — a Wizard
+    // or Spellsword had no way to protect, empower, or hold anything, which is
+    // why "mages can use roots and slows" needed authoring, not just engine work.
+    { name: 'Arcane Aegis', learnLevel: 120, type: 'buff', channel: 'support', target: 'team', cooldown: 5, accuracy: 100, power: 0, mana: 30, effects: { ward: 22 }, desc: 'Spins a lattice of force around the whole team: each ally gains a 22 HP absorb shield.' },
+    { name: 'Rime Bind', learnLevel: 160, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 3, accuracy: 90, power: 16, element: 'water', mana: 16, status: { kind: 'knockback', chance: 50, duration: 2 }, desc: 'Ice climbs the target\'s legs and sets — it can still cast and swing, but it is going nowhere.' },
     { name: 'Thunderclap', learnLevel: 160, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 3, accuracy: 88, power: 20, element: 'air', effects: { firstStrikeMult: 1.35 }, desc: 'Lightning hit; 1.35× damage if this monster acted before the target this round.' },
+    { name: 'Frost Nova', learnLevel: 280, type: 'damage', channel: 'magic', target: 'allEnemies', cooldown: 4, accuracy: 85, power: 20, element: 'water', mana: 26, status: { kind: 'knockback', chance: 40, duration: 2 }, desc: 'A ring of hoarfrost bursts outward, chilling every foe stiff and slow.' },
     { name: 'Cinderburst', learnLevel: 200, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 3, accuracy: 88, power: 28, element: 'fire', effects: { bonusVsStatus: { kind: 'burn', mult: 1.5, consume: true } }, desc: 'Solid single-target fire burst; 1.5× and snuffs the flame if the target is already Burning.' },
     { name: 'Stone Spear', learnLevel: 240, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 3, accuracy: 85, power: 30, element: 'earth', effects: { pierce: 0.25 }, desc: 'Earth lance that punches through defence.' },
     { name: 'Static Chain', learnLevel: 330, type: 'damage', channel: 'magic', target: 'allEnemies', cooldown: 4, accuracy: 85, power: 24, element: 'air', status: { kind: 'vulnerable', chance: 20, duration: 2 }, desc: 'Bolt that arcs across all foes; 20% chance to leave each Vulnerable.' },
     { name: 'Mana Leech', learnLevel: 380, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 3, accuracy: 88, power: 18, effects: { manaBurn: 12, lifesteal: 0.25 }, desc: 'Arcane siphon: burns MP, heals the caster.' },
+    { name: 'Elemental Infusion', learnLevel: 240, type: 'buff', channel: 'support', target: 'team', cooldown: 5, accuracy: 100, power: 0, mana: 36, effects: { atkBuff: 0.16, accBuff: 6, duration: 3 }, desc: "Charges every ally's strikes with raw element: team +16% damage and +6% accuracy for 3 rounds." },
     { name: 'Inferno', learnLevel: 430, type: 'damage', channel: 'magic', target: 'allEnemies', cooldown: 4, accuracy: 82, power: 26, element: 'fire', status: { kind: 'burn', chance: 25, duration: 3 }, desc: 'Fire AoE; 25% chance to Burn.' },
+    { name: 'Mirror Image', learnLevel: 250, type: 'buff', channel: 'support', target: 'self', cooldown: 5, accuracy: 100, power: 0, mana: 20, effects: { dodgeBuff: 14, duration: 3 }, desc: 'Splits into shimmering duplicates: +14% dodge for 3 rounds as attacks find the wrong one.' },
     { name: 'Glacial Prison', learnLevel: 540, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 5, accuracy: 85, power: 30, element: 'water', status: { kind: 'stun', chance: 25, duration: 1 }, desc: 'Entombs in ice, 25% stun chance.' },
     { name: 'Deep Freeze', learnLevel: 650, type: 'damage', channel: 'magic', target: 'allEnemies', cooldown: 5, accuracy: 80, power: 32, element: 'water', effects: { pierce: 0.2 }, desc: 'Freezing AoE storm that punches through frozen armour.' },
     { name: 'Void Lance', learnLevel: 780, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 5, accuracy: 85, power: 44, effects: { pierce: 0.5 }, desc: 'Pure void: half of defence ignored.' },
@@ -140,7 +170,15 @@ const POOLS: Record<Stat, Row[]> = {
     { name: 'Discord', learnLevel: 40, type: 'damage', channel: 'voice', target: 'enemy', cooldown: 2, accuracy: 90, power: 11, status: { kind: 'blind', chance: 45, duration: 3 }, desc: 'Jarring note; 45% chance to Blind.' },
     { name: 'Rallying Song', learnLevel: 90, type: 'buff', channel: 'support', target: 'team', cooldown: 4, accuracy: 100, power: 0, effects: { atkBuff: 0.1, duration: 3 }, desc: 'Stirring tune: team +10% damage for 3 rounds.' },
     { name: 'Grand Mockery', learnLevel: 120, type: 'debuff', channel: 'voice', target: 'allEnemies', cooldown: 4, accuracy: 95, power: 0, effects: { atkDebuff: 0.12, duration: 3 }, status: { kind: 'healblock', chance: 20, duration: 2 }, desc: 'Cutting jeer: enemy team −12% damage for 3 rounds; 20% chance their wounds won\'t close.' },
+    // ⚠️ CHA's self-protection. The audit reported "zero self-buffs", which was
+    // PARTLY a measurement artifact — it counted `target: 'self'` only, and CHA's
+    // three team buffs already include the caster (the crowd is every living
+    // ally, caster included). What was genuinely missing was a DEFENSIVE option
+    // for a class with the weakest damage tier: Bravura is that, and Hymn of
+    // Shields is the uncapped team version that covers the bard too.
+    { name: 'Bravura', learnLevel: 140, type: 'buff', channel: 'support', target: 'self', cooldown: 4, accuracy: 100, power: 0, mana: 16, effects: { ward: 20, dodgeBuff: 8, duration: 3 }, desc: 'Performs straight through the danger: a 20 HP absorb shield and +8% dodge for 3 rounds.' },
     { name: 'Screech', learnLevel: 160, type: 'damage', channel: 'voice', target: 'allEnemies', cooldown: 3, accuracy: 85, power: 14, status: { kind: 'fear', chance: 20, duration: 2 }, desc: 'Voice AoE; 20% chance to inflict Fear for 2 rounds.' },
+    { name: 'Hymn of Shields', learnLevel: 260, type: 'buff', channel: 'support', target: 'team', cooldown: 6, accuracy: 100, power: 0, mana: 38, effects: { ward: 26, guard: 5, duration: 3 }, desc: 'A swelling hymn that armours everyone who can hear it, the singer included: 26 HP of shield and +5 flat mitigation each.' },
     { name: 'Captivate', learnLevel: 200, type: 'damage', channel: 'voice', target: 'enemy', cooldown: 3, accuracy: 88, power: 16, effects: { lifesteal: 0.4 }, desc: 'Feeds on adoration: heals 40% of damage.' },
     { name: 'Battle Hymn', learnLevel: 240, type: 'buff', channel: 'support', target: 'team', cooldown: 5, accuracy: 100, power: 0, effects: { dodgeBuff: 5, regenBuff: 2, duration: 3 }, status: { kind: 'haste', chance: 100, duration: 2 }, desc: 'Steadying anthem: team +5% dodge, +2 regen for 3 rounds — and the whole team acts first next round.' },
     { name: 'Demoralize', learnLevel: 330, type: 'debuff', channel: 'voice', target: 'allEnemies', cooldown: 5, accuracy: 90, power: 0, effects: { atkDebuff: 0.2, duration: 3 }, desc: 'Breaks the spirit: enemy team −20% damage for 3 rounds.' },

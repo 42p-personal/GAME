@@ -103,7 +103,15 @@ const isCleanseOrRegen: MovePick = (mv) => !!(mv.effects?.cleanse || mv.effects?
 // utility list (found via the same sweep: War Cry, Berserk, Sidestep, Focus
 // Aim, Blur, Insight, Providence, Ascendance all had zero uses across 80
 // battles). New universal fallback slot below, not a class-specific one.
-const isSelfBuff: MovePick = (mv) => mv.type !== 'damage' && mv.target === 'self'
+// ⚠️ The universal fallback used `target === 'self'` ALONE, so a
+// TEAM buff could never claim the fallback slot no matter how good it was —
+// measured: Arcane Aegis was learnable by 53% of monsters and equipped by 0%.
+// That silently blocked the whole "buffs affect all allies" rule at the loadout
+// layer, one level above the engine. A team buff includes the caster, so it is
+// strictly better than the equivalent self buff — hence PREFERRED here, with
+// self as the fallback's fallback.
+const isPersonalBuff: MovePick = (mv) => mv.type !== 'damage'
+  && (mv.target === 'self' || mv.target === 'team' || mv.target === 'ally')
   && !!(mv.effects?.atkBuff || mv.effects?.dodgeBuff || mv.effects?.accBuff || mv.effects?.regenBuff)
 
 // Utility slots a support class fills before topping up with damage, in order.
@@ -113,6 +121,14 @@ const CLASS_UTILITY_SLOTS: Record<string, MovePick[]> = {
   Sage: [isHeal, isCleanseOrRegen],
   Orator: [isTeamBuff, isEnemyDebuff],
   Bard: [isTeamBuff, isEnemyDebuff],
+  // ⚠️ Only 5 of the 11 classes had a utility profile, so the other 6 fell
+  // through to the buff fallback and picked up whatever ranked highest. These
+  // three come straight from the P3 kit table: a Captain commands (team buffs),
+  // and a Wizard/Spellsword now HAS protection worth equipping (Arcane Aegis,
+  // Elemental Infusion) where INT previously offered nothing but damage.
+  Captain: [isTeamBuff, isEnemyDebuff],
+  Wizard: [isTeamBuff, isWardOrGuard],
+  Spellsword: [isWardOrGuard, isTeamBuff],
 }
 
 /**
@@ -227,7 +243,10 @@ export function chooseLoadout(learned: Move[], stats?: Stats, size = 3): Move[] 
     // all of them — War Cry, Berserk, Blur, Insight, Providence... had zero
     // uses across 80 battles), if a utility slot is still unclaimed.
     if (out.length < 2) {
-      const pick = support.find((mv) => isSelfBuff(mv) && !out.includes(mv))
+      // Team-wide first (it covers the caster too and is priced for the reach),
+      // then a self-only buff. See the isPersonalBuff note above.
+      const pick = support.find((mv) => mv.target === 'team' && isPersonalBuff(mv) && !out.includes(mv))
+        ?? support.find((mv) => isPersonalBuff(mv) && !out.includes(mv))
       if (pick) out.push(pick)
     }
   }

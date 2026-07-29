@@ -14,6 +14,31 @@ import { MoveSpatial } from '../core'
 import { ALL_FIELD_MOVES } from './fieldMoves'
 
 export const SPATIAL_MOVES: Record<string, MoveSpatial> = {
+  // ── ROOTS AND SLOWS ───────────────────────────────────────────────────────
+  // ⚠️ CORRECTION to the class-kit audit, which claimed "no pool move authors a
+  // root or a slow". Untrue — Pin Down, Snipe, Glacial Prison, Deep Freeze,
+  // Earthshaker and Static Chain all carry one further down this table. The real
+  // gaps were narrower: CON had NONE (the Warden could shove and nothing else),
+  // and INT's were all lv540+, so a mage had no movement denial until very late.
+  // These entries fix those two, they do not introduce the category.
+  //
+  // ⚠️ Keys are matched by move NAME — renaming in moves.ts without renaming
+  // here makes the move silently inert, exactly how 8 entries once did nothing.
+  //
+  // ⚠️ root/slow land in applyOnTarget, which runs only in the HIT path, so each
+  // carrier must be a move that actually connects. A zone is different:
+  // applySelfEffects places it at CAST time, which is why Shield Wall can be a
+  // pure utility that never strikes anyone. And any `allEnemies` move needs an
+  // `area` shape or it has no geometry on a continuous field.
+  'Rime Bind': { root: 1.4 },                              // INT — an early single-target pin
+  'Frost Nova': { slow: { mult: 0.6, duration: 2.5 },      // INT — early AoE chill
+    area: { shape: 'circle', centre: 'self', radius: 5 } },
+  'Seize': { pull: 2.4, root: 1.2 },                       // CON — grab and drag in
+  'Quagmire Stomp': { slow: { mult: 0.55, duration: 3 },   // CON — churn the whole line's footing
+    area: { shape: 'circle', centre: 'self', radius: 5.2 } },
+  // Zone `power` on a slow zone is the speed MULTIPLIER, not a magnitude.
+  'Shield Wall': { zone: { radius: 4.5, duration: 6, effect: 'slow', power: 0.55, centre: 'self' } },
+
   // ── GAP CLOSERS ───────────────────────────────────────────────────────────
   // The counter to kiting. A charge crosses the ground, so cover still stops
   // it — that is what keeps it fair against a caster who positioned well.

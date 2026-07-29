@@ -272,7 +272,20 @@ function utilityScore(
     const pool = mv.target === 'team' ? allies : mv.target === 'self' ? [u] : allies
     // How much heat is actually on a candidate — defence is worth the danger.
     const heatOn = (v: FieldUnit) => enemies.filter((e) => dist(v.pos, e.pos) < 6).length
+    // ⚠️ A team buff LANDS ON EVERY ALLY (see the crowd loop in resolveHit) but
+    // was VALUED as if it hit one — the best single beneficiary. So the whole
+    // reach a team buff is paid for in mana never entered the comparison, and a
+    // team ward lost to a self ward that absorbed a sixth as much. Team buffs are
+    // uncapped by design: value them as the TOTAL they deliver, and let the
+    // authored `Move.mana` be the thing that prices the better buff.
+    // `atkBuff`/`defBuff` already did this via their own `reach` multiplier.
     const pick = (score: (v: FieldUnit) => number) => {
+      if (mv.target === 'team') {
+        const total = pool.reduce((n, v) => n + score(v), 0)
+        const focus = [...pool].sort((a, b) => score(b) - score(a))[0]
+        if (focus) offer(total, focus) // aim is cosmetic for a team cast
+        return
+      }
       for (const v of pool) offer(score(v), v)
     }
     // WARD / GUARD — worth what they will actually absorb, so they are cast when

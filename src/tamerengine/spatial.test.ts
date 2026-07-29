@@ -28,7 +28,12 @@ describe('the spatial table is honest', () => {
 
   it('every entry does something', () => {
     for (const [name, sp] of Object.entries(SPATIAL_MOVES)) {
-      const does = !!(sp.move || sp.pull || sp.push || sp.root || sp.slow || sp.backstab || sp.area)
+      // ⚠️ `zone`, `fade` and `haulAlly` were MISSING from this list, so an entry
+      // whose whole job is placing a zone (Shield Wall) read as "declares
+      // nothing". The check is meant to catch dead entries, not to enumerate a
+      // stale subset of MoveSpatial — keep it in step with the type.
+      const does = !!(sp.move || sp.pull || sp.push || sp.root || sp.slow || sp.backstab
+        || sp.area || sp.zone || sp.fade || sp.haulAlly)
       expect(does, `${name} declares nothing`).toBe(true)
     }
   })
@@ -44,7 +49,12 @@ describe('the spatial table is honest', () => {
 
   it('leaves the rest of the pool alone', () => {
     expect(spatialOf('Ember')).toBeUndefined()
-    expect(Object.keys(SPATIAL_MOVES).length).toBeLessThan(ALL_MOVES.length / 3)
+    // Spatial behaviour is meant to be SPECIAL, not the default — this is the
+    // ceiling that stops it being slapped on everything. Widened from 1/3 when
+    // the movement-denial category (roots/slows for the mage and the Warden) was
+    // authored as a deliberate group; it is still a real ceiling, not a rubber
+    // stamp, so a pass that pushes past 40% should have to justify itself here.
+    expect(Object.keys(SPATIAL_MOVES).length).toBeLessThan(ALL_MOVES.length * 0.4)
   })
 })
 
@@ -119,12 +129,15 @@ describe('mechanics fire in a real fight', () => {
 
 describe('area shapes replace the row targets', () => {
   it('every former row / allEnemies move now has real geometry', () => {
-    // These 14 targeted `frontRow` / `backRow` / `allEnemies` — formations the
-    // field does not have. Without a shape they would hit everyone regardless
-    // of where anyone stood, which is exactly what made spacing pointless.
+    // These target `frontRow` / `backRow` / `allEnemies` — formations the field
+    // does not have. Without a shape they would hit everyone regardless of where
+    // anyone stood, which is exactly what made spacing pointless.
+    // ⚠️ The count is a TRIPWIRE for exactly that: it fired when Frost Nova and
+    // Quagmire Stomp were added with no geometry (14 -> 16). Any new AoE must
+    // author an `area` and bump this deliberately.
     const rowMoves = ALL_MOVES.filter((m: Move) =>
       m.target === 'allEnemies' || m.target === 'frontRow' || m.target === 'backRow')
-    expect(rowMoves.length).toBe(14)
+    expect(rowMoves.length).toBe(16)
     const missing = rowMoves.filter((m: Move) => !spatialOf(m.name)?.area).map((m: Move) => m.name)
     expect(missing).toEqual([])
   })
