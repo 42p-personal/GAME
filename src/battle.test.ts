@@ -64,14 +64,23 @@ const GOLDENS = [
     // getting its tanks back is the change working, not a coin landing differently.
     // Captures this cycle: B 347 (play-quality) <- B 404 (AoE-aware AI) <-
     // A 419 (AoE falloff) <- A 376 (live formation) <- A 349 (v0.89 league curve).
-    winner: 'A', events: 406, logLines: 317,
+    // ⚠️ recaptured for the P3 class-kit gap fixes (the ABILITY POOL moved, not the
+    // engine): the pool grew 90 -> 100, CON's buffs were retargeted self -> team,
+    // and the loadout's buff fallback stopped rejecting team buffs. All three
+    // change what these monsters LEARN and EQUIP, so a different fight is the
+    // expected outcome. Winner HELD at A — the fight just runs longer and
+    // bloodier (406 -> 440 events) because team buffs and control now get cast,
+    // and A's slot 0 no longer survives it. This was the ONLY golden of the 12
+    // that moved, which is the reassuring part: a pool change of that size
+    // touching one fight means the other 11 kits were left intact.
+    winner: 'A', events: 440, logLines: 357,
     finals: [
-      { side: 'A', slot: 0, hp: 350, mana: 709, wasKOd: false },
-      { side: 'A', slot: 1, hp: 0, mana: 242, wasKOd: true },
-      { side: 'A', slot: 2, hp: 874, mana: 737, wasKOd: false },
+      { side: 'A', slot: 0, hp: 0, mana: 716, wasKOd: true },
+      { side: 'A', slot: 1, hp: 0, mana: 246, wasKOd: true },
+      { side: 'A', slot: 2, hp: 874, mana: 751, wasKOd: false },
       { side: 'B', slot: 0, hp: 0, mana: 743, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 746, wasKOd: true },
-      { side: 'B', slot: 2, hp: 0, mana: 23, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 750, wasKOd: true },
+      { side: 'B', slot: 2, hp: 0, mana: 27, wasKOd: true },
     ],
   },
 ] as const
