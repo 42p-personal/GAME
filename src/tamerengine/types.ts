@@ -187,11 +187,14 @@ export const BASIC_STAT_SCALE = 1 / 70
 // whose kit is physical had the least fuel to cast it. Measured: 4–6 ability
 // casts for a WHOLE fight, and 76% of all casts were the free attack.
 //
-// So each role now EARNS mana the way it actually plays:
+// So each role now EARNS mana the way it actually plays. THREE roles only —
+// a "caster" is not one of them: a caster is a DAMAGE dealer if it throws spells
+// and a SUPPORT if it mends, and fuels the same way anyone in that job does.
+// What makes casting feel different is the WIS POOL and WIS regen, which an
+// INT/WIS monster has far more of.
 //   tank    — pays for its abilities by soaking (per hit TAKEN)
 //   damage  — pays for them by connecting (per hit DEALT)
 //   support — a steady trickle, since it neither tanks nor spikes
-//   caster  — still the WIS pool + WIS regen, which is why that is raised below
 export const MANA_ON_HIT_TAKEN = 2   // tanks
 export const MANA_ON_HIT_DEALT = 2   // STR/DEX damage dealers
 export const MANA_SUPPORT_PER_SEC = 1
@@ -207,6 +210,16 @@ export const WIS_REGEN_DIVISOR = 200
  * 12 goldens are untouched.
  */
 export const FIELD_MANA_COST_MULT = 0.5
+
+/**
+ * FIELD loadout size — 4, against the turn engine's 3. More equipped abilities
+ * means more that is off cooldown at any moment, which is the direct lever on the
+ * action economy: fewer dead seconds filled by the free attack, and more room for
+ * counterplay in what a monster brings.
+ * ⚠️ FIELD-ONLY. `chooseLoadout` still defaults to 3, so battle.ts equips exactly
+ * what it always did and the 12 goldens cannot move.
+ */
+export const FIELD_LOADOUT_SIZE = 4
 
 export interface FieldSetup {
   seed: string

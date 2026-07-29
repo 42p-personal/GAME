@@ -6,7 +6,7 @@
 // (monsters + placement + obstacles + seed). So: fixed dt, fixed unit order,
 // one seeded rng stream, and no wall-clock or Math.random anywhere.
 import { Channel, Monster, Move, MoveArea, MoveSpatial, Stat, aoeFalloff, mulberry32, hashString, StatusKind } from '../core'
-import { manaCost, maxHp, maxMana } from '../monster'
+import { chooseLoadout, learnedMoves, manaCost, maxHp, maxMana } from '../monster'
 import {
   DT, FIELD_H, FIELD_W, FieldEvent, FieldResult, FieldSetup, FieldSide, FieldUnit,
   MAX_TICKS, Obstacle, RETARGET_EVERY, UnitVisState, Vec2,
@@ -14,6 +14,7 @@ import {
   SUDDEN_DEATH_AT, SUDDEN_DEATH_BASE, SUDDEN_DEATH_RAMP, KITE_MAX, KITE_REFILL, BLOCK_DR,
   BASIC_STAT_TIER, BASIC_BASE_POWER, BASIC_STAT_SCALE,
   MANA_ON_HIT_TAKEN, MANA_ON_HIT_DEALT, MANA_SUPPORT_PER_SEC, WIS_REGEN_DIVISOR, FIELD_MANA_COST_MULT,
+  FIELD_LOADOUT_SIZE,
 } from './types'
 import { archetypeOf, desiredGoal, dist, isMelee, manaRoleOf, norm, pickTarget, reachOf, spacingRadius, sub, traitsFor, wantsToKite } from './decide'
 import { personalityOf, spendAbove } from './personality'
@@ -90,7 +91,27 @@ function autoPlace(team: Monster[], side: FieldSide): Vec2[] {
   })
 }
 
-function buildUnit(m: Monster, side: FieldSide, slot: number, pos: Vec2): FieldUnit {
+/**
+ * The FIELD equips FIELD_LOADOUT_SIZE (4) abilities, not the turn engine's 3.
+ *
+ * ⚠️ ADDITIVE, not a re-pick: whatever the monster already has equipped is kept
+ * (that may be the player's own choice, or an awakened signature move), and the
+ * extra slot is filled with the best learnable move it is not already carrying.
+ * Deterministic — `chooseLoadout` is a pure ranking over the learned pool, no rng
+ * — so a replay reproduces.
+ */
+function fieldLoadout(m: Monster): Move[] {
+  // ⚠️ Only top up a STANDARD FULL KIT. A monster handed a deliberately narrow
+  // loadout (a scenario, or a test isolating one move) means it — padding that
+  // dilutes the construction and the pinned move stops being chosen.
+  if (m.loadout.length < 3 || m.loadout.length >= FIELD_LOADOUT_SIZE) return m.loadout
+  const extra = chooseLoadout(learnedMoves(m.stats), m.stats, FIELD_LOADOUT_SIZE)
+    .filter((mv) => !m.loadout.some((x) => x.id === mv.id))
+  return [...m.loadout, ...extra].slice(0, FIELD_LOADOUT_SIZE)
+}
+
+function buildUnit(m0: Monster, side: FieldSide, slot: number, pos: Vec2): FieldUnit {
+  const m: Monster = { ...m0, loadout: fieldLoadout(m0) }
   const hp = Math.min(m.hp ?? maxHp(m.stats), maxHp(m.stats))
   const mp = Math.min(m.mp ?? maxMana(m.stats), maxMana(m.stats))
   return {

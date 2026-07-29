@@ -115,7 +115,13 @@ const CLASS_UTILITY_SLOTS: Record<string, MovePick[]> = {
   Bard: [isTeamBuff, isEnemyDebuff],
 }
 
-export function chooseLoadout(learned: Move[], stats?: Stats): Move[] {
+/**
+ * ⚠️ `size` DEFAULTS TO 3 and must stay that way for the turn engine: growing it
+ * changes what every generated monster equips, which moves all 12 golden battles.
+ * The FIELD engine passes 4 (see FIELD_LOADOUT_SIZE) through its own call site,
+ * so the two engines can disagree until the field one takes over.
+ */
+export function chooseLoadout(learned: Move[], stats?: Stats, size = 3): Move[] {
   // A learned move that's one half of a designed setup->payoff pair (the
   // OTHER half also learned) — either a bonusVsStatus combo (Bloodletter/
   // Rending Blow, Field of Doom/Mind Crush, Cinderburst/Ember, Siren's Call/
@@ -235,15 +241,15 @@ export function chooseLoadout(learned: Move[], stats?: Stats): Move[] {
   // pushed a 2nd time here, duplicating a loadout slot.
   const seenStats = new Set<Stat>()
   for (const m of damage) {
-    if (out.length >= 3) break
+    if (out.length >= size) break
     if (out.includes(m)) continue
     if (!seenStats.has(m.stat) || out.length < 2) { out.push(m); seenStats.add(m.stat) }
   }
   for (const m of [...damage, ...support]) {
-    if (out.length >= 3) break
+    if (out.length >= size) break
     if (!out.includes(m)) out.push(m)
   }
-  return out.slice(0, 3)
+  return out.slice(0, size)
 }
 
 export interface GenOptions {
