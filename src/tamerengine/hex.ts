@@ -10,11 +10,17 @@
 // Pointy-top axial hexes. World units are the engine's (40×22 field).
 import { FIELD_H, FIELD_W, Vec2 } from './types'
 
+export type HexZone = 'A' | 'B' | 'neutral'
+
 export interface HexCell {
   /** axial coordinates, unique per cell */
   q: number; r: number
   /** world-space centre — this is what feeds the sim's placement */
   cx: number; cy: number
+}
+export interface FieldHexCell extends HexCell {
+  /** which band of the field this cell falls in — A/B deploy zones or the middle */
+  zone: HexZone
 }
 
 /** A team's deployment zone: the back band on its own side of the field. */
@@ -26,26 +32,42 @@ export function deployZone(side: 'A' | 'B'): { x0: number; x1: number; y0: numbe
 }
 
 /**
- * The hex cells covering a deployment zone. `size` is the hex radius in world
- * units — tuned so a cell comfortably holds one monster (radius 0.9) with the
- * ~1.19 non-overlap gap, i.e. cells are spaced wider than that so a placed
- * formation never starts overlapping.
+ * ONE continuous pointy-top hex grid over the WHOLE field, each cell tagged with
+ * the band it lands in. The deploy screen draws all of them (the middle band
+ * faint, the two zones live) — the board reads as fully hexed, TFT-style, while
+ * the grid stays a single aligned lattice so nothing seams at the zone edges.
+ * `size` is the hex radius in world units — tuned so a cell comfortably holds one
+ * monster (radius 0.9) past the ~1.19 non-overlap gap, so a placed formation
+ * never starts overlapping.
  */
-export function hexCells(side: 'A' | 'B', size = 2.6): HexCell[] {
-  const z = deployZone(side)
+export function fieldHexCells(size = 2.6): FieldHexCell[] {
   const w = Math.sqrt(3) * size       // horizontal spacing between columns
   const h = (3 / 2) * size            // vertical spacing between rows
-  const cells: HexCell[] = []
+  const zA = deployZone('A'), zB = deployZone('B')
+  const cells: FieldHexCell[] = []
   let q = 0
-  for (let cx = z.x0 + size; cx <= z.x1; cx += w, q++) {
+  // Keep whole cells a full radius inside the field so none straddle an edge
+  // (or spill past a deploy zone's far bound).
+  for (let cx = size; cx <= FIELD_W - size; cx += w, q++) {
+    const yOff = (q % 2) * (h / 2) // odd columns offset down half a row (brick layout)
     let r = 0
-    // odd columns offset down by half a row (pointy-top brick layout)
-    const yOff = (q % 2) * (h / 2)
-    for (let cy = z.y0 + size + yOff; cy <= z.y1; cy += h, r++) {
-      cells.push({ q, r, cx: +cx.toFixed(2), cy: +cy.toFixed(2) })
+    for (let cy = size + yOff; cy <= FIELD_H - size; cy += h, r++) {
+      const zone: HexZone = cx <= zA.x1 ? 'A' : cx >= zB.x0 ? 'B' : 'neutral'
+      cells.push({ q, r, cx: +cx.toFixed(2), cy: +cy.toFixed(2), zone })
     }
   }
   return cells
+}
+
+/**
+ * The hex cells a team may deploy on — its band of the continuous field grid.
+ * Derived from `fieldHexCells` so a zone cell and its neighbour in the middle
+ * band share one lattice (a placed formation lines up with the drawn grid).
+ */
+export function hexCells(side: 'A' | 'B', size = 2.6): HexCell[] {
+  return fieldHexCells(size)
+    .filter((c) => c.zone === side)
+    .map(({ q, r, cx, cy }) => ({ q, r, cx, cy }))
 }
 
 /** Enemy auto-deploy: sort its team by role and lay it onto its hexes —

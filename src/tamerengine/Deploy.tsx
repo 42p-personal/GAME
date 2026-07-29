@@ -19,7 +19,7 @@
 // Static UI, so plain React state is fine here (unlike the animated TamerArena).
 import { useLayoutEffect, useRef, useState } from 'react'
 import { FIELD_W, Vec2 } from './types'
-import { hexCells, HexCell } from './hex'
+import { fieldHexCells, FieldHexCell } from './hex'
 import { BATTLE_SPRITE_SET } from './BattleSprite'
 import { TacticsPanel } from './TacticsPanel'
 import { Tactics, DEFAULT_TACTICS } from '../core'
@@ -43,9 +43,8 @@ export function Deploy({ team, onStart }: DeployProps) {
   const [tactics, setTactics] = useState<Record<number, Tactics>>({})
   const [launching, setLaunching] = useState(false)
 
-  const cellsA = hexCells('A')
-  const cellsB = hexCells('B')
-  const cellByKey = (k: string) => cellsA.find((c) => `${c.q},${c.r}` === k)!
+  const allCells = fieldHexCells()
+  const cellByKey = (k: string) => allCells.find((c) => `${c.q},${c.r}` === k)!
 
   useLayoutEffect(() => {
     const el = wrapRef.current
@@ -64,10 +63,11 @@ export function Deploy({ team, onStart }: DeployProps) {
   const allPlaced = team.every((_, i) => placed[i] != null)
   const tacticFor = (i: number) => tactics[i] ?? DEFAULT_TACTICS
 
-  // Click a hex: if occupied, SELECT that monster (for orders); if empty, place
-  // (or move) the selected monster there, then advance to the next unplaced.
-  const placeOnCell = (cell: HexCell) => {
-    if (launching) return
+  // Click a hex in YOUR zone: if occupied, SELECT that monster (for orders); if
+  // empty, place (or move) the selected monster there, then advance to the next
+  // unplaced. Neutral / enemy hexes are display-only.
+  const placeOnCell = (cell: FieldHexCell) => {
+    if (launching || cell.zone !== 'A') return
     const key = `${cell.q},${cell.r}`
     const occ = Object.entries(placed).find(([, k]) => k === key)
     if (occ) { setSelected(Number(occ[0])); return }
@@ -93,18 +93,20 @@ export function Deploy({ team, onStart }: DeployProps) {
   // A small hex slot marker centred on the cell — sized well inside the ~3-unit
   // cell spacing so neighbours never touch.
   const R = 1.35 * px
-  const slot = (c: HexCell) => ({ left: c.cx * px - R, top: c.cy * px - R, width: R * 2, height: R * 2 })
+  const slot = (c: FieldHexCell) => ({ left: c.cx * px - R, top: c.cy * px - R, width: R * 2, height: R * 2 })
 
   return (
     <div className="dp-wrap" ref={wrapRef}>
       <div className="dp-stage">
         <div className="dp-field" style={{ backgroundImage: 'url(/field/arena-grass.jpg)' }}>
           {px > 0 && <>
-            {/* HEX GRID — fades out on launch; deployment-only, gone in the fight */}
+            {/* HEX GRID — the WHOLE board is hexed (middle band faint, the two
+                zones live). Fades out on launch; deployment-only, gone in the fight. */}
             <div className={`dp-hexlayer${launching ? ' launching' : ''}`}>
-              {cellsB.map((c) => <div key={`b${c.q},${c.r}`} className="dp-hex dp-enemy" style={slot(c)} />)}
-              {cellsA.map((c) => {
+              {allCells.map((c) => {
                 const key = `${c.q},${c.r}`
+                if (c.zone === 'neutral') return <div key={`n${key}`} className="dp-hex dp-neutral" style={slot(c)} />
+                if (c.zone === 'B') return <div key={`b${key}`} className="dp-hex dp-enemy" style={slot(c)} />
                 return (
                   <div
                     key={`a${key}`}
