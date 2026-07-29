@@ -251,6 +251,9 @@ export function TamerArena({ result, speciesById, obstacles, teamAName = 'Team A
           el.mpFill.style.width = Math.max(0, Math.min(100, (ua.mp / el.maxMp) * 100)) + '%'
           setRow(el.buffRow, ua.buffs)
           setRow(el.debuffRow, ua.debuffs)
+          // BLOCKING reads as a braced stance — the unit is holding, not idling,
+          // and it is now a real slice of the fight, so it must be visible.
+          el.face.style.filter = ua.state === 'block' ? 'drop-shadow(0 0 3px #6fb6ff) brightness(0.88)' : ''
           el.face.style.transform = `scaleX(${el.facing}) rotate(${dead ? '82deg' : '0'})`
           el.root.style.opacity = dead ? '0.34' : '1'
           el.root.querySelectorAll<HTMLElement>('.ta-bar,.ta-buffs,.ta-debuffs').forEach((n) => (n.style.display = dead ? 'none' : ''))

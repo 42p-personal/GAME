@@ -169,8 +169,12 @@ export const BLOCK_DR = 0.2
 // swing is a real blow, a caster's is a feeble jab so it must spend abilities.
 // The basic's stat follows its channel (melee STR / ranged DEX / magic INT /
 // voice CHA / support WIS), so this table IS part of the class identity.
+// An EVEN ramp 0.70 → 0.35, one step (0.07) per rung. ⚠️ The first cut of this
+// table ran 1.00 → 0.35, which let a STR bruiser's free swing hit far too hard
+// for a move that costs nothing; compressing the top keeps the hierarchy while
+// stopping STR from carrying a fight on autos alone.
 export const BASIC_STAT_TIER: Record<string, number> = {
-  STR: 1.0, DEX: 0.85, INT: 0.7, CON: 0.55, CHA: 0.45, WIS: 0.35,
+  STR: 0.70, DEX: 0.63, INT: 0.56, CON: 0.49, CHA: 0.42, WIS: 0.35,
 }
 /** Flat floor, so an untrained monster can still swing for something. */
 export const BASIC_BASE_POWER = 5
