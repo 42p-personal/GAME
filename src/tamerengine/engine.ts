@@ -11,7 +11,7 @@ import {
   DT, FIELD_H, FIELD_W, FieldEvent, FieldResult, FieldSetup, FieldSide, FieldUnit,
   MAX_TICKS, Obstacle, RETARGET_EVERY, UnitVisState, Vec2,
   CHANNEL_CAST_TIME, CHANNEL_RANGE, DEPLOY_DEPTH, SECONDS_PER_ROUND,
-  SUDDEN_DEATH_AT, SUDDEN_DEATH_BASE, SUDDEN_DEATH_RAMP, KITE_MAX, KITE_REFILL,
+  SUDDEN_DEATH_AT, SUDDEN_DEATH_BASE, SUDDEN_DEATH_RAMP, KITE_MAX, KITE_REFILL, BLOCK_DR,
 } from './types'
 import { archetypeOf, desiredGoal, dist, isMelee, norm, pickTarget, reachOf, spacingRadius, sub, traitsFor, wantsToKite } from './decide'
 import { personalityOf, spendAbove } from './personality'
@@ -119,6 +119,7 @@ function buildUnit(m: Monster, side: FieldSide, slot: number, pos: Vec2): FieldU
     slowFor: 0,
     disengageFor: 0,
     kiteFor: KITE_MAX,
+    blockingUntil: 0,
     dead: false,
   }
 }
@@ -319,11 +320,19 @@ function utilityScore(
  */
 function basicAttack(u: FieldUnit): Move {
   // Fight at the range this monster is built for.
+  // ⚠️ Pick the channel by REACH, not by power. Keying off the highest-POWER
+  // move gave a ranged monster a MELEE basic (range 1.28) while `reachOf` parked
+  // it at 6.8 — its free attack was unreachable, so between skill cooldowns it
+  // had nothing to do and simply walked. The basic attack must reach from where
+  // the unit actually chooses to stand, or it does not exist.
   let channel: Channel = 'melee'
-  let best = 0
+  let bestRange = -1, bestPower = -1
   for (const mv of u.m.loadout) {
     if (mv.type !== 'damage') continue
-    if (mv.power > best) { best = mv.power; channel = mv.channel }
+    const r = mv.range ?? CHANNEL_RANGE[mv.channel]
+    if (r > bestRange || (r === bestRange && mv.power > bestPower)) {
+      bestRange = r; bestPower = mv.power; channel = mv.channel
+    }
   }
   const stat: Stat = channel === 'melee' ? 'STR' : channel === 'ranged' ? 'DEX'
     : channel === 'magic' ? 'INT' : channel === 'voice' ? 'CHA' : 'WIS'
@@ -592,6 +601,29 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       // zero-engagement draw no tiebreak can resolve. The walls close in.
       if (t >= SUDDEN_DEATH_AT && target && !steer) {
         goal = { ...target.pos }
+      }
+
+      // BLOCK — the free defensive action, the half of "Attack + Block" the field
+      // engine never had. A unit already in reach of its target with nothing off
+      // cooldown BRACES instead of walking off, which is what it used to do for
+      // want of any other option (13.8% of all unit-ticks measured pacing in
+      // range). Holding position IS the fix; the damage reduction is the reward.
+      // ⚠️ Never overrides a STEERING status (a feared monster must still run) and
+      // never applies once SUDDEN DEATH is forcing the fight — both of those exist
+      // to stop stand-offs, and blocking through them stalls fights into draws.
+      // ⚠️ Also requires LINE OF SIGHT: a ranged unit whose shot is blocked by a
+      // rock cannot cast, and if it braced on that it would stand behind cover
+      // forever instead of stepping out for an angle. Brace only when you could
+      // genuinely fight from here and are merely waiting on a cooldown.
+      if (!routed && !steer && t < SUDDEN_DEATH_AT && target
+        // ⚠️ NO slack on the range: bracing even slightly outside what it can
+        // actually cast at deadlocks the unit — it holds just out of its own
+        // reach and never closes the last step.
+        && dist(u.pos, target.pos) <= reachOf(u)
+        && (isMelee(u) || hasLineOfSight(u.pos, target.pos, obstacles))) {
+        u.blockingUntil = t + DT * 2
+        vis.set(u.id, 'block')
+        continue
       }
       stepToward(u, goal, mates, obstacles)
       vis.set(u.id, 'move')
@@ -901,7 +933,9 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     const sp = spatialOf(mv.name)
     const behind = sp?.backstab && isBehind(u, target) ? sp.backstab : 1
     const raw = mv.power * (1 + atk / 320) * (crit ? 1.5 : 1) * behind * falloff * modAtk(u) * (CHANNEL_DMG[mv.channel] ?? 1)
-    const dmg = Math.max(1, Math.round(raw * (1 - Math.min(0.55, mitigation / 1400)) * statusDamageTaken(target) * modDmgTaken(target)))
+    // A BLOCKING target shrugs off part of the blow — the payoff for bracing.
+    const blocked = target.blockingUntil > tick * DT ? 1 - BLOCK_DR : 1
+    const dmg = Math.max(1, Math.round(raw * (1 - Math.min(0.55, mitigation / 1400)) * statusDamageTaken(target) * modDmgTaken(target) * blocked))
     target.hp -= dmg
     dmgDealt[u.side] += dmg
     lastAggressor = u.side

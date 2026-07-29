@@ -124,6 +124,10 @@ export interface FieldUnit {
    *  it drains while a threat is in kite range and only refills once the unit is
    *  safe again. At 0 the unit holds ground (and uses cover) instead of running. */
   kiteFor: number
+  /** BLOCKING until this time. A unit in reach of its target with nothing off
+   *  cooldown BRACES rather than wandering — the free defensive action the turn
+   *  engine has always had ("Attack + Block") and the field engine was missing. */
+  blockingUntil: number
   dead: boolean
 }
 
@@ -151,7 +155,9 @@ export type FieldEvent =
   | { t: number; kind: 'end'; winner: FieldSide | 'draw' }
 
 /** Coarse pose for the renderer — drives which animation a sprite plays. */
-export type UnitVisState = 'idle' | 'move' | 'cast' | 'hurt' | 'dead'
+export type UnitVisState = 'idle' | 'move' | 'cast' | 'hurt' | 'block' | 'dead'
+/** Damage a blocking unit shrugs off. The free defensive action's whole value. */
+export const BLOCK_DR = 0.2
 
 export interface FieldSetup {
   seed: string

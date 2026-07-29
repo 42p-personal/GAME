@@ -310,7 +310,10 @@ export function desiredGoal(
 
   // Stand-off point: just inside reach, so a ranged unit does not walk into a
   // melee unit's face and a melee unit does close all the way.
-  const standoff = Math.max(0.8, reach * 0.85 * engageMult(self))
+  // ⚠️ MUST sit inside the BASIC attack's range (engine: CHANNEL_RANGE × 0.8) or
+  // the unit parks where its own free attack cannot reach — which is exactly what
+  // 0.85 did, leaving every monster with nothing to do between skill cooldowns.
+  const standoff = Math.max(0.8, reach * 0.75 * engageMult(self))
   let goal: Vec2
   if (d > standoff) {
     goal = add(self.pos, scale(toward, d - standoff))

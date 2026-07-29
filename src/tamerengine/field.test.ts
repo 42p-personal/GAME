@@ -159,7 +159,7 @@ describe('target selection', () => {
     radius: 0.9, speed: 3, hp: 500, maxHp: 500, mp: 50, maxMp: 50,
     traits: { cohesion: 0.5, predation: 0.5 }, targetId: null, retargetIn: 0,
     cooldowns: {}, castingFor: 0, castMoveId: null, castTargetId: null, statuses: [], mods: [], forcedTargetId: null, forcedUntil: 0,
-    rootedFor: 0, fadedUntil: 0, slowMult: 1, slowFor: 0, disengageFor: 0, kiteFor: 99, dead: false, ...over,
+    rootedFor: 0, fadedUntil: 0, slowMult: 1, slowFor: 0, disengageFor: 0, kiteFor: 99, blockingUntil: 0, dead: false, ...over,
   })
 
   it('a PREDATOR crosses the field for the valuable kill; an ANCHOR takes what is near', () => {
@@ -197,7 +197,7 @@ describe('positioning', () => {
     radius: 0.9, speed: 3, hp: 500, maxHp: 500, mp: 50, maxMp: 50,
     traits: { cohesion: 0.5, predation: 0.5 }, targetId: null, retargetIn: 0,
     cooldowns: {}, castingFor: 0, castMoveId: null, castTargetId: null, statuses: [], mods: [], forcedTargetId: null, forcedUntil: 0,
-    rootedFor: 0, fadedUntil: 0, slowMult: 1, slowFor: 0, disengageFor: 0, kiteFor: 99, dead: false, ...over,
+    rootedFor: 0, fadedUntil: 0, slowMult: 1, slowFor: 0, disengageFor: 0, kiteFor: 99, blockingUntil: 0, dead: false, ...over,
   })
 
   it('closes the distance toward a distant target', () => {
@@ -232,7 +232,7 @@ describe('awareness — the counter to a dive', () => {
     radius: 0.9, speed: 3, hp: 500, maxHp: 500, mp: 50, maxMp: 50,
     traits: { cohesion: 0.5, predation: 0.5 }, targetId: null, retargetIn: 0,
     cooldowns: {}, castingFor: 0, castMoveId: null, castTargetId: null, statuses: [], mods: [], forcedTargetId: null, forcedUntil: 0,
-    rootedFor: 0, fadedUntil: 0, slowMult: 1, slowFor: 0, disengageFor: 0, kiteFor: 99, dead: false, ...over,
+    rootedFor: 0, fadedUntil: 0, slowMult: 1, slowFor: 0, disengageFor: 0, kiteFor: 99, blockingUntil: 0, dead: false, ...over,
   })
 
   it('an ALERT monster turns on the enemy diving its wounded ally', () => {
