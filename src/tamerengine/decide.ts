@@ -297,22 +297,40 @@ export function desiredGoal(
     const pull = self.traits.cohesion * 0.35
     goal = { x: goal.x * (1 - pull) + c.x * pull, y: goal.y * (1 - pull) + c.y * pull }
   }
-  // USE COVER: sample a ring around the intended spot and prefer ground where
-  // an obstacle breaks the enemies' line to us while our own target stays
-  // reachable. Cover you cannot shoot from is just hiding.
-  if (self.m.tactics?.useCover && losFn && liveEnemies.length) {
-    const threat = centroid(liveEnemies)
+  // RUN LoS / USE COVER. A ranged unit under pressure USES THE TERRAIN: when a
+  // melee threat is closing, it prefers a stance that breaks that threat's line
+  // to it while it keeps a shot on its own target — tuck behind a rock and peek,
+  // instead of sprinting across the open (which is what read as "racing around
+  // the map"). Default behaviour for ranged when pressured; the `useCover` order
+  // forces it even before a threat is in its face. Melee never does this — its
+  // whole job is to be in contact.
+  if (reach > 3 && losFn && liveEnemies.length) {
+    // the nearest MELEE bearing down on us — that is who we break line from
+    let threat: FieldUnit | null = null
+    let td = Infinity
+    for (const e of liveEnemies) {
+      if (!isMelee(e)) continue
+      const d = dist(self.pos, e.pos)
+      if (d < td) { td = d; threat = e }
+    }
+    const pressured = !!threat && td < reach * 1.3        // inside our stand-off
+    const forced = self.m.tactics?.useCover
     const obey = personalityOf(self.m).temperament / 100
-    if (obey > 0.25 && losFn(goal, threat)) {
-      for (let i = 0; i < 8; i++) {
-        const a = (i / 8) * Math.PI * 2
-        const c = { x: goal.x + Math.cos(a) * 3.5, y: goal.y + Math.sin(a) * 3.5 }
+    if (threat && obey > 0.2 && (pressured || forced) && losFn(goal, threat.pos)) {
+      let bestCover: Vec2 | null = null
+      let bestScore = -Infinity
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2
+        const rad = 2.6 + (i % 2) * 1.8
+        const c = { x: goal.x + Math.cos(a) * rad, y: goal.y + Math.sin(a) * rad }
         if (c.x < 1 || c.x > FIELD_W - 1 || c.y < 1 || c.y > FIELD_H - 1) continue
-        if (losFn(c, threat)) continue           // still exposed
-        if (dist(c, target.pos) > reach) continue // cannot shoot from there
-        goal = c
-        break
+        if (losFn(c, threat.pos)) continue            // still exposed to the threat
+        if (dist(c, target.pos) > reach) continue     // can't shoot our target from here
+        // prefer cover that stays close to where we already wanted to be (less running)
+        const score = -dist(c, goal)
+        if (score > bestScore) { bestScore = score; bestCover = c }
       }
+      if (bestCover) goal = bestCover
     }
   }
 

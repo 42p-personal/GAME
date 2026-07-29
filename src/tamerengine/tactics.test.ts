@@ -78,25 +78,25 @@ describe('commit', () => {
 })
 
 describe('use cover', () => {
-  it('moves to ground that breaks the enemy line of sight', () => {
+  it('a RANGED unit runs LoS — tucks where a closing melee cannot see it', () => {
     const los = (a: { x: number; y: number }, b: { x: number; y: number }) =>
       hasLineOfSight(a, b, DEFAULT_OBSTACLES)
     const o = DEFAULT_OBSTACLES[0] // spans x 18.8-21.2, y 3.5-8.0
-    // Both stand BELOW the rock, so the line between them is currently clear —
-    // there is cover available, and the seeker has to choose to use it.
-    const foe = unit('f', { side: 'B', pos: { x: o.x + 5, y: 10 } })
     const start = { x: o.x - 1.8, y: 10 }
+    // Cover is a RANGED behaviour, and it breaks line from the closing MELEE
+    // threat specifically (melee wants contact and never hides).
+    const foe = unit('f', {
+      side: 'B', pos: { x: o.x + 4, y: 10 },
+      m: { ...generateMonster('cover-foe', { speciesId: 'aegisox', train: 700 }), tactics: { ...DEFAULT_TACTICS } } as Monster, // Tank, reach 1.6
+    })
     expect(los(start, foe.pos)).toBe(true) // precondition: currently exposed
-
-    const plain = unit('m1', { pos: { ...start } })
-    const seeker = unit('m2', { pos: { ...start }, m: mk('m', obedient({ useCover: true })) })
-    const gPlain = desiredGoal(plain, foe, [], [foe], los)
+    const seeker = unit('m2', {
+      pos: { ...start },
+      m: { ...generateMonster('cover-rg', { speciesId: 'grivvel', train: 850 }), personality: { temperament: 100 }, tactics: { ...DEFAULT_TACTICS, useCover: true } } as Monster, // Rogue, reach 8
+    })
     const gSeek = desiredGoal(seeker, foe, [], [foe], los)
-
-    // The one told to use cover ends up somewhere the enemy cannot see it.
+    // It ends up somewhere the melee threat cannot see it — while still able to shoot.
     expect(los(gSeek, foe.pos)).toBe(false)
-    // The one with no such order does not go out of its way to hide.
-    expect(gSeek).not.toEqual(gPlain)
   })
 
   it('is ignored by a wilful monster', () => {

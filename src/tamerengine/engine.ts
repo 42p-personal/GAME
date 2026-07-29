@@ -56,6 +56,13 @@ export const hasLineOfSight = (a: Vec2, b: Vec2, obstacles: Obstacle[]): boolean
 // stacked. Must stay below (CHANNEL_RANGE.melee × 0.8) / (2 × radius) = 0.71.
 const COLLISION_R_FRAC = 0.66
 
+// Field-only DAMAGE-by-delivery. Range is worth paying for: a ranged unit hits
+// the back line and fights from cover, so it trades raw punch for that reach;
+// melee, walled to what's adjacent and divable, hits harder. FIELD-ONLY —
+// battle.ts and its 12 goldens never read this, so it cannot move them. Small on
+// purpose, and sim-tuned per the balancing rule; nudge gently.
+const CHANNEL_DMG: Record<string, number> = { melee: 1.12, ranged: 0.88, magic: 0.92, voice: 1, support: 1 }
+
 // ── Setup ───────────────────────────────────────────────────────────────────
 /** Default cover: a symmetric pair of blocks so neither side is advantaged. */
 export const DEFAULT_OBSTACLES: Obstacle[] = [
@@ -881,7 +888,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     // is worth a slot. It only pays if the caster is genuinely on the far side.
     const sp = spatialOf(mv.name)
     const behind = sp?.backstab && isBehind(u, target) ? sp.backstab : 1
-    const raw = mv.power * (1 + atk / 320) * (crit ? 1.5 : 1) * behind * falloff * modAtk(u)
+    const raw = mv.power * (1 + atk / 320) * (crit ? 1.5 : 1) * behind * falloff * modAtk(u) * (CHANNEL_DMG[mv.channel] ?? 1)
     const dmg = Math.max(1, Math.round(raw * (1 - Math.min(0.55, mitigation / 1400)) * statusDamageTaken(target) * modDmgTaken(target)))
     target.hp -= dmg
     dmgDealt[u.side] += dmg
