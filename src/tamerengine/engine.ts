@@ -63,6 +63,10 @@ const COLLISION_R_FRAC = 0.66
 // purpose, and sim-tuned per the balancing rule; nudge gently.
 const CHANNEL_DMG: Record<string, number> = { melee: 1.12, ranged: 0.88, magic: 0.92, voice: 1, support: 1 }
 
+// Fraction of its speed a unit keeps while moving AWAY from the nearest enemy.
+// See the note in stepToward: this is what breaks the pursuit equilibrium.
+const BACKPEDAL_MULT = 0.6
+
 // ── Setup ───────────────────────────────────────────────────────────────────
 /** Default cover: a symmetric pair of blocks so neither side is advantaged. */
 export const DEFAULT_OBSTACLES: Obstacle[] = [
@@ -1024,7 +1028,25 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       }
     }
     dir = norm(dir)
-    const step = u.speed * u.slowMult * statusSpeedMult(u) * DT
+    // BACKPEDAL PENALTY. ⚠️ Giving ground costs speed. Without this, a fleeing
+    // unit runs as fast as its pursuer, so a chase NEVER resolves — a pursuit
+    // equilibrium that left units out of range 76% of the fight regardless of
+    // field size or speed (both measured, both invariant). Retreating at a
+    // fraction of advance speed is what lets a committed attacker actually close.
+    let backpedal = 1
+    {
+      let nd = Infinity, nearest: FieldUnit | null = null
+      for (const e of units) {
+        if (e.dead || e.side === u.side) continue
+        const d = dist(u.pos, e.pos)
+        if (d < nd) { nd = d; nearest = e }
+      }
+      if (nearest) {
+        const toFoe = norm(sub(nearest.pos, u.pos))
+        if (dir.x * toFoe.x + dir.y * toFoe.y < -0.25) backpedal = BACKPEDAL_MULT
+      }
+    }
+    const step = u.speed * backpedal * u.slowMult * statusSpeedMult(u) * DT
     const tryMove = (nx: number, ny: number) => {
       const p = { x: nx, y: ny }
       if (obs.some((o) => insideObstacle(p, o, u.radius * 0.6))) return false
