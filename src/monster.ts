@@ -378,6 +378,9 @@ export function attackStat(s: Stats, channel: Move['channel']): number {
 // Multi-hit skills pay for their expected total output, not the per-hit power.
 // Costs are 2× the base formula (user spec 2026-07-20: "increase all spell costs by 100%").
 export function manaCost(m: Move): number {
+  // AUTHORED cost wins. Mana is a design axis, not just a formula output: a move
+  // may be deliberately stronger on some other axis and simply cost more MP.
+  if (m.mana !== undefined) return m.mana
   const avgHits = m.effects?.hits ? (m.effects.hits[0] + m.effects.hits[1]) / 2 : 1
   const base = m.type === 'damage' ? Math.max(4, Math.round(m.power * avgHits * 0.45))
     : m.power > 0 ? Math.max(6, Math.round(m.power * 0.4)) // heals

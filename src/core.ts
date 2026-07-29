@@ -74,6 +74,35 @@ export type Target = 'enemy' | 'allEnemies' | 'frontRow' | 'backRow' | 'self' | 
 export const AOE_FALLOFF_PER_TARGET = 0.05
 export const aoeFalloff = (targetCount: number): number =>
   Math.max(0.4, 1 - AOE_FALLOFF_PER_TARGET * Math.max(0, targetCount - 1))
+
+// ── STAT SCALING (ability rework) ───────────────────────────────────────────
+// Damage is `power × (1 + stat × statScale)`. Every move used to share one flat
+// 1/320, which is why the pool's throughput ran flat-to-INVERTED against learn
+// level: lvl-90 Power Strike (15.4 DPS) beat the lvl-920 capstone Titanfall
+// (12.3), so training a stat to 920 could leave a monster with a worse attack
+// than it had at 90.
+//
+// A higher-level move should GENERALLY scale better, so progression pays twice —
+// a better-scaling move AND the trained stat. That also keeps low-league fights
+// sane: a capstone is close to a starter on an untrained monster and only pulls
+// away on an invested one.
+//
+// ⚠️ A SEED, NOT A LAW. `Move.statScale` is authored per ability; this only
+// supplies the default when a move does not state one.
+// ⚠️ LOW is pinned at the OLD flat 1/320 on purpose, so this change only ever
+// ADDS. A first cut used 1/420, which quietly NERFED every low/mid move — and
+// since `learnedMoves` gates by stat, a mid-game monster can only equip low/mid
+// moves, so the whole mid-game got weaker (sim: damage/fight 28.9k → 27.3k).
+// Progression should pay by lifting the top, not by lowering the bottom.
+export const STAT_SCALE_LOW = 1 / 320  // ~lvl 40 — unchanged from the old flat value
+export const STAT_SCALE_HIGH = 1 / 150 // ~lvl 920
+export const defaultStatScale = (learnLevel: number): number => {
+  const t = Math.min(1, Math.max(0, (learnLevel - 40) / (920 - 40)))
+  return STAT_SCALE_LOW + (STAT_SCALE_HIGH - STAT_SCALE_LOW) * t
+}
+/** The coefficient a move actually uses — its authored value, else the seed. */
+export const statScaleOf = (mv: Move): number =>
+  mv.statScale ?? defaultStatScale(mv.learnLevel)
 export type StatusKind = 'blind' | 'poison' | 'burn' | 'fear' | 'confusion' | 'stun' | 'knockback' | 'bleed' | 'silence' | 'vulnerable'
   | 'sleep' | 'doom' | 'healblock' | 'haste' | 'charm'
 
@@ -158,6 +187,26 @@ export interface Move {
   status?: MoveStatus
   element?: Element // magic moves carry an element (§8.5)
   effects?: MoveEffects
+  // ── Per-ability authoring axes (ability rework) ───────────────────────────
+  /**
+   * How hard this move scales with its stat, as the coefficient in
+   * `power × (1 + stat × statScale)`.
+   *
+   * ⚠️ THIS IS A DESIGN AXIS, NOT A DERIVED VALUE. Every move used to share one
+   * flat `1/320`, which is why the pool's throughput was flat-to-INVERTED against
+   * learn level — a lvl-90 Power Strike out-damaged the lvl-920 capstone. Authored
+   * per ability so a move can deliberately scale hard or flat; `defaultStatScale`
+   * below only seeds a sensible starting point from `learnLevel`.
+   *
+   * Higher-level moves should GENERALLY scale better, so progression pays twice
+   * (a better-scaling move AND the trained stat) — a guideline, not a law.
+   */
+  statScale?: number
+  /**
+   * Authored MP cost, overriding the derived `monster.ts:manaCost`. Mana is a
+   * trading axis: a move may be stronger in some dimension and simply cost more.
+   */
+  mana?: number
   // ── Spatial fields (v0.93, field engine only) ────────────────────────────
   // The turn-based engine in battle.ts NEVER reads these, so adding them cannot
   // move a golden. Both are OPTIONAL and fall back to a channel-derived default

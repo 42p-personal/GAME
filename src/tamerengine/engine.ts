@@ -5,7 +5,7 @@
 // depends on `simulateFieldBattle` being a pure function of
 // (monsters + placement + obstacles + seed). So: fixed dt, fixed unit order,
 // one seeded rng stream, and no wall-clock or Math.random anywhere.
-import { Channel, Monster, Move, MoveArea, MoveSpatial, Stat, aoeFalloff, mulberry32, hashString, StatusKind } from '../core'
+import { Channel, Monster, Move, MoveArea, MoveSpatial, Stat, aoeFalloff, statScaleOf, mulberry32, hashString, StatusKind } from '../core'
 import { chooseLoadout, learnedMoves, manaCost, maxHp, maxMana } from '../monster'
 import {
   DT, FIELD_H, FIELD_W, FieldEvent, FieldResult, FieldSetup, FieldSide, FieldUnit,
@@ -157,7 +157,9 @@ const castOf = (mv: Move) => mv.castTime ?? CHANNEL_CAST_TIME[mv.channel]
 function estimateDamage(u: FieldUnit, mv: Move, target: FieldUnit): number {
   const atk = u.m.stats[mv.stat] ?? 0
   const mit = mv.channel === 'melee' || mv.channel === 'ranged' ? target.m.stats.CON : target.m.stats.WIS
-  return Math.max(1, Math.round(mv.power * (1 + atk / 320) * (1 - Math.min(0.55, mit / 1400))))
+  // ⚠️ Must mirror strike()'s formula, or kill-checks (and therefore `worthSpending`
+  // and the finish-it override) misjudge whether a cast would land a kill.
+  return Math.max(1, Math.round(mv.power * (1 + atk * statScaleOf(mv)) * (1 - Math.min(0.55, mit / 1400))))
 }
 
 /**
@@ -972,7 +974,8 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     // is worth a slot. It only pays if the caster is genuinely on the far side.
     const sp = spatialOf(mv.name)
     const behind = sp?.backstab && isBehind(u, target) ? sp.backstab : 1
-    const raw = mv.power * (1 + atk / 320) * (crit ? 1.5 : 1) * behind * falloff * modAtk(u) * (CHANNEL_DMG[mv.channel] ?? 1)
+    // ⚠️ Per-ability stat scaling, not a shared /320 — see statScaleOf in core.ts.
+    const raw = mv.power * (1 + atk * statScaleOf(mv)) * (crit ? 1.5 : 1) * behind * falloff * modAtk(u) * (CHANNEL_DMG[mv.channel] ?? 1)
     // A BLOCKING target shrugs off part of the blow — the payoff for bracing.
     const blocked = target.blockingUntil > tick * DT ? 1 - BLOCK_DR : 1
     const dmg = Math.max(1, Math.round(raw * (1 - Math.min(0.55, mitigation / 1400)) * statusDamageTaken(target) * modDmgTaken(target) * blocked))
