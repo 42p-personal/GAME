@@ -12,6 +12,7 @@ import {
   MAX_TICKS, Obstacle, RETARGET_EVERY, UnitVisState, Vec2,
   CHANNEL_CAST_TIME, CHANNEL_RANGE, DEPLOY_DEPTH, SECONDS_PER_ROUND,
   SUDDEN_DEATH_AT, SUDDEN_DEATH_BASE, SUDDEN_DEATH_RAMP, KITE_MAX, KITE_REFILL, BLOCK_DR,
+  BASIC_STAT_TIER, BASIC_BASE_POWER, BASIC_STAT_SCALE,
 } from './types'
 import { archetypeOf, desiredGoal, dist, isMelee, norm, pickTarget, reachOf, spacingRadius, sub, traitsFor, wantsToKite } from './decide'
 import { personalityOf, spendAbove } from './personality'
@@ -318,7 +319,7 @@ function utilityScore(
  * every ~6 seconds and the fight read as passive. A basic attack matched to the
  * unit's natural range keeps everyone contributing between cooldowns.
  */
-function basicAttack(u: FieldUnit): Move {
+export function basicAttackFor(m: Monster): Move {
   // Fight at the range this monster is built for.
   // ⚠️ Pick the channel by REACH, not by power. Keying off the highest-POWER
   // move gave a ranged monster a MELEE basic (range 1.28) while `reachOf` parked
@@ -327,7 +328,7 @@ function basicAttack(u: FieldUnit): Move {
   // the unit actually chooses to stand, or it does not exist.
   let channel: Channel = 'melee'
   let bestRange = -1, bestPower = -1
-  for (const mv of u.m.loadout) {
+  for (const mv of m.loadout) {
     if (mv.type !== 'damage') continue
     const r = mv.range ?? CHANNEL_RANGE[mv.channel]
     if (r > bestRange || (r === bestRange && mv.power > bestPower)) {
@@ -342,7 +343,8 @@ function basicAttack(u: FieldUnit): Move {
     // Deliberately weak and fast — it fills the gaps between real skills, it
     // does not replace them.
     cooldown: 0.9, accuracy: 90,
-    power: 12 + (u.m.stats[stat] ?? 0) / 26,
+    // Stat-tiered: physical swings hit, caster jabs do not (see BASIC_STAT_TIER).
+    power: BASIC_BASE_POWER + (m.stats[stat] ?? 0) * BASIC_STAT_SCALE * (BASIC_STAT_TIER[stat] ?? 0.5),
     range: CHANNEL_RANGE[channel] * 0.8,
     castTime: 0.15,
     desc: 'A basic strike.',
@@ -538,7 +540,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       // 254 utility casts. The bar is whatever the unit would otherwise DO.
       let mv: Move | null = routed || silenced ? null : chooseMove(u, target, obstacles)
       if (!mv && !routed) {
-        const ba = basicAttack(u)
+        const ba = basicAttackFor(u.m)
         const inReach = dist(u.pos, target.pos) <= (ba.range ?? CHANNEL_RANGE.melee)
         const canSee = ba.channel === 'melee' || hasLineOfSight(u.pos, target.pos, obstacles)
         if (inReach && canSee && (u.cooldowns.basic ?? 0) <= 0) mv = ba
@@ -895,7 +897,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
   }
 
   function resolveHit(u: FieldUnit, target: FieldUnit, moveId: string) {
-    const mv = u.m.loadout.find((x) => x.id === moveId) ?? basicAttack(u)
+    const mv = u.m.loadout.find((x) => x.id === moveId) ?? basicAttackFor(u.m)
     u.castMoveId = null
     u.castTargetId = null
     const t2 = +(tick * DT).toFixed(2)

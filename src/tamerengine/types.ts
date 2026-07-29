@@ -159,6 +159,24 @@ export type UnitVisState = 'idle' | 'move' | 'cast' | 'hurt' | 'block' | 'dead'
 /** Damage a blocking unit shrugs off. The free defensive action's whole value. */
 export const BLOCK_DR = 0.2
 
+// ── THE FREE ATTACK ─────────────────────────────────────────────────────────
+// ⚠️ It must never out-damage a real ability. It did: at train 850 the basic
+// out-DPSed every monster's BEST ability by 1.2–2.3×, so abilities were strictly
+// worse than just swinging, and the ~1s swing dominated the action economy.
+//
+// Base damage keys off the STAT — never off the monster's own abilities, which
+// is gameable in both directions — on a deliberate hierarchy: a STR bruiser's
+// swing is a real blow, a caster's is a feeble jab so it must spend abilities.
+// The basic's stat follows its channel (melee STR / ranged DEX / magic INT /
+// voice CHA / support WIS), so this table IS part of the class identity.
+export const BASIC_STAT_TIER: Record<string, number> = {
+  STR: 1.0, DEX: 0.85, INT: 0.7, CON: 0.55, CHA: 0.45, WIS: 0.35,
+}
+/** Flat floor, so an untrained monster can still swing for something. */
+export const BASIC_BASE_POWER = 5
+/** Stat → power, kept well under the authored pool's scaling. */
+export const BASIC_STAT_SCALE = 1 / 70
+
 export interface FieldSetup {
   seed: string
   teamA: Monster[]
