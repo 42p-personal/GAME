@@ -4,11 +4,11 @@
 import { useMemo, useState } from 'react'
 import { generateMonster } from '../monster'
 import { simulateFieldBattle } from './engine'
-import { FIELD_W, FIELD_H, Obstacle, Vec2 } from './types'
+import { FIELD_W, FIELD_H, Obstacle } from './types'
 import { autoDeployByRole } from './hex'
 import { Monster } from '../core'
 import { TamerArena } from './TamerArena'
-import { Deploy, DeployMonster } from './Deploy'
+import { Deploy, DeployMonster, DeployResult } from './Deploy'
 
 const OBSTACLES: Obstacle[] = [
   { x: FIELD_W / 2 - 1.4, y: 4.5, w: 2.8, h: 4.0 },
@@ -25,7 +25,7 @@ const build = (sp: string, seed: string): Monster => generateMonster(seed, { spe
 
 export function TamerArenaDemo() {
   const [n, setN] = useState(1)
-  const [placeA, setPlaceA] = useState<Vec2[] | null>(null)
+  const [deployed, setDeployed] = useState<DeployResult | null>(null)
 
   const teams = useMemo(() => {
     const seed = 'demo' + n
@@ -37,18 +37,21 @@ export function TamerArenaDemo() {
   const deployTeam: DeployMonster[] = A_SPECIES.map((s, i) => ({ id: 'A' + i, name: NAME[s], species: s }))
 
   const fight = useMemo(() => {
-    if (!placeA) return null
+    if (!deployed) return null
     const { seed, teamA, teamB } = teams
+    // The player's pre-battle orders ride on each monster's `.tactics` — this is
+    // what the field decider reads, so the plan set on the deploy screen bites.
+    const teamAO = teamA.map((m, i) => ({ ...m, tactics: deployed.tactics[i] }))
     // Enemy auto-deploys on its own hexes by role (sturdier = front).
     const placeB = autoDeployByRole('B', teamB.map((m) => ({ front: m.stats.CON + m.stats.STR - m.stats.INT - m.stats.WIS })))
     const speciesById: Record<string, string> = {}
     A_SPECIES.forEach((s, i) => (speciesById['A' + i] = s))
     B_SPECIES.forEach((s, i) => (speciesById['B' + i] = s))
-    const result = simulateFieldBattle({ seed, teamA, teamB, obstacles: OBSTACLES, placeA, placeB })
+    const result = simulateFieldBattle({ seed, teamA: teamAO, teamB, obstacles: OBSTACLES, placeA: deployed.placeA, placeB })
     return { result, speciesById }
-  }, [placeA, teams])
+  }, [deployed, teams])
 
-  const reset = () => { setPlaceA(null); setN((v) => v + 1) }
+  const reset = () => { setDeployed(null); setN((v) => v + 1) }
 
   return (
     <div style={{ minHeight: '100vh', background: '#12141b', color: '#e9ecf3', padding: '24px 16px' }}>
@@ -65,7 +68,7 @@ export function TamerArenaDemo() {
             : 'Drop each monster onto a hex to set your formation, then start the fight. Standalone — not wired into the game yet.'}
         </p>
 
-        {!fight && <Deploy team={deployTeam} onStart={(pa) => setPlaceA(pa)} />}
+        {!fight && <Deploy team={deployTeam} onStart={setDeployed} />}
 
         {fight && (
           <>

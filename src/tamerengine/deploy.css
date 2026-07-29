@@ -55,3 +55,29 @@
 }
 .dp-start:disabled { background:#2c3342; color:#6b7280; border-color:#2c3342; cursor:not-allowed; }
 .dp-hint { margin-top:10px; font-size:13px; color:var(--muted,#8a93a7); max-width:64ch; }
+.dp-hint b { color:var(--ink,#e9ecf3); font-weight:700; }
+
+/* hex layer — fades out when the fight launches; the grid is deployment-only */
+.dp-hexlayer { position:absolute; inset:0; z-index:2; transition:opacity .45s ease; }
+.dp-hexlayer.launching { opacity:0; pointer-events:none; }
+/* the selected monster on the field */
+.dp-sprite.dp-sel { filter:drop-shadow(0 0 4px #5ab0ff) drop-shadow(0 3px 2px rgba(0,0,0,.45)); }
+
+/* ── pre-battle orders (TacticsPanel) ────────────────────────────────────── */
+.tac-panel { margin-top:14px; background:var(--panel,#1b1f2a); border:1px solid var(--line,#2c3342);
+  border-radius:10px; padding:12px 14px; }
+.tac-head { font:600 13px/1 ui-monospace, Consolas, monospace; color:var(--ink,#e9ecf3); margin-bottom:10px; }
+.tac-head b { color:#5ab0ff; }
+.tac-row { display:grid; grid-template-columns:84px 1fr; gap:8px; align-items:center; padding:5px 0; }
+.tac-row + .tac-row { border-top:1px solid rgba(255,255,255,.05); }
+.tac-label { font:600 11px/1.2 ui-monospace, Consolas, monospace; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--muted,#8a93a7); }
+.tac-opts { display:flex; flex-wrap:wrap; gap:6px; }
+.tac-opt { font:600 12px/1 ui-monospace, Consolas, monospace; color:var(--ink,#e9ecf3);
+  background:#12141b; border:1px solid var(--line,#2c3342); border-radius:7px;
+  padding:6px 9px; cursor:pointer; transition:border-color .12s, background-color .12s; }
+.tac-opt:hover { border-color:#5ab0ff; }
+.tac-opt.on { background:rgba(90,176,255,.16); border-color:#5ab0ff; color:#dbe9ff; }
+
+@media (prefers-reduced-motion: reduce) { .dp-hexlayer { transition:none; } }
+@media (max-width:560px) { .tac-row { grid-template-columns:1fr; gap:4px; } }

@@ -211,8 +211,13 @@ suite — **136/136 green**, turn engine and its 12 goldens untouched.
   — stage cups/trials onto tamerengine, run the fight through `TamerArena` in the
   `App.tsx` battle phase, produce the reward/injury/exp the cup loop consumes,
   then retire `simulateTeamBattle`.
-- Tactics controls on the deploy screen (M5 placed formation only; the tactics
-  already drive behaviour, but the standalone demo uses defaults).
+- ~~Tactics controls on the deploy screen~~ **DONE (Step 1).** `Deploy.tsx` is now
+  the planning phase: place on hexes **and** set each monster's orders
+  (`TacticsPanel.tsx` — the 7 Tactics fields the field decider reads:
+  temperament, target, engage, spacing, commit, cover, survival), then **FIGHT**
+  fades the hex grid out and hands (placement + tactics) to the sim. The grid is
+  deployment-only, gone in the fight. A differential sim confirms the orders bite
+  (same teams/placement: defensive 68s/1-survivor vs aggressive 31s/3).
 - Ward / guard / thorns / cleanse / dodge / accuracy have no field representation.
 - Per-cup arenas: backdrop + obstacle set keyed to the tournament.
 - Battle sprites for the other 60 species — explicitly *after* the engine works.
