@@ -110,6 +110,19 @@ export const FIELD_STATUS: Record<StatusKind, FieldStatusRule> = {
 /** Statuses that help their carrier — never applied to enemies by mistake. */
 export const BENEFICIAL = new Set<StatusKind>(['haste'])
 
+/**
+ * CONTROL statuses — the ones that stop or hijack a monster's actions, and so the
+ * ones subject to diminishing returns (see CC_DR_STEP in types.ts).
+ *
+ * ⚠️ Deliberately NOT every debuff. poison/burn/bleed/vulnerable/doom/healblock
+ * hurt you but leave you playing the game, so putting them on the DR meter would
+ * let a damage-over-time kit burn away the protection that is meant to guard
+ * against LOCKOUT — the exact thing DR exists to cap.
+ */
+export const CONTROL_STATUSES = new Set<StatusKind>([
+  'stun', 'sleep', 'fear', 'confusion', 'charm', 'silence', 'knockback',
+])
+
 // How far off its heading a confused monster veers, in radians. Fixed, not
 // rolled: the field engine's contract is that a replay reproduces exactly, and
 // alternating the sign per application is enough to stop it reading as a

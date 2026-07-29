@@ -14,12 +14,12 @@ import {
   SUDDEN_DEATH_AT, SUDDEN_DEATH_BASE, SUDDEN_DEATH_RAMP, KITE_MAX, KITE_REFILL, BLOCK_DR,
   BASIC_STAT_TIER, BASIC_BASE_POWER, BASIC_STAT_SCALE,
   MANA_ON_HIT_TAKEN, MANA_ON_HIT_DEALT, MANA_SUPPORT_PER_SEC, WIS_REGEN_DIVISOR, FIELD_MANA_COST_MULT,
-  FIELD_LOADOUT_SIZE,
+  FIELD_LOADOUT_SIZE, CC_DR_STEP, CC_DR_RESET, CLEANSE_CC_IMMUNITY,
 } from './types'
-import { archetypeOf, desiredGoal, dist, isMelee, manaRoleOf, norm, pickTarget, reachOf, spacingRadius, sub, traitsFor, wantsToKite } from './decide'
+import { archetypeOf, desiredGoal, dist, isMelee, manaRoleOf, norm, pickTarget, reachOf, spacingRadius, sub, threatOf, traitsFor, wantsToKite } from './decide'
 import { personalityOf, spendAbove } from './personality'
 import { spatialOf } from './spatial'
-import { FIELD_STATUS, BENEFICIAL, CONFUSION_VEER } from './status'
+import { FIELD_STATUS, BENEFICIAL, CONTROL_STATUSES, CONFUSION_VEER } from './status'
 
 // ── Geometry helpers ────────────────────────────────────────────────────────
 const insideObstacle = (p: Vec2, o: Obstacle, pad = 0) =>
@@ -143,6 +143,11 @@ function buildUnit(m0: Monster, side: FieldSide, slot: number, pos: Vec2): Field
     disengageFor: 0,
     kiteFor: KITE_MAX,
     blockingUntil: 0,
+    ward: 0,
+    ccResist: 0,
+    lastCcAt: -999,
+    ccImmuneUntil: 0,
+    hasAttacked: false,
     dead: false,
   }
 }
@@ -253,6 +258,46 @@ function utilityScore(
       // comparison against damage and no monster ever healed anyone.
       const urgency = 1 + (1 - patient.hp / patient.maxHp) * 1.5
       offer(restored * urgency, patient)
+    }
+  }
+
+  // ── THE NINE FORMERLY-INERT EFFECTS ──────────────────────────────────────
+  // ⚠️ These scored ZERO, which is the whole reason no monster had ever cast one
+  // — 11 moves were literally unplayable. Every score below is SITUATIONAL, for
+  // the reason the Fade note gives: a flat value turns a defensive cooldown into
+  // a tic. This engine has twice shipped that bug (taunt cast 86 times before
+  // taunt existed; War Cry taking 137 of 254 utility casts for almost nothing).
+  {
+    const fx = mv.effects
+    const pool = mv.target === 'team' ? allies : mv.target === 'self' ? [u] : allies
+    // How much heat is actually on a candidate — defence is worth the danger.
+    const heatOn = (v: FieldUnit) => enemies.filter((e) => dist(v.pos, e.pos) < 6).length
+    const pick = (score: (v: FieldUnit) => number) => {
+      for (const v of pool) offer(score(v), v)
+    }
+    // WARD / GUARD — worth what they will actually absorb, so they are cast when
+    // a monster is under fire and never on an idle walk-up.
+    if (fx?.ward) pick((v) => (heatOn(v) > 0 ? fx.ward! * (0.5 + heatOn(v) * 0.4) : 0))
+    if (fx?.guard) pick((v) => heatOn(v) * fx.guard! * 2.5)
+    // THORNS — worth the hits it will reflect, i.e. how many are on that body.
+    if (fx?.thorns) pick((v) => heatOn(v) * fx.thorns! * 3)
+    // DODGE — avoided damage, so again a function of attackers.
+    if (fx?.dodgeBuff) pick((v) => heatOn(v) * fx.dodgeBuff! * 0.8)
+    // ACCURACY — worth more landed damage, judged on the holder's own output.
+    if (fx?.accBuff) pick((v) => fx.accBuff! * 0.6 * (1 + threatOf(v.m) / 120))
+    // HP REGEN — a slow heal: worth what it can actually restore.
+    if (fx?.hpRegenBuff) {
+      const rounds = fx.duration ?? 3
+      pick((v) => Math.min(fx.hpRegenBuff! * rounds, v.maxHp - v.hp) * 0.9)
+    }
+    // CLEANSE — the statuses it strips, plus real value in the CC immunity it
+    // now grants (so it is worth pre-casting on someone being chain-controlled).
+    if (fx?.cleanse) {
+      pick((v) => {
+        const bad = v.statuses.filter((st) => !BENEFICIAL.has(st.kind)).length
+        const chained = v.ccResist > 0 ? 12 : 0
+        return bad * 18 + chained
+      })
     }
   }
 
@@ -417,6 +462,13 @@ const statusDamageTaken = (u: FieldUnit) =>
 
 const modAtk = (u: FieldUnit) => u.mods.reduce((n, m) => n * (m.atk ?? 1), 1)
 const modDmgTaken = (u: FieldUnit) => u.mods.reduce((n, m) => n * (m.dmgTaken ?? 1), 1)
+// The previously-inert defensive/accuracy effects. These SUM (they are flat
+// amounts or percentage POINTS), unlike atk/dmgTaken which multiply.
+const modGuard = (u: FieldUnit) => u.mods.reduce((n, m) => n + (m.guard ?? 0), 0)
+const modThorns = (u: FieldUnit) => u.mods.reduce((n, m) => n + (m.thorns ?? 0), 0)
+const modDodge = (u: FieldUnit) => u.mods.reduce((n, m) => n + (m.dodge ?? 0), 0)
+const modAcc = (u: FieldUnit) => u.mods.reduce((n, m) => n + (m.acc ?? 0), 0)
+const modHpRegen = (u: FieldUnit) => u.mods.reduce((n, m) => n + (m.hpRegen ?? 0), 0)
 
 /** The affliction currently driving this unit's feet, if any. First wins. */
 const steeringStatus = (u: FieldUnit) => {
@@ -493,6 +545,13 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       const regen = u.m.stats.WIS / WIS_REGEN_DIVISOR
         + (mRole === 'support' ? MANA_SUPPORT_PER_SEC : 0)
       u.mp = Math.min(u.maxMp, u.mp + regen * DT)
+      // hpRegenBuff, finally real — authored per turn, applied per second here.
+      const hpr = modHpRegen(u)
+      if (hpr > 0 && !statusFlag(u, 'blockHeal')) {
+        u.hp = Math.min(u.maxHp, u.hp + (hpr / SECONDS_PER_ROUND) * DT)
+      }
+      // CC DR decays once the target has been left alone for the reset window.
+      if (u.ccResist > 0 && t - u.lastCcAt >= CC_DR_RESET) u.ccResist = 0
       tickStatuses(u, t)
       if (u.dead) { vis.set(u.id, 'dead'); continue }
 
@@ -827,6 +886,29 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       const crowd = mv.target === 'team' ? units.filter((x) => x.side === u.side && !x.dead) : [aim]
       for (const v of crowd) v.mods.push({ dmgTaken: Math.max(0.4, 1 - fx.defBuff / 100), until })
     }
+    // ── THE PREVIOUSLY-INERT DEFENSIVE / ACCURACY EFFECTS ────────────────────
+    // ⚠️ These nine keys existed on 29 pool moves and 26 signature moves and did
+    // NOTHING on the field — 11 moves were entirely inert, which is why a Tank
+    // could not tank. Ported from the turn engine's `applyBuffTo`.
+    if (friendly) {
+      const crowd = mv.target === 'team' ? units.filter((x) => x.side === u.side && !x.dead) : [aim]
+      for (const v of crowd) {
+        if (fx?.ward) v.ward += fx.ward // an absorb POOL, not a timed mod
+        if (fx?.guard) v.mods.push({ guard: fx.guard, until })
+        if (fx?.thorns) v.mods.push({ thorns: fx.thorns, until })
+        if (fx?.dodgeBuff) v.mods.push({ dodge: fx.dodgeBuff, until })   // POINTS
+        if (fx?.accBuff) v.mods.push({ acc: fx.accBuff, until })         // POINTS
+        if (fx?.hpRegenBuff) v.mods.push({ hpRegen: fx.hpRegenBuff, until })
+        // CLEANSE strips every non-beneficial status AND grants a short control
+        // immunity. ⚠️ It must NOT reset `ccResist` — doing so would make
+        // cleansing your own ally a DR-wipe that re-opens them to a full stun.
+        // The immunity is the compensation: a real window to act, no exploit.
+        if (fx?.cleanse) {
+          v.statuses = v.statuses.filter((st) => BENEFICIAL.has(st.kind))
+          v.ccImmuneUntil = Math.max(v.ccImmuneUntil, t2 + CLEANSE_CC_IMMUNITY)
+        }
+      }
+    }
     if (friendly && mv.power > 0 && !statusFlag(aim, 'blockHeal')) {
       const healed = Math.min(mv.power, aim.maxHp - aim.hp)
       if (healed > 0) {
@@ -870,7 +952,25 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
    */
   function applyFieldStatus(from: FieldUnit, target: FieldUnit, kind: StatusKind, rounds: number, t: number) {
     if (target.dead) return
-    const until = t + rounds * SECONDS_PER_ROUND
+    let seconds = rounds * SECONDS_PER_ROUND
+    // ── CC DIMINISHING RETURNS ───────────────────────────────────────────────
+    // Control on the same target lands shorter each time (100/75/50/25/immune),
+    // resetting after CC_DR_RESET quiet seconds. This is what makes chain-CC a
+    // TIMING decision instead of a dump, and it is the hard cap on the lockout
+    // build (WIS Disruptor + CHA Enchanter — resource denial plus action denial).
+    if (CONTROL_STATUSES.has(kind)) {
+      if (t < target.ccImmuneUntil) return // cleansed: briefly immune
+      // ⚠️ CON resists control natively — you cannot lock a Juggernaut down the
+      // way you lock a caster. Precedent: Aegisox's `Immovable` innate already
+      // makes incoming debuffs 25% weaker. Acts as a FLOOR on the meter.
+      const conFloor = Math.min(0.3, (target.m.stats.CON ?? 0) / 3000)
+      const resist = Math.min(1, Math.max(target.ccResist, conFloor))
+      seconds *= 1 - resist
+      target.ccResist = Math.min(1, Math.max(target.ccResist, conFloor) + CC_DR_STEP)
+      target.lastCcAt = t
+      if (seconds <= 0.05) return // fully diminished — the control simply fails
+    }
+    const until = t + seconds
     const rule = FIELD_STATUS[kind]
     if (rule.maxStacks) {
       if (target.statuses.filter((s) => s.kind === kind).length >= rule.maxStacks) return
@@ -963,7 +1063,10 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     }
     // BLIND and CONFUSION bite here — the accuracy penalty is the same one the
     // turn engine applies, so a blinded monster is worth the same in either.
-    if (rng() * 100 > mv.accuracy - statusAccPenalty(u)) {
+    // ⚠️ accBuff / dodgeBuff are percentage POINTS, never fractions, so they add
+    // to the accuracy figure directly (see the units rule in CLAUDE.md).
+    const acc = mv.accuracy - statusAccPenalty(u) + modAcc(u) - modDodge(target)
+    if (rng() * 100 > acc) {
       events.push({ t: t2, kind: 'miss', id: u.id, targetId: target.id, move: mv.name })
       return
     }
@@ -974,14 +1077,39 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     // is worth a slot. It only pays if the caster is genuinely on the far side.
     const sp = spatialOf(mv.name)
     const behind = sp?.backstab && isBehind(u, target) ? sp.backstab : 1
+    // FIRST STRIKE — bonus against a target that has not yet thrown a blow.
+    // ⚠️ The turn engine keys this off `actedThisRound`; a continuous field has no
+    // rounds, so it becomes "hasn't attacked yet", making it an OPENING reward.
+    const opener = mv.effects?.firstStrikeMult && !target.hasAttacked ? mv.effects.firstStrikeMult : 1
     // ⚠️ Per-ability stat scaling, not a shared /320 — see statScaleOf in core.ts.
-    const raw = mv.power * (1 + atk * statScaleOf(mv)) * (crit ? 1.5 : 1) * behind * falloff * modAtk(u) * (CHANNEL_DMG[mv.channel] ?? 1)
+    const raw = opener * mv.power * (1 + atk * statScaleOf(mv)) * (crit ? 1.5 : 1) * behind * falloff * modAtk(u) * (CHANNEL_DMG[mv.channel] ?? 1)
     // A BLOCKING target shrugs off part of the blow — the payoff for bracing.
     const blocked = target.blockingUntil > tick * DT ? 1 - BLOCK_DR : 1
-    const dmg = Math.max(1, Math.round(raw * (1 - Math.min(0.55, mitigation / 1400)) * statusDamageTaken(target) * modDmgTaken(target) * blocked))
-    target.hp -= dmg
+    // GUARD is FLAT damage reduction, subtracted after the multipliers — the turn
+    // engine's `defFlat`. Floored at 1 so a big guard can never make a unit
+    // outright immune, only very hard to chip.
+    const afterMult = raw * (1 - Math.min(0.55, mitigation / 1400)) * statusDamageTaken(target) * modDmgTaken(target) * blocked
+    const dmg = Math.max(1, Math.round(afterMult - modGuard(target)))
+    // WARD soaks BEFORE health — an absorb pool that depletes, not a multiplier.
+    let toHp = dmg
+    if (target.ward > 0) {
+      const soaked = Math.min(target.ward, toHp)
+      target.ward -= soaked
+      toHp -= soaked
+    }
+    target.hp -= toHp
+    u.hasAttacked = true // drives firstStrikeMult (see above)
     dmgDealt[u.side] += dmg
     lastAggressor = u.side
+    // THORNS — flat damage reflected onto the attacker per hit TAKEN. Melee-range
+    // only would be the alternative, but the turn engine reflects on any hit and
+    // that is what makes thorns a real answer to a ranged focus. Cannot kill via
+    // reflect chains: it never reflects onto a reflect.
+    const thorns = modThorns(target)
+    if (thorns > 0 && !u.dead && u.side !== target.side) {
+      u.hp -= Math.max(1, Math.round(thorns))
+      if (u.hp <= 0) { u.hp = 0; u.dead = true; events.push({ t: t2, kind: 'death', id: u.id }) }
+    }
     // MANA BY ROLE (see types.ts). A damage dealer is paid for CONNECTING and a
     // tank for SOAKING, so each fuels its kit by doing its actual job — the fix
     // for physical classes having no way to afford their own physical abilities.

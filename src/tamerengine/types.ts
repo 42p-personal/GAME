@@ -103,8 +103,36 @@ export interface FieldUnit {
   statuses: { kind: StatusKind; until: number; from: string }[]
   /** Timed multipliers from buff/debuff moves. Kept as a list rather than two
    *  scalars so several can overlap and expire independently — the turn engine
-   *  models these as round-limited `Combatant.mods` and this is its analogue. */
-  mods: { atk?: number; dmgTaken?: number; until: number }[]
+   *  models these as round-limited `Combatant.mods` and this is its analogue.
+   *
+   *  ⚠️ EXTENDED for the previously-inert effects rather than adding six parallel
+   *  timers: `guard` (flat DR), `thorns` (flat reflect per hit taken), `dodge` /
+   *  `acc` (percentage POINTS — never fractions), `hpRegen` (HP per second).
+   *  One list means expiry is handled in exactly one place. */
+  mods: {
+    atk?: number; dmgTaken?: number
+    guard?: number; thorns?: number; dodge?: number; acc?: number; hpRegen?: number
+    until: number
+  }[]
+  /** WARD — an absorb shield that soaks damage BEFORE health. Not timed: it is a
+   *  pool that depletes, mirroring the turn engine's `Combatant.ward`. */
+  ward: number
+  /** CC DIMINISHING RETURNS. Successive control on the same unit lands shorter:
+   *  applied for `duration × (1 − ccResist)`, then the meter steps up. Decays back
+   *  to 0 after CC_DR_RESET seconds without any control landing, so chain-CC is a
+   *  timing decision rather than a dump. */
+  ccResist: number
+  /** When the last control effect landed — drives the reset window above. */
+  lastCcAt: number
+  /** Brief control IMMUNITY, granted by a cleanse. ⚠️ Deliberately does NOT reset
+   *  `ccResist`: resetting it would make cleansing your own ally a DR-wipe exploit
+   *  that re-opens them to a full-duration stun. */
+  ccImmuneUntil: number
+  /** Has this unit attacked yet? ⚠️ The field's stand-in for the turn engine's
+   *  `actedThisRound`, which `firstStrikeMult` keys off — a continuous field has
+   *  no rounds, so "hasn't reacted yet" becomes "hasn't thrown a blow yet". Makes
+   *  first-strike bonuses an OPENING-burst reward rather than a per-round one. */
+  hasAttacked: boolean
   /** TAUNT. While this holds, the unit must attack the taunter — the one thing
    *  that lets a tank protect a back line it is not standing on. */
   forcedTargetId: string | null
@@ -158,6 +186,24 @@ export type FieldEvent =
 export type UnitVisState = 'idle' | 'move' | 'cast' | 'hurt' | 'block' | 'dead'
 /** Damage a blocking unit shrugs off. The free defensive action's whole value. */
 export const BLOCK_DR = 0.2
+
+// ── CC DIMINISHING RETURNS ──────────────────────────────────────────────────
+// Arena-style: control on the same target lands shorter each time, resetting
+// after a quiet window. 100% → 75% → 50% → 25% → immune.
+//
+// ⚠️ This is the hard cap on the lockout build (WIS Disruptor + CHA Enchanter:
+// resource denial stacked on action denial). It must exist BEFORE both of those
+// ability lines do, or that pairing has no counterplay at all.
+//
+// Global rather than per-category on purpose: mixing a silence with a charm gets
+// no discount, which is exactly what caps the lockout. Per-category would reward
+// varied CC kits but loosen that cap — revisit only if chain-CC feels
+// over-punished in sim.
+export const CC_DR_STEP = 0.25
+export const CC_DR_RESET = 3.0 // seconds without control before the meter clears
+/** Seconds of control immunity a cleanse grants. Compensation for NOT resetting
+ *  the DR meter — a real window to act, without the DR-wipe exploit. */
+export const CLEANSE_CC_IMMUNITY = 1.2
 
 // ── THE FREE ATTACK ─────────────────────────────────────────────────────────
 // ⚠️ It must never out-damage a real ability. It did: at train 850 the basic

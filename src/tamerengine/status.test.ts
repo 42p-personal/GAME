@@ -237,18 +237,29 @@ describe('field — non-damage moves are actually cast', () => {
     if (after.length) expect(after.some((e) => e.targetId === t.id)).toBe(true)
   })
 
-  it('never spends a cast on an effect the field does not model', () => {
-    // Dodge and accuracy mods have no field representation at all. A monster
-    // holding ONLY such a move must fall back to its basic attack, not burn
-    // cooldowns on nothing — the failure that had Taunt cast 86 times for zero
-    // effect before taunt was real. (Purge would NOT do here: its 10 power is a
-    // genuine small heal, so casting it is correct.)
-    for (const dead of ['Sidestep', 'Focus Aim', 'Blur']) {
-      const A = [mk('na' + dead, [move(dead)])]
-      const B = [mk('nb' + dead)]
-      const casts = of(run(A, B, 'noop').events, 'cast')
-      expect(casts.length, `${dead}: never acted`).toBeGreaterThan(0) // it still fights
-      expect(casts.every((e) => e.move !== dead), `${dead} was cast for nothing`).toBe(true)
+  it('the formerly-inert defensive effects are now MODELLED and get cast', () => {
+    // ⚠️ THIS TEST USED TO ASSERT THE OPPOSITE. Dodge/accuracy/ward/guard/thorns/
+    // cleanse had no field representation, so the invariant was "a monster holding
+    // only such a move must fall back to its basic attack rather than burn a
+    // cooldown on nothing". They are real now, so the same moves must be CHOSEN —
+    // and the old assertion is exactly what would catch them silently regressing
+    // to inert again.
+    // ⚠️ 'Focus Aim' is deliberately NOT in this list. It is a bare `accBuff: 10`,
+    // which scores 7.8 against a UTILITY_FLOOR of 8 — so the AI declines it, and
+    // that is CORRECT: +10 accuracy points on an already-90%-accurate attacker buys
+    // less than simply swinging. The effect is modelled; the move is just weak, and
+    // it earns its slot in the ability rework when it gains its crit rider. Padding
+    // the score to make this test pass is precisely how War Cry ended up taking 137
+    // of 254 utility casts.
+    for (const live of ['Sidestep', 'Blur']) {
+      // Two enemies on it, so the situational scoring has real danger to price:
+      // these are deliberately worthless with nothing nearby (see the Fade note
+      // in utilityScore — a flat value turns a defensive cooldown into a tic).
+      const A = [mk('na' + live, [move(live)])]
+      const B = [mk('nb' + live), mk('nc' + live)]
+      const casts = of(run(A, B, 'live').events, 'cast')
+      expect(casts.length, `${live}: never acted`).toBeGreaterThan(0)
+      expect(casts.some((e) => e.move === live), `${live} is still inert`).toBe(true)
     }
   })
 })
