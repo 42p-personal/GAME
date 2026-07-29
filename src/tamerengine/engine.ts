@@ -13,8 +13,9 @@ import {
   CHANNEL_CAST_TIME, CHANNEL_RANGE, DEPLOY_DEPTH, SECONDS_PER_ROUND,
   SUDDEN_DEATH_AT, SUDDEN_DEATH_BASE, SUDDEN_DEATH_RAMP, KITE_MAX, KITE_REFILL, BLOCK_DR,
   BASIC_STAT_TIER, BASIC_BASE_POWER, BASIC_STAT_SCALE,
+  MANA_ON_HIT_TAKEN, MANA_ON_HIT_DEALT, MANA_SUPPORT_PER_SEC, WIS_REGEN_DIVISOR, FIELD_MANA_COST_MULT,
 } from './types'
-import { archetypeOf, desiredGoal, dist, isMelee, norm, pickTarget, reachOf, spacingRadius, sub, traitsFor, wantsToKite } from './decide'
+import { archetypeOf, desiredGoal, dist, isMelee, manaRoleOf, norm, pickTarget, reachOf, spacingRadius, sub, traitsFor, wantsToKite } from './decide'
 import { personalityOf, spendAbove } from './personality'
 import { spatialOf } from './spatial'
 import { FIELD_STATUS, BENEFICIAL, CONFUSION_VEER } from './status'
@@ -126,6 +127,8 @@ function buildUnit(m: Monster, side: FieldSide, slot: number, pos: Vec2): FieldU
 }
 
 // ── Move selection ──────────────────────────────────────────────────────────
+/** FIELD mana cost — undoes monster.ts's turn-engine 2× (see FIELD_MANA_COST_MULT). */
+const mpCost = (mv: Move) => manaCost(mv) * FIELD_MANA_COST_MULT
 const rangeOf = (mv: Move) => mv.range ?? CHANNEL_RANGE[mv.channel]
 const castOf = (mv: Move) => mv.castTime ?? CHANNEL_CAST_TIME[mv.channel]
 
@@ -163,7 +166,7 @@ function chooseMove(u: FieldUnit, target: FieldUnit, obstacles: Obstacle[]): Mov
   let bestScore = -Infinity
   for (const mv of dmgMoves) {
     if ((u.cooldowns[mv.id] ?? 0) > 0) continue
-    if (u.mp < manaCost(mv)) continue
+    if (u.mp < mpCost(mv)) continue
     if (d > rangeOf(mv)) continue
     // Ranged and magic need to actually SEE the target — cover is real.
     if (mv.channel !== 'melee' && !hasLineOfSight(u.pos, target.pos, obstacles)) continue
@@ -460,7 +463,13 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       u.slowFor = Math.max(0, u.slowFor - DT)
       u.disengageFor = Math.max(0, u.disengageFor - DT)
       if (u.slowFor <= 0) u.slowMult = 1
-      u.mp = Math.min(u.maxMp, u.mp + (u.m.stats.WIS / 300) * DT)
+      // MANA REGEN. WIS is still the caster's engine (divisor lowered, so INT/WIS
+      // monsters gain real fuel), and a SUPPORT earns a steady trickle on top —
+      // it neither soaks nor connects reliably, so time is its resource.
+      const mRole = manaRoleOf(u.m)
+      const regen = u.m.stats.WIS / WIS_REGEN_DIVISOR
+        + (mRole === 'support' ? MANA_SUPPORT_PER_SEC : 0)
+      u.mp = Math.min(u.maxMp, u.mp + regen * DT)
       tickStatuses(u, t)
       if (u.dead) { vis.set(u.id, 'dead'); continue }
 
@@ -559,7 +568,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
         u.castMoveId = mv.id
         u.castTargetId = aim.id
         u.cooldowns[mv.id] = mv.cooldown * 0.9 + castOf(mv)
-        u.mp = Math.max(0, u.mp - manaCost(mv))
+        u.mp = Math.max(0, u.mp - mpCost(mv))
         events.push({ t, kind: 'cast', id: u.id, targetId: aim.id, move: mv.name, channel: mv.channel })
         applyCasterMovement(u, aim, mv, t, obstacles)
         applySelfEffects(u, aim, mv, t)
@@ -765,7 +774,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     for (const mv of u.m.loadout) {
       if (mv.type === 'damage') continue
       if ((u.cooldowns[mv.id] ?? 0) > 0) continue
-      if (u.mp < manaCost(mv)) continue
+      if (u.mp < mpCost(mv)) continue
       const got = utilityScore(u, mv, mates, foes)
       if (!got) continue
       // Same reach and cover rules as a damage cast — a support cannot heal
@@ -949,6 +958,12 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     target.hp -= dmg
     dmgDealt[u.side] += dmg
     lastAggressor = u.side
+    // MANA BY ROLE (see types.ts). A damage dealer is paid for CONNECTING and a
+    // tank for SOAKING, so each fuels its kit by doing its actual job — the fix
+    // for physical classes having no way to afford their own physical abilities.
+    // ⚠️ On the LANDED hit only, so whiffing earns nothing.
+    if (manaRoleOf(u.m) === 'damage') u.mp = Math.min(u.maxMp, u.mp + MANA_ON_HIT_DEALT)
+    if (manaRoleOf(target.m) === 'tank') target.mp = Math.min(target.maxMp, target.mp + MANA_ON_HIT_TAKEN)
     // An assassin breaks off after landing a blow (melee only — a ranged unit
     // is already at distance and kites by its own reach). This is the state the
     // 'assassin' archetype reads to dart back out before diving again.

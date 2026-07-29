@@ -181,6 +181,33 @@ export const BASIC_BASE_POWER = 5
 /** Stat → power, kept well under the authored pool's scaling. */
 export const BASIC_STAT_SCALE = 1 / 70
 
+// ── MANA ECONOMY ────────────────────────────────────────────────────────────
+// ⚠️ WIS regen alone STARVED every physical class. `maxMana = WIS + INT/2` and
+// regen keyed off WIS, but a warrior's abilities are STR-based — so the monsters
+// whose kit is physical had the least fuel to cast it. Measured: 4–6 ability
+// casts for a WHOLE fight, and 76% of all casts were the free attack.
+//
+// So each role now EARNS mana the way it actually plays:
+//   tank    — pays for its abilities by soaking (per hit TAKEN)
+//   damage  — pays for them by connecting (per hit DEALT)
+//   support — a steady trickle, since it neither tanks nor spikes
+//   caster  — still the WIS pool + WIS regen, which is why that is raised below
+export const MANA_ON_HIT_TAKEN = 2   // tanks
+export const MANA_ON_HIT_DEALT = 2   // STR/DEX damage dealers
+export const MANA_SUPPORT_PER_SEC = 1
+/** WIS → mana/sec divisor. Lowered 300 → 200 so INT/WIS casters gain real fuel. */
+export const WIS_REGEN_DIVISOR = 200
+/**
+ * FIELD-ONLY mana cost scalar. `monster.ts:manaCost` is deliberately 2× the base
+ * formula — a TURN-engine decision, where a monster acts once per ~2s round so a
+ * pool stretches a long way in wall-clock terms. On a real-time field a unit can
+ * act every second, so that doubling priced abilities out entirely: even WITH the
+ * per-hit generation above, monsters could not afford their cheapest ability 61.5%
+ * of the time. This undoes the doubling for the field only, so battle.ts and its
+ * 12 goldens are untouched.
+ */
+export const FIELD_MANA_COST_MULT = 0.5
+
 export interface FieldSetup {
   seed: string
   teamA: Monster[]

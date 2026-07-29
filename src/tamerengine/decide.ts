@@ -420,6 +420,27 @@ export function desiredGoal(
   }
 }
 
+/**
+ * How this monster EARNS mana (see the MANA ECONOMY note in types.ts).
+ *
+ * Keyed off class first, then the monster's dominant stat — so a high-CON
+ * Warrior fuels like a tank and a STR/DEX bruiser fuels by connecting, without
+ * either needing to be the Tank *class*. An INT/WIS monster is a 'caster' and
+ * keeps the WIS pool + WIS regen as its only source, which is the whole reason
+ * that regen was raised.
+ */
+export type ManaRole = 'tank' | 'damage' | 'support' | 'caster'
+export function manaRoleOf(m: Monster): ManaRole {
+  if (m.className === 'Tank') return 'tank'
+  if (roleOfClass(m.className) === 'support') return 'support'
+  const s = m.stats
+  const top = (['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'] as Stat[])
+    .reduce((a, b) => ((s[b] ?? 0) > (s[a] ?? 0) ? b : a))
+  if (top === 'CON') return 'tank'
+  if (top === 'STR' || top === 'DEX') return 'damage'
+  return 'caster'
+}
+
 /** Field positioning archetypes, derived from stats + reach + personality. */
 export type Archetype = 'anchor' | 'artillery' | 'assassin' | 'support' | 'skirmisher'
 export function archetypeOf(u: FieldUnit): Archetype {
