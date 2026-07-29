@@ -621,8 +621,16 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
         // reach and never closes the last step.
         && dist(u.pos, target.pos) <= reachOf(u)
         && (isMelee(u) || hasLineOfSight(u.pos, target.pos, obstacles))) {
-        u.blockingUntil = t + DT * 2
-        vis.set(u.id, 'block')
+        // ⚠️ HOLDING and BLOCKING are different things. Any unit that is in reach
+        // and merely waiting on a cooldown HOLDS its ground (that is what stops
+        // the pacing) — but the damage reduction is EARNED, not free: only an
+        // anchor/tank, or a monster whose `preserve` order has actually tripped
+        // at its current HP, braces. Everything else simply stands ready to swing.
+        const pres = u.m.tactics?.preserve ?? 'off'
+        const presAt = pres === 'defensive' ? 0.25 : pres === 'cautious' ? 0.4 : 0
+        const guarding = archetypeOf(u) === 'anchor' || (presAt > 0 && u.hp / u.maxHp < presAt)
+        if (guarding) { u.blockingUntil = t + DT * 2; vis.set(u.id, 'block') }
+        else vis.set(u.id, 'idle')
         continue
       }
       stepToward(u, goal, mates, obstacles)

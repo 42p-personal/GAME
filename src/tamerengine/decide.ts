@@ -423,6 +423,13 @@ export function desiredGoal(
 /** Field positioning archetypes, derived from stats + reach + personality. */
 export type Archetype = 'anchor' | 'artillery' | 'assassin' | 'support' | 'skirmisher'
 export function archetypeOf(u: FieldUnit): Archetype {
+  // ⚠️ TANK IS A FRONT-LINE ANCHOR, NOT A SUPPORT. `CLASS_ROLES` files Tank under
+  // the 'support' ROLE (it is a team-composition label — a Tank is not a damage
+  // pick), but spatially a Tank belongs at the FRONT soaking hits. The support
+  // early-return caught it first, so every Tank-class monster positioned itself
+  // BEHIND the line and never counted as an anchor — the exact opposite of the
+  // job. Checked before the role test, so composition and geometry can disagree.
+  if (u.m.className === 'Tank') return 'anchor'
   if (roleOfClass(u.m.className) === 'support') return 'support'
   // Artillery = a genuine RANGED or MAGIC single-target reach. ⚠️ Voice reach
   // does NOT count: a voice AoE radiates from the CASTER, so a screamer wants to
