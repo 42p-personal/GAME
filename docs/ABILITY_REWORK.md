@@ -140,6 +140,72 @@ already generates.
 
 ---
 
+## 3b. Class kit table (P3 — the pass's contract)
+
+⚠️ **This is the one thing tested strictly.** Everything else is a guideline.
+
+### How a class gets its kit
+
+`classForStats` takes the top **two** stats and needs an **exact (primary, secondary) match** — of
+30 ordered pairs only these 11 are classes; everything else is **Generalist**. `learnedMoves` gates
+by stat *value*, so a class has deeper access to its **primary** pool than its secondary. That is
+what separates classes sharing a pair: **Tank (CON+STR)** and **Warrior (STR+CON)** draw on the same
+two wells, but the Tank reaches further into CON and the Warrior further into STR.
+
+### What each pool actually supplies (measured)
+
+| stat | dmg | self-buff | **team/ally** | debuff | heals | statuses |
+|---|---|---|---|---|---|---|
+| STR | 11 | 4 | **0** | 0 | 0 | bleed, vulnerable, stun |
+| DEX | 10 | 4 | **0** | 1 | 0 | poison, bleed, haste, vulnerable, knockback |
+| CON | 3 | 10 | **0** | 2 | 5 | knockback |
+| INT | **15** | **0** | **0** | **0** | **0** | burn, vulnerable, stun |
+| WIS | 4 | 7 | 3 | 1 | 3 | silence, doom |
+| CHA | 9 | **0** | 3 | 3 | 0 | blind, healblock, fear, confusion, sleep, charm, haste |
+
+### The gaps this exposes
+
+1. ⚠️ **CON has ZERO team/ally-targeted moves.** All ten of its buffs are `self`. So the Tank's and
+   Spellshield's "protect others" identity is currently **impossible** — a Guardian that can only
+   shield itself is not a guardian. **The single biggest hole in the pool.**
+   → needs: team ward, ally-targeted guard/shield, and the **Bodyguard** damage-redirect passive.
+2. ⚠️ **INT is 15/15 damage** — no buffs, debuffs, heals or team play at all. A Wizard or Spellsword
+   contributes nothing but damage, and every scrap of utility must come from its secondary stat.
+   → needs: the Elementalist zones and Hexer utility to carry INT's non-damage weight.
+3. ⚠️ **CHA has zero self-buffs** — a Bard or Orator cannot protect itself at all, and CHA is also
+   the weakest damage tier. Doubly fragile.
+4. **Captain's team buffs number 3**, all from CHA — thin for a class whose whole identity is
+   commanding a team.
+5. **No pool has a root or a slow.** Both exist only as `spatial` fields, which no pool move authors
+   — so the DEX Skirmisher/Marksman root and the CON Warden slow must be authored, not repurposed.
+6. **CON's only status is knockback**, so the Warden line has shove and nothing else for denial.
+
+### Per-class contract
+
+| class | pair | role | identity | lines it should favour | key need |
+|---|---|---|---|---|---|
+| **Tank** | CON+STR | support | soaks and **protects others**; decides the geometry | CON Guardian / Warden | ⚠️ team-targeted protection (gap 1) |
+| **Warrior** | STR+CON | damage | front-line damage that commits and endures | STR Duelist / Berserker | armour-break setup (Sunder) |
+| **Rogue** | DEX+STR | damage | gets behind you and kills one thing | DEX Assassin | Shadowstep, Ambush, Vanish |
+| **Ranger** | DEX+INT | damage | **focuses the most critical enemy** at range | DEX Marksman / INT Artillery | a real root to hold the target |
+| **Sage** | WIS+INT | support | sustains and cleanses; the resource anchor | WIS Mender / Battery | Font of Power aura |
+| **Wizard** | INT+WIS | damage | burst or attrition, player's choice | INT Artillery / Hexer | zones; INT has no utility (gap 2) |
+| **Spellsword** | INT+CON | damage | a caster that holds the line | INT Artillery + CON Juggernaut | conditional-HP damage |
+| **Spellshield** | CON+WIS | support | warder — shields and dispels | CON Guardian + WIS Mender | ⚠️ team wards (gap 1) |
+| **Captain** | STR+CHA | damage | fights *and* commands | CHA Captain + STR Duelist | more team buffs (gap 4) |
+| **Orator** | CHA+WIS | support | debuffs, silences, breaks morale | CHA Demagogue + WIS Disruptor | ⚠️ self-protection (gap 3) |
+| **Bard** | CHA+DEX | support | back line: **buffs the team AND damages** | CHA Captain / Enchanter | ⚠️ CHA damage floor + self-protection |
+
+### Line affinity solves the loadout problem
+
+⚠️ Declaring **which lines each class favours** (the column above) is also the fix for the
+`chooseLoadout` trap in §5: the picker ranks "best per stat" and knows nothing about lines, so it
+would draft one move from each of three lines and every generated monster — every rival in the game
+— would read as incoherent mush. Given per-class line affinity it can instead prefer moves from the
+class's affine lines, and generated monsters come out coherent. One mechanism, two problems solved.
+
+---
+
 ## 4. Built so far
 
 ### P1 — authoring axes (commit `4fe69bf`)
