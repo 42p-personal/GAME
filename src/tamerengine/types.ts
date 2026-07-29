@@ -29,6 +29,14 @@ export const MAX_TICKS = MAX_SECONDS * TICK_HZ
 // Re-picking a target every tick makes units jitter between equal-scoring foes.
 // They commit for this long unless the target dies or they are forced off it.
 export const RETARGET_EVERY = 0.6 // seconds
+// KITE BUDGET. A ranged unit may backpedal for at most this long before it must
+// hold and fight — you cannot attack and kite. Drains while a threat is in kite
+// range, refills (at KITE_REFILL× the rate) only once the unit is safe.
+export const KITE_MAX = 1.2 // seconds
+export const KITE_REFILL = 0.5
+// LEASH. No unit may aim to stand more than this far from the fight's centre of
+// mass, so nothing can wander off across the map however it is steered.
+export const LEASH_RADIUS = 12
 // Move statuses author their duration in ROUNDS, a unit the field has no
 // concept of. A turn-based round — everyone acting once — is worth roughly
 // this many seconds here. One constant, so restating it is impossible.
@@ -111,6 +119,11 @@ export interface FieldUnit {
   /** seconds an assassin will break off and dart to safety after a strike,
    *  before diving back in — the in-and-out of the assassin archetype. */
   disengageFor: number
+  /** KITE BUDGET — seconds of backpedalling a ranged unit has left before it must
+   *  stand and fight. You cannot attack and kite, so kiting is a brief measure:
+   *  it drains while a threat is in kite range and only refills once the unit is
+   *  safe again. At 0 the unit holds ground (and uses cover) instead of running. */
+  kiteFor: number
   dead: boolean
 }
 

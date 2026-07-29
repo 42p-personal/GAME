@@ -11,9 +11,9 @@ import {
   DT, FIELD_H, FIELD_W, FieldEvent, FieldResult, FieldSetup, FieldSide, FieldUnit,
   MAX_TICKS, Obstacle, RETARGET_EVERY, UnitVisState, Vec2,
   CHANNEL_CAST_TIME, CHANNEL_RANGE, DEPLOY_DEPTH, SECONDS_PER_ROUND,
-  SUDDEN_DEATH_AT, SUDDEN_DEATH_BASE, SUDDEN_DEATH_RAMP,
+  SUDDEN_DEATH_AT, SUDDEN_DEATH_BASE, SUDDEN_DEATH_RAMP, KITE_MAX, KITE_REFILL,
 } from './types'
-import { archetypeOf, desiredGoal, dist, isMelee, norm, pickTarget, reachOf, spacingRadius, sub, traitsFor } from './decide'
+import { archetypeOf, desiredGoal, dist, isMelee, norm, pickTarget, reachOf, spacingRadius, sub, traitsFor, wantsToKite } from './decide'
 import { personalityOf, spendAbove } from './personality'
 import { spatialOf } from './spatial'
 import { FIELD_STATUS, BENEFICIAL, CONFUSION_VEER } from './status'
@@ -114,6 +114,7 @@ function buildUnit(m: Monster, side: FieldSide, slot: number, pos: Vec2): FieldU
     slowMult: 1,
     slowFor: 0,
     disengageFor: 0,
+    kiteFor: KITE_MAX,
     dead: false,
   }
 }
@@ -488,6 +489,13 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       const forced = u.forcedTargetId ? byId.get(u.forcedTargetId) : null
       if (forced && !forced.dead && foes.includes(forced)) u.targetId = forced.id
       const target = u.targetId ? byId.get(u.targetId) ?? null : null
+
+      // KITE BUDGET. Drains while a threat is in kite range (whether or not the
+      // unit actually gives ground this tick), refills once it is clear — so a
+      // ranged unit backpedals briefly, then must plant and fight (or use cover).
+      u.kiteFor = target && wantsToKite(u, target)
+        ? Math.max(0, u.kiteFor - DT)
+        : Math.min(KITE_MAX, u.kiteFor + DT * KITE_REFILL)
 
       // A committed cast roots the unit — this is the window a diver punishes.
       if (u.castingFor > 0) {

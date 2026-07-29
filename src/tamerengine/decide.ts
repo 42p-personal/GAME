@@ -3,7 +3,7 @@
 // Everything here is a PURE function of the units' state — no randomness, no
 // mutation — so it is directly unit-testable and the tick loop stays readable.
 import { Monster, Stat, roleOfClass } from '../core'
-import { FieldTraits, FieldUnit, Vec2, FIELD_W, FIELD_H, CHANNEL_RANGE } from './types'
+import { FieldTraits, FieldUnit, Vec2, FIELD_W, FIELD_H, CHANNEL_RANGE, LEASH_RADIUS } from './types'
 import { coachedValue, panicThreshold, personalityOf, resolvePersonality, threatRadius } from './personality'
 
 export const v = (x: number, y: number): Vec2 => ({ x, y })
@@ -197,6 +197,11 @@ function priorityBias(self: FieldUnit, e: FieldUnit): number {
 /** How early a ranged monster starts giving ground — awareness buys distance. */
 const kiteAt = (u: FieldUnit): number => 0.45 + (personalityOf(u.m).awareness / 100) * 0.3
 
+/** True when a ranged unit is close enough to a threat that it WOULD backpedal —
+ *  the engine spends its kite budget while this holds and refills it otherwise. */
+export const wantsToKite = (self: FieldUnit, target: FieldUnit): boolean =>
+  reachOf(self) > 3 && dist(self.pos, target.pos) < reachOf(self) * kiteAt(self)
+
 
 // ── SPATIAL ORDERS (v0.93) ──────────────────────────────────────────────────
 // Coaching that only means anything on real ground. Each is applied in
@@ -275,16 +280,26 @@ export function desiredGoal(
   const liveAllies = allies.filter((a) => !a.dead && a.id !== self.id)
   const liveEnemies = enemies.filter((e) => !e.dead)
 
+  // LEASH: no unit may aim to stand more than LEASH_RADIUS from the fight's centre
+  // of mass — the hard stop on wandering off across the map, applied to EVERY goal
+  // this function returns (retreat and kite included).
+  const battleCentre = centroid([self, ...liveAllies, ...liveEnemies])
+  const leash = (g: Vec2): Vec2 => {
+    const dv = sub(g, battleCentre)
+    const L = len(dv)
+    return L > LEASH_RADIUS ? add(battleCentre, scale(norm(dv), LEASH_RADIUS)) : g
+  }
+
   // TEMPORARY retreat: back away from the NEAREST threat only, and only far
   // enough to be safe — no sprint to the home edge. Once the threat is beyond
   // safe range this returns null and the unit resumes fighting from there.
   const rThreat = retreatThreatOf(self, liveEnemies)
   if (rThreat) {
     const away = norm(sub(self.pos, rThreat.pos))
-    return {
+    return leash({
       x: Math.min(FIELD_W - 1, Math.max(1, self.pos.x + away.x * 5)),
       y: Math.min(FIELD_H - 1, Math.max(1, self.pos.y + away.y * 5)),
-    }
+    })
   }
 
   if (!target) return centroid(liveAllies.length ? liveAllies : [self])
@@ -299,9 +314,10 @@ export function desiredGoal(
   let goal: Vec2
   if (d > standoff) {
     goal = add(self.pos, scale(toward, d - standoff))
-  } else if (reach > 3 && d < reach * kiteAt(self)) {
-    // KITING: a ranged unit backs off when something closes on it — and an
-    // AWARE one starts backing off earlier, before it is already in trouble.
+  } else if (reach > 3 && d < reach * kiteAt(self) && self.kiteFor > 0) {
+    // KITING: a ranged unit backs off when something closes on it — but ONLY
+    // while it has kite budget left (you cannot attack and kite). Once the budget
+    // runs out it drops to the branch below and HOLDS, then fights / uses cover.
     goal = add(self.pos, scale(toward, -(reach * kiteAt(self) - d)))
   } else {
     goal = { ...self.pos }
@@ -394,9 +410,10 @@ export function desiredGoal(
   if (self.side === 'A') goal.x = Math.min(goal.x, limit)
   else goal.x = Math.max(goal.x, limit)
 
+  const g = leash(goal) // keep it near the fight
   return {
-    x: Math.min(FIELD_W - 0.5, Math.max(0.5, goal.x)),
-    y: Math.min(FIELD_H - 0.5, Math.max(0.5, goal.y)),
+    x: Math.min(FIELD_W - 0.5, Math.max(0.5, g.x)),
+    y: Math.min(FIELD_H - 0.5, Math.max(0.5, g.y)),
   }
 }
 
