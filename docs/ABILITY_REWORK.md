@@ -176,9 +176,57 @@ two wells, but the Tank reaches further into CON and the Warrior further into ST
    the weakest damage tier. Doubly fragile.
 4. **Captain's team buffs number 3**, all from CHA — thin for a class whose whole identity is
    commanding a team.
-5. **No pool has a root or a slow.** Both exist only as `spatial` fields, which no pool move authors
-   — so the DEX Skirmisher/Marksman root and the CON Warden slow must be authored, not repurposed.
+5. ~~**No pool has a root or a slow.**~~ ⚠️ **This finding was WRONG** — corrected while fixing it.
+   `Pin Down`, `Snipe`, `Glacial Prison`, `Deep Freeze`, `Earthshaker` and `Static Chain` all carry a
+   root or slow in `SPATIAL_MOVES`. The real gaps were narrower: **CON had none**, and **INT's were
+   all lv540+**, so a mage had no denial until very late.
 6. **CON's only status is knockback**, so the Warden line has shove and nothing else for denial.
+
+### ⚠️ Resolutions (shipped — commits `033fb90`, `3c215a3`)
+
+Fixing these needed work at **three layers**. A move can be authored perfectly and still never reach
+a single monster's kit — which is what was actually happening.
+
+**Authoring** (`src/moves.ts`, pool **90 → 100**):
+
+| gap | fix |
+|---|---|
+| 1 — CON can't protect | `Barbed Carapace`/`Fortify`/`Stone Wall` → `team`, `Steady Vigil` → `ally`, repriced via authored `mana` (24/44/48/18) |
+| 2 — INT is all damage | `Arcane Aegis` (team ward), `Elemental Infusion` (team atk+acc), `Mirror Image` (self dodge) — INT's first non-damage moves ever |
+| 3 — CHA can't protect itself | `Bravura` (self ward+dodge), `Hymn of Shields` (team ward+guard, covers the singer) |
+| 4 — Captain thin | Captain gained a `CLASS_UTILITY_SLOTS` profile; now equips `Hymn of Shields` + `Barbed Carapace` |
+| 5 — mage denial too late | `Rime Bind` (root, lv160), `Frost Nova` (AoE slow, lv280) |
+| 6 — Warden has only shove | `Seize` (pull+root), `Quagmire Stomp` (AoE slow), `Shield Wall` (slow zone) |
+
+**Engine** — *buffs are uncapped and affect ALL allies, better ones cost more*:
+a team buff already **applied** to every ally, but `bestUtility` **scored** it as the single best
+beneficiary, so its whole reach never entered the comparison and a team ward lost to a self ward
+absorbing a sixth as much. Now valued as the **total** it delivers, with authored `mana` pricing the
+better buff. Team-buff casts across the 12-fight sim: **9 → 176**.
+
+**Loadout** — the layer that was silently discarding the rest: the universal buff fallback tested
+`target === 'self'` **alone**, so a team buff could never claim the slot however good it was
+(`Arcane Aegis`: 53% learnable, **0% equipped**). Team-wide is now preferred, self is the fallback.
+Only 5 of 11 classes had a utility profile; Captain/Wizard/Spellsword added from the table below.
+
+⚠️ **Second correction**: "CHA has zero self-buffs" was **partly a measurement artifact** — the audit
+counted `target: 'self'` only, and CHA's three team buffs already include the caster. The genuine
+lack was a *defensive* option for the weakest damage tier, which `Bravura` now supplies.
+
+⚠️ **Two traps this pass discovered the hard way:**
+- **`spatialOf` reads only the name-keyed table.** An inline `spatial` on a *pool* move is silently
+  inert — the same failure mode as the 8 entries that were once innate names. Rename a move in
+  `moves.ts` ⇒ rename its `SPATIAL_MOVES` key.
+- **A move must carry its identity in SHARED data, not only a field-side table.** `Shield Wall` was
+  first authored with no `effects` at all: inert in the turn engine, and invisible to every loadout
+  predicate (they read `effects`). The four control moves needed the same treatment — their denial is
+  expressed as `knockback` ("acts last") in shared data so both engines and the ranker can see it.
+
+**Still open (the known `chooseLoadout` trap, P4):** `Seize`, `Rime Bind` and `Frost Nova` are
+authored, registered and functional but score **0% equipped** — they are deliberately low-power
+(control traded for damage) and `chooseLoadout` ranks on damage-per-cast, so the ×1.15 status nudge
+cannot lift them. They are player-equippable via Edit Abilities; only auto-selection misses them.
+This is exactly what the **line affinity** work below is for.
 
 ### Per-class contract
 
