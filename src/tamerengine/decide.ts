@@ -237,6 +237,31 @@ export function commitLimit(u: FieldUnit): number {
   return coachedValue(u.side === 'A' ? FIELD_W : 0, cap, personalityOf(u.m).temperament)
 }
 
+/**
+ * RETREAT is a TEMPORARY back-off, not a rout to the home edge. A unit below its
+ * survival threshold gives ground only while a threat is still too close — a
+ * ranged unit until it can shoot from safety, a melee for a few steps — then it
+ * resumes. Returns the threat it is backing away from, or null if it should hold
+ * and fight. The engine also reads this to briefly FADE a retreating unit so its
+ * chaser peels onto the nearest ally (the ally "takes the aggro").
+ */
+export function retreatThreatOf(self: FieldUnit, liveEnemies: FieldUnit[]): FieldUnit | null {
+  const hpFrac = self.hp / self.maxHp
+  const preserve = self.m.tactics?.preserve ?? 'off'
+  // COMPOSURE decides when it breaks; an explicit 'preserve' order raises the floor.
+  const innatePanic = panicThreshold(personalityOf(self.m))
+  const ordered = preserve === 'defensive' ? 0.4 : preserve === 'cautious' ? 0.25 : 0
+  const retreatAt = Math.max(innatePanic, ordered)
+  if (retreatAt <= 0 || hpFrac >= retreatAt || !liveEnemies.length) return null
+  let nearest: FieldUnit | null = null
+  let nd = Infinity
+  for (const e of liveEnemies) { const d = dist(self.pos, e.pos); if (d < nd) { nd = d; nearest = e } }
+  // Safe = far enough that it is no longer under pressure: a ranged unit is safe
+  // once it can shoot from range; a melee only needs a few steps of daylight.
+  const safe = reachOf(self) > 3 ? reachOf(self) * 0.95 : 7
+  return nearest && nd < safe ? nearest : null
+}
+
 // ── Positioning ─────────────────────────────────────────────────────────────
 /**
  * Where this unit wants to be standing. Returns a world point; the engine
@@ -249,22 +274,16 @@ export function desiredGoal(
 ): Vec2 {
   const liveAllies = allies.filter((a) => !a.dead && a.id !== self.id)
   const liveEnemies = enemies.filter((e) => !e.dead)
-  const homeX = self.side === 'A' ? 2 : FIELD_W - 2
 
-  // Playing to survive: below its threshold it disengages toward its own edge.
-  const hpFrac = self.hp / self.maxHp
-  // COMPOSURE decides when it breaks. A steady monster holds until it is
-  // nearly done; a flighty one bails early. An explicit 'preserve' order raises
-  // the floor on top of that.
-  const preserve = self.m.tactics?.preserve ?? 'off'
-  const innatePanic = panicThreshold(personalityOf(self.m))
-  const ordered = preserve === 'defensive' ? 0.4 : preserve === 'cautious' ? 0.25 : 0
-  const retreatAt = Math.max(innatePanic, ordered)
-  if (retreatAt > 0 && hpFrac < retreatAt && liveEnemies.length) {
-    const away = norm(sub(self.pos, centroid(liveEnemies)))
+  // TEMPORARY retreat: back away from the NEAREST threat only, and only far
+  // enough to be safe — no sprint to the home edge. Once the threat is beyond
+  // safe range this returns null and the unit resumes fighting from there.
+  const rThreat = retreatThreatOf(self, liveEnemies)
+  if (rThreat) {
+    const away = norm(sub(self.pos, rThreat.pos))
     return {
-      x: Math.min(FIELD_W - 1, Math.max(1, self.pos.x + away.x * 6 + (homeX - self.pos.x) * 0.25)),
-      y: Math.min(FIELD_H - 1, Math.max(1, self.pos.y + away.y * 6)),
+      x: Math.min(FIELD_W - 1, Math.max(1, self.pos.x + away.x * 5)),
+      y: Math.min(FIELD_H - 1, Math.max(1, self.pos.y + away.y * 5)),
     }
   }
 

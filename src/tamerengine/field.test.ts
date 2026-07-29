@@ -207,11 +207,13 @@ describe('positioning', () => {
     expect(goal.x).toBeGreaterThan(me.pos.x)
   })
 
-  it('a wounded monster on PRESERVE disengages instead of advancing', () => {
-    const me = base({ hp: 60, m: mk('p', { tactics: { ...DEFAULT_TACTICS, preserve: 'defensive' } }) })
-    const foe = base({ id: 'f', side: 'B', pos: { x: 20, y: 11 } })
+  it('a wounded monster on PRESERVE backs off from a CLOSE threat (temporary retreat)', () => {
+    // Retreat is now a TEMPORARY back-off, triggered only while a threat is
+    // actually close — so the foe is placed inside the safe range.
+    const me = base({ hp: 60, pos: { x: 10, y: 11 }, m: mk('p', { tactics: { ...DEFAULT_TACTICS, preserve: 'defensive' } }) })
+    const foe = base({ id: 'f', side: 'B', pos: { x: 13, y: 11 } })
     const goal = desiredGoal(me, foe, [], [foe])
-    expect(goal.x).toBeLessThan(me.pos.x) // moving away from the enemy, toward its own edge
+    expect(goal.x).toBeLessThan(me.pos.x) // gives ground, away from the near threat
   })
 
   it('COHESION pulls a unit back toward its allies', () => {
