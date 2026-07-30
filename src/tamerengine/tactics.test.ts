@@ -2,6 +2,7 @@
 // Each is gated by temperament, like every other order.
 import { describe, it, expect } from 'vitest'
 import { generateMonster } from '../monster'
+import { ALL_MOVES } from '../moves'
 import { commitLimit, desiredGoal, engageMult, spacingRadius } from './decide'
 import { simulateFieldBattle, hasLineOfSight, DEFAULT_OBSTACLES } from './engine'
 import { DEFAULT_TACTICS, Monster, Tactics } from '../core'
@@ -87,12 +88,23 @@ describe('use cover', () => {
     // threat specifically (melee wants contact and never hides).
     const foe = unit('f', {
       side: 'B', pos: { x: o.x + 4, y: 10 },
-      m: { ...generateMonster('cover-foe', { speciesId: 'aegisox', train: 700 }), tactics: { ...DEFAULT_TACTICS } } as Monster, // Tank, reach 1.6
+      // ⚠️ The FOE is pinned melee too. Cover is triggered by a closing MELEE threat
+      // specifically, so if the pool happens to hand this Tank a ranged move the
+      // branch under test never runs at all.
+      m: { ...generateMonster('cover-foe', { speciesId: 'aegisox', train: 700 }),
+        loadout: [ALL_MOVES.find((x) => x.name === 'Power Strike')!],
+        tactics: { ...DEFAULT_TACTICS } } as Monster,
     })
     expect(los(start, foe.pos)).toBe(true) // precondition: currently exposed
     const seeker = unit('m2', {
       pos: { ...start },
-      m: { ...generateMonster('cover-rg', { speciesId: 'grivvel', train: 850 }), personality: { temperament: 100 }, tactics: { ...DEFAULT_TACTICS, useCover: true } } as Monster, // Rogue, reach 8
+      // ⚠️ Loadout PINNED to a ranged move. Reach derives from the drafted damage
+      // moves, so a pool change can silently turn this fixture melee — and melee
+      // never hides, which short-circuits the very branch under test. Same fix as
+      // targeting.test.ts. Rain of Arrows is ranged, so reach is deterministic.
+      m: { ...generateMonster('cover-rg', { speciesId: 'grivvel', train: 850 }),
+        loadout: [ALL_MOVES.find((x) => x.name === 'Rain of Arrows')!],
+        personality: { temperament: 100 }, tactics: { ...DEFAULT_TACTICS, useCover: true } } as Monster,
     })
     const gSeek = desiredGoal(seeker, foe, [], [foe], los)
     // It ends up somewhere the melee threat cannot see it — while still able to shoot.

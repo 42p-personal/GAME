@@ -25,9 +25,12 @@ const GOLDENS = [
     // 68 -> 62, so every STR monster hits differently.
     // ⚠️ Recaptured for the DEX POOL REWORK (16 -> 24 moves, three lines).
     // ⚠️ Recaptured for the CON POOL REWORK (18 -> 23 moves, three lines).
-    winner: 'A', events: 227, logLines: 170,
+    // ⚠️ Recaptured for the DAMAGE TIERING pass: STR/DEX/INT are the damage stats
+    // and CON/WIS/CHA are not, so per-stat power multipliers split them into two
+    // clear tiers, plus a wider stat-scale band. Every monster hits differently.
+    winner: 'A', events: 200, logLines: 143,
     finals: [
-      { side: 'A', slot: 0, hp: 180, mana: 3, wasKOd: false },
+      { side: 'A', slot: 0, hp: 235, mana: 0, wasKOd: false },
       { side: 'B', slot: 0, hp: 0, mana: 0, wasKOd: true },
     ],
   },
@@ -44,10 +47,13 @@ const GOLDENS = [
     // express a monster's class instead of ranking all 100 moves globally.
     // 147 -> 73 events: both monsters now draft along their own lines and the
     // fight resolves in half the time it took with globally-ranked kits.
-    winner: 'B', events: 73, logLines: 56,
+    // ⚠️ Recaptured for the DAMAGE TIERING pass: STR/DEX/INT are the damage stats
+    // and CON/WIS/CHA are not, so per-stat power multipliers split them into two
+    // clear tiers, plus a wider stat-scale band. Every monster hits differently.
+    winner: 'B', events: 70, logLines: 53,
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 514, wasKOd: true },
-      { side: 'B', slot: 0, hp: 587, mana: 679, wasKOd: false },
+      { side: 'A', slot: 0, hp: 0, mana: 515, wasKOd: true },
+      { side: 'B', slot: 0, hp: 569, mana: 679, wasKOd: false },
     ],
   },
   {
@@ -73,12 +79,15 @@ const GOLDENS = [
     // ⚠️ Recaptured for the WIS POOL REWORK (16 -> 22 moves, three lines).
     // Winner flipped A -> B. WIS gained real damage this pass (4 -> 9 moves incl.
     // a capstone hit), so a side with a WIS monster stops being purely passive.
-    winner: 'B', events: 111, logLines: 83,
+    // ⚠️ Recaptured for the DAMAGE TIERING pass: STR/DEX/INT are the damage stats
+    // and CON/WIS/CHA are not, so per-stat power multipliers split them into two
+    // clear tiers, plus a wider stat-scale band. Every monster hits differently.
+    winner: 'B', events: 81, logLines: 66,
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 509, wasKOd: true },
-      { side: 'A', slot: 1, hp: 0, mana: 242, wasKOd: true },
-      { side: 'B', slot: 0, hp: 120, mana: 223, wasKOd: false },
-      { side: 'B', slot: 1, hp: 216, mana: 323, wasKOd: false },
+      { side: 'A', slot: 0, hp: 0, mana: 516, wasKOd: true },
+      { side: 'A', slot: 1, hp: 0, mana: 266, wasKOd: true },
+      { side: 'B', slot: 0, hp: 60, mana: 227, wasKOd: false },
+      { side: 'B', slot: 1, hp: 216, mana: 291, wasKOd: false },
     ],
   },
   {
@@ -151,14 +160,20 @@ const GOLDENS = [
     // not the pool being broken. ⚠️ RE-CHECK once INT and CHA are reworked — if it
     // is still a draw with the pool complete, that IS a real signal.
     // ⚠️ Recaptured for the INT POOL REWORK (20 -> 22 moves, three lines).
-    winner: 'draw', events: 479, logLines: 349,
+    // ⚠️ Recaptured for the DAMAGE TIERING pass: STR/DEX/INT are the damage stats
+    // and CON/WIS/CHA are not, so per-stat power multipliers split them into two
+    // clear tiers, plus a wider stat-scale band. Every monster hits differently.
+    // ⚠️ THE DRAW IS GONE — A wins decisively with a survivor on 590 HP. I flagged
+    // the previous full-wipe draw to be re-checked once the pool was complete, and
+    // this is that re-check: it was the half-transitioned pool, not WIS sustain.
+    winner: 'A', events: 468, logLines: 337,
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 698, wasKOd: true },
-      { side: 'A', slot: 1, hp: 0, mana: 369, wasKOd: true },
-      { side: 'A', slot: 2, hp: 0, mana: 745, wasKOd: true },
-      { side: 'B', slot: 0, hp: 0, mana: 753, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 772, wasKOd: true },
-      { side: 'B', slot: 2, hp: 0, mana: 109, wasKOd: true },
+      { side: 'A', slot: 0, hp: 0, mana: 716, wasKOd: true },
+      { side: 'A', slot: 1, hp: 0, mana: 363, wasKOd: true },
+      { side: 'A', slot: 2, hp: 590, mana: 735, wasKOd: false },
+      { side: 'B', slot: 0, hp: 0, mana: 767, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 752, wasKOd: true },
+      { side: 'B', slot: 2, hp: 0, mana: 141, wasKOd: true },
     ],
   },
 ] as const

@@ -104,8 +104,8 @@ export const aoeFalloff = (targetCount: number): number =>
 // since `learnedMoves` gates by stat, a mid-game monster can only equip low/mid
 // moves, so the whole mid-game got weaker (sim: damage/fight 28.9k → 27.3k).
 // Progression should pay by lifting the top, not by lowering the bottom.
-export const STAT_SCALE_LOW = 1 / 320  // ~lvl 40 — unchanged from the old flat value
-export const STAT_SCALE_HIGH = 1 / 150 // ~lvl 920
+export const STAT_SCALE_LOW = 1 / 270  // ~lvl 40 — unchanged from the old flat value
+export const STAT_SCALE_HIGH = 1 / 130 // ~lvl 920
 export const defaultStatScale = (learnLevel: number): number => {
   const t = Math.min(1, Math.max(0, (learnLevel - 40) / (920 - 40)))
   return STAT_SCALE_LOW + (STAT_SCALE_HIGH - STAT_SCALE_LOW) * t
