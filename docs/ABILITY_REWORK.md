@@ -361,9 +361,50 @@ Harness scripts live in the session scratchpad — `sweep.ts` (duration/travel/k
 **Acceptance targets**: resolve **≥8/12** before sudden death · duration **30–45s** · ability share
 of casts **>60%** · mana starvation **<20%** · travel/unit near **28–37**.
 
-⚠️ The current 0/12 is expected mid-pass: the free attack is correctly weak and defence is now real,
-so **nothing carries the damage**. The counterweight is P4's damage curve and P5's mana pass. Median
-ability DPS is 7.7 and Cleave — the best move these monsters have — is 11.9, which is why.
+### ⚠️⚠️ EVERY "kills" FIGURE ABOVE IS WRONG — and so was the diagnosis built on it
+
+The sweep harness counted `e.kind === 'dead'`. **The engine emits `'death'`** (see the `FieldEvent`
+union in `types.ts`). So the counter returned 0 for the entire pass, and "0 kills" was reported for
+weeks. Re-measured with the right name, the same sweep has **51 kills**.
+
+The diagnosis that grew out of it — *"56% of the HP pool is removed with zero kills, so resolution is
+blocked by damage spread"* — is **retracted**. It was an artifact.
+
+**The second, larger instrument bug: the sweep was not representative.** Its five species
+(kongrath, aegisox, maneleo, grivvel, ursath) produce only **Warrior / Tank / Rogue** — STR, CON and
+DEX. **No INT, WIS or CHA at all.** So every INT/WIS/CHA change in this whole rework was invisible to
+it, which is why the P4 floor pass — 7 INT moves lifted — moved measured field damage by **+0.2%**.
+
+A class-diverse sweep (`dsweep.ts`, 12 species spanning 12 classes) tells a completely different
+story, and the engine is in far better shape than the table above suggests:
+
+| sweep | resolved | duration | kills | reading |
+|---|---|---|---|---|
+| **class-diverse (12 classes)** | **9/12** | **42.9s** | 53 | **already meets the acceptance targets** |
+| old mammal-only (Warrior/Tank/Rogue) | 1/12 | 64.2s | 51 | an all-bruiser mirror grinding on mitigation — a pathological matchup, not a baseline |
+
+⚠️ **Use `dsweep.ts` for all further balance work.** The mammal sweep is still useful as a *worst
+case* (high-CON teams with no caster), but it must never again be read as the game's baseline.
+
+**The real finding it surfaced — STR is the weakest stat on the field**, despite the STR pool having
+the highest paper DPS:
+
+| class | dmg/fight | | class | dmg/fight |
+|---|---|---|---|---|
+| Wizard | 323 | | Rogue | 138 |
+| Sage | 307 | | Bard | 126 |
+| Generalist | 271 | | Spellsword | 113 |
+| Spellshield | 154 | | **Warrior** | **57** |
+| Orator | 153 | | **Captain** | **9** |
+
+Casters free-cast from range; melee spends the fight closing and being kited. That is a **P6 class-
+identity/flanking** problem, not a numbers problem — resist the urge to fix it by inflating STR power.
+
+### After P4's floor pass (commit `bc715a4`)
+
+Pool floor violations **12 → 0**; `Heartseeker` 137.8 → 54.4 DPS, so the capstone leads DEX again.
+Field effect on the mammal sweep was negligible (+0.2% damage) for the representativeness reason
+above — the fix is real, the instrument just could not see it.
 
 ---
 
