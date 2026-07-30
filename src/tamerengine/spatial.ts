@@ -42,6 +42,8 @@ export const SPATIAL_MOVES: Record<string, MoveSpatial> = {
   'Barricade': { zone: { radius: 5, duration: 7, effect: 'slow', power: 0.5, centre: 'self' } },
   'Zone of Control': { zone: { radius: 3.6, duration: 8, effect: 'slow', power: 0.6, centre: 'self' } },
   'Crushing Grip': { root: 2.0 },
+  // WIS — a patch of dead air. The only spatial move in the stat.
+  'Null Field': { zone: { radius: 4.2, duration: 7, effect: 'slow', power: 0.7, centre: 'self' } },
   'Tremor': { slow: { mult: 0.6, duration: 2.5 }, area: { shape: 'circle', centre: 'self', radius: 5.4 } },
   'Earthen Grasp': { root: 1.8, area: { shape: 'circle', centre: 'self', radius: 5.8 } },
   'Overrun': { move: { kind: 'dash', to: 'target', maxRange: 7 }, push: 3 },

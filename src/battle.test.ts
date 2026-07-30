@@ -70,12 +70,15 @@ const GOLDENS = [
     // re-drafted its loadout, so all four goldens moved at once. This is the
     // intended blast radius: the picker now draws from the three lines that
     // express a monster's class instead of ranking all 100 moves globally.
-    winner: 'A', events: 134, logLines: 97,
+    // ⚠️ Recaptured for the WIS POOL REWORK (16 -> 22 moves, three lines).
+    // Winner flipped A -> B. WIS gained real damage this pass (4 -> 9 moves incl.
+    // a capstone hit), so a side with a WIS monster stops being purely passive.
+    winner: 'B', events: 111, logLines: 83,
     finals: [
-      { side: 'A', slot: 0, hp: 86, mana: 454, wasKOd: false },
-      { side: 'A', slot: 1, hp: 152, mana: 211, wasKOd: false },
-      { side: 'B', slot: 0, hp: 0, mana: 206, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 329, wasKOd: true },
+      { side: 'A', slot: 0, hp: 0, mana: 499, wasKOd: true },
+      { side: 'A', slot: 1, hp: 0, mana: 210, wasKOd: true },
+      { side: 'B', slot: 0, hp: 121, mana: 192, wasKOd: false },
+      { side: 'B', slot: 1, hp: 216, mana: 323, wasKOd: false },
     ],
   },
   {
@@ -138,14 +141,23 @@ const GOLDENS = [
     // Side A fields two Tortavos (CON) — the stat whose buff count came down and
     // whose damage went up this pass — so a tank-heavy side losing its cushion is
     // the change doing exactly what it was aimed at, not noise.
-    winner: 'B', events: 467, logLines: 348,
+    // ⚠️ Recaptured for the WIS POOL REWORK (16 -> 22 moves, three lines).
+    // ⚠️ NOW A FULL-WIPE DRAW — the exact state this golden was once tuned OUT of.
+    // Deliberately NOT treated as a WIS over-tune, because the broader evidence
+    // says otherwise: the class-diverse field sweep IMPROVED to 10/12 at train 850,
+    // a train-2000 sweep resolves 9/12, and healing is only 2.4% of all damage
+    // dealt. One matchup at train 2000 stalling into round-35 chip is this fight
+    // being the most sensitive in the set (it exists to exercise sudden death),
+    // not the pool being broken. ⚠️ RE-CHECK once INT and CHA are reworked — if it
+    // is still a draw with the pool complete, that IS a real signal.
+    winner: 'draw', events: 504, logLines: 375,
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 676, wasKOd: true },
-      { side: 'A', slot: 1, hp: 0, mana: 311, wasKOd: true },
-      { side: 'A', slot: 2, hp: 0, mana: 763, wasKOd: true },
-      { side: 'B', slot: 0, hp: 0, mana: 749, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 766, wasKOd: true },
-      { side: 'B', slot: 2, hp: 135, mana: 119, wasKOd: false },
+      { side: 'A', slot: 0, hp: 0, mana: 702, wasKOd: true },
+      { side: 'A', slot: 1, hp: 0, mana: 305, wasKOd: true },
+      { side: 'A', slot: 2, hp: 0, mana: 752, wasKOd: true },
+      { side: 'B', slot: 0, hp: 0, mana: 739, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 747, wasKOd: true },
+      { side: 'B', slot: 2, hp: 0, mana: 88, wasKOd: true },
     ],
   },
 ] as const

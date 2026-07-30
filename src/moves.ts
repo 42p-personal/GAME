@@ -162,29 +162,43 @@ const POOLS: Record<Stat, Row[]> = {
     { name: 'Vital Surge', learnLevel: 780, type: 'buff', channel: 'support', target: 'self', cooldown: 6, accuracy: 100, power: 50, mana: 34, effects: { cleanse: true }, desc: 'Shrugs it all off and knits shut. CON heals ITSELF; healing others is WIS.' },
     { name: 'Colossus Crash', learnLevel: 850, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 5, accuracy: 85, power: 36, mana: 32, variance: 0.2, effects: { guard: 10, maxHpDmg: 0.03, consumeWard: 0.015 }, desc: 'A crushing advance that braces after the blow; the bigger they are, the more it takes.' },
   ],
+  // ══ WIS ══ resource buffer & stealer · lifesteal · manasteal · THE healer ════
+  // DISRUPTOR denies resources — silence, doom, mana burn, until the enemy simply
+  // never casts. MENDER is the only real team healing in the game. SIPHON takes
+  // what they have and keeps it.
+  //
+  // ⚠️ WIS is the ONLY stat that can heal ANOTHER monster. CON heals itself,
+  // nobody else does at all. Mend and Clarity target an ALLY for that reason.
+  // ⚠️ Its buffs came down and its damage went up this pass (4 -> 9): restoration
+  // and denial are its identity, but it needed to be able to threaten something.
   WIS: [
-    { name: 'Focus', learnLevel: 40, type: 'buff', channel: 'support', target: 'self', cooldown: 4, accuracy: 100, power: 0, effects: { regenBuff: 2, duration: 3 }, desc: 'Centre the mind: +2 mana regen for 3 rounds.' },
-    { name: 'Mend', learnLevel: 40, type: 'buff', channel: 'support', target: 'self', cooldown: 3, accuracy: 100, power: 14, desc: 'Soothing focus: heal a little HP.' },
-    { name: 'Mana Sap', learnLevel: 90, type: 'damage', channel: 'support', target: 'enemy', cooldown: 2, accuracy: 92, power: 11, effects: { manaBurn: 10 }, desc: 'Light hit that drinks 10 MP from the target.' },
-    { name: 'Clarity', learnLevel: 120, type: 'buff', channel: 'support', target: 'self', cooldown: 3, accuracy: 100, power: 0, effects: { cleanse: true }, desc: 'A clear mind: remove ailments.' },
-    { name: 'Serenity', learnLevel: 160, type: 'buff', channel: 'support', target: 'self', cooldown: 5, accuracy: 100, power: 0, effects: { dodgeBuff: 6, regenBuff: 2, duration: 3 }, desc: 'Calm flow: +6% dodge, +2 regen for 3 rounds.' },
-    { name: 'Silencing Spike', learnLevel: 200, type: 'damage', channel: 'support', target: 'enemy', cooldown: 2, accuracy: 90, power: 18, effects: { manaBurn: 13 }, status: { kind: 'silence', chance: 25, duration: 2 }, desc: 'Psychic jab that burns 13 MP; 25% chance to Silence.' },
-    { name: 'Attunement', learnLevel: 240, type: 'buff', channel: 'support', target: 'team', cooldown: 4, accuracy: 100, power: 0, effects: { regenBuff: 3, duration: 3 }, desc: "Links the team's focus: everyone regains more mana for 3 rounds." },
-    { name: 'Mage Armour', learnLevel: 160, type: 'buff', channel: 'support', target: 'self', cooldown: 5, accuracy: 100, power: 0, mana: 16, effects: { ward: 30, defBuff: 12, duration: 3 }, desc: 'Woven force settles over the caster: a 30 HP absorb shield and +12 mitigation for 3 rounds.' },
-    { name: 'Insight', learnLevel: 330, type: 'buff', channel: 'support', target: 'self', cooldown: 5, accuracy: 100, power: 0, effects: { accBuff: 12, duration: 3 }, desc: 'Read the fight: +12% accuracy for 3 rounds.' },
-    { name: 'Drain Spirit', learnLevel: 380, type: 'damage', channel: 'support', target: 'enemy', cooldown: 4, accuracy: 88, power: 20, effects: { manaBurn: 15, lifesteal: 0.3 }, desc: 'Drinks 15 MP and heals for part of the damage.' },
-    { name: 'Tranquility', learnLevel: 430, type: 'buff', channel: 'support', target: 'ally', cooldown: 5, accuracy: 100, power: 32, desc: 'Deep restorative calm channelled into an ally: strong heal.' },
-    { name: 'Field of Doom', learnLevel: 540, type: 'debuff', channel: 'support', target: 'enemy', cooldown: 5, accuracy: 95, power: 0, effects: { atkDebuff: 0.15, duration: 3 }, status: { kind: 'doom', chance: 28, duration: 4 }, desc: 'Dampening field: target deals −15% damage for 3 rounds; 28% chance to seal its Doom.' },
-    // ⚠️ Ward Against Ruin's team heal is PAID FOR with cooldown 6 -> 7. Healing has
-    // NO AoE falloff (that applies to damage only), so a team heal scales linearly
-    // with team size: 18 each is 54 at 3v3 but 108 at 6v6 off a single cast. The
-    // modest per-head number plus the longer cooldown are what keep it from
-    // outclassing Tranquility (lv430, one ally, 32) and preserve the WIS healing
-    // ladder: self (Mend 14) -> one ally (Tranquility 32) -> whole team (18 each).
-    { name: 'Ward Against Ruin', learnLevel: 650, type: 'buff', channel: 'support', target: 'team', cooldown: 7, accuracy: 100, power: 18, effects: { cleanse: true, regenBuff: 3, duration: 3 }, desc: "Clears the whole team's ailments — confusion, charm, doom, silence, sleep, healblock, all of it — mends 18 HP each, and steadies their focus for 3 rounds." },
-    { name: 'Mind Crush', learnLevel: 780, type: 'damage', channel: 'support', target: 'enemy', cooldown: 5, accuracy: 85, power: 36, effects: { manaBurn: 25, bonusVsStatus: { kind: 'doom', mult: 1.6, consume: true } }, desc: 'Heavy psychic blow; burns 25 MP. 1.6× and detonates the target\'s Doom early if it has one.' },
-    { name: 'Providence', learnLevel: 850, type: 'buff', channel: 'support', target: 'self', cooldown: 7, accuracy: 100, power: 0, effects: { dodgeBuff: 12, accBuff: 12, duration: 4 }, desc: 'Sees what comes: +12% dodge and accuracy for 4 rounds.' },
-    { name: 'Ascendance', learnLevel: 920, type: 'buff', channel: 'support', target: 'self', cooldown: 8, accuracy: 100, power: 0, effects: { atkBuff: 0.25, regenBuff: 4, duration: 4 }, desc: 'Transcendent state: +25% damage, +4 regen for 4 rounds.' },
+    // ── Disruptor — resource denial; the enemy never gets to cast ────────────
+    { name: 'Silencing Spike', learnLevel: 200, type: 'damage', channel: 'support', target: 'enemy', cooldown: 2, accuracy: 90, power: 20, mana: 18, variance: 0.15, effects: { manaBurn: 13 }, status: { kind: 'silence', chance: 30, duration: 2 }, desc: 'A psychic jab that drinks 13 MP and can close the throat entirely.' },
+    { name: 'Wither', learnLevel: 300, type: 'damage', channel: 'support', target: 'enemy', cooldown: 4, accuracy: 90, power: 20, mana: 20, variance: 0.15, effects: { lifesteal: 0.25, manaBurn: 10 }, desc: 'Saps them round on round and feeds you what it takes.' },
+    { name: 'Null Field', learnLevel: 320, type: 'control', channel: 'support', target: 'self', cooldown: 6, accuracy: 100, power: 0, mana: 34, effects: { regenBuff: 3, duration: 4 }, desc: 'A patch of dead air. Nothing casts well inside it, including what walks in.' },
+    { name: 'Enfeeble', learnLevel: 380, type: 'debuff', channel: 'support', target: 'enemy', cooldown: 4, accuracy: 95, power: 0, mana: 22, effects: { atkDebuff: 0.2, accDebuff: 12, duration: 3 }, desc: 'They hit softer and they miss more. The Disruptor pressure debuff.' },
+    { name: 'Hush', learnLevel: 420, type: 'control', channel: 'support', target: 'enemy', cooldown: 4, accuracy: 95, power: 0, mana: 18, status: { kind: 'silence', chance: 75, duration: 3 }, desc: 'No damage, no flourish — just silence, reliably, for three rounds.' },
+    { name: 'Field of Doom', learnLevel: 540, type: 'debuff', channel: 'support', target: 'enemy', cooldown: 5, accuracy: 95, power: 0, mana: 26, effects: { atkDebuff: 0.15, duration: 3 }, status: { kind: 'doom', chance: 32, duration: 4 }, desc: 'A dampening field, and a clock. Mind Crush knows what to do with the clock.' },
+    { name: 'Dread Whisper', learnLevel: 700, type: 'debuff', channel: 'support', target: 'enemy', cooldown: 5, accuracy: 95, power: 0, mana: 28, status: { kind: 'fear', chance: 60, duration: 2 }, desc: "WIS's one hard control: a word in the ear, and they run." },
+    { name: 'Mind Crush', learnLevel: 780, type: 'damage', channel: 'support', target: 'enemy', cooldown: 5, accuracy: 85, power: 34, mana: 34, variance: 0.15, effects: { manaBurn: 25, bonusVsStatus: { kind: 'doom', mult: 1.8, consume: true } }, desc: 'A heavy psychic blow that detonates their Doom early. The payoff.' },
+
+    // ── Mender — the only real team healing in the game ──────────────────────
+    { name: 'Mend', learnLevel: 40, type: 'buff', channel: 'support', target: 'ally', cooldown: 3, accuracy: 100, power: 16, mana: 8, desc: 'Soothing focus, given to somebody else. WIS is the only stat that can.' },
+    { name: 'Clarity', learnLevel: 120, type: 'buff', channel: 'support', target: 'ally', cooldown: 3, accuracy: 100, power: 0, mana: 12, effects: { cleanse: true }, desc: "Clears an ally's head — confusion, charm, fear, all of it." },
+    { name: 'Renewal', learnLevel: 260, type: 'buff', channel: 'support', target: 'ally', cooldown: 4, accuracy: 100, power: 8, mana: 18, effects: { hpRegenBuff: 8, duration: 4 }, desc: 'Not a burst but a tide: 8 HP a round for four rounds.' },
+    { name: 'Tranquility', learnLevel: 430, type: 'buff', channel: 'support', target: 'ally', cooldown: 5, accuracy: 100, power: 34, mana: 26, desc: 'Deep restorative calm channelled into one ally.' },
+    { name: 'Rebuke', learnLevel: 560, type: 'damage', channel: 'support', target: 'enemy', cooldown: 4, accuracy: 90, power: 28, mana: 24, variance: 0.2, desc: 'The healer answers back. A mender is not the same thing as a bystander.' },
+    { name: 'Ward Against Ruin', learnLevel: 650, type: 'buff', channel: 'support', target: 'team', cooldown: 7, accuracy: 100, power: 20, mana: 46, effects: { cleanse: true, regenBuff: 3, duration: 3 }, desc: "Clears the whole team's ailments and mends 20 HP each. The Mender capstone." },
+
+    // ── Siphon — take what they have, and keep it ────────────────────────────
+    { name: 'Mana Sap', learnLevel: 90, type: 'damage', channel: 'support', target: 'enemy', cooldown: 2, accuracy: 92, power: 16, mana: 8, variance: 0.15, effects: { manaBurn: 14 }, desc: 'Drinks 14 MP straight out of them. Once the worst move in the game; now a real theft.' },
+    { name: 'Mind Spike', learnLevel: 140, type: 'damage', channel: 'support', target: 'enemy', cooldown: 2, accuracy: 92, power: 18, mana: 8, variance: 0.15, desc: 'A cheap psychic jab — the filler WIS never had and could never afford.' },
+    { name: 'Serenity', learnLevel: 160, type: 'buff', channel: 'support', target: 'self', cooldown: 5, accuracy: 100, power: 0, mana: 12, effects: { regenBuff: 4, dodgeBuff: 8, duration: 3 }, desc: 'Calm flow. The one self-regen — the other three were the same move wearing hats.' },
+    { name: 'Attunement', learnLevel: 240, type: 'buff', channel: 'support', target: 'team', cooldown: 4, accuracy: 100, power: 0, mana: 30, effects: { regenBuff: 4, duration: 3 }, desc: "Links the team's focus: everyone regains mana faster. Distinct from Serenity by REACH." },
+    { name: 'Drain Spirit', learnLevel: 380, type: 'damage', channel: 'support', target: 'enemy', cooldown: 4, accuracy: 88, power: 24, mana: 20, variance: 0.15, effects: { manaBurn: 15, lifesteal: 0.35 }, desc: 'Takes both at once — their mana, and a share of their blood.' },
+    { name: 'Spirit Siphon', learnLevel: 600, type: 'damage', channel: 'support', target: 'enemy', cooldown: 5, accuracy: 88, power: 32, mana: 30, variance: 0.2, effects: { manaBurn: 20, lifesteal: 0.4 }, desc: 'Holds on and drains, HP and MP together, for as long as it lasts.' },
+    { name: 'Judgement', learnLevel: 820, type: 'damage', channel: 'support', target: 'enemy', cooldown: 6, accuracy: 88, power: 44, mana: 38, variance: 0.2, desc: 'A real capstone HIT rather than one more aura. WIS can end things too.' },
+    { name: 'Providence', learnLevel: 850, type: 'buff', channel: 'support', target: 'team', cooldown: 7, accuracy: 100, power: 12, mana: 40, effects: { cleanse: true, hpRegenBuff: 6, duration: 3 }, desc: 'Sees what is coming: clears the team and steadies it. Restoration — empowerment is CHA.' },
   ],
   INT: [
     { name: 'Spark', learnLevel: 40, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 1, accuracy: 95, power: 13, element: 'air', desc: 'Small air bolt.' },

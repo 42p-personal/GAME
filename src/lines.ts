@@ -110,12 +110,11 @@ export const LINE_OF: Record<string, string> = {
   // ── WIS ────────────────────────────────────────────────────────────────────
   'Silencing Spike': 'Disruptor', 'Null Field': 'Disruptor', Foresight: 'Disruptor',
   'Field of Doom': 'Disruptor', 'Dread Whisper': 'Disruptor', 'Mind Crush': 'Disruptor',
-  Insight: 'Disruptor', Enfeeble: 'Disruptor', Wither: 'Disruptor', Hush: 'Disruptor',
+  Enfeeble: 'Disruptor', Wither: 'Disruptor', Hush: 'Disruptor',
   Mend: 'Mender', Clarity: 'Mender', Renewal: 'Mender', Tranquility: 'Mender',
-  'Ward Against Ruin': 'Mender', 'Mage Armour': 'Mender', Rebuke: 'Mender',
+  'Ward Against Ruin': 'Mender', Rebuke: 'Mender',
   'Mana Sap': 'Siphon', Serenity: 'Siphon', Attunement: 'Siphon', 'Drain Spirit': 'Siphon',
-  'Spirit Siphon': 'Siphon', Providence: 'Siphon', Focus: 'Siphon', Ascendance: 'Siphon',
-  'Mind Spike': 'Siphon', Judgement: 'Siphon',
+  'Spirit Siphon': 'Siphon', Providence: 'Siphon', 'Mind Spike': 'Siphon', Judgement: 'Siphon',
 
   // ── INT ────────────────────────────────────────────────────────────────────
   Ember: 'Hexer', 'Fracturing Stones': 'Hexer', Cinderburst: 'Hexer', 'Arcane Bomb': 'Hexer',
