@@ -363,7 +363,13 @@ export function desiredGoal(
         const c = { x: goal.x + Math.cos(a) * rad, y: goal.y + Math.sin(a) * rad }
         if (c.x < 1 || c.x > FIELD_W - 1 || c.y < 1 || c.y > FIELD_H - 1) continue
         if (losFn(c, threat.pos)) continue            // still exposed to the threat
-        if (dist(c, target.pos) > reach) continue     // can't shoot our target from here
+        if (dist(c, target.pos) > reach) continue     // out of reach of our target
+        // ⚠️ AND WE MUST BE ABLE TO SEE IT. This check was missing: cover was
+        // chosen on DISTANCE to the target alone, so a unit would deliberately
+        // relocate behind a rock that also blocked its own shot and then stand
+        // there. Measured cost: casters held line of sight only 47% of ticks
+        // (rogues 20%), and a blocked unit cannot use its free attack either.
+        if (!losFn(c, target.pos)) continue           // no shot from there — not cover, just hiding
         // prefer cover that stays close to where we already wanted to be (less running)
         const score = -dist(c, goal)
         if (score > bestScore) { bestScore = score; bestCover = c }
@@ -406,6 +412,45 @@ export function desiredGoal(
       }
       break
     }
+  }
+
+  // ── TAKE THE ANGLE ────────────────────────────────────────────────────────
+  // ⚠️ NOTHING IN THIS ENGINE EVER MOVED TO **GAIN** A SHOT. The cover block
+  // above only breaks line FROM a melee threat, and it only runs when one is
+  // actually bearing down. So a ranged unit whose shot was blocked by a rock,
+  // with nobody near it, simply stood there: it could cast nothing (non-melee
+  // casts need line of sight) and could not even use its free attack, which is
+  // gated on the same check. Measured: casters held a line only 47% of ticks,
+  // rogues 20%, and both ran at ~12% of their cooldown capacity while sitting on
+  // ~90% mana. They were not out of resources — they had no angle.
+  //
+  // So: if we cannot see the target from where we intend to stand, SIDESTEP to
+  // the nearest point that can. Deliberately the LAST word on the goal, after
+  // archetype positioning, because it is a hard precondition for acting at all —
+  // but it never overrides the leash or the commit line below it.
+  // ⚠️ ONLY WHEN ALREADY IN REACH. Sidestepping from out of range is the wrong
+  // answer to the wrong problem: a unit that is simply too far away should WALK
+  // IN, which usually clears the rock on its own. Letting it strafe from
+  // distance cost casters their approach — in-range time fell 72% -> 53% and
+  // their damage with it, while the classes that were genuinely stuck behind
+  // cover (Ranger, Rogue) gained. This is a "I can reach it but not see it" fix.
+  if (reach > 3 && losFn && d <= reach && !losFn(goal, target.pos)) {
+    let best: Vec2 | null = null
+    let bestD = Infinity
+    for (let ring = 0; ring < 3; ring++) {
+      const rad = 2.2 + ring * 2.0
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2
+        const c = { x: goal.x + Math.cos(a) * rad, y: goal.y + Math.sin(a) * rad }
+        if (c.x < 1 || c.x > FIELD_W - 1 || c.y < 1 || c.y > FIELD_H - 1) continue
+        if (dist(c, target.pos) > reach) continue   // no good if we still can't reach
+        if (!losFn(c, target.pos)) continue         // still blocked
+        const dd = dist(c, self.pos)                // least walking wins
+        if (dd < bestD) { bestD = dd; best = c }
+      }
+      if (best) break // nearest ring that works — don't cross the map for a better angle
+    }
+    if (best) goal = best
   }
 
   // COMMIT: a 'hold' order refuses to over-extend past the halfway line.

@@ -106,9 +106,24 @@ describe('use cover', () => {
         loadout: [ALL_MOVES.find((x) => x.name === 'Rain of Arrows')!],
         personality: { temperament: 100 }, tactics: { ...DEFAULT_TACTICS, useCover: true } } as Monster,
     })
-    const gSeek = desiredGoal(seeker, foe, [], [foe], los)
-    // It ends up somewhere the melee threat cannot see it — while still able to shoot.
-    expect(los(gSeek, foe.pos)).toBe(false)
+    // ⚠️ THE TARGET AND THE THREAT MUST BE DIFFERENT MONSTERS. This test used to
+    // pass `foe` as both, then assert the seeker ended up where `foe` could not
+    // see it — which, with one enemy, is the same as asserting it hides where it
+    // cannot shoot. That is not cover, it is just hiding, and it was the actual
+    // engine defect: cover was picked on DISTANCE to the target alone, so a unit
+    // would relocate behind a rock that blocked its own line and then stand
+    // there doing nothing (casters held a shot only 47% of ticks).
+    // Cover means: break the DIVER's line while keeping your own on your TARGET.
+    const mark = unit('mark', {
+      side: 'B', pos: { x: start.x - 7, y: start.y },
+      m: { ...generateMonster('cover-mark', { speciesId: 'aegisox', train: 700 }),
+        loadout: [ALL_MOVES.find((x) => x.name === 'Power Strike')!],
+        tactics: { ...DEFAULT_TACTICS } } as Monster,
+    })
+    const gSeek = desiredGoal(seeker, mark, [], [foe, mark], los)
+    // THE INVARIANT: whatever stance it picks, it can still shoot what it is
+    // aiming at. A position that blocks its own shot is never an improvement.
+    expect(los(gSeek, mark.pos)).toBe(true)
   })
 
   it('is ignored by a wilful monster', () => {
