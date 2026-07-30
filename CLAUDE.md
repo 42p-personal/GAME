@@ -141,8 +141,9 @@ week) off the same seeded rng `applyWeek` uses.
 
 ### Species Training Aptitude
 Body type grants one MINOR bonus (+10%, `core.ts:BODY_MINOR`); each species authors its own MAJOR
-(+20%) and FLAW (−20%) via `Species.trainingProfile`. A handful of "vanilla" species have only the
-minor. The 15 exclusive-body species fall back to legacy stat-derived aptitude. See
+(+20%) and FLAW (−20%) via `Species.trainingProfile`. ⚠️ **All 65 species now author a profile** —
+the legacy stat-derived fallback in `game.ts:trainingProfileFor()` is still there as a safety net
+for any future species added without one, but nothing currently reaches it. See
 `game.ts:trainingProfileFor()` / `statTrainingBonus()`.
 
 ### Classes are emergent, not species-locked
@@ -152,6 +153,46 @@ untrained base stats derive," used solely by `validate.ts` to catch self-contrad
 Any species can in principle train into any class; aptitude only weights how fast each stat trains.
 **Never write flavour text or UI as if a species is destined for its class.**
 
+### The ability system (`moves.ts` + `lines.ts` + the authoring axes)
+
+Reworked wholesale on `3doverhal`; `docs/ABILITY_REWORK.md` is the live design doc.
+
+**Lines.** Each stat has THREE lines — a group of abilities sharing a win condition, not a power
+tier (`src/lines.ts`): STR Bloodrage/Duelist/Warcry · DEX Assassin/Venomcraft/Volley · CON
+Warden/Guardian/Bulwark · WIS Disruptor/Mender/Siphon · INT Hexer/Elementalist/Arcanist · CHA
+Enchanter/Captain/Demagogue. `CLASS_LINES` says which three a class draws from, and `chooseLoadout`
+multiplies affine moves by 1.35.
+
+⚠️ **Lines exist because three separate waves of authored content never reached a kit.** The picker
+used to rank all ~100 moves globally, so a move could only be drafted by out-scoring every other —
+control moves (deliberately low-power) measured 0% equipped, `Arcane Aegis` was 53% learnable and 0%
+equipped. Nudging scores twice made it WORSE. A line is a group to DRAW FROM, never a track the
+player is forced down, and affinity is a multiplier so off-line picks stay possible.
+
+⚠️ **Every move must appear in `LINE_OF`** — `validate.ts` enforces it, because a lineless move is
+invisible to affinity and silently unpickable.
+
+**The three authoring axes**, all per-ability, all optional:
+| axis | what it does | ⚠️ |
+|---|---|---|
+| `statScale` | damage is `power × (1 + stat × statScale)`; the progression axis | **FIELD-ONLY** — `battle.ts` never reads it, so changing it CANNOT move a golden. `STAT_SCALE_HIGH` only reaches capstones a mid-game monster cannot learn. |
+| `mana` | authored MP, overriding the derived `manaCost` | All 137 author one. Mana prices EFFECTIVENESS, not power — `Blood Price` is 30 power for 10 MP because it is paid for in blood. |
+| `variance` | half-width of the damage range; `power` is the MID-POINT | Default 0.15 is exactly the flat spread `battle.ts` always rolled, so an unauthored move behaves identically. `Deadeye` 0.05, `Gambler's Volley` 0.50. |
+
+**Two standing balance rules the pool is held to** (both asserted by harnesses, not vibes):
+- **Nothing falls below the free attack.** Judged with conditionals credited — an opener, a
+  detonator or a stun is worth more than its raw number, and ignoring that once flagged 8 correctly
+  priced DEX moves as broken.
+- **AoE is weak into one body and strong into three.** `aoeFalloff` expresses it; the audit judges
+  AoE at 3 targets, never at 1.
+
+**Support is divided by KIND, not by amount: CHA empowers · CON protects · WIS restores.** CHA is the
+only stat that makes an ally stronger; CON's support is shields and prevention; WIS's is healing and
+cleansing, and it is the ONLY stat that can heal another monster.
+
+**Damage is tiered on purpose.** Median effective DPS: STR 42.6 · DEX 38.2 · INT 35.2 || CON 28.0 ·
+CHA 26.8 · WIS 22.8. The support tier is not underpowered — it is paid in utility.
+
 ### Battle sim (`src/battle.ts`)
 - Every skill costs MP (`monster.ts:manaCost`, 2× the base formula); free universal Attack + Block;
   per-turn choice policy in `chooseAction`, element-aware (`effPower` folds in resist/weak vs the
@@ -159,11 +200,11 @@ Any species can in principle train into any class; aptitude only weights how fas
 - `maxMana = WIS + floor(INT/2)`; WIS is the sole regen stat; `maxHp = 40 + CON×2.0`
   (`monster.ts:maxHp`, shared by BOTH engines — changing it moves the goldens).
 - Guard (flat DR) lasts until the guardian's NEXT ACTION and mitigates every hit in between.
-- **100-move pool** (`src/moves.ts`, no longer 15/stat — STR/DEX/WIS 15, CHA 17, CON 18, INT 20;
-  reference in `docs/ABILITIES.md`) with `core.ts:MoveEffects`:
-  pierce, multi-hit, execute, recoil (capped 15%), lifesteal, mana burn, guard, ward (CON-exclusive),
+- **137-move pool** (`src/moves.ts` — 23 per stat except WIS 22) with `core.ts:MoveEffects`:
+  pierce, multi-hit, execute, recoil (capped 15%), lifesteal, mana burn, guard, ward,
   round-limited buffs/debuffs via `Combatant.mods`, plus framework effects (maxHpDmg, bonusVsStatus
-  combos, thorns, hpRegenBuff).
+  combos, thorns, hpRegenBuff). ⚠️ `ward` is NO LONGER CON-exclusive — CHA carries it too
+  (Bravura, Hymn of Shields), and `guard` spans STR/CON/CHA. See "The ability system" below.
 - Mitigation: physical vs CON + guard; magic/voice/support vs WIS.
 - Innate abilities grant passives via `INNATE_EFFECTS` (keyed by ability NAME — rename in
   `species.ts` requires renaming the key here too). Each species has TWO innates, only ONE active
@@ -219,10 +260,27 @@ and in memory:
   the round-robin needs bracket/scout/standings label plumbing (a clean follow-up).
 - **Hall of Fame live perks / lifespan elixir / richer inheritance** (aptitude-mix, signature-move) —
   natural extensions of the Phase 5 meta systems.
-- **Balance validation** — a full numeric rebalance beyond the structural fixes is still open ("lots
-  of the balancing is not correct" was flagged broadly).
 - **`tauntForce` targeting design** — mass taunt works; a proper forced-target pass for the AI is a
   standalone follow-on.
+
+### tamerengine — what the ability rework left open
+
+The pool rework is DONE (137 moves, 18 lines, all six stats). Still outstanding, in order:
+1. **FOCUS FIRE (P6)** — ⚠️ the highest-value item, and the one no number can reach. Damage spreads
+   evenly across a whole enemy side, so nobody crosses the death threshold until very late. It is
+   why CON-heavy compositions still grind (tank-mirror resolves 1/4 at 60s while dealing the MOST
+   damage of any composition). Two carefully aimed numeric levers — the mitigation cap and the maxHp
+   coefficient — both measured NULL against it. Flanking (+10 acc when outnumbered and unsupported)
+   is already in; target selection is not.
+2. **Six PASSIVES** — designed in `ABILITY_REWORK.md`, not built. Needs engine work FIRST: exclude
+   them from `chooseMove`, from `reachOf` (or a passive's channel sets a unit's stand-off distance —
+   the bug that once parked bruisers outside their own swing range) and from `basicAttackFor`.
+3. **+7 classes** — every stat has 3 primaries except WIS (1). 19 of 30 ordered stat pairs map to no
+   class, which is why ~15% of all monsters are Generalist.
+4. **`spreadStatus`** (contagion) — the one effect from P2 deliberately left unbuilt; sim it alone.
+5. **Freeze the goldens.** They moved 22 times in one day during the rework. A golden that moves that
+   often is a changelog, not a regression detector — capture once now the pool is stable.
+6. **`docs/ABILITIES.md` is stale** — still the pre-rework 90.
 
 ---
 
@@ -234,9 +292,12 @@ and in memory:
 | `src/game.ts` | Career state, drills/training, applyWeek()/previewWeekEffects(), aptitudes, food math, statCapFor() |
 | `src/drills.ts` | The **30** training drills: 6 basic + 12 intensive + 6 extreme + 6 diverse |
 | `src/App.tsx` | UI: TownView, RanchView, AbilitySelector, EventModal, saves, migration |
-| `src/core.ts` | Types, classes, elements, MoveEffects, Tactics, GAMEPLANS, Rival, foods, RNG |
+| `src/core.ts` | Types, classes, elements, MoveEffects, Tactics, GAMEPLANS, Rival, foods, RNG, the three ability axes (`statScale`/`mana`/`variance`), `HARD_CONTROL_STATUSES` |
 | `src/species.ts` | **65 species** = 13 body types x 5 (30 base + 15 prestige + 20 fusion) + computed BODY_AVERAGES |
-| `src/moves.ts` | The **100**-move pool (STR/DEX/WIS 15, CHA 17, CON 18, INT 20) — see `docs/ABILITIES.md`. ⚠️ The ability rework is mid-flight on `3doverhal`; `docs/ABILITY_REWORK.md` is the live design doc |
+| `src/moves.ts` | The **137**-move pool, 23/stat (WIS 22), grouped into 18 lines. ⚠️ `docs/ABILITIES.md` still lists the PRE-REWORK 90 and is stale; `docs/ABILITY_REWORK.md` is the live design doc |
+| `src/lines.ts` | The 18 ability LINES, per-class affinity (`CLASS_LINES`), and `LINE_OF` for every move. ⚠️ The fix for three waves of authored-but-unreachable content |
+| `tools/sweep40.ts` | The balance instrument: 40 matchups over 10 compositions. `--noise` reports its own error band |
+| `tools/ab.ts` | Paired A/B for balance constants — runs the SAME fights under both settings and judges with a sign test |
 | `src/battle.ts` | Auto-battle sim: mana, innates, round-based mods, tactics, BattleEvent stream |
 | `src/battleReport.ts` | `analyzeBattle` — pure post-battle causal report |
 | `src/arena.tsx` | Animated arena replay; league backgrounds, live status HUD, battle-report card |
