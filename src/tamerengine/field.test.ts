@@ -185,8 +185,14 @@ describe('target selection', () => {
   })
 
   it('values a squishy damage dealer above a tanky one', () => {
-    const squishy = unit('sq', { maxHp: 320 })
-    const beefy = unit('bf', { maxHp: 900 })
+    // ⚠️ SAME monster in both, differing only in maxHp. They used to be built
+    // from different seeds ('sq' / 'bf'), so they also had different loadouts and
+    // therefore different threat — meaning this comparison moved whenever the
+    // ability pool did, and it duly inverted on the P4 loadout-ranking change.
+    // maxHp must be the only variable for the assertion to mean anything.
+    const twin = mk('twin')
+    const squishy = unit('sq', { m: twin, maxHp: 320 })
+    const beefy = unit('bf', { m: twin, maxHp: 900 })
     expect(valueOf(squishy)).toBeGreaterThan(valueOf(beefy))
   })
 })

@@ -5,6 +5,7 @@ import { generateMonster } from '../monster'
 import { isMelee, pickTarget, traitsFor } from './decide'
 import { FieldUnit, FieldSide, Vec2 } from './types'
 import { Monster } from '../core'
+import { ALL_MOVES } from '../moves'
 
 // A minimal FieldUnit wrapper — only the fields pickTarget/isMelee read need to
 // be real; the rest are inert defaults.
@@ -17,8 +18,22 @@ function unit(m: Monster, side: FieldSide, pos: Vec2, hp = 500, maxHp = 500): Fi
     rootedFor: 0, fadedUntil: 0, slowMult: 1, slowFor: 0, disengageFor: 0, kiteFor: 99, blockingUntil: 0, ward: 0, ccResist: 0, lastCcAt: -999, ccImmuneUntil: 0, hasAttacked: false, dead: false,
   }
 }
-const melee = (seed: string) => generateMonster(seed, { speciesId: 'aegisox', train: 700 }) as Monster // Tank, reach 1.6
-const ranged = (seed: string) => generateMonster(seed, { speciesId: 'grivvel', train: 850 }) as Monster // Rogue, reach 8
+// ⚠️ Both PIN their loadout instead of trusting whatever chooseLoadout happens to
+// draft. Reach derives from the damage moves in the kit, so a pool change can
+// silently turn the "ranged" fixture melee — which is exactly what happened on
+// the P4 loadout-ranking pass: grivvel drafted Power Strike + Body Slam, reach
+// fell 8 -> 1.6, and `isMelee` short-circuited the very branch under test. What
+// is being tested here is the reach SPLIT, so reach must be the fixture, not an
+// emergent property of the current pool.
+const moveNamed = (n: string) => ALL_MOVES.find((m) => m.name === n)!
+const melee = (seed: string) => ({
+  ...generateMonster(seed, { speciesId: 'aegisox', train: 700 }),
+  loadout: [moveNamed('Power Strike')], // melee channel -> reach 1.6
+}) as Monster
+const ranged = (seed: string) => ({
+  ...generateMonster(seed, { speciesId: 'grivvel', train: 850 }),
+  loadout: [moveNamed('Piercing Shot')], // ranged channel -> reach 8
+}) as Monster
 
 describe('tamerengine — targeting split', () => {
   it('classifies reach correctly (melee vs ranged)', () => {

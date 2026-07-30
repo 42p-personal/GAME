@@ -21,10 +21,15 @@ const GOLDENS = [
   },
   {
     name: '1v1-high', a: ['gold-a2'], b: ['gold-b2'], train: 1800,
-    winner: 'B', events: 74, logLines: 57,
+    // Recaptured for the P4 loadout-ranking pass (chooseLoadout now ranks damage
+    // by power/cooldown — a RATE — instead of damage-per-cast). Winner held at B.
+    // 74 -> 147 events: both monsters swapped a big slow move for sustained ones,
+    // so more casts land per fight. B ends on 146 mana rather than 673, which is
+    // the same story from the other side — it is actually spending its bar now.
+    winner: 'B', events: 147, logLines: 108,
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 437, wasKOd: true },
-      { side: 'B', slot: 0, hp: 511, mana: 673, wasKOd: false },
+      { side: 'A', slot: 0, hp: 0, mana: 467, wasKOd: true },
+      { side: 'B', slot: 0, hp: 520, mana: 146, wasKOd: false },
     ],
   },
   {
@@ -40,12 +45,15 @@ const GOLDENS = [
     // 52 -> 70 events. Winner HELD at A and both its monsters still survive —
     // the fight is longer because the losing side's spells now do real damage
     // instead of being worse than swinging. Prior: 58 -> 52 (play quality).
-    winner: 'A', events: 70, logLines: 58,
+    // Recaptured again for the P4 loadout-ranking pass: 70 -> 91 events, winner
+    // still A with both monsters alive. Same cause as 1v1-high — rate-ranked kits
+    // fire more often.
+    winner: 'A', events: 91, logLines: 73,
     finals: [
-      { side: 'A', slot: 0, hp: 180, mana: 244, wasKOd: false },
-      { side: 'A', slot: 1, hp: 152, mana: 196, wasKOd: false },
-      { side: 'B', slot: 0, hp: 0, mana: 122, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 347, wasKOd: true },
+      { side: 'A', slot: 0, hp: 111, mana: 253, wasKOd: false },
+      { side: 'A', slot: 1, hp: 152, mana: 186, wasKOd: false },
+      { side: 'B', slot: 0, hp: 0, mana: 208, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 329, wasKOd: true },
     ],
   },
   {
@@ -85,14 +93,20 @@ const GOLDENS = [
     // to exactly this monster, so the side built around it wins. A 3v3 decided by
     // the caster whose spells stopped being worse than punching is the fix
     // working. Now 5 of 6 monsters die — a decisive fight, not a grind.
-    winner: 'B', events: 416, logLines: 334,
+    // ⚠️ Recaptured for the P4 loadout-ranking pass — winner flipped BACK to A, and
+    // decisively (416 -> 333 events, A keeps two monsters on 1077 and 1348 HP).
+    // This golden has now moved on three consecutive ability changes, which is
+    // what a 3v3 between two near-equal high-training teams does: it is the most
+    // sensitive fight in the set, not an unstable engine. The other three goldens
+    // held their winner across all three passes.
+    winner: 'A', events: 333, logLines: 256,
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 716, wasKOd: true },
-      { side: 'A', slot: 1, hp: 0, mana: 298, wasKOd: true },
-      { side: 'A', slot: 2, hp: 0, mana: 763, wasKOd: true },
-      { side: 'B', slot: 0, hp: 0, mana: 731, wasKOd: true },
-      { side: 'B', slot: 1, hp: 473, mana: 750, wasKOd: false },
-      { side: 'B', slot: 2, hp: 750, mana: 9, wasKOd: false },
+      { side: 'A', slot: 0, hp: 0, mana: 700, wasKOd: true },
+      { side: 'A', slot: 1, hp: 1077, mana: 11, wasKOd: false },
+      { side: 'A', slot: 2, hp: 1348, mana: 737, wasKOd: false },
+      { side: 'B', slot: 0, hp: 0, mana: 732, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 731, wasKOd: true },
+      { side: 'B', slot: 2, hp: 0, mana: 21, wasKOd: true },
     ],
   },
 ] as const

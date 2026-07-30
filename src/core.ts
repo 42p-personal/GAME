@@ -72,6 +72,16 @@ export type Target = 'enemy' | 'allEnemies' | 'frontRow' | 'backRow' | 'self' | 
 // meta rewarded AoE casters. Charged per ADDITIONAL target, so a lone survivor
 // takes an undiminished hit.
 export const AOE_FALLOFF_PER_TARGET = 0.05
+
+// ── HARD CONTROL ────────────────────────────────────────────────────────────
+// Statuses that take a turn AWAY rather than shaving damage off it. DoTs
+// (burn/poison/bleed) are deliberately excluded — they are damage, not control.
+// ⚠️ Canonical here in core so BOTH the loadout picker (monster.ts, which must
+// not import tamerengine) and the field engine can share one list;
+// tamerengine/status.ts re-exports it as CONTROL_STATUSES.
+export const HARD_CONTROL_STATUSES = new Set<StatusKind>([
+  'stun', 'sleep', 'fear', 'confusion', 'charm', 'silence', 'knockback',
+])
 export const aoeFalloff = (targetCount: number): number =>
   Math.max(0.4, 1 - AOE_FALLOFF_PER_TARGET * Math.max(0, targetCount - 1))
 

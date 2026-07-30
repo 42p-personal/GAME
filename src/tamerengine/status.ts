@@ -24,7 +24,7 @@
 // at application. Damage-over-time is likewise stated PER SECOND here and scaled
 // by DT each tick — the turn engine's "5% of maxHp per round" becomes 2.5%/s.
 // ─────────────────────────────────────────────────────────────────────────────
-import { StatusKind } from '../core'
+import { StatusKind, HARD_CONTROL_STATUSES } from '../core'
 
 /** How a status hijacks where its carrier walks. */
 export type Steer =
@@ -119,9 +119,9 @@ export const BENEFICIAL = new Set<StatusKind>(['haste'])
  * let a damage-over-time kit burn away the protection that is meant to guard
  * against LOCKOUT — the exact thing DR exists to cap.
  */
-export const CONTROL_STATUSES = new Set<StatusKind>([
-  'stun', 'sleep', 'fear', 'confusion', 'charm', 'silence', 'knockback',
-])
+// Single source of truth lives in core.ts, so the loadout picker (which must not
+// import tamerengine) and this engine cannot drift apart.
+export const CONTROL_STATUSES = HARD_CONTROL_STATUSES
 
 // How far off its heading a confused monster veers, in radians. Fixed, not
 // rolled: the field engine's contract is that a replay reproduces exactly, and

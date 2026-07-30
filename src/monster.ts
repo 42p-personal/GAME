@@ -1,8 +1,7 @@
 // Seed -> monster generator (§10.1 genome idea, simplified) plus derived values.
 import {
   CLASSES, NORMAL_FOODS, INNATE_SECONDARY_LEVEL, LEAGUES, Monster, Move, RNG, STATS, Stat, Stats, classForStats, hashString,
-  isFusionBody, isPrestigeBody, leagueForStat, mulberry32, pick, randInt,
-} from './core'
+  isFusionBody, isPrestigeBody, leagueForStat, mulberry32, pick, randInt, HARD_CONTROL_STATUSES } from './core'
 import { ALL_MOVES } from './moves'
 import { SPECIES } from './species'
 
@@ -85,7 +84,17 @@ export function learnedMoves(stats: Stats): Move[] {
 // slot falls through to best-damage when nothing suitable is learned yet, so
 // low-level monsters degrade gracefully. Without `stats` (legacy callers),
 // falls back to raw-power ranking.
-const expectedOutput = (m: Move) => m.power * (m.effects?.hits ? (m.effects.hits[0] + m.effects.hits[1]) / 2 : 1)
+// ⚠️ Damage per CAST, divided by the cooldown that cast costs you — i.e. a rate,
+// not a lump. It used to be `power × hits` with NO cooldown term at all, so the
+// picker consistently preferred a big slow move to a better sustained one, and a
+// single point of power could flip a slot no matter what it cost to use. Caught
+// when a +11 power lift on Rime Bind (a lv160 move on a 3-turn cooldown) made it
+// the top-scoring low INT move and the variety pass then handed it to 36% of ALL
+// monsters across ten classes — a homogenised pool from one number moving.
+// The divisor is cooldown alone: cast time lives in tamerengine, and monster.ts
+// must not depend on the field engine.
+const expectedOutput = (m: Move) =>
+  m.power * (m.effects?.hits ? (m.effects.hits[0] + m.effects.hits[1]) / 2 : 1) / Math.max(1, m.cooldown)
 
 type MovePick = (mv: Move) => boolean
 const isHeal: MovePick = (mv) => mv.type !== 'damage' && mv.power > 0
@@ -113,6 +122,12 @@ const isCleanseOrRegen: MovePick = (mv) => !!(mv.effects?.cleanse || mv.effects?
 const isPersonalBuff: MovePick = (mv) => mv.type !== 'damage'
   && (mv.target === 'self' || mv.target === 'team' || mv.target === 'ally')
   && !!(mv.effects?.atkBuff || mv.effects?.dodgeBuff || mv.effects?.accBuff || mv.effects?.regenBuff)
+
+// Classes whose P3 kit contract explicitly calls for movement denial, and so get
+// ONE loadout slot reserved for a hard-control move. Deliberately short: denial
+// on every class would make every fight a lockout, which is what CC diminishing
+// returns already exists to prevent.
+const CLASS_WANTS_CONTROL = new Set(['Ranger', 'Wizard', 'Tank'])
 
 // Utility slots a support class fills before topping up with damage, in order.
 const CLASS_UTILITY_SLOTS: Record<string, MovePick[]> = {
@@ -167,7 +182,24 @@ export function chooseLoadout(learned: Move[], stats?: Stats, size = 3): Move[] 
   // tools, not bonusVsStatus combos) — give those a smaller, unconditional
   // nudge so they can still compete against a stat's single strongest
   // pure-damage move instead of being crowded out every time.
-  const carriesStatus = (m: Move) => !!m.status
+  // ⚠️ Every status used to be worth a flat ×1.15 regardless of what it DID or how
+  // often it landed, so a 55%-chance knockback scored the same as a 30% bleed.
+  // That is why the control moves were dead weight: they are deliberately
+  // low-power (control traded for damage), and a flat nudge could never pay that
+  // trade back — Seize, Rime Bind and Frost Nova measured 0% equipped across 780
+  // monsters despite being learnable by up to 38% of them.
+  // Now the nudge is worth what the status is worth: HARD CONTROL takes a turn
+  // away, a DoT just adds a little damage. Scaled by landing chance so a coin-flip
+  // stun is not priced like a guaranteed one.
+  // ⚠️ Kept deliberately modest. A big multiplier here would hand every slot to
+  // whatever carries CC — the loadout-layer version of how War Cry once took 137
+  // of 254 utility casts. 0.3 also keeps a 50%-chance DoT at ~1.15, i.e. exactly
+  // the old value, so this is additive for control rather than a global reshuffle.
+  const statusWeight = (m: Move) => {
+    if (!m.status) return 1
+    const chance = Math.min(100, Math.max(0, m.status.chance)) / 100
+    return 1 + chance * (HARD_CONTROL_STATUSES.has(m.status.kind) ? 0.4 : 0.3)
+  }
   const dmgScore = (m: Move) => {
     const base = stats
       ? expectedOutput(m) * Math.pow(Math.max(1, attackStat(stats, m.channel)) / 40, 0.8)
@@ -175,8 +207,7 @@ export function chooseLoadout(learned: Move[], stats?: Stats, size = 3): Move[] 
     // proportional nudges, so neither can make a genuinely weak low-level
     // move outrank a much stronger high-level one
     if (isComboPiece(m)) return base * 1.5
-    if (carriesStatus(m)) return base * 1.15
-    return base
+    return base * statusWeight(m)
   }
   const damage = learned.filter((m) => m.type === 'damage').sort((a, b) => dmgScore(b) - dmgScore(a))
   const support = learned.filter((m) => m.type !== 'damage').sort((a, b) => b.learnLevel - a.learnLevel)
@@ -247,6 +278,24 @@ export function chooseLoadout(learned: Move[], stats?: Stats, size = 3): Move[] 
       // then a self-only buff. See the isPersonalBuff note above.
       const pick = support.find((mv) => mv.target === 'team' && isPersonalBuff(mv) && !out.includes(mv))
         ?? support.find((mv) => isPersonalBuff(mv) && !out.includes(mv))
+      if (pick) out.push(pick)
+    }
+    // ── ONE RESERVED CONTROL SLOT, for the classes whose kit calls for it ─────
+    // ⚠️ Control moves cannot be made to WIN a damage comparison, and trying was
+    // the mistake. They are deliberately low-power — control traded for damage —
+    // so ranking them as damage means they either lose outright (0% equipped) or,
+    // if nudged hard enough to win, they take over: a single +11 power lift put
+    // Rime Bind on 36% of all monsters across ten classes. Neither is a kit.
+    // So the class that NEEDS denial reserves a slot for it, exactly as Tanks
+    // reserve one for a taunt. Straight from the P3 kit table: Ranger — "a real
+    // root to hold the target"; Wizard — Hexer zones/denial; Tank — "decides the
+    // geometry" via the Warden slow.
+    // ⚠️ Drawn from `damage`, not `support`: these moves carry their control as a
+    // rider on a hit (`type: 'damage'`), so no utility predicate can ever see
+    // them. And it never claims the LAST slot — a kit without damage is not a kit.
+    if (CLASS_WANTS_CONTROL.has(classForStats(stats)) && out.length < size - 1) {
+      const pick = damage.find((mv) =>
+        mv.status && HARD_CONTROL_STATUSES.has(mv.status.kind) && !out.includes(mv))
       if (pick) out.push(pick)
     }
   }
