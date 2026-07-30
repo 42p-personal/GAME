@@ -408,6 +408,59 @@ above — the fix is real, the instrument just could not see it.
 
 ---
 
+## 6b. P4 loadout / P5 mana / P6 flanking — shipped, with the measurements
+
+### P4 loadout ranking (`78b784a`)
+
+**`expectedOutput` had no cooldown term**, so `chooseLoadout` ranked damage-per-CAST
+rather than per second, and had always preferred a big slow move to a better sustained
+one. Now divided by cooldown. Found the long way: three attempts, two wrong.
+
+| attempt | result |
+|---|---|
+| weight the status nudge by what the status does (hard control 0.4 / DoT 0.3 x chance) | Rime Bind 0% -> **37%** equipped across TEN classes — homogenised |
+| drop the coefficient to 0.25, BELOW the old flat 1.15 | still 36% — so the nudge was never the cause |
+| divide by cooldown | overshoot gone, and control back to 0% |
+
+⚠️ **The lesson: a control move cannot be made to WIN a damage comparison.** It is
+deliberately low-power — control traded for damage. Nudge it enough to win and it takes
+over; leave it and it never appears. So the class that NEEDS denial **reserves a slot**,
+exactly as a Tank reserves one for its taunt. Ranger **63%** / Wizard **76%** / Tank
+**80%** of kits now carry hard control, and only those three classes do.
+
+### P5 mana (`16a7b11`) — all four targets met
+
+`FIELD_MANA_COST_MULT` **0.5 -> 0.22**, swept one knob at a time.
+
+| mult | starved | basic share | resolved | duration |
+|---|---|---|---|---|
+| 0.50 | 66.1% | 57% | 8/12 | 45.5s |
+| 0.32 | 42.2% | 47% | 10/12 | 39.8s |
+| **0.22** | **18.4%** | **38%** | **9/12** | **42.4s** |
+| 0.15 | 12.3% | 35% | 10/12 | 41.2s |
+
+Not the lowest value on purpose: below ~0.18 mana stops being a constraint you can run
+out of, deleting an axis of play. The worst-case mammal sweep gained most: **1/12 -> 5/12**.
+
+### P6 flanking (`ef485e8`) — and a corrected diagnosis
+
++10 accuracy POINTS against a defender engaged by 2+ enemies with no ally within 3.2u.
+Warrior damage **57 -> 82** per fight.
+
+⚠️ **"Melee spends the fight closing and being kited" was WRONG.** Time-in-state by reach:
+
+| | dead | move | cast | idle |
+|---|---|---|---|---|
+| MELEE | **44%** | 29% | **14%** | 12% |
+| RANGED | 26% | 32% | 28% | 13% |
+
+Move time is the SAME. **Melee dies at 1.7x the rate**, and dead units cast nothing —
+that is the entire 4x class-damage gap. The remedy is survivability and formation (soak,
+protect, guard uptime), **not** gap-closers, per-move ranges or bigger STR numbers.
+⚠️ This directly undercuts P7's premise: gap-closers would not have touched the cause.
+
+---
+
 ## 7. Standing rules that apply
 
 - **Balance iteratively**: nudge one value, sim, read, adjust. The sim is the arbiter (CLAUDE.md).
