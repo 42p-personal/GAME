@@ -9,7 +9,7 @@ import { Channel, Monster, Move, MoveArea, MoveSpatial, Stat, aoeFalloff, statSc
 import { chooseLoadout, learnedMoves, manaCost, maxHp, maxMana } from '../monster'
 import {
   DT, FIELD_H, FIELD_W, FieldEvent, FieldResult, FieldSetup, FieldSide, FieldUnit,
-  MAX_TICKS, Obstacle, RETARGET_EVERY, UnitVisState, Vec2, CONTAGION_RADIUS,
+  MAX_TICKS, Obstacle, RETARGET_EVERY, UnitVisState, Vec2, CONTAGION_RADIUS, TEAM_AURA_RADIUS,
   CHANNEL_CAST_TIME, CHANNEL_RANGE, DEPLOY_DEPTH, SECONDS_PER_ROUND,
   SUDDEN_DEATH_AT, SUDDEN_DEATH_BASE, SUDDEN_DEATH_RAMP, KITE_MAX, KITE_REFILL, BLOCK_DR,
   BASIC_STAT_TIER, BASIC_BASE_POWER, BASIC_STAT_SCALE,
@@ -1010,9 +1010,24 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
    * scream cannot be aimed at a spot); one centred on 'target' lands where the
    * victim is standing, which is what makes clumping dangerous.
    */
+  /**
+   * Everyone a TEAM effect actually reaches: allies within TEAM_AURA_RADIUS of
+   * the caster. Replaces four identical `x.side === u.side` filters that had no
+   * distance term at all, so an aura crossed the whole field.
+   */
+  function teamCrowd(u: FieldUnit, mv: Move, aim: FieldUnit): FieldUnit[] {
+    if (mv.target !== 'team') return [aim]
+    return units.filter((x) => x.side === u.side && !x.dead
+      && dist(u.pos, x.pos) <= TEAM_AURA_RADIUS)
+  }
+
   function areaVictims(u: FieldUnit, target: FieldUnit, area: MoveArea): FieldUnit[] {
     const origin = area.centre === 'self' ? u.pos : target.pos
-    const foes = units.filter((x) => x.side !== u.side && !x.dead)
+    // ⚠️ SIDE-AWARE. This hard-coded `x.side !== u.side`, so a friendly area
+    // effect — a group heal, a ward zone — had no geometry and simply could not
+    // exist. A shape does not care whose side it is on; who it CATCHES does.
+    const friendly = u.side === target.side
+    const foes = units.filter((x) => (friendly ? x.side === u.side : x.side !== u.side) && !x.dead)
     if (area.shape === 'circle') {
       const r = area.radius ?? 4
       return foes.filter((f) => dist(origin, f.pos) <= r + f.radius)
@@ -1070,11 +1085,11 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     // compiles, runs, and is wrong by a factor of a hundred.
     const until = t2 + (fx?.duration ?? 3) * SECONDS_PER_ROUND
     if (fx?.atkBuff && friendly) {
-      const crowd = mv.target === 'team' ? units.filter((x) => x.side === u.side && !x.dead) : [aim]
+      const crowd = teamCrowd(u, mv, aim)
       for (const v of crowd) v.mods.push({ atk: 1 + fx.atkBuff, until })
     }
     if (fx?.defBuff && friendly) {
-      const crowd = mv.target === 'team' ? units.filter((x) => x.side === u.side && !x.dead) : [aim]
+      const crowd = teamCrowd(u, mv, aim)
       for (const v of crowd) v.mods.push({ dmgTaken: Math.max(0.4, 1 - fx.defBuff / 100), until })
     }
     // ── THE PREVIOUSLY-INERT DEFENSIVE / ACCURACY EFFECTS ────────────────────
@@ -1082,7 +1097,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     // NOTHING on the field — 11 moves were entirely inert, which is why a Tank
     // could not tank. Ported from the turn engine's `applyBuffTo`.
     if (friendly) {
-      const crowd = mv.target === 'team' ? units.filter((x) => x.side === u.side && !x.dead) : [aim]
+      const crowd = teamCrowd(u, mv, aim)
       for (const v of crowd) {
         if (fx?.ward) v.ward += fx.ward // an absorb POOL, not a timed mod
         if (fx?.guard) v.mods.push({ guard: fx.guard, until })
@@ -1137,7 +1152,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     } else if (mv.status && BENEFICIAL.has(mv.status.kind)) {
       // The pool's two haste moves are team buffs — the only way haste is ever
       // handed out, so without this branch the status would never once appear.
-      const crowd = mv.target === 'team' ? units.filter((x) => x.side === u.side && !x.dead) : [aim]
+      const crowd = teamCrowd(u, mv, aim)
       for (const v of crowd) applyFieldStatus(u, v, mv.status.kind, mv.status.duration, t2)
     }
   }

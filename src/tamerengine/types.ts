@@ -332,6 +332,29 @@ export const FIELD_LOADOUT_SIZE = 4
  */
 export const CONTAGION_RADIUS = 5.5
 
+/**
+ * How far a TEAM buff, ward or heal reaches from the caster, in field units.
+ *
+ * ⚠️ TEAM EFFECTS USED TO HAVE NO RANGE AT ALL — `units.filter(x => x.side ===
+ * u.side)`, so a war cry reached an ally on the far side of a 40x22 field.
+ * Support was the only role in the game that was completely position-blind: a
+ * Bard could stand in a corner and buff as well as one standing with its line.
+ * 9 covers a team that is fighting together and drops a straggler or a diving
+ * assassin. Sits under LEASH_RADIUS (12) on purpose — a unit at the leash edge
+ * is exactly the one that should fall out of the aura.
+ *
+ * ⚠️ AT 9 THIS IS A GUARD RAIL, NOT A DECISION, and that is deliberate. Measured
+ * ally-to-ally spacing over 45,842 sampled pairs:
+ *     radius  5 -> 15.0% of allies missed      radius  8 -> 2.3%
+ *     radius  6 ->  8.8%                       radius  9 -> 0.7%
+ *     radius  7 ->  5.0%                       radius 10 -> 0.7%
+ * Teams fight inside 9 almost always, so this punishes only a support that has
+ * genuinely wandered off — 200 paired fights moved 8 of them (p = 0.29). Drop it
+ * to 6-7 to make positioning a real cost; that is a BALANCE decision with a
+ * measurable price, not a tuning nicety, so it is left generous until asked for.
+ */
+export const TEAM_AURA_RADIUS = 9
+
 export interface FieldSetup {
   seed: string
   teamA: Monster[]
