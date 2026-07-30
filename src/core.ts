@@ -104,8 +104,20 @@ export const aoeFalloff = (targetCount: number): number =>
 // since `learnedMoves` gates by stat, a mid-game monster can only equip low/mid
 // moves, so the whole mid-game got weaker (sim: damage/fight 28.9k → 27.3k).
 // Progression should pay by lifting the top, not by lowering the bottom.
-export const STAT_SCALE_LOW = 1 / 270  // ~lvl 40 — unchanged from the old flat value
-export const STAT_SCALE_HIGH = 1 / 130 // ~lvl 920
+export const STAT_SCALE_LOW = 1 / 320  // ~lvl 40 — unchanged from the old flat value
+// ⚠️ 1/270 WAS TRIED AND REVERTED. It was committed on a 12-fight sweep reading
+// 10/12 vs 9/12 — inside that sweep's own noise band (sd 0.7). A paired A/B over
+// 40 identical matchups then measured it properly: 23 fights faster, 16 slower,
+// sign test p = 0.34, resolved delta ZERO, damage/fight -57. It does nothing.
+// ⚠️ Contrast STAT_SCALE_HIGH below, which was tried the same way and KEPT:
+// 19 faster / 5 slower, p = 0.0066. Both looked 'not significant' on a mean CI;
+// only the sign test separated them, because a few fights swing 20-30s when they
+// tip from timeout to a kill and those outliers swamp the mean.
+export const STAT_SCALE_HIGH = 1 / 130 // ~lvl 920 — 1/150 -> 1/130, sign test p = 0.0066
+// (+3 fights resolved, +44 damage/fight over 40 paired matchups). ⚠️ This end of
+// the band only reaches CAPSTONES: a train-850 monster has stats near 300 and
+// cannot LEARN a lv920 move, which is why raising HIGH alone once moved measured
+// field damage by 0.1%. It pays off at high training, not in the mid-game.
 export const defaultStatScale = (learnLevel: number): number => {
   const t = Math.min(1, Math.max(0, (learnLevel - 40) / (920 - 40)))
   return STAT_SCALE_LOW + (STAT_SCALE_HIGH - STAT_SCALE_LOW) * t

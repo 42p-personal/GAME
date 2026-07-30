@@ -1,0 +1,111 @@
+// The 40-matchup balance sweep. Replaces tools/dsweep.ts (12 fights) as the
+// instrument every tuning decision is judged against.
+//
+// ⚠️ WHY IT EXISTS. A noise study on the 12-fight sweep — the same matchups re-run
+// with five different seed batches — measured sd 0.7 on "resolved" and 0.9s on
+// duration. That makes ±1.4 fights and ±1.8s indistinguishable from luck, and
+// several tuning decisions had already been made on 1-2 fight differences. The
+// STAT_SCALE_LOW pick in particular (1/320 -> 9/12, 1/270 -> 10/12, 1/230 -> 8/12)
+// spanned less than the noise band and was, on that evidence, unfalsifiable.
+//
+// ⚠️ COMPOSITION IS A VARIABLE, NOT A CONSTANT. Melee measured as hopeless (100%
+// deaths) when it fought alone and fine (81%) beside a second front-liner — the
+// same monsters, a different team. So the ten compositions below deliberately
+// span the range from all-caster to double-front-line rather than sampling
+// "typical" teams, because there is no typical team.
+//
+// Usage: npx tsx tools/sweep40.ts [--noise]
+//   --noise re-runs every composition across five seed batches and reports the
+//   spread, so a claimed improvement can be checked against the instrument's own
+//   error before it is believed.
+import { generateMonster } from '../src/monster'
+import { simulateFieldBattle } from '../src/tamerengine/engine'
+import { autoDeployByRole } from '../src/tamerengine/hex'
+import { classForStats } from '../src/core'
+
+const mk = (id: string, sp: string, train = 850) =>
+  generateMonster(id, { speciesId: sp, train }) as never
+const OBSTACLES = [
+  { x: 19, y: 6, w: 2.2, h: 2.2 }, { x: 21, y: 15, w: 2.2, h: 2.2 },
+  { x: 13, y: 11, w: 2, h: 2 }, { x: 27, y: 11, w: 2, h: 2 },
+]
+
+/** Ten compositions spanning the real range of teams a player can field. */
+const COMPS: { name: string; a: string[]; b: string[] }[] = [
+  { name: 'balanced',      a: ['kongrath', 'maelurk', 'larkessa'],        b: ['aegisox', 'strixil', 'pinguox'] },
+  { name: 'all-caster',    a: ['maelurk', 'strixil', 'archmage-aleph'],   b: ['abyssomancer', 'carcharun', 'frostwyren'] },
+  { name: 'double-front',  a: ['aegisox', 'kongrath', 'maelurk'],         b: ['ursath', 'maneleo', 'strixil'] },
+  { name: 'mixed-arcane',  a: ['lanterix', 'bruxaroo', 'carcharun'],      b: ['lurkerss', 'vespera', 'geckari'] },
+  { name: 'assassins',     a: ['grivvel', 'mantevoke', 'larkessa'],       b: ['aegisox', 'nautilux', 'frostwyren'] },
+  { name: 'support-heavy', a: ['strixil', 'koalio', 'tortavos'],          b: ['quokkade', 'carcharun', 'aegisox'] },
+  { name: 'marksmen',      a: ['pinguox', 'mantaris', 'maelurk'],         b: ['kongrath', 'aegisox', 'strixil'] },
+  { name: 'generalists',   a: ['corvaan', 'tazzik', 'abyssomancer'],      b: ['geckari', 'odonatra', 'sylvaglide'] },
+  { name: 'tank-mirror',   a: ['aegisox', 'tortavos', 'ursath'],          b: ['vipramane', 'nautilux', 'crocmaw'] },
+  { name: 'glass',         a: ['archmage-aleph', 'grivvel', 'stormlerath'], b: ['lurkerss', 'balaenix', 'stellarion'] },
+]
+const SEED_BATCHES = [
+  ['s1', 's2', 's3', 's4'], ['q1', 'q2', 'q3', 'q4'], ['z1', 'z2', 'z3', 'z4'],
+  ['m1', 'm2', 'm3', 'm4'], ['k1', 'k2', 'k3', 'k4'],
+]
+
+interface Run { resolved: number; fights: number; dur: number; kills: number; dmg: number
+  byClass: Map<string, { dmg: number; casts: number; n: number }> }
+
+function runBatch(seeds: string[], train = 850): Run {
+  const out: Run = { resolved: 0, fights: 0, dur: 0, kills: 0, dmg: 0, byClass: new Map() }
+  for (const comp of COMPS) for (const sd of seeds) {
+    const A = comp.a.map((s, i) => mk(`${sd}${comp.name}a${i}`, s, train))
+    const B = comp.b.map((s, i) => mk(`${sd}${comp.name}b${i}`, s, train))
+    const front = (m: never) => ({ front: (m as never as { stats: Record<string, number> }).stats.CON
+      + (m as never as { stats: Record<string, number> }).stats.STR
+      - (m as never as { stats: Record<string, number> }).stats.INT
+      - (m as never as { stats: Record<string, number> }).stats.WIS })
+    const r = simulateFieldBattle({ seed: sd + comp.name, teamA: A, teamB: B,
+      obstacles: OBSTACLES, placeA: autoDeployByRole('A', A.map(front)), placeB: autoDeployByRole('B', B.map(front)) })
+    out.fights++; out.dur += r.duration
+    if (r.duration < 55) out.resolved++
+    const cls = new Map<string, string>()
+    A.forEach((m, i) => cls.set('A' + i, classForStats((m as never as { stats: never }).stats)))
+    B.forEach((m, i) => cls.set('B' + i, classForStats((m as never as { stats: never }).stats)))
+    for (const [, c] of cls) {
+      const s = out.byClass.get(c) ?? { dmg: 0, casts: 0, n: 0 }; s.n++; out.byClass.set(c, s)
+    }
+    for (const e of r.events as never as { kind: string; id: string; dmg: number }[]) {
+      if (e.kind === 'death') out.kills++
+      if (e.kind === 'hit') { out.dmg += e.dmg
+        const c = cls.get(e.id); if (c) { const s = out.byClass.get(c)!; s.dmg += e.dmg } }
+      if (e.kind === 'cast') { const c = cls.get(e.id); if (c) { const s = out.byClass.get(c)!; s.casts++ } }
+    }
+  }
+  return out
+}
+
+const line = (label: string, r: Run) =>
+  `${label.padEnd(12)} ${String(r.resolved) + '/' + r.fights}`.padEnd(26)
+  + `${(r.dur / r.fights).toFixed(1)}s`.padStart(7)
+  + String(r.kills).padStart(8) + (r.dmg / r.fights).toFixed(0).padStart(11)
+
+const noise = process.argv.includes('--noise')
+if (!noise) {
+  const r = runBatch(SEED_BATCHES[0])
+  console.log(`40-MATCHUP SWEEP — 10 compositions x 4 seeds, train 850\n`)
+  console.log('               resolved       dur   kills  dmg/fight')
+  console.log(line('total', r))
+  console.log('\ndamage by class (per fight):')
+  for (const [c, s] of [...r.byClass].sort((a, b) => b[1].dmg - a[1].dmg))
+    console.log('  ', c.padEnd(13), 'dmg', String(Math.round(s.dmg / r.fights)).padStart(5),
+      ' casts', String(Math.round(s.casts / r.fights)).padStart(4), ' appearances', s.n)
+} else {
+  console.log('NOISE STUDY — same 40 matchups, five seed batches\n')
+  console.log('               resolved       dur   kills  dmg/fight')
+  const res: number[] = [], dur: number[] = []
+  for (const seeds of SEED_BATCHES) {
+    const r = runBatch(seeds); res.push(r.resolved); dur.push(r.dur / r.fights)
+    console.log(line(seeds[0], r))
+  }
+  const mean = (a: number[]) => a.reduce((x, y) => x + y, 0) / a.length
+  const sd = (a: number[]) => Math.sqrt(mean(a.map((x) => (x - mean(a)) ** 2)))
+  console.log(`\nresolved: mean ${mean(res).toFixed(1)}/40  sd ${sd(res).toFixed(2)}  range ${Math.min(...res)}-${Math.max(...res)}`)
+  console.log(`duration: mean ${mean(dur).toFixed(2)}s  sd ${sd(dur).toFixed(2)}s`)
+  console.log(`\n=> a change must beat ~${(2 * sd(res)).toFixed(1)} fights or ~${(2 * sd(dur)).toFixed(1)}s to be believable.`)
+}
