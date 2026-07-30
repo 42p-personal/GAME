@@ -141,8 +141,14 @@ describe('field statuses — the three that gained geometry', () => {
     // monster has to cross ground to reach the ally it now wants to hit.
     const c = move('Cacophony')
     const long: Move = { ...c, status: { kind: 'charm', chance: 100, duration: 6 } }
+    // ⚠️ THE ENEMIES ARE PINNED TO ONE WEAK MOVE, and must stay that way. With
+    // full drafted loadouts this fixture depended on the CASTER surviving long
+    // enough for a charmed victim to walk over and swing: when melee reach went
+    // 1.6 -> 3.0 the charm landed at 4.6s and the caster died at 4.9s, so the
+    // window closed and the test failed with zero friendly fire. That measures
+    // how fast a random kit kills, not whether charm flips a side.
     const A = [mk('ha', [long])]
-    const B = [mk('hb'), mk('hb2')]
+    const B = [mk('hb', [move('Scrap')]), mk('hb2', [move('Scrap')])]
     const r = run(A, B, 'charm')
     // A charmed B unit striking the other B unit — friendly fire that can only
     // happen because charm swapped which side it treats as hostile.

@@ -54,7 +54,7 @@ export const hasLineOfSight = (a: Vec2, b: Vec2, obstacles: Obstacle[]): boolean
   !obstacles.some((o) => segmentHitsRect(a, b, o))
 
 // Non-overlap uses this fraction of the sum of visual radii, so two monsters
-// settle ~1.19 units apart (0.66 × 1.8) — inside the 1.28 basic-melee reach, so
+// settle ~1.19 units apart (0.66 × 1.8) — inside the 2.40 basic-melee reach, so
 // melee still connects, but far enough that the sprites read as adjacent, never
 // stacked. Must stay below (CHANNEL_RANGE.melee × 0.8) / (2 × radius) = 0.71.
 const COLLISION_R_FRAC = 0.66
@@ -750,7 +750,16 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       // churn of re-picked targets into a committed brawl. Non-melee, and any
       // unit not yet in contact, re-evaluate normally.
       const cur = u.targetId ? byId.get(u.targetId) : null
-      const engaged = !!cur && !cur.dead && isMelee(u) && dist(u.pos, cur.pos) <= reachOf(u) + 1.5
+      // ⚠️ YOU CANNOT BE "ENGAGED" WITH SOMEONE WHO IS NO LONGER YOUR ENEMY.
+      // Sticky engagement stops a melee unit jittering between equidistant foes,
+      // but it keyed only on distance — so a CHARMED monster stayed locked on the
+      // target it had before its allegiance flipped and never re-picked. Charm
+      // silently did nothing to a melee unit already in contact.
+      // Latent since sticky engagement landed, and exposed by melee reach going
+      // 1.6 -> 3.0: the window is `reach + 1.5`, so it widened from 3.1 to 4.5
+      // units and swallowed the re-target that used to rescue this by accident.
+      const engaged = !!cur && !cur.dead && isMelee(u) && foes.includes(cur)
+        && dist(u.pos, cur.pos) <= reachOf(u) + 1.5
       if (!cur || cur.dead || (u.retargetIn <= 0 && !engaged)) {
         const pick = pickTarget(u, foes, mates, t)
         u.targetId = pick?.id ?? null
@@ -1573,8 +1582,8 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
         for (let j = i + 1; j < live.length; j++) {
           const a = live[i], b = live[j]
           // ⚠️ COLLISION RADIUS < VISUAL RADIUS. A monster's `radius` (0.9) is its
-          // steering/footprint size, but the sum of two full radii (1.8) exceeds
-          // the basic MELEE reach (CHANNEL_RANGE.melee × 0.8 = 1.28) — so if
+          // steering/footprint size, but the sum of two full radii (1.8) once
+          // exceeded the basic MELEE reach (it was 1.28 when melee was 1.6) — so if
           // collision kept them 1.8 apart, melee attackers could NEVER close to
           // hit and every melee fight would stall. Non-overlap uses a smaller
           // physical radius so units settle just inside melee reach: adjacent,

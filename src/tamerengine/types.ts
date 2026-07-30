@@ -356,8 +356,18 @@ export interface FieldResult {
 // engine that had no space). Rather than a blocking data pass over all of them,
 // reach DERIVES from the channel and can be overridden per-move later — so the
 // engine runs today and authoring can refine it incrementally.
+// ⚠️ MELEE WAS 1.6 AND THAT IS SMALLER THAN TWO MONSTERS. Unit radius is 0.9, so
+// two bodies in contact sit 1.8 apart centre-to-centre — further than melee could
+// reach. COLLISION_R_FRAC exists solely to shrink the collision floor to 1.19 so
+// a swing connects at all, which left melee an operating window of 1.19..1.60:
+// a 0.41-unit band on a 40-unit field, about 20x less positional tolerance than
+// ranged. Measured consequence: melee units were in range of their best move 9%
+// of ticks and melee was 6.5% of all damage in the game.
+// 3.0 is arm's reach plus a step. Swept 2.2/2.6/3.0/3.4/3.8 — the gain plateaus
+// by 3.0 (37/40 resolved @ 23.2s vs 34/40 @ 27.0s) and everything past it buys
+// almost nothing while blurring melee against ranged 8 / magic 7.
 export const CHANNEL_RANGE: Record<Channel, number> = {
-  melee: 1.6,
+  melee: 3.0,
   ranged: 8,
   magic: 7,
   voice: 5.5,
