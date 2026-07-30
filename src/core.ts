@@ -630,6 +630,22 @@ export const CLASSES: ClassDef[] = [
   { name: 'Captain', primary: 'STR', secondary: 'CHA' },
   { name: 'Orator', primary: 'CHA', secondary: 'WIS' },
   { name: 'Bard', primary: 'CHA', secondary: 'DEX' },
+  // ── The orphan-pair seven (2026-07-30) ────────────────────────────────────
+  // ⚠️ Six stats give THIRTY ordered pairs and only eleven were mapped, so the
+  // other nineteen all fell through to Generalist — 18.1% of every monster
+  // generated across all 65 species and three training levels. A Generalist has
+  // no CLASS_LINES affinity, no utility profile and no slot plan, so nearly a
+  // fifth of the population had no kit identity at all. Worse, Generalist came
+  // out as the TOP damage class in the sweep, which is absurd for a fallback.
+  // These seven are the most COMMON orphan pairs, measured rather than guessed;
+  // together they cover 15.0% of the population and take Generalist to ~3%.
+  { name: 'Evoker', primary: 'INT', secondary: 'DEX' },        // 3.79%
+  { name: 'Skirmisher', primary: 'STR', secondary: 'DEX' },    // 3.03%
+  { name: 'Stalker', primary: 'DEX', secondary: 'WIS' },       // 2.14%
+  { name: 'Swashbuckler', primary: 'DEX', secondary: 'CHA' },  // 2.00%
+  { name: 'Shaman', primary: 'WIS', secondary: 'CON' },        // 1.50%
+  { name: 'Mystic', primary: 'WIS', secondary: 'DEX' },        // 1.42%
+  { name: 'Herald', primary: 'CHA', secondary: 'STR' },        // 1.09%
 ]
 
 // Emergent class from the two highest stats (§6.2). Falls back to Generalist.
@@ -648,18 +664,15 @@ export const CLASS_ROLES: Record<string, ClassRole> = {
   Warrior: 'damage', Rogue: 'damage', Ranger: 'damage', Wizard: 'damage',
   Spellsword: 'damage', Captain: 'damage',
   Tank: 'support', Spellshield: 'support', Sage: 'support', Orator: 'support', Bard: 'support',
+  // The orphan-pair seven. WIS finally has primaries other than Sage — it had
+  // exactly ONE class to its name while STR, DEX and INT had three each.
+  Evoker: 'damage', Skirmisher: 'damage', Stalker: 'damage', Swashbuckler: 'damage',
+  Shaman: 'support', Mystic: 'support', Herald: 'support',
 }
 export const roleOfClass = (className: string): ClassRole => CLASS_ROLES[className] ?? 'damage'
 
 // Body-type averages + species signatures moved to species.ts — they're computed
 // from the actual SPECIES data so they can never drift out of sync again.
-
-// --- Elemental affinities (§8.5) ---
-// Each body type resists one element (takes less) and is weak to one (takes more).
-// Every body type has a UNIQUE (resist, weak) pair — no two share the same combo,
-// so elemental matchups always distinguish body types (validated in validate.ts).
-export const RESIST_MULT = 0.7
-export const WEAK_MULT = 1.3
 
 // --- Food & happiness (§2.4 / §12) ---
 // Three tiers (2026-07-25 food overhaul):

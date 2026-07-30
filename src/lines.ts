@@ -56,6 +56,15 @@ export const CLASS_LINES: Record<string, readonly string[]> = {
   Captain: ['Captain', 'Warcry', 'Duelist'],
   Orator: ['Demagogue', 'Enchanter', 'Disruptor'],
   Bard: ['Captain', 'Enchanter', 'Volley'],
+  // The orphan-pair seven. Each draws from its OWN two stats, so the affinity
+  // multiplier pulls a kit that actually expresses the pair it emerged from.
+  Evoker: ['Elementalist', 'Arcanist', 'Volley'],        // INT/DEX — quick, precise casting
+  Skirmisher: ['Bloodrage', 'Duelist', 'Assassin'],      // STR/DEX — fast, aggressive melee
+  Stalker: ['Assassin', 'Venomcraft', 'Siphon'],         // DEX/WIS — patient hunter, poisons and drain
+  Swashbuckler: ['Volley', 'Assassin', 'Demagogue'],     // DEX/CHA — flash and provocation
+  Shaman: ['Mender', 'Disruptor', 'Guardian'],           // WIS/CON — the healer that also holds ground
+  Mystic: ['Mender', 'Siphon', 'Venomcraft'],            // WIS/DEX — drain and affliction
+  Herald: ['Captain', 'Demagogue', 'Warcry'],            // CHA/STR — leads from the front
 }
 
 /**

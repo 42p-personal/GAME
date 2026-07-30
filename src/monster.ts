@@ -190,6 +190,15 @@ const CLASS_SLOTS: Record<string, SlotPlan> = {
   Rogue: { utility: 1, control: false, minDamage: 2 },
   Spellsword: { utility: 1, control: false, minDamage: 2 },
   Generalist: { utility: 1, control: false, minDamage: 2 },
+  // The orphan-pair seven. Damage classes keep their damage; the three support
+  // ones buy a second utility slot with a damage slot, exactly as Sage does.
+  Evoker: { utility: 1, control: true, minDamage: 2 },       // INT denial, like the Wizard
+  Skirmisher: { utility: 1, control: false, minDamage: 2 },
+  Stalker: { utility: 1, control: true, minDamage: 2 },      // a hunter holds its prey
+  Swashbuckler: { utility: 1, control: false, minDamage: 2 },
+  Shaman: { utility: 2, control: false, minDamage: 1 },
+  Mystic: { utility: 2, control: false, minDamage: 1 },
+  Herald: { utility: 2, control: false, minDamage: 1 },
 }
 const slotsFor = (cls: string): SlotPlan => CLASS_SLOTS[cls] ?? DEFAULT_SLOTS
 
@@ -208,6 +217,10 @@ const CLASS_UTILITY_SLOTS: Record<string, MovePick[]> = {
   Captain: [isTeamBuff, isEnemyDebuff],
   Wizard: [isTeamBuff, isWardOrGuard],
   Spellsword: [isWardOrGuard, isTeamBuff],
+  // The orphan-pair seven — each profile follows the class's own stat pair.
+  Shaman: [isHeal, isWardOrGuard],       // WIS mends, CON protects
+  Mystic: [isHeal, isCleanseOrRegen],    // WIS restores, and keeps itself running
+  Herald: [isTeamBuff, isEnemyDebuff],   // CHA empowers and denies
 }
 
 /**
