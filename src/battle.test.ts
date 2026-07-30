@@ -13,10 +13,17 @@ const team = (seeds: string[], train: number) => seeds.map((s) => generateMonste
 const GOLDENS = [
   {
     name: '1v1-low', a: ['gold-a1'], b: ['gold-b1'], train: 150,
-    winner: 'A', events: 221, logLines: 160, // recaptured v0.852: gold-a1 Titanrex / gold-b1 Pyraxon (prestige base-stat bump)
+    // ⚠️ Recaptured for LINE AFFINITY (src/lines.ts) — every monster in the game
+    // re-drafted its loadout, so all four goldens moved at once. This is the
+    // intended blast radius: the picker now draws from the three lines that
+    // express a monster's class instead of ranking all 100 moves globally.
+    // Prior: 221/160 (v0.852 prestige base-stat bump). A now survives on 9 HP —
+    // a low-training fight that got much closer, because both sides draft along
+    // their lines instead of both grabbing the same globally-best moves.
+    winner: 'A', events: 239, logLines: 177,
     finals: [
-      { side: 'A', slot: 0, hp: 188, mana: 0, wasKOd: false },
-      { side: 'B', slot: 0, hp: 0, mana: 5, wasKOd: true },
+      { side: 'A', slot: 0, hp: 9, mana: 10, wasKOd: false },
+      { side: 'B', slot: 0, hp: 0, mana: 7, wasKOd: true },
     ],
   },
   {
@@ -26,10 +33,16 @@ const GOLDENS = [
     // 74 -> 147 events: both monsters swapped a big slow move for sustained ones,
     // so more casts land per fight. B ends on 146 mana rather than 673, which is
     // the same story from the other side — it is actually spending its bar now.
-    winner: 'B', events: 147, logLines: 108,
+    // ⚠️ Recaptured for LINE AFFINITY (src/lines.ts) — every monster in the game
+    // re-drafted its loadout, so all four goldens moved at once. This is the
+    // intended blast radius: the picker now draws from the three lines that
+    // express a monster's class instead of ranking all 100 moves globally.
+    // 147 -> 73 events: both monsters now draft along their own lines and the
+    // fight resolves in half the time it took with globally-ranked kits.
+    winner: 'B', events: 73, logLines: 56,
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 467, wasKOd: true },
-      { side: 'B', slot: 0, hp: 520, mana: 146, wasKOd: false },
+      { side: 'A', slot: 0, hp: 0, mana: 475, wasKOd: true },
+      { side: 'B', slot: 0, hp: 603, mana: 673, wasKOd: false },
     ],
   },
   {
@@ -48,11 +61,15 @@ const GOLDENS = [
     // Recaptured again for the P4 loadout-ranking pass: 70 -> 91 events, winner
     // still A with both monsters alive. Same cause as 1v1-high — rate-ranked kits
     // fire more often.
-    winner: 'A', events: 91, logLines: 73,
+    // ⚠️ Recaptured for LINE AFFINITY (src/lines.ts) — every monster in the game
+    // re-drafted its loadout, so all four goldens moved at once. This is the
+    // intended blast radius: the picker now draws from the three lines that
+    // express a monster's class instead of ranking all 100 moves globally.
+    winner: 'A', events: 134, logLines: 97,
     finals: [
-      { side: 'A', slot: 0, hp: 111, mana: 253, wasKOd: false },
-      { side: 'A', slot: 1, hp: 152, mana: 186, wasKOd: false },
-      { side: 'B', slot: 0, hp: 0, mana: 208, wasKOd: true },
+      { side: 'A', slot: 0, hp: 86, mana: 454, wasKOd: false },
+      { side: 'A', slot: 1, hp: 152, mana: 175, wasKOd: false },
+      { side: 'B', slot: 0, hp: 0, mana: 206, wasKOd: true },
       { side: 'B', slot: 1, hp: 0, mana: 329, wasKOd: true },
     ],
   },
@@ -99,14 +116,21 @@ const GOLDENS = [
     // what a 3v3 between two near-equal high-training teams does: it is the most
     // sensitive fight in the set, not an unstable engine. The other three goldens
     // held their winner across all three passes.
-    winner: 'A', events: 333, logLines: 256,
+    // ⚠️ Recaptured for LINE AFFINITY (src/lines.ts) — every monster in the game
+    // re-drafted its loadout, so all four goldens moved at once. This is the
+    // intended blast radius: the picker now draws from the three lines that
+    // express a monster's class instead of ranking all 100 moves globally.
+    // Winner flipped back to A and this time it is a 3-0 SWEEP — all three of A's
+    // monsters survive. A tank-heavy side getting coherent tank kits is exactly
+    // what affinity is for, so a decisive result here reads as the fix working.
+    winner: 'A', events: 418, logLines: 338,
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 700, wasKOd: true },
-      { side: 'A', slot: 1, hp: 1077, mana: 11, wasKOd: false },
-      { side: 'A', slot: 2, hp: 1348, mana: 737, wasKOd: false },
-      { side: 'B', slot: 0, hp: 0, mana: 732, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 731, wasKOd: true },
-      { side: 'B', slot: 2, hp: 0, mana: 21, wasKOd: true },
+      { side: 'A', slot: 0, hp: 272, mana: 700, wasKOd: false },
+      { side: 'A', slot: 1, hp: 1298, mana: 13, wasKOd: false },
+      { side: 'A', slot: 2, hp: 1307, mana: 732, wasKOd: false },
+      { side: 'B', slot: 0, hp: 0, mana: 739, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 737, wasKOd: true },
+      { side: 'B', slot: 2, hp: 0, mana: 8, wasKOd: true },
     ],
   },
 ] as const

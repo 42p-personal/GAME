@@ -3,6 +3,7 @@ import {
   CLASSES, NORMAL_FOODS, INNATE_SECONDARY_LEVEL, LEAGUES, Monster, Move, RNG, STATS, Stat, Stats, classForStats, hashString,
   isFusionBody, isPrestigeBody, leagueForStat, mulberry32, pick, randInt, HARD_CONTROL_STATUSES } from './core'
 import { ALL_MOVES } from './moves'
+import { CLASS_LINES } from './lines'
 import { SPECIES } from './species'
 
 const NAME_PARTS = ['Ash', 'Bru', 'Cor', 'Dra', 'Fen', 'Gru', 'Ky', 'Lo', 'Mor', 'Nyx', 'Pyr', 'Qui', 'Rho', 'Syl', 'Tho', 'Vex', 'Wyn', 'Zar']
@@ -206,9 +207,25 @@ export function chooseLoadout(learned: Move[], stats?: Stats, size = 3): Move[] 
       : expectedOutput(m)
     // proportional nudges, so neither can make a genuinely weak low-level
     // move outrank a much stronger high-level one
-    if (isComboPiece(m)) return base * 1.5
-    return base * statusWeight(m)
+    if (isComboPiece(m)) return base * 1.5 * lineFit(m)
+    return base * statusWeight(m) * lineFit(m)
   }
+  // ── LINE AFFINITY ─────────────────────────────────────────────────────────
+  // ⚠️ THE fix for the trap that swallowed three waves of authored content
+  // (control moves, team buffs, defensive moves — all 0% equipped). The picker
+  // used to rank the whole pool globally, so a move only ever got drafted by
+  // out-scoring all 100 others; anything deliberately traded away from raw
+  // numbers could never win. Now a move that expresses what this monster is FOR
+  // gets a real edge over one that merely scores well. See src/lines.ts.
+  //
+  // ⚠️ Deliberately a MULTIPLIER, not a filter. A Wizard with a genuinely great
+  // off-line move can still take it — off-line content stays reachable, which is
+  // what keeps multi-classing and odd stat spreads interesting. Two earlier
+  // attempts at the same problem overshot precisely because they were absolute:
+  // a status weighting put one move on 36% of all monsters, and a value-based
+  // support sort collapsed every kit onto the same two team buffs.
+  const myLines = stats ? CLASS_LINES[classForStats(stats)] : undefined
+  const lineFit = (m: Move) => (myLines && m.line && myLines.includes(m.line) ? 1.35 : 1)
   const damage = learned.filter((m) => m.type === 'damage').sort((a, b) => dmgScore(b) - dmgScore(a))
   // ⚠️ Sorted by learnLevel, i.e. LEVEL AS A PROXY FOR QUALITY. This is a known
   // weakness, not a good rule: Acrobatics (lv160, +30% dodge) loses its slot to
@@ -216,9 +233,16 @@ export function chooseLoadout(learned: Move[], stats?: Stats, size = 3): Move[] 
   // WORSE across the board — defensive moves equipped 33% -> 20%, defensive casts
   // 6.5% -> 5.3%, damage/fight 1859 -> 1676 — because scoring by magnitude
   // concentrates every kit onto the same two team buffs and kills variety.
-  // The real fix is per-class LINE AFFINITY (docs/ABILITY_REWORK.md), not a
-  // cleverer global sort. Left deliberately as-is until then.
-  const support = learned.filter((m) => m.type !== 'damage').sort((a, b) => b.learnLevel - a.learnLevel)
+  // ⚠️ Ordered by LINE AFFINITY first, then learnLevel. The old sort was
+  // learnLevel alone — level as a proxy for quality — which is how Acrobatics
+  // (lv160, +30% dodge) lost its slot to Blur (lv240, +14%). A value-based sort
+  // was tried instead and measured WORSE across the board (defensive moves
+  // equipped 33% -> 20%, casts 6.5% -> 5.3%, damage 1859 -> 1676) because ranking
+  // support by raw magnitude collapses every kit onto the same two team buffs.
+  // Affinity avoids that: it does not say which buff is biggest, it says which
+  // buff belongs to this monster — so kits diverge by class instead of converging.
+  const support = learned.filter((m) => m.type !== 'damage')
+    .sort((a, b) => (lineFit(b) - lineFit(a)) || (b.learnLevel - a.learnLevel))
   const out: Move[] = []
 
   if (stats) {

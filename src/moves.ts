@@ -34,6 +34,7 @@
 // Carapace (thorns) is the flagship team-fight combo: force the whole enemy
 // side onto one tank, then punish every hit.
 import { Move, Stat } from './core'
+import { LINE_OF } from './lines'
 
 type Row = Omit<Move, 'id' | 'stat'>
 
@@ -199,6 +200,10 @@ export const ALL_MOVES: Move[] = (Object.keys(POOLS) as Stat[]).flatMap((stat) =
     ...row,
     id: `${stat}-${i}`,
     stat,
+    // The line this move belongs to, from the single lookup in `lines.ts`. See
+    // that file for why the pool needs lines at all — three separate waves of
+    // authored content were silently unreachable without them.
+    line: LINE_OF[row.name],
   })),
 )
 

@@ -6,6 +6,7 @@
 // list so the vitest suite can assert it's empty; `validateDesign()` is the
 // console wrapper main.tsx runs in dev.
 import { BODY_ELEMENT, BodyType, CLASSES, GAMEPLANS, LEAGUES, STATS, STATUS_INFO, StatusKind, TARGET_PRIORITY_INFO, TEMPERAMENT_INFO, classForStats } from './core'
+import { LINES, CLASS_LINES } from './lines'
 import { SPECIES } from './species'
 import { ALL_MOVES } from './moves'
 import { ALL_SIGNATURE_MOVES, SIGNATURE_LISTS, signatureChoicesFor } from './signatureMoves'
@@ -15,6 +16,27 @@ import { INNATE_EFFECTS } from './battle'
 
 export function designProblems(): string[] {
   const problems: string[] = []
+
+  // ─── ABILITY LINES (P4) ───────────────────────────────────────────────────
+  // ⚠️ A move with no line is INVISIBLE to line affinity, so it silently loses
+  // every loadout comparison it would otherwise win — the precise failure mode
+  // that left control moves, team buffs and defensive moves at 0% equipped
+  // before lines existed. A missing entry in LINE_OF must be loud, not silent.
+  for (const mv of ALL_MOVES) {
+    if (!mv.line) { problems.push(`${mv.stat}/${mv.name}: no line — add it to LINE_OF in lines.ts`); continue }
+    const own = LINES[mv.stat]
+    if (!own.includes(mv.line as never)) {
+      problems.push(`${mv.stat}/${mv.name}: line "${mv.line}" belongs to another stat`)
+    }
+  }
+  // Every line must actually be reachable by at least one class, or the moves in
+  // it are content nobody is ever steered toward.
+  const claimed = new Set(Object.values(CLASS_LINES).flat())
+  for (const stat of Object.keys(LINES) as (keyof typeof LINES)[]) {
+    for (const line of LINES[stat]) {
+      if (!claimed.has(line)) problems.push(`line "${line}" (${stat}) is favoured by NO class`)
+    }
+  }
 
   // ─── SIGNATURE SKILLS (v0.91) ─────────────────────────────────────────────
   // ⚠️ UNIT GUARD. These fields are PERCENTAGE POINTS, not fractions — writing

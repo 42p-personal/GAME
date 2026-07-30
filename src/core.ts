@@ -213,6 +213,16 @@ export interface Move {
    */
   statScale?: number
   /**
+   * Which of its stat's three LINES this move belongs to (see `src/lines.ts`).
+   * Attached when `ALL_MOVES` is built, from the one lookup table there, rather
+   * than hand-written on every row — the grouping is a design statement and is
+   * far easier to check when it can be read in one place.
+   *
+   * ⚠️ A line is a group to DRAW FROM, not a track to commit to. It only tells
+   * the auto-picker what a monster is for; the player's own choices are free.
+   */
+  line?: string
+  /**
    * Authored MP cost, overriding the derived `monster.ts:manaCost`. Mana is a
    * trading axis: a move may be stronger in some dimension and simply cost more.
    */
