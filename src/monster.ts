@@ -1,7 +1,8 @@
 // Seed -> monster generator (§10.1 genome idea, simplified) plus derived values.
 import {
   CLASSES, NORMAL_FOODS, INNATE_SECONDARY_LEVEL, LEAGUES, Monster, Move, RNG, STATS, Stat, Stats, classForStats, hashString,
-  isFusionBody, isPrestigeBody, leagueForStat, mulberry32, pick, randInt, HARD_CONTROL_STATUSES } from './core'
+  isFusionBody, isPrestigeBody, leagueForStat, mulberry32, pick, randInt, HARD_CONTROL_STATUSES,
+  statScaleOf } from './core'
 import { ALL_MOVES } from './moves'
 import { CLASS_LINES } from './lines'
 import { SPECIES } from './species'
@@ -94,8 +95,32 @@ export function learnedMoves(stats: Stats): Move[] {
 // monsters across ten classes — a homogenised pool from one number moving.
 // The divisor is cooldown alone: cast time lives in tamerengine, and monster.ts
 // must not depend on the field engine.
-const expectedOutput = (m: Move) =>
-  m.power * (m.effects?.hits ? (m.effects.hits[0] + m.effects.hits[1]) / 2 : 1) / Math.max(1, m.cooldown)
+/**
+ * How much damage a move is actually worth TO THIS MONSTER.
+ *
+ * ⚠️ THE OLD VERSION WAS `power x hits / cooldown`, and that divisor is what
+ * filled every kit with starters. It prices a move as though the monster could
+ * only ever hold ONE — spam it, and a long cooldown is dead air. A monster holds
+ * three or four and ROTATES: a cd-4 nuke fires at full value whenever it is up
+ * while the others cover the gap. Under the divisor Scrap (14 power, cd 1, the
+ * tutorial move) out-ranked Blood Price (32, cd 3) forever, which is why a
+ * STR-359 Warrior drafted Scrap and a Sage with top WIS drafted three INT moves.
+ * Cooldown is now a MILD discount, not a divisor.
+ *
+ * ⚠️ It also ignored `statScale` and read the stat off the CHANNEL rather than
+ * the move — so a CON move on the melee channel (Body Slam) was scored by the
+ * monster's STR. Both engines compute damage as `power x (1 + stats[mv.stat] x
+ * statScale)`; the draft now ranks by that same expression, so what a monster
+ * DRAFTS and what it HITS FOR finally agree, and a capstone that scales hard
+ * reads as better on a trained monster instead of worse.
+ */
+const COOLDOWN_DISCOUNT = 0.18
+const expectedOutput = (m: Move, stats?: Stats) => {
+  const hits = m.effects?.hits ? (m.effects.hits[0] + m.effects.hits[1]) / 2 : 1
+  const stat = stats ? (stats[m.stat] ?? 0) : 0
+  const scaled = m.power * (1 + stat * statScaleOf(m)) * hits
+  return scaled / (1 + (Math.max(1, m.cooldown) - 1) * COOLDOWN_DISCOUNT)
+}
 
 type MovePick = (mv: Move) => boolean
 const isHeal: MovePick = (mv) => mv.type !== 'damage' && mv.power > 0
@@ -202,9 +227,10 @@ export function chooseLoadout(learned: Move[], stats?: Stats, size = 3): Move[] 
     return 1 + chance * (HARD_CONTROL_STATUSES.has(m.status.kind) ? 0.4 : 0.3)
   }
   const dmgScore = (m: Move) => {
-    const base = stats
-      ? expectedOutput(m) * Math.pow(Math.max(1, attackStat(stats, m.channel)) / 40, 0.8)
-      : expectedOutput(m)
+    // ⚠️ The old channel-stat multiplier is GONE, not merely replaced: the stat
+    // now enters through expectedOutput via the move's OWN stat, exactly as the
+    // damage formula uses it. Keeping both would count the stat twice.
+    const base = expectedOutput(m, stats)
     // proportional nudges, so neither can make a genuinely weak low-level
     // move outrank a much stronger high-level one
     if (isComboPiece(m)) return base * 1.5 * lineFit(m)
@@ -339,6 +365,19 @@ export function chooseLoadout(learned: Move[], stats?: Stats, size = 3): Move[] 
   // no longer true now that a combo payoff (often type 'damage') can land in
   // `out` via the priority pass above, which caused Mind Crush et al. to get
   // pushed a 2nd time here, duplicating a loadout slot.
+  // ⚠️ THE ONE-MOVE-PER-STAT RULE LOOKS WRONG AND IS RIGHT — do not "fix" it.
+  // It reads like a bug: it forces the last slot off-stat, so a STR-359 Warrior
+  // ends up holding a DEX shot instead of a second STR move. Replacing it with a
+  // soft 0.85 penalty (so a clearly better same-stat move could win) was TRIED
+  // and measured WORSE on the acceptance test — damage classes beating a tank
+  // 1v1 fell 44% -> 41%, and the STR bruiser specifically 63% -> 50%.
+  // The reason is MITIGATION IS CHANNEL-SPLIT: melee/ranged are mitigated by the
+  // target's CON, magic/voice/support by its WIS. A tank is CON-heavy and
+  // WIS-light, so a monster carrying a second stat's move has a channel that
+  // routes around the wall's best defence, while one stacking its own stat feeds
+  // every hit into the stat the tank trained. Variety is not cosmetic here — it
+  // is the counterplay to a tank, and it is why CHA support leapt 4% -> 42% when
+  // it was allowed to stack voice moves.
   const seenStats = new Set<Stat>()
   for (const m of damage) {
     if (out.length >= size) break

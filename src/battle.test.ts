@@ -28,10 +28,16 @@ const GOLDENS = [
     // ⚠️ Recaptured for the DAMAGE TIERING pass: STR/DEX/INT are the damage stats
     // and CON/WIS/CHA are not, so per-stat power multipliers split them into two
     // clear tiers, plus a wider stat-scale band. Every monster hits differently.
-    winner: 'A', events: 200, logLines: 143,
+    // ⚠️ Recaptured for the DRAFT fix (chooseLoadout:expectedOutput no longer
+    // divides by cooldown and now scales by the move's OWN stat). Every golden
+    // team re-drafted, so all four moved at once — expected, not a regression.
+    // ⚠️ These pin the TURN engine, which tamerengine will replace at M7; they
+    // are kept green so a real regression in the SHIPPED game still shows up,
+    // but their movement is no longer treated as signal about the new engine.
+    winner: 'A', events: 221, logLines: 163,
     finals: [
-      { side: 'A', slot: 0, hp: 235, mana: 0, wasKOd: false },
-      { side: 'B', slot: 0, hp: 0, mana: 0, wasKOd: true },
+      { side: 'A', slot: 0, hp: 158, mana: 1, wasKOd: false },
+      { side: 'B', slot: 0, hp: 0, mana: 4, wasKOd: true },
     ],
   },
   {
@@ -50,10 +56,16 @@ const GOLDENS = [
     // ⚠️ Recaptured for the DAMAGE TIERING pass: STR/DEX/INT are the damage stats
     // and CON/WIS/CHA are not, so per-stat power multipliers split them into two
     // clear tiers, plus a wider stat-scale band. Every monster hits differently.
-    winner: 'B', events: 70, logLines: 53,
+    // ⚠️ Recaptured for the DRAFT fix (chooseLoadout:expectedOutput no longer
+    // divides by cooldown and now scales by the move's OWN stat). Every golden
+    // team re-drafted, so all four moved at once — expected, not a regression.
+    // ⚠️ These pin the TURN engine, which tamerengine will replace at M7; they
+    // are kept green so a real regression in the SHIPPED game still shows up,
+    // but their movement is no longer treated as signal about the new engine.
+    winner: 'B', events: 84, logLines: 63,
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 515, wasKOd: true },
-      { side: 'B', slot: 0, hp: 569, mana: 679, wasKOd: false },
+      { side: 'A', slot: 0, hp: 0, mana: 481, wasKOd: true },
+      { side: 'B', slot: 0, hp: 503, mana: 679, wasKOd: false },
     ],
   },
   {
@@ -82,12 +94,18 @@ const GOLDENS = [
     // ⚠️ Recaptured for the DAMAGE TIERING pass: STR/DEX/INT are the damage stats
     // and CON/WIS/CHA are not, so per-stat power multipliers split them into two
     // clear tiers, plus a wider stat-scale band. Every monster hits differently.
-    winner: 'B', events: 81, logLines: 66,
+    // ⚠️ Recaptured for the DRAFT fix (chooseLoadout:expectedOutput no longer
+    // divides by cooldown and now scales by the move's OWN stat). Every golden
+    // team re-drafted, so all four moved at once — expected, not a regression.
+    // ⚠️ These pin the TURN engine, which tamerengine will replace at M7; they
+    // are kept green so a real regression in the SHIPPED game still shows up,
+    // but their movement is no longer treated as signal about the new engine.
+    winner: 'B', events: 73, logLines: 63,
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 516, wasKOd: true },
-      { side: 'A', slot: 1, hp: 0, mana: 266, wasKOd: true },
-      { side: 'B', slot: 0, hp: 60, mana: 227, wasKOd: false },
-      { side: 'B', slot: 1, hp: 216, mana: 291, wasKOd: false },
+      { side: 'A', slot: 0, hp: 0, mana: 289, wasKOd: true },
+      { side: 'A', slot: 1, hp: 0, mana: 243, wasKOd: true },
+      { side: 'B', slot: 0, hp: 84, mana: 200, wasKOd: false },
+      { side: 'B', slot: 1, hp: 216, mana: 313, wasKOd: false },
     ],
   },
   {
@@ -166,14 +184,23 @@ const GOLDENS = [
     // ⚠️ THE DRAW IS GONE — A wins decisively with a survivor on 590 HP. I flagged
     // the previous full-wipe draw to be re-checked once the pool was complete, and
     // this is that re-check: it was the half-transitioned pool, not WIS sustain.
-    winner: 'A', events: 468, logLines: 337,
+    // ⚠️ Recaptured for the DRAFT fix (chooseLoadout:expectedOutput no longer
+    // divides by cooldown and now scales by the move's OWN stat). Every golden
+    // team re-drafted, so all four moved at once — expected, not a regression.
+    // ⚠️ These pin the TURN engine, which tamerengine will replace at M7; they
+    // are kept green so a real regression in the SHIPPED game still shows up,
+    // but their movement is no longer treated as signal about the new engine.
+    // ⚠️ Now a CLEAN 3-0 SWEEP with all three of A alive — it was a full-wipe
+    // draw. Coherent kits (each monster drafting moves its own stat drives)
+    // beat incoherent ones decisively; that is the draft fix showing up.
+    winner: 'A', events: 420, logLines: 303,
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 716, wasKOd: true },
-      { side: 'A', slot: 1, hp: 0, mana: 363, wasKOd: true },
-      { side: 'A', slot: 2, hp: 590, mana: 735, wasKOd: false },
-      { side: 'B', slot: 0, hp: 0, mana: 767, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 752, wasKOd: true },
-      { side: 'B', slot: 2, hp: 0, mana: 141, wasKOd: true },
+      { side: 'A', slot: 0, hp: 706, mana: 675, wasKOd: false },
+      { side: 'A', slot: 1, hp: 1298, mana: 273, wasKOd: false },
+      { side: 'A', slot: 2, hp: 1348, mana: 737, wasKOd: false },
+      { side: 'B', slot: 0, hp: 0, mana: 737, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 768, wasKOd: true },
+      { side: 'B', slot: 2, hp: 0, mana: 45, wasKOd: true },
     ],
   },
 ] as const

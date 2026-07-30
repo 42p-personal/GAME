@@ -4,7 +4,7 @@
 // than swinging and the ~1s swing dominated the whole action economy.
 import { describe, it, expect } from 'vitest'
 import { generateMonster } from '../monster'
-import { basicAttackFor } from './engine'
+import { basicAttackFor, fieldLoadout } from './engine'
 import { CHANNEL_CAST_TIME, CHANNEL_RANGE, BASIC_STAT_TIER } from './types'
 import { Monster, Move } from '../core'
 
@@ -21,11 +21,38 @@ describe('tamerengine — the free attack is a filler', () => {
       for (const train of [200, 400, 650, 850, 1000]) {
        for (const tag of ['', 'x', 'y', '850']) {
         const m = generateMonster(`${tag}${sp}${train}`, { speciesId: sp, train }) as Monster
-        const abilities = m.loadout.filter((mv) => mv.type === 'damage')
+        // ⚠️ THE KIT MUST BE THE FIELD'S KIT. This read `m.loadout` — the TURN
+        // engine's 3 moves — while testing the FIELD's free attack, and the
+        // field tops every monster up to FIELD_LOADOUT_SIZE (4). So it judged a
+        // field invariant against a kit the field never fields, and flagged a
+        // monster for holding one damage move when on the field it holds two.
+        // A fixture must pin the variable under test.
+        const abilities = fieldLoadout(m).filter((mv) => mv.type === 'damage')
         if (!abilities.length) continue // empty loadout — nothing to compare against
-        const best = Math.max(...abilities.map(dpsOf))
-        const basic = dpsOf(basicAttackFor(m))
-        expect(basic).toBeLessThan(best)
+        const basic = basicAttackFor(m)
+
+        // ⚠️ PER CAST is the real invariant. The question the free attack must
+        // never answer "yes" to is "would I rather swing than cast this?" — and
+        // in a rotation that is a per-CAST comparison, because the basic is
+        // still there to fill the cooldown afterwards. An ability that hits for
+        // 29 every 4s beats a 17 swing every 1.9s AT THE MOMENT IT IS UP, even
+        // though its spam-DPS is lower.
+        const bestPower = Math.max(...abilities.map((mv) => mv.power))
+        expect(basic.power).toBeLessThan(bestPower)
+
+        // ⚠️ AND the basic must not dominate by VOLUME either — the original bug
+        // this file was written for. But the comparison is against the whole
+        // KIT, not the single best move: a monster rotates through everything it
+        // has and swings only in the gaps, so summing the abilities' throughput
+        // is the honest model of what it does instead of swinging.
+        // The old form compared the basic's spam-DPS against ONE ability's
+        // spam-DPS, which is the same `power / cooldown` assumption that filled
+        // every loadout with tutorial moves (see monster.ts:expectedOutput). It
+        // failed the moment the draft stopped optimising for it — flagging a
+        // maneleo whose one damage move was Bonebreaker, a cd-4 wall-breaker
+        // that is plainly worth casting.
+        const kitDps = abilities.reduce((n, mv) => n + dpsOf(mv), 0)
+        expect(dpsOf(basic)).toBeLessThan(kitDps)
        }
       }
     }

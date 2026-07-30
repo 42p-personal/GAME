@@ -100,7 +100,7 @@ function autoPlace(team: Monster[], side: FieldSide): Vec2[] {
  * Deterministic — `chooseLoadout` is a pure ranking over the learned pool, no rng
  * — so a replay reproduces.
  */
-function fieldLoadout(m: Monster): Move[] {
+export function fieldLoadout(m: Monster): Move[] {
   // ⚠️ Only top up a STANDARD FULL KIT. A monster handed a deliberately narrow
   // loadout (a scenario, or a test isolating one move) means it — padding that
   // dilutes the construction and the pinned move stops being chosen.
