@@ -71,13 +71,32 @@ export function valueOf(u: FieldUnit): number {
  * monster chooses to stand.
  */
 export function reachOf(u: FieldUnit): number {
-  let best = 0
+  // ⚠️ THE RANGE OF ITS BEST WEAPON, NOT THE LONGEST THING IT HAPPENS TO CARRY.
+  // This returned the MAXIMUM range across the kit, which quietly forbade mixed
+  // builds: give a Warrior a fireball and its reach became 7, so it stood at
+  // 5.25 and never closed — the fireball did not ADD an option, it deleted every
+  // melee move in the kit. Same for a Rogue handed a long shot: it stopped
+  // closing for its Assassin line.
+  //
+  // The asymmetry is the whole argument. A cast is gated on `d <= range`, so
+  // standing CLOSE never blocks a longer move, while standing FAR blocks every
+  // shorter one. Positioning should therefore follow the weapon the monster most
+  // wants to use; anything longer still fires from there for free.
+  //
+  // ⚠️ Not the MINIMUM either — that would drag a Wizard who drafted one stray
+  // melee move into contact. Highest VALUE, so a stray off-stat move is simply
+  // never the thing it positions around.
+  let bestVal = -1
+  let bestRange = 0
   for (const mv of u.m.loadout) {
     if (mv.type !== 'damage') continue
-    const r = mv.range ?? CHANNEL_RANGE[mv.channel]
-    if (r > best) best = r
+    const val = mv.power * (1 + (u.m.stats[mv.stat] ?? 0) / 400)
+    if (val > bestVal) {
+      bestVal = val
+      bestRange = mv.range ?? CHANNEL_RANGE[mv.channel]
+    }
   }
-  return best || CHANNEL_RANGE.melee
+  return bestRange || CHANNEL_RANGE.melee
 }
 
 /**
