@@ -184,6 +184,48 @@ function worthSpending(u: FieldUnit, mv: Move, target: FieldUnit, avgPower: numb
 }
 
 /** The best move this unit can actually land on its target right now. */
+/**
+ * What a damage move is actually worth AGAINST THIS TARGET, right now.
+ *
+ * ⚠️ THE SCORE USED TO BE `mv.power` AND NOTHING ELSE. Wiring an effect into
+ * `strike` is only half of making it real — if the picker cannot see it, the
+ * move is still never chosen at the moment it would pay. With a flat power
+ * score a Warrior would never prefer Executioner against a dying target, a
+ * giant-killer would never be aimed at the giant, a detonator would never fire
+ * while its status was up, and a 3-hit move ranked as though it hit once.
+ *
+ * Mirrors `battle.ts:effPower` so the two engines rank a move the same way.
+ * Every term is SITUATIONAL: it reads live state, so the same move scores
+ * differently from one second to the next, which is the whole point.
+ */
+function effPowerField(u: FieldUnit, mv: Move, target: FieldUnit): number {
+  const e = mv.effects
+  // Multi-hit: `power` is per hit, so a 2-4 hit move is worth ~3x its number.
+  const avgHits = e?.hits ? (e.hits[0] + e.hits[1]) / 2 : 1
+  let p = mv.power * avgHits
+  if (e?.execute && target.hp / target.maxHp <= e.execute) p *= 1.5
+  if (e?.bonusVsStatus && hasStatus(target, e.bonusVsStatus.kind)) p *= e.bonusVsStatus.mult
+  if (e?.maxHpDmg) p += target.maxHp * e.maxHpDmg
+  if (e?.firstStrikeMult && !target.hasAttacked) p *= e.firstStrikeMult
+  // PIERCE is worth exactly the mitigation it skips, so it ranks itself up
+  // against a wall of CON and adds nothing against a squishy — the giant-killer
+  // aims itself without a bespoke rule.
+  if (e?.pierce) {
+    const mit = mv.channel === 'melee' || mv.channel === 'ranged' ? target.m.stats.CON : target.m.stats.WIS
+    const full = Math.min(0.55, mit / 1400)
+    const kept = Math.min(0.55, (mit * (1 - Math.min(1, e.pierce))) / 1400)
+    p *= (1 - kept) / Math.max(0.01, 1 - full)
+  }
+  // Resource strikes are worth what the caster is HOLDING — nothing with the
+  // shield down, so the AI waits until it has something to shatter.
+  if (e?.consumeWard) p *= 1 + e.consumeWard * u.ward
+  if (e?.hpScale) {
+    const f = Math.max(0, Math.min(1, u.hp / u.maxHp))
+    p *= e.hpScale.atEmpty + (e.hpScale.atFull - e.hpScale.atEmpty) * f
+  }
+  return p
+}
+
 function chooseMove(u: FieldUnit, target: FieldUnit, obstacles: Obstacle[]): Move | null {
   const d = dist(u.pos, target.pos)
   const dmgMoves = u.m.loadout.filter((mv) => mv.type === 'damage')
@@ -199,7 +241,7 @@ function chooseMove(u: FieldUnit, target: FieldUnit, obstacles: Obstacle[]): Mov
     // Ranged and magic need to actually SEE the target — cover is real.
     if (mv.channel !== 'melee' && !hasLineOfSight(u.pos, target.pos, obstacles)) continue
     if (!worthSpending(u, mv, target, avgPower)) continue
-    const score = mv.power
+    const score = effPowerField(u, mv, target)
     if (score > bestScore) { bestScore = score; best = mv }
   }
   return best
@@ -312,6 +354,33 @@ function utilityScore(
         return bad * 18 + chained
       })
     }
+    // MANA REGEN — worth what the holder can actually spend it on. A monster
+    // with a cheap kit and a full pool gains nothing; one that is dry and
+    // holding expensive abilities gains a lot. Without the emptiness term this
+    // becomes a walk-up tic, the exact failure the note above records.
+    if (fx?.regenBuff) {
+      const rounds = fx.duration ?? 3
+      pick((v) => {
+        const empty = 1 - v.mp / Math.max(1, v.maxMp)
+        return fx.regenBuff! * rounds * (0.3 + empty * 1.4)
+      })
+    }
+    // ── HOSTILE UTILITY ──────────────────────────────────────────────────────
+    // Debuffs are scored against the ENEMY they would land on, not an ally, so
+    // they need their own pass rather than the `pick` helper above.
+    const hostile = (score: (v: FieldUnit) => number) => {
+      for (const e2 of enemies) offer(score(e2), e2)
+    }
+    // DEFENCE DOWN — worth the extra damage it opens up, so it is cast on the
+    // wall that is actually being hit rather than on whoever is nearest.
+    if (fx?.defDebuff) hostile((v) => fx.defDebuff! * 1.6 * (1 + allies.filter((a) => !a.dead && dist(a.pos, v.pos) < 7).length * 0.4))
+    // ACCURACY DOWN — worth the damage it makes MISS, judged on that enemy's
+    // own output. Blinding a healer is close to worthless; blinding the bruiser
+    // beating on your front line is not.
+    if (fx?.accDebuff) hostile((v) => fx.accDebuff! * 0.7 * (1 + threatOf(v.m) / 120))
+    // MANA BURN — worth what it actually takes. A dry caster cannot be drained,
+    // so this stops being cast the moment it has done its job.
+    if (fx?.manaBurn) hostile((v) => Math.min(fx.manaBurn!, v.mp) * 0.8)
   }
 
   if (sp) {
@@ -482,6 +551,7 @@ const modThorns = (u: FieldUnit) => u.mods.reduce((n, m) => n + (m.thorns ?? 0),
 const modDodge = (u: FieldUnit) => u.mods.reduce((n, m) => n + (m.dodge ?? 0), 0)
 const modAcc = (u: FieldUnit) => u.mods.reduce((n, m) => n + (m.acc ?? 0), 0)
 const modHpRegen = (u: FieldUnit) => u.mods.reduce((n, m) => n + (m.hpRegen ?? 0), 0)
+const modRegen = (u: FieldUnit) => u.mods.reduce((n, m) => n + (m.regen ?? 0), 0)
 
 /** The affliction currently driving this unit's feet, if any. First wins. */
 const steeringStatus = (u: FieldUnit) => {
@@ -582,8 +652,12 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       // monsters gain real fuel), and a SUPPORT earns a steady trickle on top —
       // it neither soaks nor connects reliably, so time is its resource.
       const mRole = manaRoleOf(u.m)
+      // regenBuff, authored per ROUND, paid per second — the same translation
+      // hpRegenBuff gets just below. It is WIS's answer to a kit it cannot
+      // otherwise afford to run, and it did nothing on this engine until now.
       const regen = u.m.stats.WIS / WIS_REGEN_DIVISOR
         + (mRole === 'support' ? MANA_SUPPORT_PER_SEC : 0)
+        + modRegen(u) / SECONDS_PER_ROUND
       u.mp = Math.min(u.maxMp, u.mp + regen * DT)
       // hpRegenBuff, finally real — authored per turn, applied per second here.
       const hpr = modHpRegen(u)
@@ -939,6 +1013,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
         if (fx?.dodgeBuff) v.mods.push({ dodge: fx.dodgeBuff, until })   // POINTS
         if (fx?.accBuff) v.mods.push({ acc: fx.accBuff, until })         // POINTS
         if (fx?.hpRegenBuff) v.mods.push({ hpRegen: fx.hpRegenBuff, until })
+        if (fx?.regenBuff) v.mods.push({ regen: fx.regenBuff, until })
         // CLEANSE strips every non-beneficial status AND grants a short control
         // immunity. ⚠️ It must NOT reset `ccResist` — doing so would make
         // cleansing your own ally a DR-wipe that re-opens them to a full stun.
@@ -965,6 +1040,15 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       for (const v of victims) {
         if (v.dead) continue
         if (fx?.atkDebuff) v.mods.push({ atk: Math.max(0.4, 1 - fx.atkDebuff), until })
+        // ⚠️ UNITS. atkDebuff is a FRACTION (above); defDebuff and accDebuff are
+        // percentage POINTS and are subtracted directly — the standing rule in
+        // CLAUDE.md. defDebuff rides the `guard` mod negatively because guard IS
+        // this engine's defFlat, the same quantity the turn engine decrements.
+        if (fx?.defDebuff) v.mods.push({ guard: -fx.defDebuff, until })
+        if (fx?.accDebuff) v.mods.push({ acc: -fx.accDebuff, until })
+        // MANA BURN — the WIS answer to a caster. Drains what is there and no
+        // more, so it is never a negative pool.
+        if (fx?.manaBurn) v.mp = Math.max(0, v.mp - fx.manaBurn)
         // TAUNT: forced onto the taunter, which is what makes a tank able to
         // defend a back line it is not physically standing in front of.
         if (fx?.tauntForce) { v.forcedTargetId = u.id; v.forcedUntil = until }
@@ -1112,7 +1196,12 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       return
     }
     const atk = u.m.stats[mv.stat] ?? 0
-    const mitigation = mv.channel === 'melee' || mv.channel === 'ranged' ? target.m.stats.CON : target.m.stats.WIS
+    const fx = mv.effects
+    // PIERCE ignores a FRACTION of the defence outright (never points). This is
+    // the giant-killer axis: mitigation here is the target's CON/WIS, so a
+    // pierce move is the tool that stops a wall of CON reading as immunity.
+    const mitigation = (mv.channel === 'melee' || mv.channel === 'ranged' ? target.m.stats.CON : target.m.stats.WIS)
+      * (1 - Math.min(1, fx?.pierce ?? 0))
     const crit = rng() < 0.08
     // BACKSTAB: the payoff for arriving behind someone, and the reason a blink
     // is worth a slot. It only pays if the caster is genuinely on the far side.
@@ -1128,7 +1217,35 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     // inputs produced identical damage forever, while the turn engine had rolled
     // a spread since long before. Same helper now drives both.
     const spread = rollVariance(mv, rng)
-    const raw = opener * mv.power * (1 + atk * statScaleOf(mv)) * spread * (crit ? 1.5 : 1) * behind * falloff * modAtk(u) * (CHANNEL_DMG[mv.channel] ?? 1)
+    let raw = opener * mv.power * (1 + atk * statScaleOf(mv)) * spread * (crit ? 1.5 : 1) * behind * falloff * modAtk(u) * (CHANNEL_DMG[mv.channel] ?? 1)
+
+    // ── The conditional multipliers ──────────────────────────────────────────
+    // Each is a payoff for a condition the caster had to CREATE, which is why
+    // they are worth more than the raw number they replace and why pricing them
+    // as though they were flat damage once flagged eight correctly-priced DEX
+    // moves as broken. All mirror battle.ts so a move reads the same in either
+    // engine.
+    // HP SCALE — output rides the CASTER's own health: a last-stand move pays
+    // out when nearly dead, a fresh-and-strong one when untouched.
+    if (fx?.hpScale) {
+      const f = Math.max(0, Math.min(1, u.hp / u.maxHp))
+      raw *= fx.hpScale.atEmpty + (fx.hpScale.atFull - fx.hpScale.atEmpty) * f
+    }
+    // CONSUME WARD — shatter your own shield into the blow. Spent below, and
+    // only on a hit that LANDS: losing a 45-point ward to a whiff reads as a
+    // bug rather than as risk, which is exactly how the turn engine found it.
+    if (fx?.consumeWard && u.ward > 0) raw *= 1 + fx.consumeWard * u.ward
+    // EXECUTE — the finisher. This is the mechanic that ENDS grinding fights;
+    // it did nothing on this engine, which is a large part of why long fights
+    // stayed long however much damage was being dealt.
+    if (fx?.execute && target.hp / target.maxHp <= fx.execute) raw *= 1.5
+    // BONUS VS STATUS — the detonator half of a setup/payoff pair.
+    if (fx?.bonusVsStatus && hasStatus(target, fx.bonusVsStatus.kind)) raw *= fx.bonusVsStatus.mult
+    // MAX-HP DAMAGE — the giant-killer. Added BEFORE mitigation, as the turn
+    // engine does, so it is reduced like any other damage; it scales with the
+    // target's pool rather than the attacker's stat, which is what lets a
+    // damage class threaten a wall it could never out-grind.
+    if (fx?.maxHpDmg) raw += target.maxHp * fx.maxHpDmg
     // A BLOCKING target shrugs off part of the blow — the payoff for bracing.
     const blocked = target.blockingUntil > tick * DT ? 1 - BLOCK_DR : 1
     // GUARD is FLAT damage reduction, subtracted after the multipliers — the turn
@@ -1145,6 +1262,21 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     }
     target.hp -= toHp
     u.hasAttacked = true // drives firstStrikeMult (see above)
+    // The ward is spent only now, on a blow that connected — see consumeWard above.
+    if (fx?.consumeWard && u.ward > 0) u.ward = 0
+    // LIFESTEAL — WIS/CHA sustain that costs the enemy rather than a heal slot.
+    // Gated on the same blockHeal flag as every other heal in this engine, so
+    // healblock shuts off drain too; otherwise it would be the strictly better
+    // heal and there would be no reason to run a real one.
+    const steal = fx?.lifesteal ?? 0
+    if (steal > 0 && dmg > 0 && !statusFlag(u, 'blockHeal')) {
+      const stolen = Math.max(1, Math.round(dmg * steal))
+      const gained = Math.min(stolen, u.maxHp - u.hp)
+      if (gained > 0) {
+        u.hp += gained
+        events.push({ t: t2, kind: 'heal', id: u.id, targetId: u.id, move: mv.name, amount: gained })
+      }
+    }
     dmgDealt[u.side] += dmg
     lastAggressor = u.side
     // THORNS — flat damage reflected onto the attacker per hit TAKEN. Melee-range

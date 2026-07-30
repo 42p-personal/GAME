@@ -112,6 +112,12 @@ export interface FieldUnit {
   mods: {
     atk?: number; dmgTaken?: number
     guard?: number; thorns?: number; dodge?: number; acc?: number; hpRegen?: number
+    // MANA regen, authored per ROUND by the move and paid out per second here —
+    // the same translation `hpRegen` gets. ⚠️ `guard` doubles as the carrier for
+    // `defDebuff`, pushed NEGATIVE: the turn engine models a defence debuff as
+    // `defFlat -= defDebuff`, and `guard` is this engine's defFlat, so a negative
+    // guard is not a hack — it is the same quantity with the same sign.
+    regen?: number
     until: number
   }[]
   /** WARD — an absorb shield that soaks damage BEFORE health. Not timed: it is a
