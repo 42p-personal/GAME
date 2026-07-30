@@ -422,6 +422,16 @@ export interface Tactics {
   spacing?: 'spread' | 'tight' // fan out against AoE, or clump to focus-fire
   useCover?: boolean // prefer ground where an obstacle breaks enemy line of sight
   commit?: 'dive' | 'hold' // chase past the enemy front line, or refuse to over-extend
+  /**
+   * How the monster spends its BIGGEST move. 'nuke' holds it for a target worth
+   * finishing; 'steady' fires it the moment it is up.
+   * ⚠️ This was a HIDDEN stat. It is derived from CON+WIS-DEX as `patience` in
+   * personality.ts and silently decided whether a monster would use its best
+   * ability at all — a player could train a monster that simply refused to open
+   * with its capstone and had no way to see why, let alone change it. Coaching
+   * bends it exactly like every other order here, gated by temperament.
+   */
+  burst?: 'nuke' | 'steady'
 }
 export const DEFAULT_TACTICS: Tactics = { temperament: 'balanced', targetPriority: 'weakest' }
 

@@ -158,3 +158,16 @@ export const threatRadius = (p: Personality): number => 3 + (p.awareness / 100) 
  * overrides this — see worthSpending).
  */
 export const spendAbove = (p: Personality): number => 1 - (p.patience / 100) * 0.5
+
+/**
+ * The same threshold, after the player's `burst` order. 'steady' says fire it as
+ * soon as it is up (threshold 1 — always worth spending); 'nuke' says hold it
+ * for something worth finishing. Absent, the monster's own patience decides,
+ * exactly as before.
+ */
+export const spendAboveFor = (m: Monster, p: Personality): number => {
+  const order = m.tactics?.burst
+  if (order === 'steady') return 1
+  if (order === 'nuke') return Math.min(spendAbove(p), 0.5)
+  return spendAbove(p)
+}

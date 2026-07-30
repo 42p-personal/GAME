@@ -17,7 +17,7 @@ import {
   FIELD_LOADOUT_SIZE, CC_DR_STEP, CC_DR_RESET, CLEANSE_CC_IMMUNITY,
 } from './types'
 import { archetypeOf, desiredGoal, dist, isMelee, manaRoleOf, norm, pickTarget, reachOf, spacingRadius, sub, threatOf, traitsFor, wantsToKite } from './decide'
-import { personalityOf, spendAbove } from './personality'
+import { personalityOf, spendAboveFor } from './personality'
 import { spatialOf } from './spatial'
 import { FIELD_STATUS, BENEFICIAL, CONTROL_STATUSES, CONFUSION_VEER } from './status'
 
@@ -176,11 +176,53 @@ function estimateDamage(u: FieldUnit, mv: Move, target: FieldUnit): number {
  * until the target is softened; an impulsive one fires the instant it is up.
  * A guaranteed KILL always overrides the wait.
  */
-function worthSpending(u: FieldUnit, mv: Move, target: FieldUnit, avgPower: number): boolean {
+/**
+ * How much a unit wants to spend its BIGGEST move right now — a weighting in
+ * 0..1, never a veto.
+ *
+ * ⚠️ THIS USED TO REFUSE THE MOVE OUTRIGHT. A patient monster would decline its
+ * best ability until the target dropped below a threshold that, in a fight it
+ * was losing, never arrived — so it stood on its strongest tool and poked. As a
+ * player-facing order (`burst`) a hard veto is worse still: "hold your nuke"
+ * must not mean "never attack". Discounted instead, so a held-back nuke still
+ * wins when nothing better is off cooldown.
+ */
+/** How far a held-back nuke is discounted. Not zero — see spendWeight. */
+const HOLD_BACK_DISCOUNT = 0.55
+
+/**
+ * Would this monster rather cover up than throw its free attack?
+ *
+ * ⚠️ BRACING IS FOR EVERY CLASS, not just anchors. The block branch was reachable
+ * only when a unit had NOTHING else to do, and once the free attack's cooldown
+ * dropped to 0.55s that state effectively stopped existing — so nothing outside
+ * the anchor archetype ever braced. A real skill still always wins; this only
+ * ever declines the FILLER, and only when covering up is plainly worth more than
+ * a ~9-power poke: hurt, and with two or more bodies on you.
+ *
+ * `preserve` tunes the threshold, and an unordered monster still flinches at
+ * 30% — instinct, not coaching. That is the "every class can brace" floor;
+ * richer tactical control over it is a separate pass.
+ */
+function wouldBrace(u: FieldUnit, foes: FieldUnit[], now: number): boolean {
+  const pres = u.m.tactics?.preserve ?? 'off'
+  const at = pres === 'defensive' ? 0.25 : pres === 'cautious' ? 0.4 : 0.3
+  if (u.hp / u.maxHp >= at) return false
+  let onMe = 0
+  for (const e of foes) {
+    if (e.dead) continue
+    if (dist(u.pos, e.pos) <= reachOf(e) + 1.0) onMe++
+  }
+  void now
+  return onMe >= 2
+}
+
+function spendWeight(u: FieldUnit, mv: Move, target: FieldUnit, avgPower: number): number {
   const isBig = mv.power > avgPower * 1.25
-  if (!isBig) return true
-  if (estimateDamage(u, mv, target) >= target.hp) return true // finish it
-  return target.hp / target.maxHp <= spendAbove(personalityOf(u.m))
+  if (!isBig) return 1
+  if (estimateDamage(u, mv, target) >= target.hp) return 1 // it would finish them — always
+  const at = spendAboveFor(u.m, personalityOf(u.m))
+  return target.hp / target.maxHp <= at ? 1 : HOLD_BACK_DISCOUNT
 }
 
 /** The best move this unit can actually land on its target right now. */
@@ -240,8 +282,7 @@ function chooseMove(u: FieldUnit, target: FieldUnit, obstacles: Obstacle[]): Mov
     if (d > rangeOf(mv)) continue
     // Ranged and magic need to actually SEE the target — cover is real.
     if (mv.channel !== 'melee' && !hasLineOfSight(u.pos, target.pos, obstacles)) continue
-    if (!worthSpending(u, mv, target, avgPower)) continue
-    const score = effPowerField(u, mv, target)
+    const score = effPowerField(u, mv, target) * spendWeight(u, mv, target, avgPower)
     if (score > bestScore) { bestScore = score; best = mv }
   }
   return best
@@ -762,6 +803,15 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
         const canSee = ba.channel === 'melee' || hasLineOfSight(u.pos, target.pos, obstacles)
         if (inReach && canSee && (u.cooldowns.basic ?? 0) <= 0) mv = ba
       }
+      // ⚠️ BRACING MUST BE ABLE TO BEAT THE FREE ATTACK, or it can never happen:
+      // the basic re-arms every 0.55s, so "nothing else to do" — the only state
+      // that used to reach the brace branch — effectively stopped existing when
+      // that cooldown dropped. A real SKILL still always wins; it is only the
+      // filler that a hurt, swarmed monster should decline in favour of covering
+      // up. Available to EVERY class, not just anchors: `preserve` tunes when,
+      // and a badly hurt monster braces on instinct even with no order set.
+      if (mv && mv.id === 'basic' && wouldBrace(u, foes, t)) mv = null
+
       let aim: FieldUnit = target
       if (!routed && !silenced) {
         // Utility competes with damage on the SAME scale, so the better answer
