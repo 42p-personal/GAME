@@ -5,7 +5,7 @@
 // depends on `simulateFieldBattle` being a pure function of
 // (monsters + placement + obstacles + seed). So: fixed dt, fixed unit order,
 // one seeded rng stream, and no wall-clock or Math.random anywhere.
-import { Channel, Monster, Move, MoveArea, MoveSpatial, Stat, aoeFalloff, statScaleOf, mulberry32, hashString, StatusKind } from '../core'
+import { Channel, Monster, Move, MoveArea, MoveSpatial, Stat, aoeFalloff, statScaleOf, mulberry32, hashString, StatusKind, rollVariance } from '../core'
 import { chooseLoadout, learnedMoves, manaCost, maxHp, maxMana } from '../monster'
 import {
   DT, FIELD_H, FIELD_W, FieldEvent, FieldResult, FieldSetup, FieldSide, FieldUnit,
@@ -1123,7 +1123,12 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     // rounds, so it becomes "hasn't attacked yet", making it an OPENING reward.
     const opener = mv.effects?.firstStrikeMult && !target.hasAttacked ? mv.effects.firstStrikeMult : 1
     // ⚠️ Per-ability stat scaling, not a shared /320 — see statScaleOf in core.ts.
-    const raw = opener * mv.power * (1 + atk * statScaleOf(mv)) * (crit ? 1.5 : 1) * behind * falloff * modAtk(u) * (CHANNEL_DMG[mv.channel] ?? 1)
+    // ⚠️ `power` is the MID-POINT of a damage range, not a fixed number. The field
+    // engine previously had NO variance at all — only an 8% crit — so identical
+    // inputs produced identical damage forever, while the turn engine had rolled
+    // a spread since long before. Same helper now drives both.
+    const spread = rollVariance(mv, rng)
+    const raw = opener * mv.power * (1 + atk * statScaleOf(mv)) * spread * (crit ? 1.5 : 1) * behind * falloff * modAtk(u) * (CHANNEL_DMG[mv.channel] ?? 1)
     // A BLOCKING target shrugs off part of the blow — the payoff for bracing.
     const blocked = target.blockingUntil > tick * DT ? 1 - BLOCK_DR : 1
     // GUARD is FLAT damage reduction, subtracted after the multipliers — the turn

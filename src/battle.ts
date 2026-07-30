@@ -9,7 +9,7 @@
 // when this was strictly 1v1. `simulateBattle` (still exported) is a thin
 // team-of-1 wrapper over `simulateTeamBattle`, so every existing 1v1 call site
 // (Sandbox) keeps working unchanged.
-import { Ability, Channel, Element, ManaPolicy, Monster, Move, RNG, StatusKind, Temperament, chance, elementMultiplier, frontRowCount, aoeFalloff, happinessMultiplier, hashString, mulberry32, randInt } from './core'
+import { Ability, Channel, Element, ManaPolicy, Monster, Move, RNG, StatusKind, Temperament, chance, elementMultiplier, frontRowCount, aoeFalloff, happinessMultiplier, hashString, mulberry32, randInt, rollVariance } from './core'
 import {
   attackStat, critChance, debuffBonus, debuffReduction, dodgeChance, echoChance, hpRegen,
   manaCost, manaRegen, maxHp, maxMana, mitigationPierce, staminaDamageMult,
@@ -1329,7 +1329,10 @@ function resolveDamageOnTarget(attacker: Combatant, target: Combatant, move: Mov
   // it creates INT+WIS / CHA+WIS synergy instead of pure single-stat builds.
   const spellStat = move.channel === 'magic' || move.channel === 'voice'
   const atk = attackStat(attacker.m.stats, move.channel) + (spellStat ? attacker.m.stats.WIS * 0.6 : 0)
-  const variance = 0.85 + rng() * 0.3
+  // Per-ability damage range (core.ts:rollVariance). ⚠️ Identical maths and the
+  // SAME single rng draw as the flat `0.85 + rng() * 0.3` this replaces, so any
+  // move that does not author `variance` behaves exactly as before.
+  const variance = rollVariance(move, rng)
   const hits = e?.hits ? randInt(rng, e.hits[0], e.hits[1]) : 1
   // softened growth curve so high-stat monsters don't one-shot before defense
   // matters; stat multiplier halved pool-wide (user spec 2026-07-19)

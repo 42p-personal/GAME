@@ -113,6 +113,22 @@ export const defaultStatScale = (learnLevel: number): number => {
 /** The coefficient a move actually uses — its authored value, else the seed. */
 export const statScaleOf = (mv: Move): number =>
   mv.statScale ?? defaultStatScale(mv.learnLevel)
+
+// ── DAMAGE RANGE ────────────────────────────────────────────────────────────
+// `power` is the MID-POINT of a range, not a fixed number. ⚠️ 0.15 is not an
+// arbitrary default: it is exactly the flat `0.85 + rng()*0.3` the turn engine
+// has always rolled, so every unauthored move keeps its existing behaviour and
+// the goldens cannot move on this change alone.
+//
+// ⚠️ The FIELD engine had NO variance at all — only an 8% crit — so the two
+// engines disagreed about something this basic. This is what brings them level.
+export const DEFAULT_VARIANCE = 0.15
+export const varianceOf = (mv: Move): number => mv.variance ?? DEFAULT_VARIANCE
+/** Roll the multiplier for one hit. Consumes exactly one rng draw. */
+export const rollVariance = (mv: Move, rng: RNG): number => {
+  const v = varianceOf(mv)
+  return 1 - v + rng() * 2 * v
+}
 export type StatusKind = 'blind' | 'poison' | 'burn' | 'fear' | 'confusion' | 'stun' | 'knockback' | 'bleed' | 'silence' | 'vulnerable'
   | 'sleep' | 'doom' | 'healblock' | 'haste' | 'charm'
 
@@ -222,6 +238,17 @@ export interface Move {
    * the auto-picker what a monster is for; the player's own choices are free.
    */
   line?: string
+  /**
+   * Half-width of this ability's DAMAGE RANGE, as a fraction of power. `0.15`
+   * means power is the mid-point of a ±15% spread. Authored per ability, because
+   * how *reliable* a move is is part of its character: a duellist's strike lands
+   * where it was aimed (±8%), a gambler's volley does not (±50%), and a capstone
+   * marksman shot stops gambling altogether (±5%).
+   *
+   * ⚠️ Omitted means DEFAULT_VARIANCE, which is exactly the flat ±15% the turn
+   * engine already rolled — so leaving it unset changes nothing anywhere.
+   */
+  variance?: number
   /**
    * Authored MP cost, overriding the derived `monster.ts:manaCost`. Mana is a
    * trading axis: a move may be stronger in some dimension and simply cost more.
