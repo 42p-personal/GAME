@@ -390,7 +390,7 @@ function utilityScore(
     const reach = mv.target === 'team' ? allies.length : 1
     const running = (fx.atkBuff && u.mods.some((m) => (m.atk ?? 1) > 1))
       || (fx.defBuff && u.mods.some((m) => (m.dmgTaken ?? 1) < 1))
-    offer(((fx.atkBuff ?? 0) * 55 * reach + (fx.defBuff ?? 0) * 0.5 * reach) * (running ? 0.1 : 1), u)
+    offer(((fx.atkBuff ?? 0) * 55 * reach + (fx.defBuff ?? 0) * 1.5 * reach) * (running ? 0.1 : 1), u)
   }
 
   return best

@@ -210,6 +210,14 @@ export function chooseLoadout(learned: Move[], stats?: Stats, size = 3): Move[] 
     return base * statusWeight(m)
   }
   const damage = learned.filter((m) => m.type === 'damage').sort((a, b) => dmgScore(b) - dmgScore(a))
+  // ⚠️ Sorted by learnLevel, i.e. LEVEL AS A PROXY FOR QUALITY. This is a known
+  // weakness, not a good rule: Acrobatics (lv160, +30% dodge) loses its slot to
+  // Blur (lv240, +14%) purely on level. A value-based sort was TRIED and measured
+  // WORSE across the board — defensive moves equipped 33% -> 20%, defensive casts
+  // 6.5% -> 5.3%, damage/fight 1859 -> 1676 — because scoring by magnitude
+  // concentrates every kit onto the same two team buffs and kills variety.
+  // The real fix is per-class LINE AFFINITY (docs/ABILITY_REWORK.md), not a
+  // cleverer global sort. Left deliberately as-is until then.
   const support = learned.filter((m) => m.type !== 'damage').sort((a, b) => b.learnLevel - a.learnLevel)
   const out: Move[] = []
 

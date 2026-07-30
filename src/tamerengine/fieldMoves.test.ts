@@ -17,7 +17,9 @@ describe('the field pool is separate from the main pool', () => {
     // the approved pool GROWTH (the class-kit gap fixes: CON team buffs + roots/
     // slows, INT's first buffs, CHA self-protection) — not a leak. Update it
     // deliberately when the pool grows; never to silence a leak.
-    expect(ALL_MOVES.length).toBe(100)
+    // 100 -> 102: Acrobatics (DEX) + Mage Armour (WIS), the cross-stat defensive
+    // answers. ⚠️ No golden moved, because chooseLoadout does not draft them yet.
+    expect(ALL_MOVES.length).toBe(102)
   })
 
   it('has unique ids and names', () => {
