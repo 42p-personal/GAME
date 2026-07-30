@@ -62,10 +62,14 @@ const GOLDENS = [
     // ⚠️ These pin the TURN engine, which tamerengine will replace at M7; they
     // are kept green so a real regression in the SHIPPED game still shows up,
     // but their movement is no longer treated as signal about the new engine.
-    winner: 'B', events: 84, logLines: 63,
+    // ⚠️ Recaptured for the PROGRESSION SLOPE pass — every damage move's power
+    // now scales with its learnLevel (x1.00 at lv40 -> x1.95 damage stats /
+    // x1.55 support stats at lv920), so every team's kit hits harder and the
+    // goldens move together. Deliberate, not a regression.
+    winner: 'B', events: 43, logLines: 36,
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 481, wasKOd: true },
-      { side: 'B', slot: 0, hp: 503, mana: 679, wasKOd: false },
+      { side: 'A', slot: 0, hp: 0, mana: 501, wasKOd: true },
+      { side: 'B', slot: 0, hp: 744, mana: 675, wasKOd: false },
     ],
   },
   {
@@ -100,11 +104,15 @@ const GOLDENS = [
     // ⚠️ These pin the TURN engine, which tamerengine will replace at M7; they
     // are kept green so a real regression in the SHIPPED game still shows up,
     // but their movement is no longer treated as signal about the new engine.
+    // ⚠️ Recaptured for the PROGRESSION SLOPE pass — every damage move's power
+    // now scales with its learnLevel (x1.00 at lv40 -> x1.95 damage stats /
+    // x1.55 support stats at lv920), so every team's kit hits harder and the
+    // goldens move together. Deliberate, not a regression.
     winner: 'B', events: 73, logLines: 63,
     finals: [
       { side: 'A', slot: 0, hp: 0, mana: 289, wasKOd: true },
       { side: 'A', slot: 1, hp: 0, mana: 243, wasKOd: true },
-      { side: 'B', slot: 0, hp: 84, mana: 200, wasKOd: false },
+      { side: 'B', slot: 0, hp: 54, mana: 200, wasKOd: false },
       { side: 'B', slot: 1, hp: 216, mana: 313, wasKOd: false },
     ],
   },
@@ -193,14 +201,18 @@ const GOLDENS = [
     // ⚠️ Now a CLEAN 3-0 SWEEP with all three of A alive — it was a full-wipe
     // draw. Coherent kits (each monster drafting moves its own stat drives)
     // beat incoherent ones decisively; that is the draft fix showing up.
-    winner: 'A', events: 420, logLines: 303,
+    // ⚠️ Recaptured for the PROGRESSION SLOPE pass — every damage move's power
+    // now scales with its learnLevel (x1.00 at lv40 -> x1.95 damage stats /
+    // x1.55 support stats at lv920), so every team's kit hits harder and the
+    // goldens move together. Deliberate, not a regression.
+    winner: 'B', events: 405, logLines: 293,
     finals: [
-      { side: 'A', slot: 0, hp: 706, mana: 675, wasKOd: false },
-      { side: 'A', slot: 1, hp: 1298, mana: 273, wasKOd: false },
-      { side: 'A', slot: 2, hp: 1348, mana: 737, wasKOd: false },
-      { side: 'B', slot: 0, hp: 0, mana: 737, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 768, wasKOd: true },
-      { side: 'B', slot: 2, hp: 0, mana: 45, wasKOd: true },
+      { side: 'A', slot: 0, hp: 0, mana: 684, wasKOd: true },
+      { side: 'A', slot: 1, hp: 0, mana: 183, wasKOd: true },
+      { side: 'A', slot: 2, hp: 0, mana: 754, wasKOd: true },
+      { side: 'B', slot: 0, hp: 0, mana: 757, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 772, wasKOd: true },
+      { side: 'B', slot: 2, hp: 663, mana: 23, wasKOd: false },
     ],
   },
 ] as const

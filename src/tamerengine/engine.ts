@@ -495,7 +495,17 @@ export function basicAttackFor(m: Monster): Move {
     channel, target: 'enemy',
     // Deliberately weak and fast — it fills the gaps between real skills, it
     // does not replace them.
-    cooldown: 0.9, accuracy: 90,
+    // ⚠️ COOLDOWN 0.55, NOT 0.9. At 0.9 the free attack re-armed every 0.96s
+    // while its swing occupied only its 0.15s cast, so a monster with everything
+    // else on cooldown read as ~84% IDLE — it was not stuck, it was waiting on
+    // the filler itself. The filler should not be the thing you wait for. The
+    // damage is deliberately NOT raised to compensate: this buys presence
+    // between casts, not throughput.
+    // ⚠️ Floor is set by basicAttack.test.ts — the basic must stay under the
+    // kit both per cast and by volume. At STR 359 this is ~13.3 power/s against
+    // a reachable ability's ~45/s, so there is real headroom, but drop the
+    // cooldown much further and the invariant starts to bind.
+    cooldown: 0.55, accuracy: 90,
     // Stat-tiered: physical swings hit, caster jabs do not (see BASIC_STAT_TIER).
     power: BASIC_BASE_POWER + (m.stats[stat] ?? 0) * BASIC_STAT_SCALE * (BASIC_STAT_TIER[stat] ?? 0.5),
     range: CHANNEL_RANGE[channel] * 0.8,

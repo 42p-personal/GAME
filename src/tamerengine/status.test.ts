@@ -73,8 +73,14 @@ describe('field statuses — riders actually land', () => {
   })
 
   it('records WHO applied it — fear and charm are meaningless without a source', () => {
+    // ⚠️ BOTH SIDES PINNED. This gave B a full drafted loadout, so the fixture
+    // silently depended on the caster SURVIVING long enough to land its rider —
+    // and the moment the pool's damage curve was steepened, B killed A in 4.8s
+    // after a single Screech and the test failed with zero status events. That
+    // is the meta being measured, not the mechanic. B now holds one weak move,
+    // so this stays a controlled experiment about where a status comes from.
     const A = [mk('fa', [certain('Screech')])]
-    const B = [mk('fb')]
+    const B = [mk('fb', [move('Scrap')])]
     const evs = of(run(A, B).events, 'status')
     expect(evs.length).toBeGreaterThan(0)
     for (const e of evs) expect(e.by).toBeTruthy()
