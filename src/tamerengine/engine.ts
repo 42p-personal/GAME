@@ -515,6 +515,33 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
   // Persistent patches of ground. The arena's own contribution to tactics: a
   // zone denies SPACE rather than damaging a body.
   const zones: { x: number; y: number; r: number; until: number; effect: 'damage' | 'slow' | 'heal'; power: number; side: FieldSide }[] = []
+
+  // ── FLANKING ──────────────────────────────────────────────────────────────
+  // Being OUTNUMBERED and UNSUPPORTED is what gets punished — not merely being
+  // attacked. A defender with two enemies on it but a friend at its shoulder is
+  // fighting a normal fight; the same defender alone is surrounded.
+  // ⚠️ Deliberately keyed off the DEFENDER's situation, not the attacker's
+  // facing. A true positional backstab already exists as a per-move `backstab`
+  // rider, and duplicating it here would double-pay the same idea.
+  // Accuracy POINTS, not a fraction (the standing units rule), and it favours
+  // melee for free: melee is what actually stacks two bodies onto one target,
+  // which is the STR/Warrior identity the class-damage table showed was weakest.
+  const FLANK_ACC_BONUS = 10
+  const FLANK_ENGAGE_RADIUS = 2.6   // "on" the defender
+  const FLANK_SUPPORT_RADIUS = 3.2  // "at its shoulder"
+  const flankBonus = (target: FieldUnit): number => {
+    let onIt = 0
+    for (const e of units) {
+      if (e.dead || e.side === target.side) continue
+      if (dist(e.pos, target.pos) <= FLANK_ENGAGE_RADIUS) onIt++
+    }
+    if (onIt < 2) return 0
+    for (const a of units) {
+      if (a.dead || a.side !== target.side || a.id === target.id) continue
+      if (dist(a.pos, target.pos) <= FLANK_SUPPORT_RADIUS) return 0 // supported
+    }
+    return FLANK_ACC_BONUS
+  }
   const vis = new Map<string, UnitVisState>(units.map((u) => [u.id, 'idle']))
   // Total damage each side has dealt, and the side that landed the most recent
   // blow — the fair, deterministic tiebreaks when a fight ends in a simultaneous
@@ -1079,6 +1106,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     // ⚠️ accBuff / dodgeBuff are percentage POINTS, never fractions, so they add
     // to the accuracy figure directly (see the units rule in CLAUDE.md).
     const acc = mv.accuracy - statusAccPenalty(u) + modAcc(u) - modDodge(target)
+      + flankBonus(target)
     if (rng() * 100 > acc) {
       events.push({ t: t2, kind: 'miss', id: u.id, targetId: target.id, move: mv.name })
       return

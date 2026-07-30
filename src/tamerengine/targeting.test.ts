@@ -3,6 +3,7 @@
 import { describe, it, expect } from 'vitest'
 import { generateMonster } from '../monster'
 import { isMelee, pickTarget, traitsFor } from './decide'
+import { simulateFieldBattle } from './engine'
 import { FieldUnit, FieldSide, Vec2 } from './types'
 import { Monster } from '../core'
 import { ALL_MOVES } from '../moves'
@@ -60,5 +61,34 @@ describe('tamerengine — targeting split', () => {
     const pick = pickTarget(self, [nearTank, backRanged], [])
     // Not forced to the nearest: it reaches the wounded high-value target.
     expect(pick?.id).toBe(backRanged.id)
+  })
+})
+
+// ── FLANKING (P6) ────────────────────────────────────────────────────────────
+// Outnumbered AND unsupported is what gets punished. The bonus is accuracy
+// POINTS on attacks against such a defender, so it is measured through hit rate.
+describe('tamerengine — flanking', () => {
+  const OB: never[] = []
+  // Two attackers on one lone defender vs the same two with a friend beside it.
+  const run = (supported: boolean) => {
+    const foe = ranged('fk-def')
+    const teamB = supported ? [foe, melee('fk-friend')] : [foe]
+    const r = simulateFieldBattle({
+      seed: 'flank', teamA: [melee('fk-a1'), melee('fk-a2')], teamB,
+      obstacles: OB,
+      placeA: [{ x: 19, y: 11 }, { x: 19, y: 12 }],
+      placeB: supported ? [{ x: 21, y: 11 }, { x: 21.6, y: 12 }] : [{ x: 21, y: 11 }],
+    })
+    const onDef = r.events.filter((e) =>
+      (e.kind === 'hit' || e.kind === 'miss') && e.targetId === 'B0')
+    const hits = onDef.filter((e) => e.kind === 'hit').length
+    return { rate: onDef.length ? hits / onDef.length : 0, n: onDef.length }
+  }
+  it('a lone defender under two attackers is hit MORE often than a supported one', () => {
+    const alone = run(false)
+    const helped = run(true)
+    expect(alone.n).toBeGreaterThan(5)   // enough swings to mean something
+    expect(helped.n).toBeGreaterThan(5)
+    expect(alone.rate).toBeGreaterThan(helped.rate)
   })
 })
