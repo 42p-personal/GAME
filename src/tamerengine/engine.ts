@@ -549,7 +549,13 @@ export function basicAttackFor(m: Monster): Move {
     cooldown: 0.55, accuracy: 90,
     // Stat-tiered: physical swings hit, caster jabs do not (see BASIC_STAT_TIER).
     power: BASIC_BASE_POWER + (m.stats[stat] ?? 0) * BASIC_STAT_SCALE * (BASIC_STAT_TIER[stat] ?? 0.5),
-    range: CHANNEL_RANGE[channel] * 0.8,
+    // ⚠️ KEYED TO THE UNIT'S ACTUAL REACH, not the channel default. `bestRange`
+    // is computed above from the loadout and was IDENTICAL to the channel
+    // default while no move authored its own range — the moment moves did, a
+    // Volley user (reach 10.4) stood at 7.8 holding a free attack that reached
+    // 6.4 and could never swing. Which is precisely the failure this move's own
+    // comment describes, arriving by a different door.
+    range: bestRange * 0.8,
     castTime: 0.15,
     desc: 'A basic strike.',
   }

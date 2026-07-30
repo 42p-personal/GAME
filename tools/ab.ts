@@ -138,13 +138,21 @@ if (dumpAt >= 0) {
   const meanSig = Math.abs(mean) > 1.96 * se
   console.log(`\n  mean-CI verdict : ${meanSig ? 'significant' : 'not significant (CI includes zero)'}`)
   console.log(`  SIGN TEST       : ${better} better / ${worse} worse of ${moved2} that moved,  p = ${p.toFixed(4)}`)
-  console.log(`  => ${p < 0.05
-    ? 'REAL EFFECT — more fights improved than chance allows.'
-    : 'NO EFFECT — the split is what a coin would give.'}`)
+  // ⚠️ THE VERDICT MUST NAME THE DIRECTION. This printed "more fights improved
+  // than chance allows" on ANY significant split, including one where the change
+  // made 119 of 199 fights WORSE — a green-looking line under a red result is
+  // exactly how a bad change gets kept.
+  console.log(`  => ${p >= 0.05
+    ? 'NO EFFECT — the split is what a coin would give.'
+    : better > worse
+      ? 'REAL EFFECT — more fights got FASTER than chance allows.'
+      : 'REAL REGRESSION — more fights got SLOWER than chance allows.'}`)
   console.log(`\n  McNEMAR (resolved) : ${gained} gained / ${lost} lost of ${moved.length} flips,  p = ${pRes.toFixed(4)}`)
-  console.log(`  => ${moved.length === 0 ? 'no fight changed resolution status.' : pRes < 0.05
-    ? 'REAL EFFECT on the metric that matters — more fights now end on their own.'
-    : 'NO EFFECT on resolution — the flips are a coin.'}`)
+  console.log(`  => ${moved.length === 0 ? 'no fight changed resolution status.' : pRes >= 0.05
+    ? 'NO EFFECT on resolution — the flips are a coin.'
+    : gained > lost
+      ? 'REAL EFFECT on the metric that matters — more fights now end on their own.'
+      : 'REAL REGRESSION — fewer fights now end on their own.'}`)
   if (moved.length) console.log('\n  fights that flipped:\n   ', moved.join('\n    '))
 
   // Per-composition, because a pooled verdict hides WHERE a change acts. Focus
