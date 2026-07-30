@@ -23,10 +23,11 @@ const GOLDENS = [
     // ⚠️ Recaptured for the STR POOL REWORK (15 -> 23 moves, three lines). Power
     // Strike lost ~20% (it was the game's damage ceiling at lvl 90) and Titanfall
     // 68 -> 62, so every STR monster hits differently.
-    winner: 'A', events: 218, logLines: 155,
+    // ⚠️ Recaptured for the DEX POOL REWORK (16 -> 24 moves, three lines).
+    winner: 'A', events: 182, logLines: 132,
     finals: [
-      { side: 'A', slot: 0, hp: 182, mana: 0, wasKOd: false },
-      { side: 'B', slot: 0, hp: 0, mana: 3, wasKOd: true },
+      { side: 'A', slot: 0, hp: 258, mana: 0, wasKOd: false },
+      { side: 'B', slot: 0, hp: 0, mana: 1, wasKOd: true },
     ],
   },
   {
@@ -44,8 +45,8 @@ const GOLDENS = [
     // fight resolves in half the time it took with globally-ranked kits.
     winner: 'B', events: 73, logLines: 56,
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 475, wasKOd: true },
-      { side: 'B', slot: 0, hp: 603, mana: 673, wasKOd: false },
+      { side: 'A', slot: 0, hp: 0, mana: 484, wasKOd: true },
+      { side: 'B', slot: 0, hp: 597, mana: 673, wasKOd: false },
     ],
   },
   {
@@ -71,7 +72,7 @@ const GOLDENS = [
     winner: 'A', events: 134, logLines: 97,
     finals: [
       { side: 'A', slot: 0, hp: 86, mana: 454, wasKOd: false },
-      { side: 'A', slot: 1, hp: 152, mana: 175, wasKOd: false },
+      { side: 'A', slot: 1, hp: 152, mana: 211, wasKOd: false },
       { side: 'B', slot: 0, hp: 0, mana: 206, wasKOd: true },
       { side: 'B', slot: 1, hp: 0, mana: 329, wasKOd: true },
     ],

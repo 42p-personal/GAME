@@ -85,14 +85,12 @@ export const LINE_OF: Record<string, string> = {
   // ── DEX ────────────────────────────────────────────────────────────────────
   Shadowstep: 'Assassin', Ambush: 'Assassin', Vanish: 'Assassin', Hamstring: 'Assassin',
   'Throat Cut': 'Assassin', Heartseeker: 'Assassin', 'Shadow Barrage': 'Assassin',
-  'Fleetfoot Riposte': 'Assassin', 'Smoke Bomb': 'Assassin',
+  'Smoke Bomb': 'Assassin',
   'Piercing Shot': 'Venomcraft', 'Toxin Stack': 'Venomcraft', 'Twin Fangs': 'Venomcraft',
   'Paralytic Dart': 'Venomcraft', Virulence: 'Venomcraft', 'Plague Shot': 'Venomcraft',
-  'Marked for the Pack': 'Venomcraft',
   Sling: 'Volley', Sidestep: 'Volley', Acrobatics: 'Volley', 'Focus Aim': 'Volley',
   'Pin Down': 'Volley', "Gambler's Volley": 'Volley', 'Rain of Arrows': 'Volley',
-  Deadeye: 'Volley', Blur: 'Volley', Snipe: 'Volley', 'Needle Storm': 'Volley',
-  Ricochet: 'Volley', 'Pinning Volley': 'Volley',
+  Deadeye: 'Volley', Ricochet: 'Volley', 'Pinning Volley': 'Volley',
 
   // ── CON ────────────────────────────────────────────────────────────────────
   Seize: 'Warden', 'Shield Wall': 'Warden', 'Quagmire Stomp': 'Warden', Barricade: 'Warden',

@@ -251,7 +251,7 @@ describe('field — non-damage moves are actually cast', () => {
     // it earns its slot in the ability rework when it gains its crit rider. Padding
     // the score to make this test pass is precisely how War Cry ended up taking 137
     // of 254 utility casts.
-    for (const live of ['Sidestep', 'Blur']) {
+    for (const live of ['Sidestep', 'Acrobatics']) {
       // Two enemies on it, so the situational scoring has real danger to price:
       // these are deliberately worthless with nothing nearby (see the Fade note
       // in utilityScore — a flat value turns a defensive cooldown into a tic).

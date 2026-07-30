@@ -52,7 +52,7 @@ export const SPATIAL_MOVES: Record<string, MoveSpatial> = {
   // A blink IGNORES cover, which is the entire reason to want one: it is the
   // only way to reach a caster who has correctly hidden behind a rock.
   // Paid for with a backstab that only lands if you actually arrive behind.
-  'Shadow Barrage': { move: { kind: 'blink', to: 'behindTarget', maxRange: 12 }, backstab: 1.45 },
+  'Shadowstep': { move: { kind: 'blink', to: 'behindTarget', maxRange: 12 }, backstab: 1.45 },
   'Void Lance': { move: { kind: 'blink', to: 'behindTarget', maxRange: 14 }, backstab: 1.4 },
   'Executioner': { move: { kind: 'blink', to: 'behindTarget', maxRange: 10 }, backstab: 1.6 },
   'Mana Leech': { move: { kind: 'blink', to: 'awayFromTarget', maxRange: 9 } }, // escape, not engage
@@ -61,7 +61,14 @@ export const SPATIAL_MOVES: Record<string, MoveSpatial> = {
   // Pull is the answer to a turtled back line; push is the answer to a diver
   // standing on your healer. Both are counterplay, not just damage.
   'Pin Down': { pull: 5, root: 1.2 },
-  'Snipe': { pull: 0, slow: { mult: 0.6, duration: 1.5 } }, // crippling shot
+  // DEX's reworked kit. ⚠️ Every allEnemies move needs an `area` or it has no
+  // geometry on a continuous field — the spatial test enforces it.
+  'Hamstring': { root: 1.5 },
+  'Vanish': { fade: { duration: 2.5 } },
+  'Smoke Bomb': { fade: { duration: 1.6 }, area: { shape: 'circle', centre: 'self', radius: 4.5 } },
+  'Ricochet': { area: { shape: 'circle', centre: 'target', radius: 4 } },
+  'Pinning Volley': { root: 1.2, area: { shape: 'circle', centre: 'target', radius: 4.4 } },
+  'Plague Shot': { area: { shape: 'circle', centre: 'target', radius: 4.6 } }, // crippling shot
   'Glacial Prison': { root: 2.0 },
   'Sonic Boom': { push: 4 },
 
@@ -89,7 +96,6 @@ export const SPATIAL_MOVES: Record<string, MoveSpatial> = {
 
   // Bombardments — land on a spot, so they punish clumping hardest.
   'Rain of Arrows': { push: 3, area: { shape: 'circle', centre: 'target', radius: 4.2 } },
-  'Needle Storm': { area: { shape: 'circle', centre: 'target', radius: 3.8 } },
   'Inferno': { area: { shape: 'circle', centre: 'target', radius: 5 } },
   'Deep Freeze': { root: 1.6, area: { shape: 'circle', centre: 'target', radius: 4.4 } },
   'World Ender': { area: { shape: 'circle', centre: 'target', radius: 7 } }, // the biggest in the game

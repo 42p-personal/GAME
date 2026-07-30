@@ -79,7 +79,7 @@ describe('teleports beat cover, charges do not', () => {
 
   it('a dash is gated on line of sight; a blink is not', () => {
     const dash = spatialOf('Power Strike')!
-    const blink = spatialOf('Shadow Barrage')!
+    const blink = spatialOf('Shadowstep')!
     expect(dash.move!.kind).toBe('dash')
     expect(blink.move!.kind).toBe('blink')
     expect(blink.backstab).toBeGreaterThan(1) // priced for it
@@ -137,7 +137,7 @@ describe('area shapes replace the row targets', () => {
     // author an `area` and bump this deliberately.
     const rowMoves = ALL_MOVES.filter((m: Move) =>
       m.target === 'allEnemies' || m.target === 'frontRow' || m.target === 'backRow')
-    expect(rowMoves.length).toBe(18) // +Intimidate, +Whirlwind (STR Warcry line)
+    expect(rowMoves.length).toBe(21) // +Intimidate, +Whirlwind (STR Warcry line)
     const missing = rowMoves.filter((m: Move) => !spatialOf(m.name)?.area).map((m: Move) => m.name)
     expect(missing).toEqual([])
   })
@@ -147,7 +147,7 @@ describe('area shapes replace the row targets', () => {
     for (const n of ['Screech', 'Cacophony', 'Crescendo', 'Grand Mockery', 'Demoralize', "Bulwark's Challenge", 'Cleave', 'Earthshaker']) {
       expect(spatialOf(n)!.area!.centre, n).toBe('self')
     }
-    for (const n of ['Rain of Arrows', 'Needle Storm', 'Inferno', 'Deep Freeze', 'World Ender']) {
+    for (const n of ['Rain of Arrows', 'Ricochet', 'Inferno', 'Deep Freeze', 'World Ender']) {
       expect(spatialOf(n)!.area!.centre, n).toBe('target')
     }
   })
