@@ -20,10 +20,13 @@ const GOLDENS = [
     // Prior: 221/160 (v0.852 prestige base-stat bump). A now survives on 9 HP —
     // a low-training fight that got much closer, because both sides draft along
     // their lines instead of both grabbing the same globally-best moves.
-    winner: 'A', events: 239, logLines: 177,
+    // ⚠️ Recaptured for the STR POOL REWORK (15 -> 23 moves, three lines). Power
+    // Strike lost ~20% (it was the game's damage ceiling at lvl 90) and Titanfall
+    // 68 -> 62, so every STR monster hits differently.
+    winner: 'A', events: 218, logLines: 155,
     finals: [
-      { side: 'A', slot: 0, hp: 9, mana: 10, wasKOd: false },
-      { side: 'B', slot: 0, hp: 0, mana: 7, wasKOd: true },
+      { side: 'A', slot: 0, hp: 182, mana: 0, wasKOd: false },
+      { side: 'B', slot: 0, hp: 0, mana: 3, wasKOd: true },
     ],
   },
   {
@@ -123,14 +126,19 @@ const GOLDENS = [
     // Winner flipped back to A and this time it is a 3-0 SWEEP — all three of A's
     // monsters survive. A tank-heavy side getting coherent tank kits is exactly
     // what affinity is for, so a decisive result here reads as the fix working.
-    winner: 'A', events: 418, logLines: 338,
+    // ⚠️ Recaptured for the STR POOL REWORK (15 -> 23 moves, three lines). Power
+    // Strike lost ~20% (it was the game's damage ceiling at lvl 90) and Titanfall
+    // 68 -> 62, so every STR monster hits differently.
+    // A still wins but it is no longer a free sweep — slot 0 dies and the other two
+    // finish on roughly half the HP they used to. A less lopsided fight.
+    winner: 'A', events: 498, logLines: 381,
     finals: [
-      { side: 'A', slot: 0, hp: 272, mana: 700, wasKOd: false },
-      { side: 'A', slot: 1, hp: 1298, mana: 13, wasKOd: false },
-      { side: 'A', slot: 2, hp: 1307, mana: 732, wasKOd: false },
+      { side: 'A', slot: 0, hp: 0, mana: 716, wasKOd: true },
+      { side: 'A', slot: 1, hp: 567, mana: 307, wasKOd: false },
+      { side: 'A', slot: 2, hp: 590, mana: 751, wasKOd: false },
       { side: 'B', slot: 0, hp: 0, mana: 739, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 737, wasKOd: true },
-      { side: 'B', slot: 2, hp: 0, mana: 8, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 734, wasKOd: true },
+      { side: 'B', slot: 2, hp: 0, mana: 133, wasKOd: true },
     ],
   },
 ] as const

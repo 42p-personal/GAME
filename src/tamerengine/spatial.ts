@@ -101,6 +101,12 @@ export const SPATIAL_MOVES: Record<string, MoveSpatial> = {
   // the classic way a support accidentally becomes the best damage in the game,
   // so these stay deliberately tight.
   'Screech': { area: { shape: 'circle', centre: 'self', radius: 5.5 } },
+  // STR's two new shouts/sweeps. ⚠️ Any allEnemies move MUST author an area or it
+  // has no geometry on a continuous field — the spatial test enforces this, and
+  // it is what caught Frost Nova and Quagmire Stomp earlier in this rework.
+  'Intimidate': { area: { shape: 'circle', centre: 'self', radius: 6 } },   // a roar carries
+  'Whirlwind': { area: { shape: 'circle', centre: 'self', radius: 3.4 } },  // only what is in reach
+
   'Cacophony': { area: { shape: 'circle', centre: 'self', radius: 5 } },
   'Crescendo': { area: { shape: 'circle', centre: 'self', radius: 5.5 } },
   'Grand Mockery': { area: { shape: 'circle', centre: 'self', radius: 6 } },

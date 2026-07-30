@@ -58,7 +58,7 @@ const MAMMAL: SignatureDef[] = [
   // line — cashed by pool Bloodletter (x2.5) or Deadeye (x1.5).
   def({ name: "Hunter's Seam", stat: 'STR', type: 'damage', channel: 'melee', target: 'enemy', cooldown: 5, accuracy: 92, power: 26, status: { kind: 'bleed', chance: 55, duration: 3 }, effects: { hits: [2, 3], randomTargets: true }, desc: 'Two or three ripping strikes across whoever is in reach; 55% chance to open a bleed on each.' }),
   def({ name: 'Rising Fury', stat: 'STR', type: 'buff', channel: 'support', target: 'self', cooldown: 5, accuracy: 100, power: 0, effects: { atkBuff: 0.35, hpRegenBuff: 6, duration: 4 }, desc: 'The longer it goes on, the worse it gets: +35% damage and +6 HP/turn for 4 rounds.' }),
-  def({ name: 'The Weight of Years', stat: 'STR', type: 'damage', channel: 'melee', target: 'enemy', cooldown: 5, accuracy: 90, power: 64, effects: { recoil: 0.12, maxHpDmg: 0.04 }, desc: 'Everything it has, and it costs: heavy recoil, and extra damage scaled off the target’s own bulk.' }),
+  def({ name: 'The Weight of Years', stat: 'STR', type: 'damage', channel: 'melee', target: 'enemy', cooldown: 5, accuracy: 90, power: 60, effects: { recoil: 0.12, maxHpDmg: 0.04 }, desc: 'Everything it has, and it costs: heavy recoil, and extra damage scaled off the target’s own bulk.' }),
   // PAYOFF, row-wide rather than bigger — pool Bloodletter already cashes bleed
   // at x2.5 on ONE target, so this wins on breadth instead.
   def({ name: 'Throatline', stat: 'STR', type: 'damage', channel: 'melee', target: 'frontRow', cooldown: 5, accuracy: 92, power: 46, effects: { execute: 0.35, bonusVsStatus: { kind: 'bleed', mult: 1.6, consume: true } }, desc: 'Finishes what the bleeding started, right across the enemy front line.' }),
@@ -135,7 +135,7 @@ const INSECTOID: SignatureDef[] = [
 // for a reason good enough to move. DEX's rule is poison and precision, heavy
 // multi-hit, and SELF buffs only — never team buffs.
 const REPTILIAN: SignatureDef[] = [
-  def({ name: 'The Long Patience', stat: 'DEX', type: 'damage', channel: 'ranged', target: 'enemy', cooldown: 5, accuracy: 92, power: 64, effects: { hpScale: { atFull: 1.5, atEmpty: 0.75 }, pierce: 0.3 }, desc: 'Untouched and unhurried, it hits like nothing else — and fades as it takes damage.' }),
+  def({ name: 'The Long Patience', stat: 'DEX', type: 'damage', channel: 'ranged', target: 'enemy', cooldown: 5, accuracy: 92, power: 60, effects: { hpScale: { atFull: 1.5, atEmpty: 0.75 }, pierce: 0.3 }, desc: 'Untouched and unhurried, it hits like nothing else — and fades as it takes damage.' }),
   // SPREADER — poison is damage-over-time, so it carries a wider spread safely.
   def({ name: 'Venom Bloom', stat: 'DEX', type: 'damage', channel: 'ranged', target: 'enemy', cooldown: 6, accuracy: 90, power: 44, status: { kind: 'poison', chance: 52, duration: 3 }, effects: { spreadStatus: { kind: 'poison', targets: 2, chance: 35 } }, desc: 'Venom that does not stay put; 52% to poison, and it passes to two more.' }),
   // SETTER — cashed by pool Deadeye (x1.5), or Bloodletter across stats.

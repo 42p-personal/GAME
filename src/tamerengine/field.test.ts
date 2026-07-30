@@ -174,8 +174,14 @@ describe('target selection', () => {
   })
 
   it('a COHESIVE unit joins the target its allies are already on', () => {
-    const e1 = unit('e1', { pos: { x: 22, y: 11 } })
-    const e2 = unit('e2', { pos: { x: 22, y: 12 } })
+    // ⚠️ SAME monster for both candidates, so position and ally-focus are the only
+    // things that differ. Built from separate seeds they had different loadouts and
+    // so different value, which made the loner's "own choice" swing with the pool —
+    // it duly flipped when the STR pool was reworked. Cohesion is what is under
+    // test here, not which of two random monsters scores higher.
+    const twin = mk('twin')
+    const e1 = unit('e1', { m: twin, pos: { x: 22, y: 11 } })
+    const e2 = unit('e2', { m: twin, pos: { x: 22, y: 12 } })
     const mate = unit('mate', { side: 'A', pos: { x: 10, y: 11 }, targetId: 'e2' })
     const loner = unit('me', { side: 'A', pos: { x: 10, y: 10 }, traits: { cohesion: 0, predation: 0.5 } })
     const teamPlayer = unit('me', { side: 'A', pos: { x: 10, y: 10 }, traits: { cohesion: 1, predation: 0.5 } })

@@ -39,22 +39,48 @@ import { LINE_OF } from './lines'
 type Row = Omit<Move, 'id' | 'stat'>
 
 const POOLS: Record<Stat, Row[]> = {
+  // ══ STR ══ executes · shouts · rages · dueling · heavy hitting · combos ══════
+  // Three lines (src/lines.ts): BLOODRAGE spends HP as a resource · DUELIST sets up
+  // and cashes in single targets · WARCRY is shouts — STR's hard CC arrives through
+  // the voice, not the blade, which is what stops it overlapping CHA's damage.
+  // ⚠️ mana is priced by EFFECTIVENESS, not derived from power: Blood Price costs
+  // 10 MP for 30 power because you pay the rest in blood.
+  // ⚠️ `variance` is the half-width of the damage range. A duellist lands where it
+  // aimed (0.10); a berserker swinging wild does not (0.25-0.35).
   STR: [
-    { name: 'Jab', learnLevel: 40, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 1, accuracy: 95, power: 12, desc: 'Quick light melee hit.' },
-    { name: 'Guard', learnLevel: 40, type: 'buff', channel: 'support', target: 'self', cooldown: 3, accuracy: 100, power: 0, effects: { guard: 8 }, desc: 'Brace against the next hits.' },
-    { name: 'Power Strike', learnLevel: 90, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 2, accuracy: 90, power: 30, effects: { recoil: 0.05 }, desc: 'Heavy single-target blow; 5% recoil.' },
-    { name: 'War Cry', learnLevel: 120, type: 'buff', channel: 'support', target: 'self', cooldown: 5, accuracy: 100, power: 0, effects: { atkBuff: 0.15, duration: 3 }, desc: 'Battle fury: +15% damage for 3 rounds.' },
-    { name: 'Cleave', learnLevel: 160, type: 'damage', channel: 'melee', target: 'frontRow', cooldown: 3, accuracy: 85, power: 34, desc: 'A horizontal sweep across the enemy front line — it cannot reach past them.' },
-    { name: 'Rending Blow', learnLevel: 200, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 3, accuracy: 85, power: 24, effects: { defDebuff: 4, duration: 3 }, status: { kind: 'bleed', chance: 50, duration: 3 }, desc: 'Dents armour for 3 rounds; 50% chance to cause Bleed.' },
-    { name: 'Flurry of Blows', learnLevel: 240, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 3, accuracy: 90, power: 9, effects: { hits: [2, 4], randomTargets: true }, desc: 'A wild combination, 2–4 strikes, each landing on whoever is in the way — including the back line.' },
-    { name: 'Bonebreaker', learnLevel: 330, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 4, accuracy: 85, power: 28, effects: { defDebuff: 8, duration: 3 }, status: { kind: 'vulnerable', chance: 40, duration: 2 }, desc: 'Shatters defence for 3 rounds; 40% chance to leave the target Vulnerable.' },
-    { name: 'Bracer', learnLevel: 380, type: 'buff', channel: 'support', target: 'self', cooldown: 4, accuracy: 100, power: 0, effects: { guard: 14 }, desc: 'A hard defensive set.' },
-    { name: 'Reckless Slam', learnLevel: 430, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 4, accuracy: 85, power: 48, element: 'fire', effects: { recoil: 0.1 }, desc: 'A scorching, reckless haymaker; 10% recoil.' },
-    { name: 'Berserk', learnLevel: 540, type: 'buff', channel: 'support', target: 'self', cooldown: 6, accuracy: 100, power: 0, effects: { atkBuff: 0.3, duration: 3 }, desc: 'Sees red: +30% damage for 3 rounds.' },
-    { name: 'Earthshaker', learnLevel: 650, type: 'damage', channel: 'melee', target: 'frontRow', cooldown: 5, accuracy: 80, power: 44, element: 'earth', status: { kind: 'stun', chance: 30, duration: 1 }, desc: 'A shockwave that fells the enemy front line; 30% chance to stun each.' },
-    { name: 'Bloodletter', learnLevel: 780, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 5, accuracy: 85, power: 10, effects: { hits: [3, 5], bonusVsStatus: { kind: 'bleed', mult: 2.5, consume: true } }, desc: 'A weak flurry, 3–5 strikes, unless the target is Bleeding — then 2.5× and drains the wound.' },
-    { name: 'Executioner', learnLevel: 850, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 4, accuracy: 90, power: 34, effects: { execute: 0.35 }, desc: 'Brutal finisher: 1.5× vs weakened foes.' },
-    { name: 'Titanfall', learnLevel: 920, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 6, accuracy: 80, power: 68, effects: { pierce: 0.3, recoil: 0.15 }, desc: 'Colossal blow that partly ignores defence; 15% recoil.' },
+    // ── Bloodrage — HP is the resource; you spend life and race the clock ──────
+    { name: 'Scrap', learnLevel: 40, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 1, accuracy: 95, power: 13, mana: 4, variance: 0.15, desc: 'A cheap, scrappy swing — what you throw while the rage builds.' },
+    { name: 'Enrage', learnLevel: 120, type: 'buff', channel: 'support', target: 'self', cooldown: 5, accuracy: 100, power: 0, mana: 14, effects: { atkBuff: 0.2, duration: 3 }, desc: 'Works itself into a fury: +20% damage for 3 rounds.' },
+    { name: 'Blood Price', learnLevel: 240, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 3, accuracy: 90, power: 30, mana: 10, variance: 0.2, effects: { recoil: 0.1 }, desc: 'Swung with everything, including what it costs you. Cheap in mana because it is paid for in blood.' },
+    { name: 'Reckless Slam', learnLevel: 380, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 4, accuracy: 85, power: 44, mana: 26, variance: 0.25, element: 'fire', effects: { recoil: 0.1 }, desc: 'A scorching, reckless haymaker; it burns the arm that throws it.' },
+    { name: 'Last Stand', learnLevel: 540, type: 'buff', channel: 'support', target: 'self', cooldown: 7, accuracy: 100, power: 0, mana: 30, effects: { atkBuff: 0.3, defBuff: 10, duration: 3 }, desc: 'Digs in and stops retreating: +30% damage and +10 mitigation for 3 rounds.' },
+    // ⚠️ hpScale is the ONE effect that already reads the caster's remaining HP,
+    // so Blood Fury is the line's payoff ATTACK rather than one more modifier —
+    // half damage at full health, more than double on the edge of death.
+    { name: 'Blood Fury', learnLevel: 700, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 3, accuracy: 88, power: 26, mana: 24, variance: 0.3, effects: { hpScale: { atFull: 0.5, atEmpty: 2.1 } }, desc: 'Feeble while it is still whole, and terrifying once it is not — this blow feeds on its own wounds.' },
+    { name: 'Titanfall', learnLevel: 920, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 6, accuracy: 80, power: 62, mana: 52, variance: 0.25, effects: { pierce: 0.3, recoil: 0.15 }, desc: 'Colossal blow that partly ignores defence; 15% recoil.' },
+
+    // ── Duelist — precision, armour-break, execute; STR's combo line ───────────
+    // ⚠️ Power Strike was the game's damage CEILING at lvl 90, which is why nothing
+    // above it ever felt like progress. Cut ~20% so the ladder above it can exist.
+    { name: 'Power Strike', learnLevel: 90, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 2, accuracy: 90, power: 24, mana: 16, variance: 0.1, effects: { recoil: 0.05 }, desc: 'A heavy, committed blow, thrown exactly where it was aimed.' },
+    { name: 'Sunder', learnLevel: 200, type: 'debuff', channel: 'melee', target: 'enemy', cooldown: 3, accuracy: 90, power: 16, mana: 14, variance: 0.1, effects: { defDebuff: 12, duration: 3 }, desc: 'Splits the guard rather than the body: −12 mitigation for 3 rounds. The setup STR never had.' },
+    { name: 'Riposte', learnLevel: 260, type: 'buff', channel: 'support', target: 'self', cooldown: 4, accuracy: 100, power: 0, mana: 18, effects: { thorns: 10, defBuff: 4, duration: 2 }, desc: 'Takes the blow to answer it: returns 10 damage on every hit for 2 rounds.' },
+    { name: 'Headbutt', learnLevel: 300, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 3, accuracy: 90, power: 25, mana: 16, variance: 0.15, status: { kind: 'stun', chance: 30, duration: 1 }, desc: 'Short, ugly, and it rings their bell.' },
+    { name: 'Bonebreaker', learnLevel: 330, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 4, accuracy: 85, power: 28, mana: 22, variance: 0.15, effects: { defDebuff: 8, duration: 3 }, status: { kind: 'vulnerable', chance: 45, duration: 2 }, desc: 'Shatters defence and leaves them open — the opener Executioner is waiting on.' },
+    { name: 'Rend', learnLevel: 480, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 3, accuracy: 85, power: 22, mana: 18, variance: 0.15, status: { kind: 'bleed', chance: 55, duration: 3 }, desc: 'Opens a wound that keeps opening. Bleed here; Bonebreaker handles armour.' },
+    { name: 'Bloodletter', learnLevel: 780, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 5, accuracy: 85, power: 10, mana: 30, variance: 0.35, effects: { hits: [3, 5], bonusVsStatus: { kind: 'bleed', mult: 2.5, consume: true } }, desc: 'A weak flurry, 3–5 strikes — unless the target is Bleeding, and then it drinks the wound.' },
+    { name: 'Executioner', learnLevel: 850, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 4, accuracy: 90, power: 32, mana: 28, variance: 0.1, effects: { execute: 0.35, bonusVsStatus: { kind: 'vulnerable', mult: 1.8, consume: true } }, desc: 'The closing blow: brutal against the weakened, and devastating against the Vulnerable.' },
+
+    // ── Warcry — shouts. STR's hard CC comes through the voice ────────────────
+    { name: 'Guard', learnLevel: 40, type: 'buff', channel: 'support', target: 'self', cooldown: 3, accuracy: 100, power: 0, mana: 6, effects: { guard: 8 }, desc: 'Brace against the next hits.' },
+    { name: 'Cleave', learnLevel: 160, type: 'damage', channel: 'melee', target: 'allEnemies', cooldown: 3, accuracy: 85, power: 26, mana: 22, variance: 0.2, desc: 'A horizontal sweep through everything in front of it — weak into one body, brutal into three.' },
+    { name: 'Intimidate', learnLevel: 220, type: 'debuff', channel: 'voice', target: 'allEnemies', cooldown: 5, accuracy: 95, power: 0, mana: 20, effects: { atkDebuff: 0.1, duration: 2 }, status: { kind: 'fear', chance: 35, duration: 2 }, desc: 'A roar with a body behind it: the nearest of them break and run.' },
+    { name: 'Challenge', learnLevel: 400, type: 'debuff', channel: 'voice', target: 'enemy', cooldown: 4, accuracy: 100, power: 0, mana: 16, effects: { tauntForce: true, atkDebuff: 0.12, duration: 3 }, desc: 'Singles one out and dares it. It comes for you, and it swings softer for the insult.' },
+    { name: 'Bracer', learnLevel: 560, type: 'buff', channel: 'support', target: 'self', cooldown: 4, accuracy: 100, power: 0, mana: 20, effects: { guard: 14 }, desc: 'A hard defensive set — Guard is the cheap answer, this is the committed one.' },
+    { name: 'Whirlwind', learnLevel: 600, type: 'damage', channel: 'melee', target: 'allEnemies', cooldown: 4, accuracy: 88, power: 30, mana: 34, variance: 0.2, desc: 'Spins through everything within reach. Pure volume, no rider.' },
+    { name: 'Earthshaker', learnLevel: 650, type: 'damage', channel: 'melee', target: 'allEnemies', cooldown: 5, accuracy: 80, power: 38, mana: 40, variance: 0.25, element: 'earth', status: { kind: 'stun', chance: 30, duration: 1 }, desc: 'A shockwave that fells whatever is standing near it.' },
+    { name: "Warlord's Roar", learnLevel: 820, type: 'buff', channel: 'support', target: 'team', cooldown: 6, accuracy: 100, power: 0, mana: 44, effects: { atkBuff: 0.18, accBuff: 6, duration: 3 }, desc: "STR's one team buff, and of course it is a shout: the whole line hits harder and truer for 3 rounds." },
   ],
   DEX: [
     { name: 'Sling', learnLevel: 40, type: 'damage', channel: 'ranged', target: 'enemy', cooldown: 1, accuracy: 95, power: 10, effects: { hits: [1, 2] }, desc: 'One or two quick shots.' },

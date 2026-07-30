@@ -80,7 +80,7 @@ export const LINE_OF: Record<string, string> = {
   'Rending Blow': 'Duelist', Rend: 'Duelist', 'Flurry of Blows': 'Duelist',
   Bloodletter: 'Duelist', Executioner: 'Duelist', Headbutt: 'Duelist',
   Guard: 'Warcry', Cleave: 'Warcry', Intimidate: 'Warcry', Challenge: 'Warcry',
-  Bracer: 'Warcry', Earthshaker: 'Warcry', Whirlwind: 'Warcry',
+  Bracer: 'Warcry', Earthshaker: 'Warcry', Whirlwind: 'Warcry', "Warlord's Roar": 'Warcry',
 
   // ── DEX ────────────────────────────────────────────────────────────────────
   Shadowstep: 'Assassin', Ambush: 'Assassin', Vanish: 'Assassin', Hamstring: 'Assassin',
