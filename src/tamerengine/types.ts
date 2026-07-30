@@ -269,8 +269,14 @@ export const WIS_REGEN_DIVISOR = 200
 // while mana is still a resource you can run out of. Below ~0.18 the returns
 // flatten and mana stops being a constraint at all, which would quietly delete a
 // whole axis of play — the reason not to just take the lowest number.
+// ⚠️ 0.22 -> 0.18 after LINE AFFINITY landed. Coherent kits actually cast their
+// abilities (ability casts 1191 -> 1851), which pushed starvation back over the
+// target to 23.1%. Re-swept: 0.20 -> 21.2%, 0.18 -> 18.5%. Not a walk-back of
+// the 'keep mana a real constraint' reasoning above — the constraint is the SAME
+// share of ticks as before, it just costs a smaller multiplier now that the
+// abilities being paid for are worth casting.
 // ⚠️ FIELD-ONLY. battle.ts uses manaCost() raw, so the 12 goldens cannot move.
-export const FIELD_MANA_COST_MULT = 0.22
+export const FIELD_MANA_COST_MULT = 0.18
 
 /**
  * FIELD loadout size — 4, against the turn engine's 3. More equipped abilities
