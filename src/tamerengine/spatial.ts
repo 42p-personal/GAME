@@ -44,6 +44,13 @@ export const SPATIAL_MOVES: Record<string, MoveSpatial> = {
   'Crushing Grip': { root: 2.0 },
   // WIS — a patch of dead air. The only spatial move in the stat.
   'Null Field': { zone: { radius: 4.2, duration: 7, effect: 'slow', power: 0.7, centre: 'self' } },
+  // INT — teleports, ground, and the frost that holds people still.
+  'Phase Step': { move: { kind: 'blink', to: 'awayFromTarget', maxRange: 9 } },
+  'Firewall': { zone: { radius: 4.4, duration: 6, effect: 'damage', power: 5, centre: 'self' } },
+  'Displace': { move: { kind: 'blink', to: 'behindTarget', maxRange: 12 }, push: 5, root: 1.2 },
+  'Arcane Bomb': { area: { shape: 'circle', centre: 'target', radius: 3.4 } },
+  'Detonate': { area: { shape: 'circle', centre: 'target', radius: 5.6 } },
+  'Seismic Crush': { area: { shape: 'circle', centre: 'self', radius: 5.6 } },
   'Tremor': { slow: { mult: 0.6, duration: 2.5 }, area: { shape: 'circle', centre: 'self', radius: 5.4 } },
   'Earthen Grasp': { root: 1.8, area: { shape: 'circle', centre: 'self', radius: 5.8 } },
   'Overrun': { move: { kind: 'dash', to: 'target', maxRange: 7 }, push: 3 },
@@ -78,7 +85,6 @@ export const SPATIAL_MOVES: Record<string, MoveSpatial> = {
   'Ricochet': { area: { shape: 'circle', centre: 'target', radius: 4 } },
   'Pinning Volley': { root: 1.2, area: { shape: 'circle', centre: 'target', radius: 4.4 } },
   'Plague Shot': { area: { shape: 'circle', centre: 'target', radius: 4.6 } }, // crippling shot
-  'Glacial Prison': { root: 2.0 },
   'Sonic Boom': { push: 4 },
 
   // ── MOVEMENT DENIAL ───────────────────────────────────────────────────────
@@ -106,7 +112,6 @@ export const SPATIAL_MOVES: Record<string, MoveSpatial> = {
   // Bombardments — land on a spot, so they punish clumping hardest.
   'Rain of Arrows': { push: 3, area: { shape: 'circle', centre: 'target', radius: 4.2 } },
   'Inferno': { area: { shape: 'circle', centre: 'target', radius: 5 } },
-  'Deep Freeze': { root: 1.6, area: { shape: 'circle', centre: 'target', radius: 4.4 } },
   'World Ender': { area: { shape: 'circle', centre: 'target', radius: 7 } }, // the biggest in the game
 
   // Chained lightning — a line that pierces everything in its path.

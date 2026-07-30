@@ -200,36 +200,43 @@ const POOLS: Record<Stat, Row[]> = {
     { name: 'Judgement', learnLevel: 820, type: 'damage', channel: 'support', target: 'enemy', cooldown: 6, accuracy: 88, power: 44, mana: 38, variance: 0.2, desc: 'A real capstone HIT rather than one more aura. WIS can end things too.' },
     { name: 'Providence', learnLevel: 850, type: 'buff', channel: 'support', target: 'team', cooldown: 7, accuracy: 100, power: 12, mana: 40, effects: { cleanse: true, hpRegenBuff: 6, duration: 3 }, desc: 'Sees what is coming: clears the team and steadies it. Restoration — empowerment is CHA.' },
   ],
+  // ══ INT ══ magic · elements · ground AoE + stun · frost root/slow · teleports ═
+  // HEXER stacks statuses and then detonates them. ELEMENTALIST makes ground you
+  // cannot stand on. ARCANIST moves things — itself, or them — and hits precisely.
+  //
+  // ⚠️ INT had SEVENTEEN damage moves and ZERO debuffs. It is a damage stat, but
+  // the framework puts debuffs in CHA/WIS/INT, and a Wizard with nothing but bolts
+  // has no way to play except "cast the biggest number". Now 3 debuffs and 2
+  // controls, and the Hexer line has an actual loop.
   INT: [
-    { name: 'Spark', learnLevel: 40, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 1, accuracy: 95, power: 13, element: 'air', desc: 'Small air bolt.' },
-    { name: 'Ember', learnLevel: 40, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 2, accuracy: 90, power: 12, element: 'fire', status: { kind: 'burn', chance: 40, duration: 3 }, desc: 'Minor fire; 40% chance to Burn.' },
-    // ⚠️ Ember deliberately does NOT spread its burn, despite being the most
-    // thematically obvious carrier for contagion. It is the cheapest INT move and
-    // therefore the most-equipped move in the game — 8 of the 14 golden monsters
-    // run it. Adding a spread here was tried and moved THREE goldens including two
-    // winner flips and a draw: it is not a move buff, it is global power creep.
-    // Contagion belongs on moves a player CHOOSES, not on the default.,
-    { name: 'Frost Shard', learnLevel: 90, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 2, accuracy: 90, power: 20, element: 'water', desc: 'Icy dart.' },
-    { name: 'Fracturing Stones', learnLevel: 120, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 2, accuracy: 90, power: 20, element: 'earth', status: { kind: 'vulnerable', chance: 30, duration: 3 }, desc: 'A stinging barrage of stone shards; 30% chance to crack their guard, leaving them Vulnerable.' },
-    // ⚠️ INT's first non-damage moves ever. The pool was 15/15 damage — a Wizard
-    // or Spellsword had no way to protect, empower, or hold anything, which is
-    // why "mages can use roots and slows" needed authoring, not just engine work.
-    { name: 'Arcane Aegis', learnLevel: 120, type: 'buff', channel: 'support', target: 'team', cooldown: 5, accuracy: 100, power: 0, mana: 30, effects: { ward: 22 }, desc: 'Spins a lattice of force around the whole team: each ally gains a 22 HP absorb shield.' },
-    { name: 'Rime Bind', learnLevel: 160, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 3, accuracy: 90, power: 27, element: 'water', mana: 16, status: { kind: 'knockback', chance: 50, duration: 2 }, desc: 'Ice climbs the target\'s legs and sets — it can still cast and swing, but it is going nowhere.' },
-    { name: 'Thunderclap', learnLevel: 160, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 3, accuracy: 88, power: 27, element: 'air', effects: { firstStrikeMult: 1.35 }, desc: 'Lightning hit; 1.35× damage if this monster acted before the target this round.' },
-    { name: 'Frost Nova', learnLevel: 280, type: 'damage', channel: 'magic', target: 'allEnemies', cooldown: 4, accuracy: 85, power: 20, element: 'water', mana: 26, status: { kind: 'knockback', chance: 40, duration: 2 }, desc: 'A ring of hoarfrost bursts outward, chilling every foe stiff and slow.' },
-    { name: 'Cinderburst', learnLevel: 200, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 3, accuracy: 88, power: 28, element: 'fire', effects: { bonusVsStatus: { kind: 'burn', mult: 1.5, consume: true } }, desc: 'Solid single-target fire burst; 1.5× and snuffs the flame if the target is already Burning.' },
-    { name: 'Stone Spear', learnLevel: 240, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 3, accuracy: 85, power: 30, element: 'earth', effects: { pierce: 0.25 }, desc: 'Earth lance that punches through defence.' },
-    { name: 'Static Chain', learnLevel: 330, type: 'damage', channel: 'magic', target: 'allEnemies', cooldown: 4, accuracy: 85, power: 24, element: 'air', status: { kind: 'vulnerable', chance: 20, duration: 2 }, desc: 'Bolt that arcs across all foes; 20% chance to leave each Vulnerable.' },
-    { name: 'Mana Leech', learnLevel: 380, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 3, accuracy: 88, power: 29, effects: { manaBurn: 12, lifesteal: 0.25 }, desc: 'Arcane siphon: burns MP, heals the caster.' },
-    { name: 'Elemental Infusion', learnLevel: 240, type: 'buff', channel: 'support', target: 'team', cooldown: 5, accuracy: 100, power: 0, mana: 36, effects: { atkBuff: 0.16, accBuff: 6, duration: 3 }, desc: "Charges every ally's strikes with raw element: team +16% damage and +6% accuracy for 3 rounds." },
-    { name: 'Inferno', learnLevel: 430, type: 'damage', channel: 'magic', target: 'allEnemies', cooldown: 4, accuracy: 82, power: 26, element: 'fire', status: { kind: 'burn', chance: 25, duration: 3 }, desc: 'Fire AoE; 25% chance to Burn.' },
-    { name: 'Mirror Image', learnLevel: 250, type: 'buff', channel: 'support', target: 'self', cooldown: 5, accuracy: 100, power: 0, mana: 20, effects: { dodgeBuff: 14, duration: 3 }, desc: 'Splits into shimmering duplicates: +14% dodge for 3 rounds as attacks find the wrong one.' },
-    { name: 'Glacial Prison', learnLevel: 540, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 5, accuracy: 85, power: 43, element: 'water', status: { kind: 'stun', chance: 25, duration: 1 }, desc: 'Entombs in ice, 25% stun chance.' },
-    { name: 'Deep Freeze', learnLevel: 650, type: 'damage', channel: 'magic', target: 'allEnemies', cooldown: 5, accuracy: 80, power: 32, element: 'water', effects: { pierce: 0.2 }, desc: 'Freezing AoE storm that punches through frozen armour.' },
-    { name: 'Void Lance', learnLevel: 780, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 5, accuracy: 85, power: 44, effects: { pierce: 0.5 }, desc: 'Pure void: half of defence ignored.' },
-    { name: 'Arcane Overload', learnLevel: 850, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 6, accuracy: 85, power: 52, effects: { recoil: 0.15 }, desc: 'Overchannelled blast; the caster burns too.' },
-    { name: 'World Ender', learnLevel: 920, type: 'damage', channel: 'magic', target: 'allEnemies', cooldown: 7, accuracy: 78, power: 56, element: 'earth', effects: { maxHpDmg: 0.02 }, desc: 'Massive earth AoE nuke; extra damage to each target scaled off its own max HP.' },
+    // ── Hexer — put it on, keep it on, then cash it in ───────────────────────
+    { name: 'Ember', learnLevel: 40, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 2, accuracy: 90, power: 12, mana: 6, variance: 0.2, element: 'fire', status: { kind: 'burn', chance: 45, duration: 3 }, desc: 'Minor fire, and it catches. The cheapest way to start a stack.' },
+    { name: 'Fracturing Stones', learnLevel: 120, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 2, accuracy: 90, power: 20, mana: 14, variance: 0.2, element: 'earth', status: { kind: 'vulnerable', chance: 40, duration: 3 }, desc: 'A stinging barrage that cracks the guard. The second stack type.' },
+    { name: 'Cinderburst', learnLevel: 200, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 3, accuracy: 88, power: 28, mana: 20, variance: 0.15, element: 'fire', effects: { bonusVsStatus: { kind: 'burn', mult: 1.6, consume: true } }, desc: 'Solid on its own, and it snuffs a Burn for far more. The first detonator.' },
+    { name: 'Sap Will', learnLevel: 280, type: 'debuff', channel: 'magic', target: 'enemy', cooldown: 4, accuracy: 95, power: 0, mana: 18, effects: { atkDebuff: 0.22, duration: 3 }, desc: 'Drains the will to strike: −22% damage for 3 rounds. INT could not do this at all before.' },
+    { name: 'Arcane Bomb', learnLevel: 340, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 4, accuracy: 88, power: 34, mana: 26, variance: 0.2, effects: { bonusVsStatus: { kind: 'vulnerable', mult: 1.7, consume: true } }, desc: 'A charge left ticking on them — devastating on anything already cracked open.' },
+    { name: 'Curse of Ruin', learnLevel: 480, type: 'debuff', channel: 'magic', target: 'enemy', cooldown: 5, accuracy: 95, power: 0, mana: 24, effects: { defDebuff: 14, duration: 3 }, desc: 'Unpicks whatever is holding them together: −14 mitigation from EVERY source of damage.' },
+    { name: 'Detonate', learnLevel: 700, type: 'damage', channel: 'magic', target: 'allEnemies', cooldown: 5, accuracy: 85, power: 26, mana: 38, variance: 0.25, effects: { bonusVsStatus: { kind: 'burn', mult: 2.0, consume: true } }, desc: 'Sets off everything still burning, on everyone at once. The Hexer capstone.' },
+
+    // ── Elementalist — ground you cannot stand on ────────────────────────────
+    { name: 'Frost Shard', learnLevel: 90, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 2, accuracy: 90, power: 20, mana: 12, variance: 0.2, element: 'water', desc: 'An icy dart. The frost line opens here.' },
+    { name: 'Rime Bind', learnLevel: 160, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 3, accuracy: 90, power: 27, mana: 16, variance: 0.15, element: 'water', desc: 'Ice climbs the legs and sets. It can still cast; it is going nowhere.' },
+    { name: 'Frost Nova', learnLevel: 280, type: 'damage', channel: 'magic', target: 'allEnemies', cooldown: 4, accuracy: 85, power: 22, mana: 26, variance: 0.2, element: 'water', desc: 'A ring of hoarfrost bursts outward — the anti-melee tool casters never had.' },
+    { name: 'Firewall', learnLevel: 400, type: 'control', channel: 'magic', target: 'self', cooldown: 5, accuracy: 100, power: 0, mana: 30, element: 'fire', desc: 'A burning line laid across the ground. Not a hit — a place they should not walk.' },
+    { name: 'Inferno', learnLevel: 430, type: 'damage', channel: 'magic', target: 'allEnemies', cooldown: 4, accuracy: 82, power: 28, mana: 32, variance: 0.25, element: 'fire', status: { kind: 'burn', chance: 30, duration: 3 }, desc: 'Fire across the whole position, and much of it keeps burning.' },
+    { name: 'Seismic Crush', learnLevel: 560, type: 'damage', channel: 'magic', target: 'allEnemies', cooldown: 5, accuracy: 82, power: 30, mana: 38, variance: 0.25, element: 'earth', status: { kind: 'stun', chance: 30, duration: 1 }, desc: 'The ground itself comes up. Damage AND a stun on everything standing on it.' },
+    { name: 'World Ender', learnLevel: 920, type: 'damage', channel: 'magic', target: 'allEnemies', cooldown: 7, accuracy: 78, power: 50, mana: 56, variance: 0.3, element: 'earth', effects: { maxHpDmg: 0.02 }, desc: 'The largest thing in the game, and it hurts the biggest of them most.' },
+
+    // ── Arcanist — move things. Yourself, or them ────────────────────────────
+    { name: 'Spark', learnLevel: 40, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 1, accuracy: 95, power: 14, mana: 5, variance: 0.15, element: 'air', desc: 'A small air bolt, cheap enough to throw between everything else.' },
+    { name: 'Phase Step', learnLevel: 180, type: 'buff', channel: 'support', target: 'self', cooldown: 4, accuracy: 100, power: 0, mana: 14, effects: { dodgeBuff: 12, duration: 1 }, desc: 'Steps out of the world and back a few paces away — through cover, if need be.' },
+    { name: 'Mirror Image', learnLevel: 250, type: 'buff', channel: 'support', target: 'self', cooldown: 5, accuracy: 100, power: 0, mana: 20, effects: { dodgeBuff: 16, duration: 3 }, desc: 'Shimmering duplicates. Attacks keep finding the wrong one.' },
+    { name: 'Static Chain', learnLevel: 330, type: 'damage', channel: 'magic', target: 'allEnemies', cooldown: 4, accuracy: 85, power: 26, mana: 28, variance: 0.2, element: 'air', status: { kind: 'vulnerable', chance: 25, duration: 2 }, desc: 'A bolt that leaps body to body along a line, weakening as it goes.' },
+    { name: 'Mana Leech', learnLevel: 380, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 3, accuracy: 88, power: 29, mana: 22, variance: 0.15, effects: { manaBurn: 14, lifesteal: 0.25 }, desc: 'Siphons and steps away in the same motion. WIS steals better; this one escapes.' },
+    { name: 'Unmake', learnLevel: 560, type: 'debuff', channel: 'magic', target: 'enemy', cooldown: 5, accuracy: 95, power: 0, mana: 26, effects: { consumeWard: 1, accDebuff: 12, duration: 3 }, desc: 'Strips the shield off them and leaves their aim shaking.' },
+    { name: 'Displace', learnLevel: 640, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 4, accuracy: 90, power: 27, mana: 26, variance: 0.15, desc: 'Teleports the TARGET — rips a diver out of your back line and pins it where it lands.' },
+    { name: 'Void Lance', learnLevel: 780, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 5, accuracy: 85, power: 44, mana: 38, variance: 0.1, effects: { pierce: 0.5 }, desc: 'Pure void. Half of everything they are wearing simply does not apply.' },
+    { name: 'Arcane Overload', learnLevel: 850, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 6, accuracy: 85, power: 50, mana: 44, variance: 0.3, effects: { recoil: 0.15 }, desc: 'Overchannelled past what the caster can hold. It burns them too.' },
   ],
   CHA: [
     { name: 'Taunt Cry', learnLevel: 40, type: 'damage', channel: 'voice', target: 'enemy', cooldown: 1, accuracy: 95, power: 10, desc: 'Light voice damage + minor aggro.' },

@@ -20,7 +20,7 @@ describe('the field pool is separate from the main pool', () => {
     // 100 -> 102: Acrobatics (DEX) + Mage Armour (WIS), the cross-stat defensive
     // answers. ⚠️ No golden moved, because chooseLoadout does not draft them yet.
     // 102 -> 110: the STR pool reworked into its three lines (15 -> 23 moves).
-    expect(ALL_MOVES.length).toBe(128)
+    expect(ALL_MOVES.length).toBe(131)
   })
 
   it('has unique ids and names', () => {

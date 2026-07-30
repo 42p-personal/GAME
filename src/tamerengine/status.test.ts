@@ -147,7 +147,11 @@ describe('field statuses — the three that gained geometry', () => {
 
 describe('field statuses — control and attrition', () => {
   it('STUN stops the victim acting', () => {
-    const A = [mk('ta', [certain('Glacial Prison')])]
+    // ⚠️ Glacial Prison was absorbed in the INT rework. Seismic Crush inherited its
+    // stun but is an AoE with a 5.6 radius, so in a 1v1 the lone enemy is often
+    // outside it and nothing ever lands — Headbutt is the single-target stun and
+    // melee, so the two units are guaranteed to engage.
+    const A = [mk('ta', [certain('Headbutt')])]
     const B = [mk('tb')]
     const r = run(A, B, 'stun')
     const stuns = of(r.events, 'status').filter((e) => e.status === 'stun')

@@ -121,12 +121,9 @@ export const LINE_OF: Record<string, string> = {
   'Curse of Ruin': 'Hexer', Detonate: 'Hexer', 'Sap Will': 'Hexer',
   'Frost Shard': 'Elementalist', 'Rime Bind': 'Elementalist', 'Frost Nova': 'Elementalist',
   Firewall: 'Elementalist', Inferno: 'Elementalist', 'Seismic Crush': 'Elementalist',
-  'World Ender': 'Elementalist', Thunderclap: 'Elementalist', 'Glacial Prison': 'Elementalist',
-  'Deep Freeze': 'Elementalist',
-  Spark: 'Arcanist', Blink: 'Arcanist', 'Mirror Image': 'Arcanist', 'Static Chain': 'Arcanist',
+  'World Ender': 'Elementalist', Spark: 'Arcanist', 'Phase Step': 'Arcanist', 'Mirror Image': 'Arcanist', 'Static Chain': 'Arcanist',
   'Mana Leech': 'Arcanist', Displace: 'Arcanist', 'Void Lance': 'Arcanist',
-  'Arcane Overload': 'Arcanist', 'Arcane Aegis': 'Arcanist', 'Stone Spear': 'Arcanist',
-  'Elemental Infusion': 'Arcanist', Unmake: 'Arcanist', Polymorph: 'Arcanist',
+  'Arcane Overload': 'Arcanist', Unmake: 'Arcanist', Polymorph: 'Arcanist',
 
   // ── CHA ────────────────────────────────────────────────────────────────────
   Discord: 'Enchanter', Screech: 'Enchanter', 'Sonic Boom': 'Enchanter', Lullaby: 'Enchanter',

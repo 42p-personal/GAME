@@ -46,8 +46,8 @@ const GOLDENS = [
     // fight resolves in half the time it took with globally-ranked kits.
     winner: 'B', events: 73, logLines: 56,
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 484, wasKOd: true },
-      { side: 'B', slot: 0, hp: 597, mana: 673, wasKOd: false },
+      { side: 'A', slot: 0, hp: 0, mana: 514, wasKOd: true },
+      { side: 'B', slot: 0, hp: 587, mana: 679, wasKOd: false },
     ],
   },
   {
@@ -75,9 +75,9 @@ const GOLDENS = [
     // a capstone hit), so a side with a WIS monster stops being purely passive.
     winner: 'B', events: 111, logLines: 83,
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 499, wasKOd: true },
-      { side: 'A', slot: 1, hp: 0, mana: 210, wasKOd: true },
-      { side: 'B', slot: 0, hp: 121, mana: 192, wasKOd: false },
+      { side: 'A', slot: 0, hp: 0, mana: 509, wasKOd: true },
+      { side: 'A', slot: 1, hp: 0, mana: 242, wasKOd: true },
+      { side: 'B', slot: 0, hp: 120, mana: 223, wasKOd: false },
       { side: 'B', slot: 1, hp: 216, mana: 323, wasKOd: false },
     ],
   },
@@ -150,14 +150,15 @@ const GOLDENS = [
     // being the most sensitive in the set (it exists to exercise sudden death),
     // not the pool being broken. ⚠️ RE-CHECK once INT and CHA are reworked — if it
     // is still a draw with the pool complete, that IS a real signal.
-    winner: 'draw', events: 504, logLines: 375,
+    // ⚠️ Recaptured for the INT POOL REWORK (20 -> 22 moves, three lines).
+    winner: 'draw', events: 479, logLines: 349,
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 702, wasKOd: true },
-      { side: 'A', slot: 1, hp: 0, mana: 305, wasKOd: true },
-      { side: 'A', slot: 2, hp: 0, mana: 752, wasKOd: true },
-      { side: 'B', slot: 0, hp: 0, mana: 739, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 747, wasKOd: true },
-      { side: 'B', slot: 2, hp: 0, mana: 88, wasKOd: true },
+      { side: 'A', slot: 0, hp: 0, mana: 698, wasKOd: true },
+      { side: 'A', slot: 1, hp: 0, mana: 369, wasKOd: true },
+      { side: 'A', slot: 2, hp: 0, mana: 745, wasKOd: true },
+      { side: 'B', slot: 0, hp: 0, mana: 753, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 772, wasKOd: true },
+      { side: 'B', slot: 2, hp: 0, mana: 109, wasKOd: true },
     ],
   },
 ] as const
