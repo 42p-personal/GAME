@@ -84,10 +84,15 @@ for fi in range(0, len(frames), STEP):
     for gy in range(0, int(FH) + 1, 4):
         g.line([0, wy(gy), W, wy(gy)], fill=GRID)
     g.line([wx(FW / 2), PAD_T, wx(FW / 2), PAD_T + int(FH * SC)], fill=(44, 45, 56))
+    # ⚠️ x,y IS THE TOP-LEFT CORNER, NOT THE CENTRE. `insideObstacle` in the
+    # engine tests `p.x > o.x && p.x < o.x + o.w`, and TamerArena draws with
+    # `left: o.x * PX`. Drawing these centred put every rock 1.1 units up-and-left
+    # of where it really is, which made shots look like they passed THROUGH cover
+    # when they were passing beside it.
     for o in obstacles:
         g.rounded_rectangle(
-            [wx(o['x'] - o['w'] / 2), wy(o['y'] - o['h'] / 2),
-             wx(o['x'] + o['w'] / 2), wy(o['y'] + o['h'] / 2)], radius=4, fill=ROCK)
+            [wx(o['x']), wy(o['y']), wx(o['x'] + o['w']), wy(o['y'] + o['h'])],
+            radius=4, fill=ROCK)
 
     pos = {u['id']: u for u in fr['units']}
 
