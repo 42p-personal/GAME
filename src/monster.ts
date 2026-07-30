@@ -153,7 +153,45 @@ const isPersonalBuff: MovePick = (mv) => mv.type !== 'damage'
 // ONE loadout slot reserved for a hard-control move. Deliberately short: denial
 // on every class would make every fight a lockout, which is what CC diminishing
 // returns already exists to prevent.
-const CLASS_WANTS_CONTROL = new Set(['Ranger', 'Wizard', 'Tank'])
+/**
+ * HOW MANY SLOTS OF EACH KIND A CLASS RESERVES.
+ *
+ * ⚠️ THE CAPS USED TO BE GLOBAL, and that is what flattened class identity. Every
+ * class could spend up to TWO slots on utility — the number was hard-coded as
+ * `out.length >= 2` in three separate places — so a Wizard and a Sage budgeted
+ * their kit identically despite one being a damage class and the other a healer.
+ * Combined with the self-buff fallback, damage classes were routinely handing two
+ * of three slots to buffs and fighting with one attack.
+ *
+ * `utility`   — ceiling on non-damage slots (heals, wards, taunts, team buffs)
+ * `control`   — reserve one DAMAGE-typed hard-control move (a stun/root rider)
+ * `minDamage` — floor. A kit that cannot hurt anything is not a kit, and this is
+ *               what stops a generous utility profile eating the whole loadout.
+ *
+ * The caps interact with `size`, which is 3 for the turn engine and 4 for the
+ * field, so a class gains its extra slot where its plan says it should.
+ */
+interface SlotPlan { utility: number; control: boolean; minDamage: number }
+const DEFAULT_SLOTS: SlotPlan = { utility: 1, control: false, minDamage: 2 }
+const CLASS_SLOTS: Record<string, SlotPlan> = {
+  // Protectors and healers buy the second utility slot with a damage slot.
+  Tank: { utility: 2, control: true, minDamage: 1 }, // taunt + ward, and the Warden slow decides the geometry
+  Spellshield: { utility: 2, control: false, minDamage: 1 },
+  Sage: { utility: 2, control: false, minDamage: 1 }, // heal + cleanse: the only stat that mends an ally
+  Orator: { utility: 2, control: true, minDamage: 1 }, // CHA denies; the control slot is its win condition
+  Captain: { utility: 2, control: false, minDamage: 1 },
+  Bard: { utility: 2, control: false, minDamage: 1 },
+  // Damage classes keep their damage. ⚠️ Wizard and Ranger previously spent up to
+  // two slots on utility like a healer — a Wizard is a DAMAGE class that happens
+  // to own denial, so it reserves control and nothing else.
+  Wizard: { utility: 1, control: true, minDamage: 2 },
+  Ranger: { utility: 1, control: true, minDamage: 2 }, // a real root to hold the target
+  Warrior: { utility: 1, control: false, minDamage: 2 },
+  Rogue: { utility: 1, control: false, minDamage: 2 },
+  Spellsword: { utility: 1, control: false, minDamage: 2 },
+  Generalist: { utility: 1, control: false, minDamage: 2 },
+}
+const slotsFor = (cls: string): SlotPlan => CLASS_SLOTS[cls] ?? DEFAULT_SLOTS
 
 // Utility slots a support class fills before topping up with damage, in order.
 const CLASS_UTILITY_SLOTS: Record<string, MovePick[]> = {
@@ -295,6 +333,16 @@ export function chooseLoadout(learned: Move[], stats?: Stats, size = 3): Move[] 
     // secondary (from CLASSES) — and the highest-scoring pair wins, so a
     // Warrior's own STR combo beats an incidental CON one even if both
     // technically qualify.
+    // The class's own slot budget — see CLASS_SLOTS. `utilityCap` can never eat
+    // the damage floor, whatever the profile asks for.
+    const plan = slotsFor(classForStats(stats))
+    const utilityCap = Math.max(0, Math.min(plan.utility, size - plan.minDamage))
+    // ⚠️ COUNT UTILITY, NOT SLOTS. The cap must look at how many NON-DAMAGE moves
+    // are held, not at `out.length` — a combo pair claims its slots first and its
+    // pieces are usually damage-typed, so a total-slot cap was already "full"
+    // before the utility loop ran and a Sage ended up with 0.19 heals per kit.
+    const utilityHeld = () => out.filter((mv) => mv.type !== 'damage').length
+
     interface ComboPair { pieces: [Move, Move]; score: number }
     const cls = CLASSES.find((c) => c.name === classForStats(stats))
     const statFit = (m: Move) => (stats[m.stat] ?? 0) + (cls?.primary === m.stat ? 300 : cls?.secondary === m.stat ? 150 : 0)
@@ -324,14 +372,15 @@ export function chooseLoadout(learned: Move[], stats?: Stats, size = 3): Move[] 
     // their taunt/ward, Sages their heals, etc) for whatever slots remain.
     const slots = CLASS_UTILITY_SLOTS[classForStats(stats)] ?? []
     for (const want of slots) {
-      if (out.length >= 2) break // always keep at least one damage slot
+      if (utilityHeld() >= utilityCap) break // the class's OWN ceiling, not a global 2
+      if (out.length >= size - plan.minDamage) break // never starve the damage floor
       const pick = support.find((mv) => want(mv) && !out.includes(mv))
       if (pick) out.push(pick)
     }
     // Self-buff fallback, available to EVERY class (previously invisible to
     // all of them — War Cry, Berserk, Blur, Insight, Providence... had zero
     // uses across 80 battles), if a utility slot is still unclaimed.
-    if (out.length < 2) {
+    if (utilityHeld() < utilityCap && out.length < size - plan.minDamage) {
       // Team-wide first (it covers the caster too and is priced for the reach),
       // then a self-only buff. See the isPersonalBuff note above.
       const pick = support.find((mv) => mv.target === 'team' && isPersonalBuff(mv) && !out.includes(mv))
@@ -351,7 +400,9 @@ export function chooseLoadout(learned: Move[], stats?: Stats, size = 3): Move[] 
     // ⚠️ Drawn from `damage`, not `support`: these moves carry their control as a
     // rider on a hit (`type: 'damage'`), so no utility predicate can ever see
     // them. And it never claims the LAST slot — a kit without damage is not a kit.
-    if (CLASS_WANTS_CONTROL.has(classForStats(stats)) && out.length < size - 1) {
+    // The control move is DAMAGE-typed, so it never threatens the damage floor —
+    // it only must not claim the last slot outright.
+    if (plan.control && out.length < size - 1) {
       const pick = damage.find((mv) =>
         mv.status && HARD_CONTROL_STATUSES.has(mv.status.kind) && !out.includes(mv))
       if (pick) out.push(pick)
