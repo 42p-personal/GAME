@@ -275,8 +275,27 @@ export const WIS_REGEN_DIVISOR = 200
 // the 'keep mana a real constraint' reasoning above — the constraint is the SAME
 // share of ticks as before, it just costs a smaller multiplier now that the
 // abilities being paid for are worth casting.
+// ⚠️ 0.18 -> 0.30, re-swept against the REWORKED pool. The old value was tuned
+// when abilities were weak; once every stat was reworked and damage was tiered,
+// mana stopped being a constraint at all — 39.7% of live ticks sat at FULL MP
+// with nothing worth spending it on. Re-swept 0.18/0.22/0.26/0.30/0.34:
+//
+//   mult   starved   at FULL   managing   ability share   resolved   dur
+//   0.18    11.1%     39.7%      49.2%        60%          10/12    35.4s
+//   0.22    12.4%     23.6%      64.1%        60%          10/12    35.4s
+//   0.26    14.2%     18.4%      67.3%        59%          10/12    35.4s
+//   0.30    16.6%     13.3%      70.2%        58%          10/12    35.0s  <- chosen
+//   0.34    24.8%      9.9%      65.4%        55%          10/12    34.9s
+//
+// ⚠️ Chosen on the MANAGING column, not the ability share. 'at FULL' is the
+// direct measure of mana doing nothing, and 70.2% spent actively managing MP is
+// the state where the resource is a decision. That knowingly trades 2 points of
+// ability share (58% vs the >60% target) — a target set back when the pool was
+// weak and the free attack was genuinely competitive with it. Abilities are
+// still the clear majority of casts, and some basic attacks between casts is
+// correct play rather than a failure.
 // ⚠️ FIELD-ONLY. battle.ts uses manaCost() raw, so the 12 goldens cannot move.
-export const FIELD_MANA_COST_MULT = 0.18
+export const FIELD_MANA_COST_MULT = 0.30
 
 /**
  * FIELD loadout size — 4, against the turn engine's 3. More equipped abilities
