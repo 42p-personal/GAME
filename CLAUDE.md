@@ -27,7 +27,7 @@ standard it does not compromise on.
 
 | team | owns | its standard |
 |---|---|---|
-| **Balancing** | `tools/dsweep.ts` and the sim harnesses, `docs/BALANCING.md`, every economy/difficulty/progression number | One value at a time, sim it, read it, adjust. Never a sweeping change in one step. |
+| **Balancing** | `tools/sweep40.ts` (40 matchups, `--noise` reports its own error band), `tools/ab.ts` (paired A/B + sign test), `docs/BALANCING.md`, every economy/difficulty/progression number | One value at a time — and prove it. ⚠️ A 12-fight sweep has sd 0.7; several changes were once made on 1-fight differences that a paired A/B later showed did nothing. Judge on the SIGN TEST, not a mean CI: a few fights swing 20-30s when they tip from timeout to a kill, and those outliers hide real effects. |
 | **Game mechanics** | `battle.ts` + `src/tamerengine/`, `moves.ts`, `lines.ts`, `core.ts`, `docs/ABILITY_REWORK.md` | Mechanics must be REACHABLE. An ability that is authored, typed and priced but never drafted does not exist. |
 | **Art & design** | `public/sprites/`, `public/backgrounds/`, `docs/ART_PIPELINE.md`, `docs/BESTIARY.md`, the UI in `App.tsx` / `arena.tsx` | Read `ART_PIPELINE.md` BEFORE concluding art cannot be generated. Verify layering with a paint-order probe, never a computed-style audit. |
 | **Quality assurance** | `validate.ts`, `src/*.test.ts`, the goldens, the count tripwires | A guard that fails loudly beats a bug that ships silently. Fixtures must pin the variable under test. |
@@ -156,7 +156,8 @@ Any species can in principle train into any class; aptitude only weights how fas
 - Every skill costs MP (`monster.ts:manaCost`, 2× the base formula); free universal Attack + Block;
   per-turn choice policy in `chooseAction`, element-aware (`effPower` folds in resist/weak vs the
   foe's body, plus firstStrikeMult when live).
-- `maxMana = WIS + floor(INT/2)`; WIS is the sole regen stat; `maxHp = 50 + CON×2.5`.
+- `maxMana = WIS + floor(INT/2)`; WIS is the sole regen stat; `maxHp = 40 + CON×2.0`
+  (`monster.ts:maxHp`, shared by BOTH engines — changing it moves the goldens).
 - Guard (flat DR) lasts until the guardian's NEXT ACTION and mitigates every hit in between.
 - **100-move pool** (`src/moves.ts`, no longer 15/stat — STR/DEX/WIS 15, CHA 17, CON 18, INT 20;
   reference in `docs/ABILITIES.md`) with `core.ts:MoveEffects`:
