@@ -133,7 +133,7 @@ export const LINE_OF: Record<string, string> = {
   Inspire: 'Captain', Fanfare: 'Captain', Triumph: 'Captain',
   'Grand Mockery': 'Demagogue', Captivate: 'Demagogue', Demoralize: 'Demagogue',
   'Crowd Surge': 'Demagogue', Dirge: 'Demagogue', "Siren's Call": 'Demagogue',
-  Crescendo: 'Demagogue', 'Taunt Cry': 'Demagogue', Showstopper: 'Demagogue',
+  Crescendo: 'Demagogue', Showstopper: 'Demagogue',
 }
 
 /** Does this line express what the class is for? */

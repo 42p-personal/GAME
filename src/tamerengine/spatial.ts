@@ -128,6 +128,10 @@ export const SPATIAL_MOVES: Record<string, MoveSpatial> = {
   'Whirlwind': { area: { shape: 'circle', centre: 'self', radius: 3.4 } },  // only what is in reach
 
   'Cacophony': { area: { shape: 'circle', centre: 'self', radius: 5 } },
+  // CHA's two new shouts. Crowd Surge is the defensive one — it PUSHES.
+  'Mass Hysteria': { area: { shape: 'circle', centre: 'self', radius: 6.2 } },
+  'Dirge': { area: { shape: 'circle', centre: 'self', radius: 5.8 } },
+  'Crowd Surge': { push: 4.5, area: { shape: 'circle', centre: 'self', radius: 5.2 } },
   'Crescendo': { area: { shape: 'circle', centre: 'self', radius: 5.5 } },
   'Grand Mockery': { area: { shape: 'circle', centre: 'self', radius: 6 } },
   'Demoralize': { area: { shape: 'circle', centre: 'self', radius: 5.5 } },

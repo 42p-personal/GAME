@@ -238,30 +238,45 @@ const POOLS: Record<Stat, Row[]> = {
     { name: 'Void Lance', learnLevel: 780, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 5, accuracy: 85, power: 44, mana: 38, variance: 0.1, effects: { pierce: 0.5 }, desc: 'Pure void. Half of everything they are wearing simply does not apply.' },
     { name: 'Arcane Overload', learnLevel: 850, type: 'damage', channel: 'magic', target: 'enemy', cooldown: 6, accuracy: 85, power: 50, mana: 44, variance: 0.3, effects: { recoil: 0.15 }, desc: 'Overchannelled past what the caster can hold. It burns them too.' },
   ],
+  // ══ CHA ══ team buff/debuff · few attacks · denial and support · lots of CC ══
+  // ENCHANTER is ACTION denial — charm, sleep, fear; the home of hard CC.
+  // CAPTAIN is empowerment. DEMAGOGUE is team debuffs and morale.
+  //
+  // ⚠️ THE RULE THIS STAT SETTLES: CHA EMPOWERS, CON PROTECTS, WIS RESTORES.
+  // CHA is the only stat in the game that makes an ally STRONGER — every atkBuff,
+  // accBuff, haste and crit grant routes through here. CON's support is shields,
+  // WIS's is healing. It had 5 buffs against CON's 12 before this pass, which for
+  // the stat whose flagship is the Enchanter was simply backwards.
+  // ⚠️ It carries the most hard CC in the game, and deliberately few attacks.
   CHA: [
-    { name: 'Taunt Cry', learnLevel: 40, type: 'damage', channel: 'voice', target: 'enemy', cooldown: 1, accuracy: 95, power: 10, desc: 'Light voice damage + minor aggro.' },
-    { name: 'Discord', learnLevel: 40, type: 'damage', channel: 'voice', target: 'enemy', cooldown: 2, accuracy: 90, power: 14, status: { kind: 'blind', chance: 45, duration: 3 }, desc: 'Jarring note; 45% chance to Blind.' },
-    { name: 'Rallying Song', learnLevel: 90, type: 'buff', channel: 'support', target: 'team', cooldown: 4, accuracy: 100, power: 0, effects: { atkBuff: 0.1, duration: 3 }, desc: 'Stirring tune: team +10% damage for 3 rounds.' },
-    { name: 'Grand Mockery', learnLevel: 120, type: 'debuff', channel: 'voice', target: 'allEnemies', cooldown: 4, accuracy: 95, power: 0, effects: { atkDebuff: 0.12, duration: 3 }, status: { kind: 'healblock', chance: 20, duration: 2 }, desc: 'Cutting jeer: enemy team −12% damage for 3 rounds; 20% chance their wounds won\'t close.' },
-    // ⚠️ CHA's self-protection. The audit reported "zero self-buffs", which was
-    // PARTLY a measurement artifact — it counted `target: 'self'` only, and CHA's
-    // three team buffs already include the caster (the crowd is every living
-    // ally, caster included). What was genuinely missing was a DEFENSIVE option
-    // for a class with the weakest damage tier: Bravura is that, and Hymn of
-    // Shields is the uncapped team version that covers the bard too.
-    { name: 'Bravura', learnLevel: 140, type: 'buff', channel: 'support', target: 'self', cooldown: 4, accuracy: 100, power: 0, mana: 16, effects: { ward: 20, dodgeBuff: 8, duration: 3 }, desc: 'Performs straight through the danger: a 20 HP absorb shield and +8% dodge for 3 rounds.' },
-    { name: 'Screech', learnLevel: 160, type: 'damage', channel: 'voice', target: 'allEnemies', cooldown: 3, accuracy: 85, power: 14, status: { kind: 'fear', chance: 20, duration: 2 }, desc: 'Voice AoE; 20% chance to inflict Fear for 2 rounds.' },
-    { name: 'Hymn of Shields', learnLevel: 260, type: 'buff', channel: 'support', target: 'team', cooldown: 6, accuracy: 100, power: 0, mana: 38, effects: { ward: 26, guard: 5, duration: 3 }, desc: 'A swelling hymn that armours everyone who can hear it, the singer included: 26 HP of shield and +5 flat mitigation each.' },
-    { name: 'Captivate', learnLevel: 200, type: 'damage', channel: 'voice', target: 'enemy', cooldown: 3, accuracy: 88, power: 18, effects: { lifesteal: 0.4 }, desc: 'Feeds on adoration: heals 40% of damage.' },
-    { name: 'Battle Hymn', learnLevel: 240, type: 'buff', channel: 'support', target: 'team', cooldown: 5, accuracy: 100, power: 0, effects: { dodgeBuff: 5, regenBuff: 2, duration: 3 }, status: { kind: 'haste', chance: 100, duration: 2 }, desc: 'Steadying anthem: team +5% dodge, +2 regen for 3 rounds — and the whole team acts first next round.' },
-    { name: 'Demoralize', learnLevel: 330, type: 'debuff', channel: 'voice', target: 'allEnemies', cooldown: 5, accuracy: 90, power: 0, effects: { atkDebuff: 0.2, duration: 3 }, desc: 'Breaks the spirit: enemy team −20% damage for 3 rounds.' },
-    { name: 'Sonic Boom', learnLevel: 380, type: 'damage', channel: 'voice', target: 'enemy', cooldown: 4, accuracy: 85, power: 30, status: { kind: 'confusion', chance: 35, duration: 2 }, effects: { spreadStatus: { kind: 'confusion', targets: 1, chance: 25 } }, desc: 'Heavy voice burst; 35% chance to Confuse, the disorientation carrying to a neighbour.' },
-    { name: 'Lullaby', learnLevel: 430, type: 'control', channel: 'voice', target: 'enemy', cooldown: 5, accuracy: 80, power: 0, status: { kind: 'sleep', chance: 35, duration: 3 }, effects: { spreadStatus: { kind: 'sleep', targets: 1, chance: 25 } }, desc: 'Sings the target to actual sleep — 35% chance, and drowsiness is catching; a stray hit will wake either.' },
-    { name: 'Standing Ovation', learnLevel: 540, type: 'buff', channel: 'support', target: 'team', cooldown: 6, accuracy: 100, power: 0, effects: { atkBuff: 0.18, accBuff: 8, hpRegenBuff: 3, duration: 3 }, desc: 'Feeds on applause: team +18% damage, +8% accuracy, +3 HP regen/turn for 3 rounds.' },
-    { name: 'Cacophony', learnLevel: 650, type: 'damage', channel: 'voice', target: 'allEnemies', cooldown: 5, accuracy: 82, power: 26, status: { kind: 'charm', chance: 15, duration: 2 }, desc: 'Voice AoE; 15% chance to Charm — a charmed foe turns on its own team.' },
-    { name: "Siren's Call", learnLevel: 780, type: 'damage', channel: 'voice', target: 'enemy', cooldown: 5, accuracy: 85, power: 34, effects: { manaBurn: 15, bonusVsStatus: { kind: 'fear', mult: 1.5, consume: true } }, desc: 'Irresistible song that scatters focus (burns MP); 1.5× and shatters their courage if they\'re Afraid.' },
-    { name: 'Showstopper', learnLevel: 850, type: 'damage', channel: 'voice', target: 'enemy', cooldown: 5, accuracy: 88, power: 40, effects: { execute: 0.35 }, desc: 'The closing number: 1.5× vs weakened foes.' },
-    { name: 'Crescendo', learnLevel: 920, type: 'damage', channel: 'voice', target: 'allEnemies', cooldown: 7, accuracy: 80, power: 52, desc: 'Massive voice AoE finisher.' },
+    // ── Enchanter — action denial. Take the turn, not the hit points ─────────
+    { name: 'Discord', learnLevel: 40, type: 'damage', channel: 'voice', target: 'enemy', cooldown: 2, accuracy: 90, power: 14, mana: 8, variance: 0.2, status: { kind: 'blind', chance: 50, duration: 3 }, desc: 'A jarring note that leaves them swinging at afterimages.' },
+    { name: 'Screech', learnLevel: 160, type: 'damage', channel: 'voice', target: 'allEnemies', cooldown: 3, accuracy: 85, power: 16, mana: 22, variance: 0.2, status: { kind: 'fear', chance: 30, duration: 2 }, desc: 'A sound that routs. Hard control across a whole line.' },
+    { name: 'Sonic Boom', learnLevel: 380, type: 'damage', channel: 'voice', target: 'enemy', cooldown: 4, accuracy: 85, power: 32, mana: 26, variance: 0.2, status: { kind: 'confusion', chance: 40, duration: 2 }, effects: { spreadStatus: { kind: 'confusion', targets: 1, chance: 30 } }, desc: 'A heavy burst, and the disorientation carries to whoever stood too close.' },
+    { name: 'Lullaby', learnLevel: 430, type: 'control', channel: 'voice', target: 'enemy', cooldown: 5, accuracy: 85, power: 0, mana: 24, status: { kind: 'sleep', chance: 60, duration: 3 }, effects: { spreadStatus: { kind: 'sleep', targets: 1, chance: 30 } }, desc: 'Sings them to actual sleep — a free hit, but any damage wakes them. Drowsiness is catching.' },
+    { name: 'Cacophony', learnLevel: 650, type: 'damage', channel: 'voice', target: 'allEnemies', cooldown: 5, accuracy: 82, power: 28, mana: 36, variance: 0.25, status: { kind: 'charm', chance: 22, duration: 2 }, desc: 'A charmed foe turns on its own team. The best status in the game, and the rarest.' },
+    { name: 'Mass Hysteria', learnLevel: 820, type: 'control', channel: 'voice', target: 'allEnemies', cooldown: 7, accuracy: 88, power: 0, mana: 52, status: { kind: 'fear', chance: 55, duration: 2 }, effects: { spreadStatus: { kind: 'confusion', targets: 2, chance: 40 } }, desc: 'The whole enemy line breaks at once. The Enchanter capstone: nobody gets a turn.' },
+
+    // ── Captain — empowerment. Nothing else in the game does this ────────────
+    { name: 'Rallying Song', learnLevel: 90, type: 'buff', channel: 'support', target: 'team', cooldown: 4, accuracy: 100, power: 0, mana: 18, effects: { atkBuff: 0.12, duration: 3 }, desc: 'A stirring tune: the whole team hits harder for 3 rounds.' },
+    { name: 'Bravura', learnLevel: 140, type: 'buff', channel: 'support', target: 'self', cooldown: 4, accuracy: 100, power: 0, mana: 16, effects: { ward: 20, dodgeBuff: 10, duration: 3 }, desc: 'Performs straight through the danger. The bard can look after itself.' },
+    { name: 'Anthem of Iron', learnLevel: 180, type: 'buff', channel: 'support', target: 'team', cooldown: 5, accuracy: 100, power: 0, mana: 24, effects: { atkBuff: 0.1, defBuff: 6, duration: 3 }, desc: 'Hit harder and hold together — attack and armour in one song.' },
+    { name: 'Inspire', learnLevel: 260, type: 'buff', channel: 'support', target: 'ally', cooldown: 4, accuracy: 100, power: 0, mana: 16, effects: { atkBuff: 0.28, accBuff: 10, duration: 3 }, desc: 'Everything poured into ONE ally. Focused, and cheaper than lifting everyone.' },
+    { name: 'Battle Hymn', learnLevel: 300, type: 'buff', channel: 'support', target: 'team', cooldown: 5, accuracy: 100, power: 0, mana: 26, effects: { dodgeBuff: 8, regenBuff: 2, duration: 3 }, status: { kind: 'haste', chance: 100, duration: 2 }, desc: 'A steadying anthem — and the whole team moves first.' },
+    { name: 'Fanfare', learnLevel: 420, type: 'buff', channel: 'support', target: 'team', cooldown: 5, accuracy: 100, power: 0, mana: 32, effects: { accBuff: 16, duration: 3 }, desc: 'Team accuracy, sharply. Nothing else in the game hands out aim like this.' },
+    { name: 'Hymn of Shields', learnLevel: 470, type: 'buff', channel: 'support', target: 'team', cooldown: 6, accuracy: 100, power: 0, mana: 38, effects: { ward: 26, guard: 5, duration: 3 }, desc: 'A hymn that armours everyone who can hear it, the singer included.' },
+    { name: 'Standing Ovation', learnLevel: 540, type: 'buff', channel: 'support', target: 'team', cooldown: 6, accuracy: 100, power: 0, mana: 42, effects: { atkBuff: 0.2, accBuff: 10, hpRegenBuff: 4, duration: 3 }, desc: 'Feeds on applause and hands it straight back to the team.' },
+    { name: 'Triumph', learnLevel: 880, type: 'buff', channel: 'support', target: 'team', cooldown: 8, accuracy: 100, power: 0, mana: 56, effects: { atkBuff: 0.32, accBuff: 14, dodgeBuff: 10, duration: 2 }, desc: 'The empowerment capstone: everything at once, for two rounds only.' },
+
+    // ── Demagogue — team debuffs and morale ──────────────────────────────────
+    { name: 'Grand Mockery', learnLevel: 120, type: 'debuff', channel: 'voice', target: 'allEnemies', cooldown: 4, accuracy: 95, power: 0, mana: 22, effects: { atkDebuff: 0.14, duration: 3 }, status: { kind: 'healblock', chance: 25, duration: 2 }, desc: "A cutting jeer: they hit softer, and some of them stop closing." },
+    { name: 'Captivate', learnLevel: 200, type: 'damage', channel: 'voice', target: 'enemy', cooldown: 3, accuracy: 88, power: 20, mana: 14, variance: 0.2, effects: { lifesteal: 0.45 }, desc: 'Feeds on adoration and gives nothing back.' },
+    { name: 'Demoralize', learnLevel: 330, type: 'debuff', channel: 'voice', target: 'allEnemies', cooldown: 5, accuracy: 90, power: 0, mana: 30, effects: { atkDebuff: 0.24, duration: 3 }, desc: 'Breaks the spirit outright. Deeper than Mockery, and that is the whole difference.' },
+    { name: 'Crowd Surge', learnLevel: 440, type: 'debuff', channel: 'voice', target: 'allEnemies', cooldown: 4, accuracy: 90, power: 14, mana: 24, variance: 0.2, effects: { accDebuff: 10, duration: 2 }, desc: 'Shoves the whole enemy line backwards. A DEFENSIVE use of a debuff stat.' },
+    { name: 'Dirge', learnLevel: 520, type: 'debuff', channel: 'voice', target: 'allEnemies', cooldown: 6, accuracy: 95, power: 0, mana: 34, status: { kind: 'healblock', chance: 70, duration: 3 }, desc: 'While it plays, nothing on that side closes a wound.' },
+    { name: "Siren's Call", learnLevel: 780, type: 'damage', channel: 'voice', target: 'enemy', cooldown: 5, accuracy: 85, power: 36, mana: 32, variance: 0.2, effects: { manaBurn: 16, bonusVsStatus: { kind: 'fear', mult: 1.6, consume: true } }, desc: 'An irresistible song that scatters focus — and shatters the courage of the Afraid.' },
+    { name: 'Showstopper', learnLevel: 850, type: 'damage', channel: 'voice', target: 'enemy', cooldown: 5, accuracy: 88, power: 40, mana: 36, variance: 0.15, effects: { execute: 0.35 }, desc: 'The closing number, and it closes them.' },
+    { name: 'Crescendo', learnLevel: 920, type: 'damage', channel: 'voice', target: 'allEnemies', cooldown: 7, accuracy: 80, power: 48, mana: 50, variance: 0.25, desc: 'A voice AoE finisher. CHA damage exists — it is just rare, and it is late.' },
   ],
 }
 
