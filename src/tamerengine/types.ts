@@ -323,6 +323,15 @@ export const FIELD_MANA_COST_MULT = 0.30
  */
 export const FIELD_LOADOUT_SIZE = 4
 
+/**
+ * How far CONTAGION (`spreadStatus`) can jump from its victim, in field units.
+ * ~3 body-widths: it punishes a clumped line and does nothing against a spread
+ * one, which is what makes the `spacing` tactic a real decision rather than
+ * flavour. The turn engine has no geometry and spreads to any N enemies; on a
+ * field that would be a strictly better effect for free.
+ */
+export const CONTAGION_RADIUS = 5.5
+
 export interface FieldSetup {
   seed: string
   teamA: Monster[]

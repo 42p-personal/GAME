@@ -9,7 +9,7 @@
 // when this was strictly 1v1. `simulateBattle` (still exported) is a thin
 // team-of-1 wrapper over `simulateTeamBattle`, so every existing 1v1 call site
 // (Sandbox) keeps working unchanged.
-import { Ability, Channel, Element, ManaPolicy, Monster, Move, RNG, StatusKind, Temperament, chance, elementMultiplier, frontRowCount, aoeFalloff, happinessMultiplier, hashString, mulberry32, randInt, rollVariance } from './core'
+import { Ability, Channel, Element, ManaPolicy, Monster, Move, RNG, StatusKind, Temperament, chance, elementMultiplier, frontRowCount, aoeFalloff, happinessMultiplier, hashString, mulberry32, randInt, rollVariance, SPREADABLE_STATUSES } from './core'
 import {
   attackStat, critChance, debuffBonus, debuffReduction, dodgeChance, echoChance, hpRegen,
   manaCost, manaRegen, maxHp, maxMana, mitigationPierce, staminaDamageMult,
@@ -585,7 +585,9 @@ const CC_KINDS = new Set<StatusKind>(['stun', 'sleep', 'fear', 'confusion', 'sil
 // CONTAGION (v0.91): which statuses a spreadStatus move may propagate. Every
 // hostile kind qualifies; 'haste' is excluded because it HELPS its carrier and
 // spreading it would hand the enemy team a buff.
-const SPREADABLE = new Set<StatusKind>(['blind', 'poison', 'burn', 'fear', 'confusion', 'stun', 'knockback', 'bleed', 'silence', 'vulnerable', 'sleep', 'doom', 'healblock', 'charm'])
+// ⚠️ Moved to core.ts so the field engine shares ONE definition — identical
+// membership, so this is a pure refactor and no golden can move.
+const SPREADABLE = SPREADABLE_STATUSES
 // Preserve tactic → the HP fraction below which a monster plays to survive.
 const PRESERVE_AT: Record<string, number> = { cautious: 0.4, defensive: 0.25 }
 

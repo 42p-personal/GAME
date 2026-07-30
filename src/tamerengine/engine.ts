@@ -5,11 +5,11 @@
 // depends on `simulateFieldBattle` being a pure function of
 // (monsters + placement + obstacles + seed). So: fixed dt, fixed unit order,
 // one seeded rng stream, and no wall-clock or Math.random anywhere.
-import { Channel, Monster, Move, MoveArea, MoveSpatial, Stat, aoeFalloff, statScaleOf, mulberry32, hashString, StatusKind, rollVariance } from '../core'
+import { Channel, Monster, Move, MoveArea, MoveSpatial, Stat, aoeFalloff, statScaleOf, mulberry32, hashString, StatusKind, rollVariance, SPREADABLE_STATUSES } from '../core'
 import { chooseLoadout, learnedMoves, manaCost, maxHp, maxMana } from '../monster'
 import {
   DT, FIELD_H, FIELD_W, FieldEvent, FieldResult, FieldSetup, FieldSide, FieldUnit,
-  MAX_TICKS, Obstacle, RETARGET_EVERY, UnitVisState, Vec2,
+  MAX_TICKS, Obstacle, RETARGET_EVERY, UnitVisState, Vec2, CONTAGION_RADIUS,
   CHANNEL_CAST_TIME, CHANNEL_RANGE, DEPLOY_DEPTH, SECONDS_PER_ROUND,
   SUDDEN_DEATH_AT, SUDDEN_DEATH_BASE, SUDDEN_DEATH_RAMP, KITE_MAX, KITE_REFILL, BLOCK_DR,
   BASIC_STAT_TIER, BASIC_BASE_POWER, BASIC_STAT_SCALE,
@@ -1324,6 +1324,36 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     if (mv.status && u.side !== target.side && !BENEFICIAL.has(mv.status.kind)
         && rng() * 100 < mv.status.chance) {
       applyFieldStatus(u, target, mv.status.kind, mv.status.duration, t2)
+    }
+    // ── CONTAGION ────────────────────────────────────────────────────────────
+    // The last of the twelve effects that did nothing on this engine, held back
+    // deliberately so it could be simmed on its own.
+    // ⚠️ ON A FIELD, CONTAGION IS A PROXIMITY MECHANIC. The turn engine spreads
+    // to any N enemies because it has no geometry; here it jumps to the NEAREST
+    // ones and only within CONTAGION_RADIUS, which is the whole point — it
+    // punishes a clumped enemy line and does nothing against a spread one, so
+    // the `spacing` tactic finally has something real to answer.
+    // Rolled after the move's own status, so a cast that APPLIES the affliction
+    // can spread it in the same beat.
+    const spr = fx?.spreadStatus
+    if (spr) {
+      const carried = target.statuses.filter((st) =>
+        SPREADABLE_STATUSES.has(st.kind) && (!spr.kind || st.kind === spr.kind))
+      if (carried.length) {
+        const picked = carried[0]
+        const left = Math.max(0, picked.until - t2) / SECONDS_PER_ROUND
+        const near = units
+          .filter((x) => x.side !== u.side && !x.dead && x.id !== target.id
+            && !hasStatus(x, picked.kind) && dist(target.pos, x.pos) <= CONTAGION_RADIUS)
+          .sort((a, b) => dist(target.pos, a.pos) - dist(target.pos, b.pos))
+        let jumped = 0
+        for (const v of near) {
+          if (jumped >= spr.targets) break
+          if (rng() * 100 >= spr.chance) continue
+          applyFieldStatus(u, v, picked.kind, left, t2)
+          jumped++
+        }
+      }
     }
     if (sp) applyOnTarget(u, target, sp, t2)
     if (target.hp <= 0) {

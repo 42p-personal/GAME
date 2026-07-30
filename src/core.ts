@@ -82,6 +82,16 @@ export const AOE_FALLOFF_PER_TARGET = 0.05
 export const HARD_CONTROL_STATUSES = new Set<StatusKind>([
   'stun', 'sleep', 'fear', 'confusion', 'charm', 'silence', 'knockback',
 ])
+/**
+ * Statuses that CONTAGION can carry from one victim to another (`spreadStatus`).
+ * Afflictions only — nothing beneficial, and nothing that is a positioning fact
+ * rather than a condition. Shared by both engines so the two can never disagree
+ * about what is catching.
+ */
+export const SPREADABLE_STATUSES = new Set<StatusKind>([
+  'blind', 'poison', 'burn', 'fear', 'confusion', 'stun', 'knockback', 'bleed',
+  'silence', 'vulnerable', 'sleep', 'doom', 'healblock', 'charm',
+])
 export const aoeFalloff = (targetCount: number): number =>
   Math.max(0.4, 1 - AOE_FALLOFF_PER_TARGET * Math.max(0, targetCount - 1))
 
