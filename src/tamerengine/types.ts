@@ -255,7 +255,22 @@ export const WIS_REGEN_DIVISOR = 200
  * of the time. This undoes the doubling for the field only, so battle.ts and its
  * 12 goldens are untouched.
  */
-export const FIELD_MANA_COST_MULT = 0.5
+// ⚠️ P5, sim-tuned 0.5 -> 0.22. The 4th field slot made mana the binding
+// constraint: 66% of live unit-ticks could not afford even the CHEAPEST ability,
+// so monsters fell back to the free attack and the whole authored pool went
+// unused (ability share of casts was 43%). Swept one knob at a time per the
+// standing rule — 0.50/0.40/0.32/0.25/0.22/0.18/0.15 — and the response is
+// clean and monotonic in starvation:
+//   0.50 -> 66.1% starved, 57% basic, 8/12 resolved, 45.5s
+//   0.32 -> 42.2% starved, 47% basic, 10/12,        39.8s
+//   0.22 -> 18.4% starved, 38% basic, 9/12,         42.4s   <- chosen
+//   0.15 -> 12.3% starved, 35% basic, 10/12,        41.2s
+// 0.22 is the point that clears both targets (<20% starved, >60% ability share)
+// while mana is still a resource you can run out of. Below ~0.18 the returns
+// flatten and mana stops being a constraint at all, which would quietly delete a
+// whole axis of play — the reason not to just take the lowest number.
+// ⚠️ FIELD-ONLY. battle.ts uses manaCost() raw, so the 12 goldens cannot move.
+export const FIELD_MANA_COST_MULT = 0.22
 
 /**
  * FIELD loadout size — 4, against the turn engine's 3. More equipped abilities
