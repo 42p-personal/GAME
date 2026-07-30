@@ -51,9 +51,9 @@ const def = (m: SignatureDef): SignatureDef => m
 // All six are melee so every mammal drives them off the stat it trains at +10%.
 // Statuses limited to STR's own three: bleed, stun, vulnerable.
 const MAMMAL: SignatureDef[] = [
-  def({ name: 'Highroad Charge', stat: 'STR', type: 'damage', channel: 'melee', target: 'enemy', cooldown: 5, accuracy: 92, power: 60, element: 'earth', status: { kind: 'stun', chance: 25, duration: 1 }, effects: { pierce: 0.35 }, desc: 'The mountain road taken at a dead run; 25% chance to stun.' }),
+  def({ name: 'Highroad Charge', stat: 'STR', type: 'damage', channel: 'melee', target: 'enemy', cooldown: 5, accuracy: 92, power: 60, status: { kind: 'stun', chance: 25, duration: 1 }, effects: { pierce: 0.35 }, desc: 'The mountain road taken at a dead run; 25% chance to stun.' }),
   // Fire is STR's one fire attack: the controlled burn that takes the range back.
-  def({ name: 'Reclaim the Range', stat: 'STR', type: 'damage', channel: 'melee', target: 'allEnemies', cooldown: 5, accuracy: 88, power: 46, element: 'fire', status: { kind: 'vulnerable', chance: 40, duration: 3 }, desc: 'Burns the encroaching brush back; 40% chance to leave each foe Vulnerable.' }),
+  def({ name: 'Reclaim the Range', stat: 'STR', type: 'damage', channel: 'melee', target: 'allEnemies', cooldown: 5, accuracy: 88, power: 46, status: { kind: 'vulnerable', chance: 40, duration: 3 }, desc: 'Burns the encroaching brush back; 40% chance to leave each foe Vulnerable.' }),
   // SETTER. Scatters, so it can bleed several foes at once and reach the back
   // line — cashed by pool Bloodletter (x2.5) or Deadeye (x1.5).
   def({ name: "Hunter's Seam", stat: 'STR', type: 'damage', channel: 'melee', target: 'enemy', cooldown: 5, accuracy: 92, power: 26, status: { kind: 'bleed', chance: 55, duration: 3 }, effects: { hits: [2, 3], randomTargets: true }, desc: 'Two or three ripping strikes across whoever is in reach; 55% chance to open a bleed on each.' }),
@@ -70,8 +70,8 @@ const MAMMAL: SignatureDef[] = [
 // cleanse; statuses limited to WIS's two, doom and silence.
 const AVIAN: SignatureDef[] = [
   // PAYOFF — set by pool Field of Doom (28%). Pool's Mind Crush cashes at x1.6.
-  def({ name: "Stormrider's Dive", stat: 'WIS', type: 'damage', channel: 'support', target: 'enemy', cooldown: 5, accuracy: 92, power: 58, element: 'air', effects: { bonusVsStatus: { kind: 'doom', mult: 2.0, consume: true } }, desc: 'Falls out of the sky onto a marked target; doubles down on anything already doomed.' }),
-  def({ name: 'Wingbreaker', stat: 'WIS', type: 'damage', channel: 'support', target: 'backRow', cooldown: 5, accuracy: 90, power: 46, element: 'air', effects: { accDebuff: 12, duration: 3 }, desc: 'Strikes clean over the front line at whoever shelters behind it, and leaves them swinging wide.' }),
+  def({ name: "Stormrider's Dive", stat: 'WIS', type: 'damage', channel: 'support', target: 'enemy', cooldown: 5, accuracy: 92, power: 58, effects: { bonusVsStatus: { kind: 'doom', mult: 2.0, consume: true } }, desc: 'Falls out of the sky onto a marked target; doubles down on anything already doomed.' }),
+  def({ name: 'Wingbreaker', stat: 'WIS', type: 'damage', channel: 'support', target: 'backRow', cooldown: 5, accuracy: 90, power: 46, effects: { accDebuff: 12, duration: 3 }, desc: 'Strikes clean over the front line at whoever shelters behind it, and leaves them swinging wide.' }),
   // SETTER — the only AoE silence in the game (pool Silencing Spike is single).
   def({ name: 'The Windless Hour', stat: 'WIS', type: 'damage', channel: 'support', target: 'allEnemies', cooldown: 6, accuracy: 88, power: 40, status: { kind: 'silence', chance: 30, duration: 2 }, effects: { manaBurn: 20 }, desc: 'The air goes dead still; 30% chance to silence each foe, and burns 20 MP.' }),
   // SPREADER — omits `kind`, so the omen carries whatever the victim holds.
@@ -102,15 +102,15 @@ const MARSUPIAL: SignatureDef[] = [
 // is ALL FOUR ELEMENTS, no buffs and no healing — so this is the only body whose
 // six are all offensive. Statuses limited to INT's three: burn, vulnerable, stun.
 const AQUATIC: SignatureDef[] = [
-  def({ name: 'Trenchfall', stat: 'INT', type: 'damage', channel: 'magic', target: 'enemy', cooldown: 5, accuracy: 92, power: 60, element: 'water', effects: { pierce: 0.3 }, desc: 'The weight of the whole water column, dropped on one target.' }),
-  def({ name: 'Ancient Cold', stat: 'INT', type: 'damage', channel: 'magic', target: 'allEnemies', cooldown: 5, accuracy: 88, power: 42, element: 'water', status: { kind: 'vulnerable', chance: 40, duration: 3 }, desc: 'Cold older than the leagues; 40% chance to leave each foe Vulnerable.' }),
+  def({ name: 'Trenchfall', stat: 'INT', type: 'damage', channel: 'magic', target: 'enemy', cooldown: 5, accuracy: 92, power: 60, effects: { pierce: 0.3 }, desc: 'The weight of the whole water column, dropped on one target.' }),
+  def({ name: 'Ancient Cold', stat: 'INT', type: 'damage', channel: 'magic', target: 'allEnemies', cooldown: 5, accuracy: 88, power: 42, status: { kind: 'vulnerable', chance: 40, duration: 3 }, desc: 'Cold older than the leagues; 40% chance to leave each foe Vulnerable.' }),
   // SPREADER — burn catching through water is the vent field, not a contradiction.
-  def({ name: 'The Boiling Vent', stat: 'INT', type: 'damage', channel: 'magic', target: 'enemy', cooldown: 6, accuracy: 90, power: 52, element: 'fire', status: { kind: 'burn', chance: 48, duration: 3 }, effects: { spreadStatus: { kind: 'burn', targets: 1, chance: 30 } }, desc: 'Superheated water from the seafloor; the scald spreads.' }),
+  def({ name: 'The Boiling Vent', stat: 'INT', type: 'damage', channel: 'magic', target: 'enemy', cooldown: 6, accuracy: 90, power: 52, status: { kind: 'burn', chance: 48, duration: 3 }, effects: { spreadStatus: { kind: 'burn', targets: 1, chance: 30 } }, desc: 'Superheated water from the seafloor; the scald spreads.' }),
   // The game's ONLY AoE stun, so pinned BELOW the pool's single-target 30%.
-  def({ name: 'Trenchbed Collapse', stat: 'INT', type: 'damage', channel: 'magic', target: 'allEnemies', cooldown: 6, accuracy: 85, power: 38, element: 'earth', status: { kind: 'stun', chance: 20, duration: 1 }, desc: 'The floor gives way beneath the whole line; 20% chance to stun each.' }),
+  def({ name: 'Trenchbed Collapse', stat: 'INT', type: 'damage', channel: 'magic', target: 'allEnemies', cooldown: 6, accuracy: 85, power: 38, status: { kind: 'stun', chance: 20, duration: 1 }, desc: 'The floor gives way beneath the whole line; 20% chance to stun each.' }),
   // PAYOFF — pool Cinderburst cashes burn at x1.5.
-  def({ name: 'The Surfacing', stat: 'INT', type: 'damage', channel: 'magic', target: 'enemy', cooldown: 5, accuracy: 92, power: 56, element: 'air', effects: { bonusVsStatus: { kind: 'burn', mult: 2.0, consume: true } }, desc: 'Breaches after generations below; doubles down on anything already burning.' }),
-  def({ name: 'Abyssal Pressure', stat: 'INT', type: 'damage', channel: 'magic', target: 'enemy', cooldown: 5, accuracy: 92, power: 48, element: 'water', effects: { maxHpDmg: 0.05, pierce: 0.25 }, desc: 'Crushing depth — it hurts the largest bodies hardest.' }),
+  def({ name: 'The Surfacing', stat: 'INT', type: 'damage', channel: 'magic', target: 'enemy', cooldown: 5, accuracy: 92, power: 56, effects: { bonusVsStatus: { kind: 'burn', mult: 2.0, consume: true } }, desc: 'Breaches after generations below; doubles down on anything already burning.' }),
+  def({ name: 'Abyssal Pressure', stat: 'INT', type: 'damage', channel: 'magic', target: 'enemy', cooldown: 5, accuracy: 92, power: 48, effects: { maxHpDmg: 0.05, pierce: 0.25 }, desc: 'Crushing depth — it hurts the largest bodies hardest.' }),
 ]
 
 // ─── INSECTOID — CON ────────────────────────────────────────────────────────
@@ -153,8 +153,8 @@ const REPTILIAN: SignatureDef[] = [
 // each gets one matching its own resist. All four statuses the two minors can
 // reach are used: burn and vulnerable (INT), doom and silence (WIS).
 const PRESTIGE_SHARED: SignatureDef[] = [
-  def({ name: 'Elder Flame', stat: 'INT', type: 'damage', channel: 'magic', target: 'enemy', cooldown: 5, accuracy: 92, power: 60, element: 'fire', status: { kind: 'burn', chance: 46, duration: 3 }, desc: 'Fire from before the leagues were drawn; 46% chance to set the target alight.' }),
-  def({ name: 'Crushing Deep', stat: 'INT', type: 'damage', channel: 'magic', target: 'allEnemies', cooldown: 6, accuracy: 88, power: 42, element: 'water', effects: { displace: { toRow: 'back', chance: 40 } }, desc: 'Pressure that drives the whole enemy line backwards out of formation.' }),
+  def({ name: 'Elder Flame', stat: 'INT', type: 'damage', channel: 'magic', target: 'enemy', cooldown: 5, accuracy: 92, power: 60, status: { kind: 'burn', chance: 46, duration: 3 }, desc: 'Fire from before the leagues were drawn; 46% chance to set the target alight.' }),
+  def({ name: 'Crushing Deep', stat: 'INT', type: 'damage', channel: 'magic', target: 'allEnemies', cooldown: 6, accuracy: 88, power: 42, effects: { displace: { toRow: 'back', chance: 40 } }, desc: 'Pressure that drives the whole enemy line backwards out of formation.' }),
   def({ name: 'Entropy Cascade', stat: 'INT', type: 'damage', channel: 'magic', target: 'enemy', cooldown: 6, accuracy: 90, power: 52, effects: { spreadStatus: { targets: 2, chance: 40 } }, desc: 'Whatever is wrong with them spreads to two more.' }),
   def({ name: 'Void Pulse', stat: 'INT', type: 'damage', channel: 'magic', target: 'allEnemies', cooldown: 5, accuracy: 88, power: 40, status: { kind: 'vulnerable', chance: 40, duration: 3 }, desc: 'A pulse of nothing at all; 40% chance to leave each foe Vulnerable.' }),
   def({ name: 'Ancient Knowing', stat: 'WIS', type: 'buff', channel: 'support', target: 'team', cooldown: 6, accuracy: 100, power: 30, effects: { cleanse: true }, desc: 'Knowledge older than injury: 30 HP to each ally and every ailment cleared.' }),
@@ -173,7 +173,7 @@ const MYTHICAL: SignatureDef[] = [
   def({ name: 'Aegis Bond', stat: 'CHA', type: 'buff', channel: 'voice', target: 'team', cooldown: 6, accuracy: 100, power: 0, effects: { thorns: 7, hpRegenBuff: 5, duration: 4 }, desc: 'Binds the team together: 7 thorns and +5 HP/turn for everyone, 4 rounds.' }),
   // PAYOFF — pool Siren's Call cashes fear at x1.5.
   def({ name: 'Cosmic Precision', stat: 'CHA', type: 'damage', channel: 'voice', target: 'enemy', cooldown: 5, accuracy: 95, power: 60, effects: { bonusVsStatus: { kind: 'fear', mult: 2.0, consume: true } }, desc: 'Finds the one gap that matters; doubles down on anything already afraid.' }),
-  def({ name: 'Stellar Cascade', stat: 'CHA', type: 'damage', channel: 'voice', target: 'backRow', cooldown: 6, accuracy: 90, power: 46, element: 'air', effects: { displace: { toRow: 'front', chance: 45 } }, desc: 'Hauls whoever is hiding at the back out into the open.' }),
+  def({ name: 'Stellar Cascade', stat: 'CHA', type: 'damage', channel: 'voice', target: 'backRow', cooldown: 6, accuracy: 90, power: 46, effects: { displace: { toRow: 'front', chance: 45 } }, desc: 'Hauls whoever is hiding at the back out into the open.' }),
   def({ name: 'Unstoppable', stat: 'CHA', type: 'damage', channel: 'voice', target: 'enemy', cooldown: 5, accuracy: 92, power: 58, effects: { hpScale: { atFull: 1.6, atEmpty: 0.8 }, pierce: 0.3 }, desc: 'Nothing has stopped it yet, and it hits like it knows.' }),
 ]
 

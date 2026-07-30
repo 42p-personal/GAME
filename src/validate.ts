@@ -5,7 +5,7 @@
 // hand-synced reward tables drifting apart. `designProblems()` returns the raw
 // list so the vitest suite can assert it's empty; `validateDesign()` is the
 // console wrapper main.tsx runs in dev.
-import { BODY_ELEMENT, BodyType, CLASSES, GAMEPLANS, LEAGUES, STATS, STATUS_INFO, StatusKind, TARGET_PRIORITY_INFO, TEMPERAMENT_INFO, classForStats } from './core'
+import { CLASSES, GAMEPLANS, LEAGUES, STATS, STATUS_INFO, StatusKind, TARGET_PRIORITY_INFO, TEMPERAMENT_INFO, classForStats } from './core'
 import { LINES, CLASS_LINES } from './lines'
 import { SPECIES } from './species'
 import { ALL_MOVES } from './moves'
@@ -98,17 +98,6 @@ export function designProblems(): string[] {
     seenPairs.set(key, c.name)
   }
 
-  // Element affinities: every body type must have a unique (resist, weak) pair.
-  // ONE sanctioned exception: all 12 distinct pairs are taken, so Primeval
-  // (v0.88 prestige fusion) deliberately inherits Mythical's celestial affinity.
-  const seenElements = new Map<string, string>()
-  for (const [body, aff] of Object.entries(BODY_ELEMENT) as [BodyType, { resist: string; weak: string }][]) {
-    if (aff.resist === aff.weak) problems.push(`BODY_ELEMENT: ${body} resists and is weak to ${aff.resist}.`)
-    const key = aff.resist + '>' + aff.weak
-    const prev = seenElements.get(key)
-    if (prev && !(body === 'Primeval' && prev === 'Mythical')) problems.push(`BODY_ELEMENT: ${body} duplicates ${prev}'s affinity (resist ${aff.resist} / weak ${aff.weak}).`)
-    seenElements.set(key, body)
-  }
 
   for (const sp of SPECIES) {
     // The class its base stats derive must match its declared naturalClass.

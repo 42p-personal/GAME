@@ -195,8 +195,7 @@ CHA 26.8 · WIS 22.8. The support tier is not underpowered — it is paid in uti
 
 ### Battle sim (`src/battle.ts`)
 - Every skill costs MP (`monster.ts:manaCost`, 2× the base formula); free universal Attack + Block;
-  per-turn choice policy in `chooseAction`, element-aware (`effPower` folds in resist/weak vs the
-  foe's body, plus firstStrikeMult when live).
+  per-turn choice policy in `chooseAction` (`effPower` folds in firstStrikeMult when live).
 - `maxMana = WIS + floor(INT/2)`; WIS is the sole regen stat; `maxHp = 40 + CON×2.0`
   (`monster.ts:maxHp`, shared by BOTH engines — changing it moves the goldens).
 - Guard (flat DR) lasts until the guardian's NEXT ACTION and mitigates every hit in between.
@@ -242,8 +241,22 @@ CHA 26.8 · WIS 22.8. The support tier is not underpowered — it is paid in uti
   (Avian+Aquatic), Broodkin (Marsupial+Insectoid), and Primeval — the *prestige* fusion
   (Mythical + Draconic/Abyssal), capped by `PRIMEVAL_GEN1_CAP`.
 
-Every body type has a UNIQUE element (resist, weak) pair enforced by `validate.ts` — ⚠️ except
-**Primeval**, which INHERITS Mythical's pair because all 12 distinct pairs were already taken.
+⚠️ **ELEMENTS ARE REMOVED FROM THE GAME (2026-07-30).** Body types no longer carry a
+resist/weak pair, moves no longer carry an element, and there is no damage multiplier for
+either. `Element`, `ELEMENTS`, `BODY_ELEMENT` and `elementMultiplier` are gone from
+`core.ts`; the `validate.ts` uniqueness guard is gone with them.
+
+*Why:* the field engine never implemented it — `grep element src/tamerengine/engine.ts`
+returned nothing — so a 13-body matrix that `validate.ts` policed for uniqueness had **zero
+mechanical effect** in the engine the game is moving to, and only 14 of 137 moves carried one
+at all. A resist/weak table a player cannot observe is bookkeeping, not a mechanic. INT
+expresses itself through statuses, zones and the widest debuff vocabulary in the pool instead.
+
+⚠️ **Do not reintroduce an `element` field** without also implementing it on the field engine;
+that split is exactly what made it dead weight. Two knock-ons to remember: the `Elementalist`
+LINE NAME (INT) is unrelated and stays, and the innate once called `elemDmgMult` (Arcane Bolt,
+Spellblade) is now `magicDmgMult` and reads the CHANNEL, so those species keep a live innate.
+
 Full backstories + per-type themes: `docs/BESTIARY.md`; fusion recipes: `docs/FUSION_DESIGN.md`.
 
 ---
@@ -292,7 +305,7 @@ The pool rework is DONE (137 moves, 18 lines, all six stats). Still outstanding,
 | `src/game.ts` | Career state, drills/training, applyWeek()/previewWeekEffects(), aptitudes, food math, statCapFor() |
 | `src/drills.ts` | The **30** training drills: 6 basic + 12 intensive + 6 extreme + 6 diverse |
 | `src/App.tsx` | UI: TownView, RanchView, AbilitySelector, EventModal, saves, migration |
-| `src/core.ts` | Types, classes, elements, MoveEffects, Tactics, GAMEPLANS, Rival, foods, RNG, the three ability axes (`statScale`/`mana`/`variance`), `HARD_CONTROL_STATUSES` |
+| `src/core.ts` | Types, classes, MoveEffects, Tactics, GAMEPLANS, Rival, foods, RNG, the three ability axes (`statScale`/`mana`/`variance`), `HARD_CONTROL_STATUSES` |
 | `src/species.ts` | **65 species** = 13 body types x 5 (30 base + 15 prestige + 20 fusion) + computed BODY_AVERAGES |
 | `src/moves.ts` | The **137**-move pool, 23/stat (WIS 22), grouped into 18 lines. ⚠️ `docs/ABILITIES.md` still lists the PRE-REWORK 90 and is stale; `docs/ABILITY_REWORK.md` is the live design doc |
 | `src/lines.ts` | The 18 ability LINES, per-class affinity (`CLASS_LINES`), and `LINE_OF` for every move. ⚠️ The fix for three waves of authored-but-unreachable content |

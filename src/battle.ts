@@ -9,7 +9,7 @@
 // when this was strictly 1v1. `simulateBattle` (still exported) is a thin
 // team-of-1 wrapper over `simulateTeamBattle`, so every existing 1v1 call site
 // (Sandbox) keeps working unchanged.
-import { Ability, Channel, Element, ManaPolicy, Monster, Move, RNG, StatusKind, Temperament, chance, elementMultiplier, frontRowCount, aoeFalloff, happinessMultiplier, hashString, mulberry32, randInt, rollVariance, SPREADABLE_STATUSES } from './core'
+import { Ability, Channel, ManaPolicy, Monster, Move, RNG, StatusKind, Temperament, chance, frontRowCount, aoeFalloff, happinessMultiplier, hashString, mulberry32, randInt, rollVariance, SPREADABLE_STATUSES } from './core'
 import {
   attackStat, critChance, debuffBonus, debuffReduction, dodgeChance, echoChance, hpRegen,
   manaCost, manaRegen, maxHp, maxMana, mitigationPierce, staminaDamageMult,
@@ -26,7 +26,7 @@ interface ActiveStatus { kind: StatusKind; turns: number }
 export type BattleSide = 'A' | 'B'
 export type BattleEvent =
   | { kind: 'round'; n: number }
-  | { kind: 'hit'; side: BattleSide; slot: number; targetSide: BattleSide; targetSlot: number; move: string; channel: Channel; element?: Element; dmg: number; hits: number; crit: boolean; execute: boolean; eff: 'super' | 'resist' | null; lifesteal: number; manaBurn: number; recoil: number; warded: number; self: boolean }
+  | { kind: 'hit'; side: BattleSide; slot: number; targetSide: BattleSide; targetSlot: number; move: string; channel: Channel; dmg: number; hits: number; crit: boolean; execute: boolean; lifesteal: number; manaBurn: number; recoil: number; warded: number; self: boolean }
   | { kind: 'miss'; side: BattleSide; slot: number; targetSide: BattleSide; targetSlot: number; move: string; channel: Channel; blocked: boolean }
   | { kind: 'stance'; side: BattleSide; slot: number; avoid: number }
   | { kind: 'utility'; side: BattleSide; slot: number; targetSide: BattleSide; targetSlot: number; move: string; heal: number; hostile: boolean }
@@ -57,7 +57,7 @@ interface InnateEffect {
   crit?: number // bonus critical-hit % (stacks with DEX-derived critChance)
   pierce?: number // fraction of target mitigation ignored (stacks with STR pierce + skill pierce)
   echo?: number // bonus % chance a skill casts twice (stacks with INT-derived echoChance)
-  elemDmgMult?: number // multiplier on damage from ELEMENTAL moves only
+  magicDmgMult?: number // multiplier on damage from MAGIC-channel moves (was elemental, pre-removal)
   executeMult?: number // damage multiplier vs targets below 30% HP
   startWard?: number // begins every battle with an absorb shield of this many HP
   manaSteal?: number // fraction of damage dealt drained from the target's mana into own
@@ -87,7 +87,7 @@ interface InnateEffect {
 export const INNATE_EFFECTS: Record<string, InnateEffect> = {
   // --- Thematic redistribution (user spec 2026-07-25): crit → DEX majors then
   // Reptilians; pierce → STR majors then Mammals; mana regen → WIS then Avians;
-  // elemental/echo → INT then Aquatics; auras → CHA majors then Marsupials;
+  // magic-damage/echo → INT then Aquatics; auras → CHA majors then Marsupials;
   // flat-DR trimmed on the tournament-dominant CON tanks. ---
 
   // damage reduction (self) — every entry its own defensive texture (2026-07-25:
@@ -134,8 +134,8 @@ export const INNATE_EFFECTS: Record<string, InnateEffect> = {
   Rend: { crit: 8 }, Whirlwind: { crit: 7 }, 'Current Rider': { crit: 6, acc: 2 }, 'Tail Drop': { crit: 10 },
   // armour piercing — STR majors (Mantevoke/Bruxaroo) + Mammal (Ursath); serrated cuts deepest
   'Serrated Claws': { pierce: 0.18 }, Southpaw: { pierce: 0.12 }, Maul: { pierce: 0.15 },
-  // elemental mastery / double-cast — INT majors + Aquatics; echo 6/8/10/12 ladder
-  'Arcane Bolt': { elemDmgMult: 1.1 }, Spellblade: { elemDmgMult: 1.12 },
+  // magic mastery / double-cast — INT majors + Aquatics; echo 6/8/10/12 ladder
+  'Arcane Bolt': { magicDmgMult: 1.1 }, Spellblade: { magicDmgMult: 1.12 },
   Wellspring: { echo: 10 }, 'Tentacle Barrage': { echo: 8 }, // eight arms — some casts come twice
   'Spell Echo': { echo: 12 }, // finally does what its name says
   // openers — bonus multiplier on this monster's first landed hit (self);
@@ -259,7 +259,7 @@ const currentInnate = (m: Monster): Ability | undefined =>
 function innateEffects(m: Monster): Required<InnateEffect> {
   const out: Required<InnateEffect> = {
     flatDR: 0, dodge: 0, acc: 0, regen: 0, hpRegen: 0, dmgMult: 1, firstHitMult: 1, lifesteal: 0,
-    lowHpDmgMult: 1, highHpDmgMult: 1, crit: 0, pierce: 0, echo: 0, elemDmgMult: 1, executeMult: 1,
+    lowHpDmgMult: 1, highHpDmgMult: 1, crit: 0, pierce: 0, echo: 0, magicDmgMult: 1, executeMult: 1,
     startWard: 0, manaSteal: 0, buffExtend: 0, debuffExtend: 0, debuffResist: 0, statusOnHit: null,
     auraFlatDR: 0, auraDodge: 0, auraRegen: 0, auraHpRegen: 0, auraDmgMult: 1,
     enemyAccDebuff: 0, enemyDodgeDebuff: 0, enemyRegenDebuff: 0, enemyDmgDebuff: 0,
@@ -280,7 +280,7 @@ function innateEffects(m: Monster): Required<InnateEffect> {
   out.crit += e.crit ?? 0
   out.pierce += e.pierce ?? 0
   out.echo += e.echo ?? 0
-  out.elemDmgMult *= e.elemDmgMult ?? 1
+  out.magicDmgMult *= e.magicDmgMult ?? 1
   out.executeMult *= e.executeMult ?? 1
   out.startWard += e.startWard ?? 0
   out.manaSteal += e.manaSteal ?? 0
@@ -707,9 +707,6 @@ function effPower(mv: Move, foe: Combatant, self?: Combatant, foeCount = 1, foes
   if (e?.maxHpDmg) p += foe.maxHp * e.maxHpDmg
   // Element-aware (2026-07-25 review fix): the damage calc has always applied
   // the body-type resist/weak multiplier, but the AI never consulted it when
-  // ranking moves — so a caster would happily throw a resisted element when a
-  // neutral or super-effective option sat in the same loadout.
-  if (mv.element) p *= elementMultiplier(foe.m.species.body, mv.element)
   // First-strike tools ranked at their real value when the foe hasn't acted
   // yet this round (the hit resolves immediately, so live state is correct).
   if (e?.firstStrikeMult && !foe.actedThisRound) p *= e.firstStrikeMult
@@ -800,7 +797,6 @@ function estimateDamage(mv: Move, attacker: Combatant, target: Combatant, foeCou
   if (e?.consumeThorns) dmg *= 1 + e.consumeThorns * attacker.thornsFlat
   if (e?.execute && target.hp / target.maxHp <= e.execute) dmg *= 1.5
   if (e?.bonusVsStatus && hasStatus(target, e.bonusVsStatus.kind)) dmg *= e.bonusVsStatus.mult
-  if (mv.element) dmg *= elementMultiplier(target.m.species.body, mv.element)
   if (hasStatus(target, 'vulnerable')) dmg *= VULNERABLE_MULT
   const mitig = (mv.channel === 'melee' || mv.channel === 'ranged')
     ? target.m.stats.CON * 0.04 : target.m.stats.WIS * 0.04
@@ -1392,14 +1388,10 @@ function resolveDamageOnTarget(attacker: Combatant, target: Combatant, move: Mov
       log.push(`    ${attacker.m.name} exploits ${target.m.name}'s ${e.bonusVsStatus.kind}!`)
     }
   }
-  // elemental affinity: resisted or super-effective vs the target's body type (§8.5)
-  let effNote = ''
-  if (move.element) {
-    const em = elementMultiplier(target.m.species.body, move.element)
-    dmg *= em * attacker.innate.elemDmgMult // innate elemental mastery only ever amplifies elemental moves
-    if (em > 1) effNote = ' — super effective!'
-    else if (em < 1) effNote = ' — resisted'
-  }
+  // ⚠️ ELEMENTS REMOVED. Body-type resist/weak used to multiply damage here. The
+  // innate that amplified it (`magicDmgMult`, once elemental mastery) now reads
+  // the CHANNEL instead, so Arcane Bolt / Spellblade still mean something.
+  if (move.channel === 'magic') dmg *= attacker.innate.magicDmgMult
   // physical channels mitigated by target CON + guard; magic/voice/support by WIS
   // (§11); buffs/shreds shift it; pierce ignores a fraction of the total.
   // CON coefficient trimmed 0.06 → 0.05 (2026-07-25) — part of the anti-tank-
@@ -1463,11 +1455,11 @@ function resolveDamageOnTarget(attacker: Combatant, target: Combatant, move: Mov
   }
   const noteStr = notes.length ? ` (${notes.join(', ')})` : ''
   const critNote = crit ? ' — CRITICAL HIT!' : ''
-  log.push(`  ${attacker.m.name} uses ${move.name}${hitNote} → ${dmg} damage to ${target.m.name}${critNote}${execNote}${effNote}${wardNote}${noteStr}.`)
+  log.push(`  ${attacker.m.name} uses ${move.name}${hitNote} → ${dmg} damage to ${target.m.name}${critNote}${execNote}${wardNote}${noteStr}.`)
   ev.push({
     kind: 'hit', side: attacker.side, slot: attacker.slot, targetSide: target.side, targetSlot: target.slot,
-    move: move.name, channel: move.channel, element: move.element,
-    dmg, hits, crit, execute: execNote !== '', eff: effNote.includes('super') ? 'super' : effNote.includes('resisted') ? 'resist' : null,
+    move: move.name, channel: move.channel,
+    dmg, hits, crit, execute: execNote !== '',
     lifesteal: stolen, manaBurn: burned, recoil, warded: absorbed, self: target === attacker,
   })
 

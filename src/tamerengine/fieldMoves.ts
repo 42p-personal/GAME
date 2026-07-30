@@ -146,7 +146,7 @@ export const ARENA_MOVES: Move[] = [
   {
     id: 'FLD-INT-2', name: 'Meteor', stat: 'INT', learnLevel: 850, type: 'damage',
     channel: 'magic', target: 'enemy', cooldown: 8, accuracy: 80, power: 46,
-    element: 'fire', range: 12, castTime: 1.1, // the longest wind-up in the game
+    range: 12, castTime: 1.1, // the longest wind-up in the game
     spatial: { area: { shape: 'circle', centre: 'target', radius: 5.5 } },
     desc: 'Call something enormous down. It takes a while to arrive.',
   },

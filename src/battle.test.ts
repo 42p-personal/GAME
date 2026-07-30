@@ -66,10 +66,13 @@ const GOLDENS = [
     // now scales with its learnLevel (x1.00 at lv40 -> x1.95 damage stats /
     // x1.55 support stats at lv920), so every team's kit hits harder and the
     // goldens move together. Deliberate, not a regression.
+    // ⚠️ Recaptured for the ELEMENT REMOVAL — body-type resist/weak no longer
+    // multiplies damage, so every fight involving a resisted or super-effective
+    // move resolves differently. Deliberate; elements are gone from the game.
     winner: 'B', events: 43, logLines: 36,
     finals: [
       { side: 'A', slot: 0, hp: 0, mana: 501, wasKOd: true },
-      { side: 'B', slot: 0, hp: 744, mana: 675, wasKOd: false },
+      { side: 'B', slot: 0, hp: 530, mana: 675, wasKOd: false },
     ],
   },
   {
@@ -108,12 +111,15 @@ const GOLDENS = [
     // now scales with its learnLevel (x1.00 at lv40 -> x1.95 damage stats /
     // x1.55 support stats at lv920), so every team's kit hits harder and the
     // goldens move together. Deliberate, not a regression.
-    winner: 'B', events: 73, logLines: 63,
+    // ⚠️ Recaptured for the ELEMENT REMOVAL — body-type resist/weak no longer
+    // multiplies damage, so every fight involving a resisted or super-effective
+    // move resolves differently. Deliberate; elements are gone from the game.
+    winner: 'A', events: 117, logLines: 95,
     finals: [
       { side: 'A', slot: 0, hp: 0, mana: 289, wasKOd: true },
-      { side: 'A', slot: 1, hp: 0, mana: 243, wasKOd: true },
-      { side: 'B', slot: 0, hp: 54, mana: 200, wasKOd: false },
-      { side: 'B', slot: 1, hp: 216, mana: 313, wasKOd: false },
+      { side: 'A', slot: 1, hp: 29, mana: 162, wasKOd: false },
+      { side: 'B', slot: 0, hp: 0, mana: 211, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 309, wasKOd: true },
     ],
   },
   {
@@ -205,14 +211,17 @@ const GOLDENS = [
     // now scales with its learnLevel (x1.00 at lv40 -> x1.95 damage stats /
     // x1.55 support stats at lv920), so every team's kit hits harder and the
     // goldens move together. Deliberate, not a regression.
-    winner: 'B', events: 405, logLines: 293,
+    // ⚠️ Recaptured for the ELEMENT REMOVAL — body-type resist/weak no longer
+    // multiplies damage, so every fight involving a resisted or super-effective
+    // move resolves differently. Deliberate; elements are gone from the game.
+    winner: 'A', events: 352, logLines: 250,
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 684, wasKOd: true },
-      { side: 'A', slot: 1, hp: 0, mana: 183, wasKOd: true },
-      { side: 'A', slot: 2, hp: 0, mana: 754, wasKOd: true },
+      { side: 'A', slot: 0, hp: 0, mana: 716, wasKOd: true },
+      { side: 'A', slot: 1, hp: 304, mana: 171, wasKOd: false },
+      { side: 'A', slot: 2, hp: 0, mana: 763, wasKOd: true },
       { side: 'B', slot: 0, hp: 0, mana: 757, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 772, wasKOd: true },
-      { side: 'B', slot: 2, hp: 663, mana: 23, wasKOd: false },
+      { side: 'B', slot: 1, hp: 0, mana: 748, wasKOd: true },
+      { side: 'B', slot: 2, hp: 0, mana: 69, wasKOd: true },
     ],
   },
 ] as const

@@ -36,7 +36,7 @@ export const SPECIES: Species[] = [
     innate: [{ name: 'Ambush Strike', desc: '+40% damage on its first hit. +4% accuracy.' }, { name: 'Statue Stance', desc: '+10% damage while above 70% HP.' }] },
   { id: 'corvaan', name: 'Corvaan', body: 'Avian', naturalClass: 'Wizard', base: s(12, 26, 16, 30, 40, 16), lifespan: 4, flavour: 'Raven, sharp-eyed and light-fingered.',
     trainingProfile: {},
-    innate: [{ name: 'Arcane Bolt', desc: '+10% elemental damage.' }, { name: 'Hex', desc: 'Enemies: -4% accuracy. Enemies: -1 mana regen/turn.' }] },
+    innate: [{ name: 'Arcane Bolt', desc: '+10% magic damage.' }, { name: 'Hex', desc: 'Enemies: -4% accuracy. Enemies: -1 mana regen/turn.' }] },
   { id: 'larkessa', name: 'Larkessa', body: 'Avian', naturalClass: 'Bard', base: s(12, 34, 14, 22, 16, 42), lifespan: 4, flavour: 'Songlark, voice carries for miles.',
     trainingProfile: { major: 'CHA', flaw: 'INT' },
     innate: [{ name: 'Song of Valor', desc: 'Team: +4% damage.' }, { name: 'Encore', desc: '25% chance its buffs last an extra round.' }] },
@@ -75,9 +75,9 @@ export const SPECIES: Species[] = [
     innate: [{ name: 'Wing Current', desc: '+10% dodge chance.' }, { name: 'Current Rider', desc: '+6% critical hit chance. +2% accuracy.' }] },
   { id: 'lanterix', name: 'Lanterix', body: 'Aquatic', naturalClass: 'Spellsword', base: s(20, 14, 36, 24, 40, 12), lifespan: 5, flavour: 'Lanternfish, a living lure glowing in the abyss.',
     trainingProfile: { major: 'WIS', flaw: 'DEX' },
-    innate: [{ name: 'Spellblade', desc: '+12% elemental damage.' }, { name: 'Abyssal Glow', desc: '+3 mana regen/turn.' }] },
+    innate: [{ name: 'Spellblade', desc: '+12% magic damage.' }, { name: 'Abyssal Glow', desc: '+3 mana regen/turn.' }] },
 
-  // --- Insectoid (⛰️ resist / 💧 weak) — chitinous, tireless; covers WIS/DEX training weaknesses ---
+  // --- Insectoid — chitinous, tireless; covers WIS/DEX training weaknesses ---
   { id: 'scarabrute', name: 'Scarabrute', body: 'Insectoid', naturalClass: 'Tank', base: s(36, 16, 44, 8, 14, 12), lifespan: 5, flavour: 'Colossal beetle, armoured shell built like a dam.',
     trainingProfile: {},
     innate: [{ name: 'Chitin Plate', desc: 'Reduces damage taken by 1 per hit. Starts battle with a 12 HP shield.' }, { name: 'Burrow', desc: '+4% dodge chance.' }] },
@@ -94,7 +94,7 @@ export const SPECIES: Species[] = [
     trainingProfile: { major: 'DEX', flaw: 'WIS' },
     innate: [{ name: 'Skim Dart', desc: '+25% damage on its first hit.' }, { name: 'Compound Eyes', desc: '+11% accuracy.' }] },
 
-  // --- Reptilian (🔥 resist / 💨 weak) — slow, patient, cold-blooded; covers DEX/WIS training weaknesses ---
+  // --- Reptilian — slow, patient, cold-blooded; covers DEX/WIS training weaknesses ---
   { id: 'crocmaw', name: 'Crocmaw', body: 'Reptilian', naturalClass: 'Warrior', base: s(44, 10, 38, 20, 12, 14), lifespan: 6, flavour: 'River crocodile, a patient ambush predator.',
     trainingProfile: { major: 'STR', flaw: 'WIS' },
     innate: [{ name: 'Death Roll', desc: '+25% damage to enemies below 30% HP.' }, { name: 'Armored Scales', desc: 'Reduces damage taken by 1 per hit. +1 HP regen/turn.' }] },

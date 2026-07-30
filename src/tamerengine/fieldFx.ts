@@ -10,7 +10,7 @@
 //
 // The point (user requirement): "all the abilities used by monsters will have
 // animations so the player can clearly see what is happening."
-import { Channel, Element, StatusKind } from '../core'
+import { Channel, StatusKind } from '../core'
 
 /** How the effect is delivered from caster to target. */
 export type FxStruct = 'lunge' | 'proj' | 'burst' | 'stance'
@@ -28,9 +28,6 @@ export const TRAVELS = new Set<FxKind>(['arrow', 'beam', 'fireball', 'waterbolt'
 
 export interface MoveFx { struct: FxStruct; kind: FxKind; color: string }
 
-const ELEMENT_COLOR: Record<Element, string> = {
-  fire: '#ff7043', water: '#4fc3f7', earth: '#a1887f', air: '#fff59d',
-}
 const CHANNEL_COLOR: Record<Channel, string> = {
   melee: '#f0f0f0', ranged: '#ffd54f', magic: '#ba68c8', voice: '#f48fb1', support: '#80cbc4',
 }
@@ -56,12 +53,14 @@ const KIND_STRUCT: Partial<Record<FxKind, FxStruct>> = {
   chain: 'burst', cage: 'burst', firewall: 'burst', notes: 'stance',
 }
 
-/** Base motion from channel + element (element wins — it's the more specific id). */
-function baseFx(channel: Channel, element?: Element): MoveFx {
-  if (element === 'fire') return { struct: 'proj', kind: 'fireball', color: ELEMENT_COLOR.fire }
-  if (element === 'water') return { struct: 'proj', kind: 'waterbolt', color: ELEMENT_COLOR.water }
-  if (element === 'earth') return { struct: 'burst', kind: 'earthspike', color: ELEMENT_COLOR.earth }
-  if (element === 'air') return { struct: 'burst', kind: 'lightning', color: ELEMENT_COLOR.air }
+/**
+ * Base motion from the CHANNEL.
+ * ⚠️ ELEMENTS REMOVED — this used to branch on fire/water/earth/air first, since
+ * an element was the more specific identity. With elements gone the channel is
+ * the only delivery signal, and it is the one that actually maps to how the move
+ * behaves (a lunge, a bolt, a shout).
+ */
+function baseFx(channel: Channel): MoveFx {
   if (channel === 'melee') return { struct: 'lunge', kind: 'claw', color: CHANNEL_COLOR.melee }
   if (channel === 'ranged') return { struct: 'proj', kind: 'arrow', color: CHANNEL_COLOR.ranged }
   if (channel === 'voice') return { struct: 'burst', kind: 'sonic', color: CHANNEL_COLOR.voice }
@@ -70,8 +69,8 @@ function baseFx(channel: Channel, element?: Element): MoveFx {
 }
 
 /** The full visual for a move: its bespoke signature if it has one, else the base. */
-export function moveFx(moveName: string | undefined, channel: Channel, element?: Element): MoveFx {
-  const base = baseFx(channel, element)
+export function moveFx(moveName: string | undefined, channel: Channel): MoveFx {
+  const base = baseFx(channel)
   const bespoke = moveName ? BESPOKE_KIND[moveName] : undefined
   if (!bespoke) return base
   return { struct: KIND_STRUCT[bespoke] ?? base.struct, kind: bespoke, color: base.color }

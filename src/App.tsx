@@ -1,6 +1,6 @@
 import { Dispatch, ReactNode, SetStateAction, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  BODY_ELEMENT, BODY_MINOR, BodyType, isFusionBody, isPrestigeBody, CC_INFO, COMBO_INFO, DEFAULT_TACTICS, Element, FOODS, FoodDef, FoodTier, GAMEPLANS, INNATE_SECONDARY_LEVEL, LEAGUES, MANA_POLICY_INFO, MatchOrders, Monster, Move, PRESERVE_INFO, STATS, Stat,
+  BODY_MINOR, BodyType, isFusionBody, isPrestigeBody, CC_INFO, COMBO_INFO, DEFAULT_TACTICS, FOODS, FoodDef, FoodTier, GAMEPLANS, INNATE_SECONDARY_LEVEL, LEAGUES, MANA_POLICY_INFO, MatchOrders, Monster, Move, PRESERVE_INFO, STATS, Stat,
   TARGET_PRIORITY_INFO, TEMPERAMENT_INFO, Tactics, classForStats,
   feedDelta, frontRowCount, happinessMultiplier, hashString, mulberry32, roleOfClass, rowOfSlot,
 } from './core'
@@ -42,7 +42,6 @@ const STAT_COLOR: Record<Stat, string> = {
   STR: 'var(--str)', DEX: 'var(--dex)', CON: 'var(--con)',
   WIS: 'var(--wis)', INT: 'var(--int)', CHA: 'var(--cha)',
 }
-const ELEMENT_ICON: Record<Element, string> = { fire: '🔥', water: '💧', earth: '⛰️', air: '💨' }
 
 function StatBar({ stat, value, max }: { stat: Stat; value: number; max: number }) {
   return (
@@ -160,7 +159,6 @@ function MonsterCard({ m }: { m: Monster }) {
       </div>
 
       <div className="afftaste">
-        <span>Element: <b className="up">{ELEMENT_ICON[BODY_ELEMENT[m.species.body].resist]} resist</b> · <b className="down">{ELEMENT_ICON[BODY_ELEMENT[m.species.body].weak]} weak</b></span>
         <span>Food preferences: <b className="up">♥ {m.favouriteFood}</b> · <b className="down">✖ {m.hatedFood}</b></span>
       </div>
 
@@ -181,7 +179,7 @@ function MonsterCard({ m }: { m: Monster }) {
         {m.loadout.map((mv) => (
           <div className="move" key={mv.id}>
             <span className="lvl">{mv.stat} {mv.learnLevel}</span>
-            <span className="mn">{mv.element ? ELEMENT_ICON[mv.element] + ' ' : ''}{mv.name}</span>
+            <span className="mn">{mv.name}</span>
             <div className="md">{mv.desc} {mv.status ? `(${mv.status.kind})` : ''} · {manaCost(mv)} MP · cd {mv.cooldown} · acc {mv.accuracy}</div>
           </div>
         ))}
@@ -218,7 +216,6 @@ function ScoutReport({ m, tier }: { m: Monster; tier: 'basic' | 'full' | undefin
       </div>
 
       <div className="afftaste">
-        <span>Element: <b className="up">{ELEMENT_ICON[BODY_ELEMENT[m.species.body].resist]} resist</b> · <b className="down">{ELEMENT_ICON[BODY_ELEMENT[m.species.body].weak]} weak</b></span>
       </div>
 
       {STATS.map((k) => knowsStats
@@ -236,7 +233,7 @@ function ScoutReport({ m, tier }: { m: Monster; tier: 'basic' | 'full' | undefin
         {knowsKit ? m.loadout.map((mv) => (
           <div className="move" key={mv.id}>
             <span className="lvl">{mv.stat} {mv.learnLevel}</span>
-            <span className="mn">{mv.element ? ELEMENT_ICON[mv.element] + ' ' : ''}{mv.name}</span>
+            <span className="mn">{mv.name}</span>
             <div className="md">{mv.desc} {mv.status ? `(${mv.status.kind})` : ''} · {manaCost(mv)} MP · cd {mv.cooldown} · acc {mv.accuracy}</div>
           </div>
         )) : <div className="md dim">?? — pay to scout its class &amp; loadout.</div>}
@@ -311,8 +308,7 @@ function Bestiary({ specialLicense, eliteLicense }: { specialLicense: boolean; e
           <div className="bestgroup" key={bt}>
             <div className="bestgroup-h">
               {bt}{minor && <> · minor <span style={{ color: STAT_COLOR[minor] }}>{minor}</span></>}
-              {' '}· resist {ELEMENT_ICON[BODY_ELEMENT[bt].resist]} · weak {ELEMENT_ICON[BODY_ELEMENT[bt].weak]}
-            </div>
+                          </div>
             {locked
               ? <div className="dim bsmall">🔒 {SPECIES.filter((s) => s.body === bt).length} species — unlock with the {licenseName}.</div>
               : SPECIES.filter((s) => s.body === bt).map((s) => {
@@ -1408,7 +1404,7 @@ function TacticsControls({ value, onChange, loadout, teamPlay }: {
             return (
               <button key={mv.id} className={'tacticopt' + (pos >= 0 ? ' on' : '')}
                 onClick={() => toggleOpener(mv.id)}>
-                {pos >= 0 ? `${pos + 1}. ` : (mv.element ? ELEMENT_ICON[mv.element] + ' ' : '▶ ')}{mv.name}
+                {pos >= 0 ? `${pos + 1}. ` : '▶ '}{mv.name}
               </button>
             )
           })}
@@ -1518,7 +1514,7 @@ function AbilitySelector({ m, name, onSetLoadout, onSetInnate, onSetTactics, onC
               <div className="slotlabel">Slot {i + 1}{selectedSlot === i ? ' — pick a move below' : ''}</div>
               {mv ? (
                 <>
-                  <div className="mn">{mv.element ? ELEMENT_ICON[mv.element] + ' ' : ''}{mv.name}</div>
+                  <div className="mn">{mv.name}</div>
                   <div className="md">{mv.stat} · {mv.channel} · {manaCost(mv)} MP · cd {mv.cooldown}</div>
                 </>
               ) : <div className="dim">empty slot</div>}
@@ -1538,7 +1534,7 @@ function AbilitySelector({ m, name, onSetLoadout, onSetInnate, onSetTactics, onC
           return (
             <div key={mv.id} className={'move' + (equipped ? ' dim-eq' : '')} onClick={() => !equipped && swap(mv)}>
               <span className="lvl">{mv.stat} {mv.learnLevel}</span>
-              <span className="mn">{mv.element ? ELEMENT_ICON[mv.element] + ' ' : ''}{mv.name}</span>
+              <span className="mn">{mv.name}</span>
               <div className="md">{mv.desc} · {mv.channel} · {manaCost(mv)} MP · cd {mv.cooldown} · acc {mv.accuracy}{equipped ? ' · equipped' : ''}</div>
             </div>
           )
@@ -2602,7 +2598,7 @@ function RanchView({ game, setGame, onBattleScreen }: {
                 {selM.loadout.map((mv) => (
                   <div className="detail-kit-move" key={mv.id}>
                     <span className="lvl">{mv.stat}</span>
-                    <span>{mv.element ? ELEMENT_ICON[mv.element] + ' ' : ''}{mv.name}</span>
+                    <span>{mv.name}</span>
                     <span className="dim">{manaCost(mv)} MP · cd {mv.cooldown}</span>
                   </div>
                 ))}

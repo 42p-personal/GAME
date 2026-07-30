@@ -154,8 +154,6 @@ export const rollVariance = (mv: Move, rng: RNG): number => {
 export type StatusKind = 'blind' | 'poison' | 'burn' | 'fear' | 'confusion' | 'stun' | 'knockback' | 'bleed' | 'silence' | 'vulnerable'
   | 'sleep' | 'doom' | 'healblock' | 'haste' | 'charm'
 
-export type Element = 'fire' | 'water' | 'earth' | 'air'
-export const ELEMENTS: Element[] = ['fire', 'water', 'earth', 'air']
 
 export type Food =
   | 'vegetables' | 'fruit' | 'meat' | 'sweet treats' // normal (taste-based)
@@ -233,7 +231,6 @@ export interface Move {
   accuracy: number // 0..100
   power: number // damage / heal scale; 0 for pure utility
   status?: MoveStatus
-  element?: Element // magic moves carry an element (§8.5)
   effects?: MoveEffects
   // ── Per-ability authoring axes (ability rework) ───────────────────────────
   /**
@@ -661,32 +658,8 @@ export const roleOfClass = (className: string): ClassRole => CLASS_ROLES[classNa
 // Each body type resists one element (takes less) and is weak to one (takes more).
 // Every body type has a UNIQUE (resist, weak) pair — no two share the same combo,
 // so elemental matchups always distinguish body types (validated in validate.ts).
-export const BODY_ELEMENT: Record<BodyType, { resist: Element; weak: Element }> = {
-  Mammal: { resist: 'water', weak: 'air' },
-  Avian: { resist: 'air', weak: 'water' }, // wind is a flier's home turf; waterlogged wings ground fast
-  Marsupial: { resist: 'earth', weak: 'fire' }, // sturdy against tremors; helpless in dry-brush fire
-  Aquatic: { resist: 'fire', weak: 'earth' },
-  Insectoid: { resist: 'earth', weak: 'water' }, // chitin shrugs off stone; rain drowns the swarm
-  Reptilian: { resist: 'fire', weak: 'air' }, // desert-baskers; cold winds still cold blood
-  Draconic: { resist: 'fire', weak: 'water' },
-  Abyssal: { resist: 'water', weak: 'fire' }, // crushing depths; surface heat is lethal
-  Mythical: { resist: 'air', weak: 'earth' }, // celestial beings; the ground rejects them
-  Saurian: { resist: 'earth', weak: 'air' }, // fusion (Mammal+Reptilian): grounded stone-scaled titans, unsettled by wind
-  Tempestine: { resist: 'air', weak: 'fire' }, // fusion (Avian+Aquatic): storm creatures at home in the gale, scattered by flame
-  Broodkin: { resist: 'water', weak: 'earth' }, // fusion (Marsupial+Insectoid): brood-carriers; chitin cracks under tremors
-  // Primeval (v0.88, prestige fusion — Mythical + Draconic/Abyssal): all 12
-  // distinct (resist, weak) pairs are taken, so Primeval INHERITS Mythical's
-  // celestial affinity — the one sanctioned duplicate (validate.ts knows).
-  Primeval: { resist: 'air', weak: 'earth' },
-}
 export const RESIST_MULT = 0.7
 export const WEAK_MULT = 1.3
-export function elementMultiplier(body: BodyType, element: Element): number {
-  const aff = BODY_ELEMENT[body]
-  if (aff.resist === element) return RESIST_MULT
-  if (aff.weak === element) return WEAK_MULT
-  return 1
-}
 
 // --- Food & happiness (§2.4 / §12) ---
 // Three tiers (2026-07-25 food overhaul):

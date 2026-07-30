@@ -5,9 +5,9 @@
 > Elite. A Tamer is a *partner*, not an owner: the Tamer provides training, care, and food; the monster
 > brings its own ambition. Nobody is forced into the ring.
 >
-> **The Intelligence stat is *arcane* intellect** — a creature's aptitude for elemental magic — **not**
+> **The Intelligence stat is *arcane* intellect** — a creature's aptitude for arcane magic — **not**
 > its sapience. A Warrior with INT 10 is every bit as thoughtful, willful, and clever as a Wizard with
-> INT 900; it simply channels no elemental power. Never read a low INT as "dumb."
+> INT 900; it simply channels no arcane power. Never read a low INT as "dumb."
 >
 > **Class is a title, not an identity — and this bestiary doesn't list one.** A monster isn't "born" a
 > Warrior or a Sage. Its class is just the current label for whichever two stats happen to be highest
@@ -16,7 +16,7 @@
 > makes certain classes the path of least resistance — but that's a weighting, not a lock. Any species
 > can be trained toward any class; it's just faster or slower depending on what the individual is
 > naturally suited to. Because of this, entries below never name a class — only the species' fixed
-> traits (body, elemental affinity, appearance) and its individual history. What a given monster becomes
+> traits (body, appearance) and its individual history. What a given monster becomes
 > is a story about *that monster*, not its species. (Class also determines battle tactics — see
 > CLAUDE.md item 4 — keyed off current stats at fight time, same as the label.)
 

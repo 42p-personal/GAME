@@ -7,13 +7,12 @@
 // log for the detailed narration either way.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { BattleEvent, BattleResult, BattleSide } from './battle'
-import { Channel, Element, Monster, Move, StatusKind, frontRowCount } from './core'
+import { Channel, Monster, Move, StatusKind, frontRowCount } from './core'
 import { maxHp, maxMana } from './monster'
 import { analyzeBattle } from './battleReport'
 import { Sprite } from './Sprite'
 import { backgroundFor } from './leagueArt'
 
-const ELEMENT_COLOR: Record<Element, string> = { fire: '#ff7043', water: '#4fc3f7', earth: '#a1887f', air: '#b0bec5' }
 const CHANNEL_COLOR: Record<Channel, string> = { melee: '#eee', ranged: '#ffd54f', magic: '#ba68c8', voice: '#f48fb1', support: '#80cbc4' }
 const STATUS_ICON: Record<StatusKind, string> = {
   blind: '🕶️', poison: '☠️', burn: '🔥', fear: '😱', confusion: '💫', stun: '💤', knockback: '💨',
@@ -43,10 +42,7 @@ type Bars = Record<string, BarState> // keyed by `${side}${slot}`
 // 'proj' — something travels from attacker to target (arrow/fireball/etc);
 // 'burst' — appears directly at the target with no travel (spike erupting
 // from the ground, a lightning strike, a soundwave, a psychic pulse).
-// Element always wins over channel when a move has one (INT's elemental
-// kit, plus the handful of STR/DEX moves with an element), since the
-// element is the more specific, more recognizable identity.
-// Base motions. The first nine are the original channel/element kit; the rest
+// Base motions. The first nine are the original channel kit; the rest
 // (v0.80) are BESPOKE motions hand-assigned to distinctive moves via BESPOKE_KIND
 // below — the "hybrid" the design calls for: shared bases for moves that
 // legitimately look alike (every fireball, every arrow), bespoke motions for the
@@ -70,7 +66,7 @@ interface Fx {
 
 // Bespoke base motion per move NAME (the acting Move is resolved from the
 // monster's loadout, so names are unique within a fight). Moves not listed fall
-// through to the channel/element base in fxFor — that's the hybrid.
+// through to the channel base in fxFor — that's the hybrid.
 const BESPOKE_KIND: Record<string, FxKind> = {
   // Heavy overhead impacts — crater + screen shake.
   'Power Strike': 'slam', 'Reckless Slam': 'slam', 'Titanfall': 'slam', 'Shell Slam': 'slam',
@@ -99,26 +95,26 @@ const KIND_STRUCT: Partial<Record<FxKind, FxStruct>> = {
   chain: 'burst', cage: 'burst', firewall: 'burst', notes: 'stance',
 }
 
-function fxFor(channel: Channel, element?: Element): { struct: FxStruct; kind: FxKind; color: string } {
-  if (element === 'fire') return { struct: 'proj', kind: 'fireball', color: ELEMENT_COLOR.fire }
-  if (element === 'water') return { struct: 'proj', kind: 'waterbolt', color: ELEMENT_COLOR.water }
-  if (element === 'earth') return { struct: 'burst', kind: 'earthspike', color: ELEMENT_COLOR.earth }
-  if (element === 'air') return { struct: 'burst', kind: 'lightning', color: '#fff59d' }
+// ⚠️ ELEMENTS REMOVED — this branched on fire/water/earth/air before the
+// channel, because an element was the more specific identity. With elements
+// gone the channel is the only delivery signal, and it is the one that maps to
+// how a move actually behaves: a lunge, a bolt, a shout.
+function fxFor(channel: Channel): { struct: FxStruct; kind: FxKind; color: string } {
   if (channel === 'melee') return { struct: 'lunge', kind: 'claw', color: CHANNEL_COLOR.melee }
   if (channel === 'ranged') return { struct: 'proj', kind: 'arrow', color: CHANNEL_COLOR.ranged }
   if (channel === 'voice') return { struct: 'burst', kind: 'sonic', color: CHANNEL_COLOR.voice }
   if (channel === 'support') return { struct: 'burst', kind: 'psychic', color: CHANNEL_COLOR.support }
-  return { struct: 'proj', kind: 'arcane', color: CHANNEL_COLOR.magic } // INT's non-elemental kit (Void Lance, Mana Leech, Arcane Overload)
+  return { struct: 'proj', kind: 'arcane', color: CHANNEL_COLOR.magic } // INT
 }
 
 // The full visual for a damaging move: bespoke base if one is assigned (its own
-// struct), else the channel/element base; plus overlays derived from the move
+// struct), else the channel base; plus overlays derived from the move
 // and the event.
 function fxForMove(
-  move: Move | undefined, channel: Channel, element: Element | undefined,
+  move: Move | undefined, channel: Channel,
   e: { execute?: boolean; lifesteal?: number; manaBurn?: number; crit?: boolean },
 ): { struct: FxStruct; kind: FxKind; color: string; overlays: Overlay[] } {
-  const base = fxFor(channel, element)
+  const base = fxFor(channel)
   const bespoke = move && BESPOKE_KIND[move.name]
   const kind = bespoke ?? base.kind
   const struct = bespoke ? (KIND_STRUCT[bespoke] ?? base.struct) : base.struct
@@ -341,7 +337,7 @@ export function ArenaBattle({ teamA, teamB, result, league, playerSide, onDone }
       case 'round': return `— Round ${e.n} —`
       case 'snap': return null
       case 'hit': {
-        const bits = [e.crit ? 'CRITICAL!' : '', e.hits > 1 ? `${e.hits} hits` : '', e.execute ? 'executes!' : '', e.eff === 'super' ? 'super effective!' : e.eff === 'resist' ? 'resisted' : ''].filter(Boolean).join(' · ')
+        const bits = [e.crit ? 'CRITICAL!' : '', e.hits > 1 ? `${e.hits} hits` : '', e.execute ? 'executes!' : ''].filter(Boolean).join(' · ')
         const tgt = e.self ? '' : ` to ${nameOf(e.targetSide, e.targetSlot)}`
         return `${nameOf(e.side, e.slot)} uses ${e.move} → ${e.dmg} damage${tgt}${bits ? ` (${bits})` : ''}`
       }
@@ -396,7 +392,7 @@ export function ArenaBattle({ teamA, teamB, result, league, playerSide, onDone }
       case 'hit': {
         const id = ++counter.current
         const mv = moveOf(e.side, e.slot, e.move)
-        const { struct, kind, color, overlays } = fxForMove(mv, e.channel, e.element, e)
+        const { struct, kind, color, overlays } = fxForMove(mv, e.channel, e)
         setFx({ id, side: e.side, slot: e.slot, struct, kind, color, overlays, targetSide: e.targetSide, targetSlot: e.targetSlot, crit: e.crit })
         addFloat(e.targetSide, e.targetSlot, `-${e.dmg}`, 'dmg')
         if (e.warded > 0) addFloat(e.targetSide, e.targetSlot, `🛡 ${e.warded}`, 'info')
@@ -404,7 +400,7 @@ export function ArenaBattle({ teamA, teamB, result, league, playerSide, onDone }
         if (e.recoil > 0) addFloat(e.side, e.slot, `-${e.recoil}`, 'burn')
         if (e.manaBurn > 0) addFloat(e.targetSide, e.targetSlot, `-${e.manaBurn} MP`, 'mana')
         if (e.crit) addFloat(e.targetSide, e.targetSlot, '💥 CRIT', 'dmg')
-        return e.crit || e.execute || e.eff === 'super' ? 950 : 800
+        return e.crit || e.execute ? 950 : 800
       }
       case 'miss': {
         const id = ++counter.current
