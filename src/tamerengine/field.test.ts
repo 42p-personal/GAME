@@ -236,10 +236,18 @@ describe('awareness — the counter to a dive', () => {
   })
 
   it('an ALERT monster turns on the enemy diving its wounded ally', () => {
-    // A frail ally is being jumped; another enemy stands equally close to me.
+    // A frail ally is being jumped, and a SECOND enemy stands nearer to me than
+    // the diver does — so an oblivious monster takes the closer, easier target
+    // and only an alert one peels onto the diver.
+    // ⚠️ Both enemies are built from the SAME seed on purpose. They used to be
+    // `mk('diver')` / `mk('other')`, which gave them different loadouts and so
+    // different `threatOf` values — meaning this test's outcome moved whenever
+    // the ABILITY POOL changed, and it duly broke on the P4 power pass with both
+    // extremes picking the diver. Identical monsters + a nearer `other` leave
+    // awareness as the only variable, which is what the test is actually about.
     const ally = u('ally', { pos: { x: 6, y: 4 }, hp: 90, maxHp: 400 })
-    const diver = u('diver', { side: 'B', pos: { x: 7.5, y: 4 } })
-    const other = u('other', { side: 'B', pos: { x: 14, y: 11 } })
+    const diver = u('diver', { side: 'B', pos: { x: 7.5, y: 4 }, m: mk('twin') })
+    const other = u('other', { side: 'B', pos: { x: 11, y: 9 }, m: mk('twin') })
     const me = (awareness: number) => u('me', {
       pos: { x: 10, y: 8 },
       m: mk('me', { personality: { awareness: awareness - 50 } }),

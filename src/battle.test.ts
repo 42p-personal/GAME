@@ -35,12 +35,17 @@ const GOLDENS = [
     // a balance change. Prior capture, v0.852: 126/93 (prestige base-stat bump).
     // Recaptured again for the play-quality pass (lethality, ranked support):
     // 58 -> 52 events. Fights keep getting shorter as the AI gets better.
-    winner: 'A', events: 52, logLines: 47,
+    // Recaptured for the P4 floor pass: 12 damage moves that sat BELOW the free
+    // attack were lifted above it, and Heartseeker's 137.8-DPS outlier was cut.
+    // 52 -> 70 events. Winner HELD at A and both its monsters still survive —
+    // the fight is longer because the losing side's spells now do real damage
+    // instead of being worse than swinging. Prior: 58 -> 52 (play quality).
+    winner: 'A', events: 70, logLines: 58,
     finals: [
-      { side: 'A', slot: 0, hp: 150, mana: 204, wasKOd: false },
-      { side: 'A', slot: 1, hp: 152, mana: 235, wasKOd: false },
-      { side: 'B', slot: 0, hp: 0, mana: 226, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 326, wasKOd: true },
+      { side: 'A', slot: 0, hp: 180, mana: 244, wasKOd: false },
+      { side: 'A', slot: 1, hp: 152, mana: 196, wasKOd: false },
+      { side: 'B', slot: 0, hp: 0, mana: 122, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 347, wasKOd: true },
     ],
   },
   {
@@ -73,14 +78,21 @@ const GOLDENS = [
     // and A's slot 0 no longer survives it. This was the ONLY golden of the 12
     // that moved, which is the reassuring part: a pool change of that size
     // touching one fight means the other 11 kits were left intact.
-    winner: 'A', events: 440, logLines: 357,
+    // ⚠️ Recaptured AGAIN for the P4 floor pass — WINNER FLIPPED A -> B, and this
+    // one is explicable rather than noise: B fields gold-b5 Archmage-Aleph, an
+    // INT caster, and INT was the pool worst hit by the floor bug (7 of its 15
+    // damage moves ranked below the free attack). Lifting them is a direct buff
+    // to exactly this monster, so the side built around it wins. A 3v3 decided by
+    // the caster whose spells stopped being worse than punching is the fix
+    // working. Now 5 of 6 monsters die — a decisive fight, not a grind.
+    winner: 'B', events: 416, logLines: 334,
     finals: [
       { side: 'A', slot: 0, hp: 0, mana: 716, wasKOd: true },
-      { side: 'A', slot: 1, hp: 0, mana: 246, wasKOd: true },
-      { side: 'A', slot: 2, hp: 874, mana: 751, wasKOd: false },
-      { side: 'B', slot: 0, hp: 0, mana: 743, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 750, wasKOd: true },
-      { side: 'B', slot: 2, hp: 0, mana: 27, wasKOd: true },
+      { side: 'A', slot: 1, hp: 0, mana: 298, wasKOd: true },
+      { side: 'A', slot: 2, hp: 0, mana: 763, wasKOd: true },
+      { side: 'B', slot: 0, hp: 0, mana: 731, wasKOd: true },
+      { side: 'B', slot: 1, hp: 473, mana: 750, wasKOd: false },
+      { side: 'B', slot: 2, hp: 750, mana: 9, wasKOd: false },
     ],
   },
 ] as const
