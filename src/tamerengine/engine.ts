@@ -562,6 +562,8 @@ const modDodge = (u: FieldUnit) => u.mods.reduce((n, m) => n + (m.dodge ?? 0), 0
 const modAcc = (u: FieldUnit) => u.mods.reduce((n, m) => n + (m.acc ?? 0), 0)
 const modHpRegen = (u: FieldUnit) => u.mods.reduce((n, m) => n + (m.hpRegen ?? 0), 0)
 const modRegen = (u: FieldUnit) => u.mods.reduce((n, m) => n + (m.regen ?? 0), 0)
+/** defDebuff, in PERCENTAGE POINTS off the mitigation fraction. */
+const modMitDebuff = (u: FieldUnit) => u.mods.reduce((n, m) => n + (m.mitDebuff ?? 0), 0)
 
 /** The affliction currently driving this unit's feet, if any. First wins. */
 const steeringStatus = (u: FieldUnit) => {
@@ -1054,7 +1056,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
         // percentage POINTS and are subtracted directly — the standing rule in
         // CLAUDE.md. defDebuff rides the `guard` mod negatively because guard IS
         // this engine's defFlat, the same quantity the turn engine decrements.
-        if (fx?.defDebuff) v.mods.push({ guard: -fx.defDebuff, until })
+        if (fx?.defDebuff) v.mods.push({ mitDebuff: fx.defDebuff, until })
         if (fx?.accDebuff) v.mods.push({ acc: -fx.accDebuff, until })
         // MANA BURN — the WIS answer to a caster. Drains what is there and no
         // more, so it is never a negative pool.
@@ -1261,7 +1263,12 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     // GUARD is FLAT damage reduction, subtracted after the multipliers — the turn
     // engine's `defFlat`. Floored at 1 so a big guard can never make a unit
     // outright immune, only very hard to chip.
-    const afterMult = raw * (1 - Math.min(0.55, mitigation / 1400)) * statusDamageTaken(target) * modDmgTaken(target) * blocked
+    // ⚠️ MITIGATION IS A FRACTION, and defDebuff comes off it in POINTS — a
+    // 12-point shred takes a tank from 25% mitigation to 13%, which is what
+    // makes it a real answer to trained CON rather than a rounding error.
+    // Floored at 0: a shred can strip armour, never invert it into a bonus.
+    const mitFrac = Math.max(0, Math.min(0.55, mitigation / 1400) - modMitDebuff(target) / 100)
+    const afterMult = raw * (1 - mitFrac) * statusDamageTaken(target) * modDmgTaken(target) * blocked
     const dmg = Math.max(1, Math.round(afterMult - modGuard(target)))
     // WARD soaks BEFORE health — an absorb pool that depletes, not a multiplier.
     let toHp = dmg

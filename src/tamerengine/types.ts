@@ -113,11 +113,21 @@ export interface FieldUnit {
     atk?: number; dmgTaken?: number
     guard?: number; thorns?: number; dodge?: number; acc?: number; hpRegen?: number
     // MANA regen, authored per ROUND by the move and paid out per second here —
-    // the same translation `hpRegen` gets. ⚠️ `guard` doubles as the carrier for
-    // `defDebuff`, pushed NEGATIVE: the turn engine models a defence debuff as
-    // `defFlat -= defDebuff`, and `guard` is this engine's defFlat, so a negative
-    // guard is not a hack — it is the same quantity with the same sign.
+    // the same translation `hpRegen` gets.
     regen?: number
+    /**
+     * `defDebuff` — PERCENTAGE POINTS off the target's mitigation fraction.
+     *
+     * ⚠️ FIRST MAPPED ONTO NEGATIVE `guard` AND THAT WAS WRONG FOR THIS ENGINE.
+     * The turn engine models it as `defFlat -= defDebuff`, and `guard` is this
+     * engine's defFlat, so the port looked exact — but on a field a monster's
+     * defence is the MITIGATION CURVE (CON/WIS ÷ 1400), not a flat guard it
+     * usually does not have. Against a bare target negative guard just added a
+     * few flat damage, which is why handing every damage class a defDebuff
+     * move made them WORSE at killing tanks (39% -> 35%).
+     * battle.ts prints this effect as "−N mitigation"; here that is literal.
+     */
+    mitDebuff?: number
     until: number
   }[]
   /** WARD — an absorb shield that soaks damage BEFORE health. Not timed: it is a
