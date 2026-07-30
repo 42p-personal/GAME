@@ -118,7 +118,8 @@ Any species can in principle train into any class; aptitude only weights how fas
   foe's body, plus firstStrikeMult when live).
 - `maxMana = WIS + floor(INT/2)`; WIS is the sole regen stat; `maxHp = 50 + CON×2.5`.
 - Guard (flat DR) lasts until the guardian's NEXT ACTION and mitigates every hit in between.
-- 90-skill pool (`src/moves.ts`, 15/stat, reference in `docs/ABILITIES.md`) with `core.ts:MoveEffects`:
+- **100-move pool** (`src/moves.ts`, no longer 15/stat — STR/DEX/WIS 15, CHA 17, CON 18, INT 20;
+  reference in `docs/ABILITIES.md`) with `core.ts:MoveEffects`:
   pierce, multi-hit, execute, recoil (capped 15%), lifesteal, mana burn, guard, ward (CON-exclusive),
   round-limited buffs/debuffs via `Combatant.mods`, plus framework effects (maxHpDmg, bonusVsStatus
   combos, thorns, hpRegenBuff).
@@ -151,10 +152,17 @@ Any species can in principle train into any class; aptitude only weights how fas
 - Plays in `src/arena.tsx`: 1v1 (Wood/Copper, Sandbox) keeps the lunge/projectile choreography;
   teams get a compact roster-row presentation. Podium finishes grant trainer XP.
 
-### Body Types (9)
-Base: Mammal, Avian, Marsupial, Aquatic, Insectoid, Reptilian. Exclusive: Draconic + Abyssal
-(Special License 800g), Mythical (Elite License 2000g). Every body type has a UNIQUE element
-(resist, weak) pair, enforced by `validate.ts`. Full backstories + per-type themes: `docs/BESTIARY.md`.
+### Body Types (13) — 5 species each, 65 total
+- **Base (6)**: Mammal, Avian, Marsupial, Aquatic, Insectoid, Reptilian.
+- **Prestige (3)**, licence-gated (`PRESTIGE_BODIES`): Draconic + Abyssal (Special License 800g),
+  Mythical (Elite License 2000g).
+- **Fusion (4)** (`FUSION_BODIES`, bred not bought): Saurian (Mammal+Reptilian), Tempestine
+  (Avian+Aquatic), Broodkin (Marsupial+Insectoid), and Primeval — the *prestige* fusion
+  (Mythical + Draconic/Abyssal), capped by `PRIMEVAL_GEN1_CAP`.
+
+Every body type has a UNIQUE element (resist, weak) pair enforced by `validate.ts` — ⚠️ except
+**Primeval**, which INHERITS Mythical's pair because all 12 distinct pairs were already taken.
+Full backstories + per-type themes: `docs/BESTIARY.md`; fusion recipes: `docs/FUSION_DESIGN.md`.
 
 ---
 
@@ -183,16 +191,16 @@ and in memory:
 |------|---------|
 | `src/town.ts` | GameState, week clock, advanceWeek(), market, lab/breeding, licensing, tournaments, events, rivals, trainer XP |
 | `src/game.ts` | Career state, drills/training, applyWeek()/previewWeekEffects(), aptitudes, food math, statCapFor() |
-| `src/drills.ts` | The 18 training drills (basic + intensive) |
+| `src/drills.ts` | The **30** training drills: 6 basic + 12 intensive + 6 extreme + 6 diverse |
 | `src/App.tsx` | UI: TownView, RanchView, AbilitySelector, EventModal, saves, migration |
 | `src/core.ts` | Types, classes, elements, MoveEffects, Tactics, GAMEPLANS, Rival, foods, RNG |
-| `src/species.ts` | 45 species (30 base + 15 exclusive) + computed BODY_AVERAGES |
-| `src/moves.ts` | The 90-move pool, 15/stat — see `docs/ABILITIES.md` |
+| `src/species.ts` | **65 species** = 13 body types x 5 (30 base + 15 prestige + 20 fusion) + computed BODY_AVERAGES |
+| `src/moves.ts` | The **100**-move pool (STR/DEX/WIS 15, CHA 17, CON 18, INT 20) — see `docs/ABILITIES.md`. ⚠️ The ability rework is mid-flight on `3doverhal`; `docs/ABILITY_REWORK.md` is the live design doc |
 | `src/battle.ts` | Auto-battle sim: mana, innates, round-based mods, tactics, BattleEvent stream |
 | `src/battleReport.ts` | `analyzeBattle` — pure post-battle causal report |
 | `src/arena.tsx` | Animated arena replay; league backgrounds, live status HUD, battle-report card |
 | `src/leagueArt.ts` | League name → arena background JPEG lookup (`public/backgrounds/`) |
-| `src/Sprite.tsx` / `src/speciesArt.ts` | Species portrait (real art for all 45); `sprites.ts` grid is a structural fallback only |
+| `src/Sprite.tsx` / `src/speciesArt.ts` | Species portrait (real art for all 65); `sprites.ts` grid is a structural fallback only |
 | `public/sprites/` | Real generated sprite PNGs (320×320 RGBA), one per species, adult-only |
 | `src/bestiary.ts` | In-game condensed species bios (BIOS record) |
 | `src/validate.ts` | Design consistency checks — `designProblems()` feeds both the dev console and the test suite |
@@ -200,7 +208,7 @@ and in memory:
 | `docs/LOOP_DESIGN.md` | The fun-loop design + phase plan (events/rivals/gameplans/report/meta) |
 | `docs/ART_PIPELINE.md` | **How every image in the game gets made** — both routes, their failure modes, post-processing. Read this BEFORE concluding art can't be generated. |
 | `docs/BATTLE_SPRITES.md` | The 128x128 side-profile battle sprite set (6 frames/species) + why it's separate from the portraits |
-| `docs/BESTIARY.md` / `docs/ABILITIES.md` | Full lore doc / full 90-move reference |
+| `docs/BESTIARY.md` / `docs/ABILITIES.md` | Full lore doc / full move reference (⚠️ ABILITIES.md still lists the pre-rework 90) |
 | `docs/GAME_DESIGN.md` | Original design doc — stale in places; CLAUDE.md + code are more current |
 | `version.md` | **Full version history / changelog** — per-version rationale + the load-bearing ⚠️ invariants (newest first) |
 
