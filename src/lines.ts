@@ -105,7 +105,6 @@ export const LINE_OF: Record<string, string> = {
   "Bulwark's Challenge": 'Guardian', 'Aegis of the Fallen': 'Guardian',
   Brace: 'Bulwark', Bastion: 'Bulwark', 'Shell Slam': 'Bulwark',
   Fortify: 'Bulwark', Retaliate: 'Bulwark', 'Colossus Crash': 'Bulwark', 'Vital Surge': 'Bulwark',
-  'Second Wind': 'Bulwark', Purge: 'Bulwark', 'Stone Wall': 'Bulwark', Undying: 'Bulwark',
   Overrun: 'Bulwark',
 
   // ── WIS ────────────────────────────────────────────────────────────────────

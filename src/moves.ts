@@ -121,44 +121,46 @@ const POOLS: Record<Stat, Row[]> = {
     // marksman is where the gambler finally stops gambling.
     { name: 'Deadeye', learnLevel: 920, type: 'damage', channel: 'ranged', target: 'enemy', cooldown: 6, accuracy: 95, power: 52, mana: 44, variance: 0.05, desc: 'One shot. It goes exactly where it was sent.' },
   ],
+  // ══ CON ══ obstacles · mass taunt · redirecting damage · prevention · shields ═
+  // WARDEN decides the geometry — zones, roots, ground you cannot cross. GUARDIAN
+  // points its protection OUTWARD (taunt, cover an ally, team wards). BULWARK is
+  // self-shielding and the conditional damage that comes with being unbroken.
+  //
+  // ⚠️ CON is a SUPPORT stat, not a damage stat: its 9 damage moves are nearly all
+  // conditional on momentum, remaining HP, or holding someone in place.
+  // ⚠️ Its buff count came DOWN this pass (12 -> 9) and its control went UP, per
+  // the framework: buffs belong to CHA/WIS. CON protects; it does not empower.
+  // ⚠️ CON is the only stat with NO hard CC by design — all ten of its control
+  // effects are soft (roots, slows, shoves). Geometry, not lockout.
   CON: [
-    { name: 'Brace', learnLevel: 40, type: 'buff', channel: 'support', target: 'self', cooldown: 2, accuracy: 100, power: 0, effects: { guard: 6 }, desc: 'Small flat damage reduction until next action.' },
-    { name: 'Second Wind', learnLevel: 40, type: 'buff', channel: 'support', target: 'self', cooldown: 3, accuracy: 100, power: 16, desc: 'Catch a breath: heal a little HP.' },
-    { name: 'Taunt', learnLevel: 90, type: 'debuff', channel: 'support', target: 'enemy', cooldown: 4, accuracy: 100, power: 0, effects: { atkDebuff: 0.1, duration: 3, tauntForce: true }, desc: 'Enrages and forces the target to attack the taunter for 3 rounds (−10% damage while enraged).' },
-    // ⚠️ CON's four TEAM/ALLY buffs. The stat had TEN buffs and every one was
-    // `self`, so a Tank or Spellshield literally could not protect anybody — the
-    // biggest hole the class-kit audit found. These are the same effects pointed
-    // outward, and they are UNCAPPED (every ally, no target limit) with the
-    // authored `mana` doing the pricing instead. See ABILITY_REWORK.md §3c.
-    { name: 'Barbed Carapace', learnLevel: 120, type: 'buff', channel: 'support', target: 'team', cooldown: 5, accuracy: 100, power: 0, mana: 24, effects: { defBuff: 4, thorns: 6, duration: 3 }, desc: 'The whole line bristles: +4 mitigation and reflects 6 damage per hit for 3 rounds.' },
-    { name: 'Body Slam', learnLevel: 160, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 2, accuracy: 90, power: 20, status: { kind: 'knockback', chance: 40, duration: 2 }, desc: 'Throws its bulk into the target; 40% chance to send it reeling — knocked back, it acts last.' },
-    { name: 'Steady Vigil', learnLevel: 200, type: 'buff', channel: 'support', target: 'ally', cooldown: 4, accuracy: 100, power: 20, mana: 18, effects: { hpRegenBuff: 5, duration: 3 }, desc: 'Stands over a wounded ally: solid heal, then +5 HP regen/turn for 3 rounds.' },
-    // ⚠️ SEIZE — CON's grab. `pull` + `root` are registered in
-    // tamerengine/spatial.ts, NOT inline: `spatialOf` only reads the name-keyed
-    // table, so an inline `spatial` on a POOL move is silently inert (the exact
-    // way 8 spatial entries once did nothing). Rename here => rename there.
-    { name: 'Seize', learnLevel: 160, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 3, accuracy: 90, power: 17, mana: 14, status: { kind: 'knockback', chance: 55, duration: 2 }, desc: 'Clamps on and hauls the target in, pinning it in place for a moment — it can still fight, but it cannot leave.' },
-    { name: 'Bastion', learnLevel: 240, type: 'buff', channel: 'support', target: 'self', cooldown: 4, accuracy: 100, power: 0, effects: { ward: 25 }, desc: 'Raise a 25 HP absorb shield.' },
-    { name: 'Purge', learnLevel: 330, type: 'buff', channel: 'support', target: 'self', cooldown: 4, accuracy: 100, power: 10, effects: { cleanse: true }, desc: 'Shrug off ailments and mend a little.' },
-    { name: 'Shell Slam', learnLevel: 380, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 3, accuracy: 85, power: 26, effects: { recoil: 0.1, hpScale: { atFull: 1.4, atEmpty: 0.8 } }, desc: 'Full-body crash; slight recoil. Hits hardest while the shell is whole, and weakens as its own health fails.' },
-    { name: 'Fortify', learnLevel: 430, type: 'buff', channel: 'support', target: 'team', cooldown: 5, accuracy: 100, power: 0, mana: 44, effects: { ward: 40 }, desc: 'Raise a 40 HP absorb shield on every ally.' },
-    // ⚠️ SHIELD WALL — the Warden's ground denial. A `zone` is placed by
-    // applySelfEffects at CAST time, so unlike root/slow it works on a utility
-    // that never "hits". Zone `power` for a slow zone is the speed MULTIPLIER
-    // (0.55 = 55% speed), not a magnitude — see the zone tick in engine.ts.
-    // ⚠️ First authored with NO `effects` at all — its whole payload was the
-    // spatial zone, which made it inert in the TURN engine (which has no zones)
-    // and invisible to every loadout predicate, since those read `effects`. A
-    // move must carry its identity in the shared data, not only in a field-only
-    // side table. The guard is what a shield wall obviously is; the zone is the
-    // field's extra expression of it.
-    { name: 'Shield Wall', learnLevel: 240, type: 'buff', channel: 'support', target: 'self', cooldown: 6, accuracy: 100, power: 0, mana: 30, effects: { guard: 14 }, desc: 'Plants a wall of shields and holds it: +14 flat mitigation, and the ground around this monster becomes a slog for anything that closes in.' },
-    { name: 'Stone Wall', learnLevel: 540, type: 'buff', channel: 'support', target: 'team', cooldown: 6, accuracy: 100, power: 0, mana: 48, effects: { defBuff: 8, duration: 3 }, desc: 'Living rampart: +8 mitigation for the whole team for 3 rounds.' },
-    { name: 'Quagmire Stomp', learnLevel: 300, type: 'damage', channel: 'melee', target: 'allEnemies', cooldown: 5, accuracy: 85, power: 22, mana: 30, status: { kind: 'knockback', chance: 45, duration: 2 }, desc: 'Stomps hard enough to churn the footing out from under the whole enemy line — they wade for a while afterwards.' },
-    { name: "Bulwark's Challenge", learnLevel: 650, type: 'debuff', channel: 'support', target: 'allEnemies', cooldown: 6, accuracy: 100, power: 0, effects: { guard: 20, tauntForce: true, duration: 2 }, desc: 'Plants its feet and roars a challenge: massive guard, and forces the WHOLE enemy team to attack it for 2 rounds.' },
-    { name: 'Vital Surge', learnLevel: 780, type: 'buff', channel: 'support', target: 'self', cooldown: 6, accuracy: 100, power: 46, effects: { cleanse: true }, desc: 'Big heal + cleanse ailments.' },
-    { name: 'Colossus Crash', learnLevel: 850, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 5, accuracy: 85, power: 36, effects: { guard: 10, maxHpDmg: 0.03, consumeWard: 0.015 }, desc: 'Crushing advance that braces after the hit; extra damage scaled off the target\'s own max HP.' },
-    { name: 'Undying', learnLevel: 920, type: 'buff', channel: 'support', target: 'self', cooldown: 8, accuracy: 100, power: 70, desc: 'Refuses to fall: massive recovery.' },
+    // ── Warden — own the ground; nobody crosses, nobody leaves ───────────────
+    { name: 'Body Slam', learnLevel: 140, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 2, accuracy: 90, power: 22, mana: 14, variance: 0.2, status: { kind: 'knockback', chance: 45, duration: 2 }, desc: 'Throws its bulk into them and sends them reeling.' },
+    { name: 'Seize', learnLevel: 160, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 3, accuracy: 90, power: 20, mana: 14, variance: 0.15, desc: 'Clamps on and hauls them in. They can still fight; they cannot leave.' },
+    { name: 'Shield Wall', learnLevel: 240, type: 'control', channel: 'support', target: 'self', cooldown: 6, accuracy: 100, power: 0, mana: 30, effects: { guard: 14 }, desc: 'Plants a wall and holds it: +14 mitigation, and the ground around it becomes a slog.' },
+    { name: 'Quagmire Stomp', learnLevel: 300, type: 'damage', channel: 'melee', target: 'allEnemies', cooldown: 5, accuracy: 85, power: 24, mana: 30, variance: 0.2, status: { kind: 'knockback', chance: 45, duration: 2 }, desc: 'Churns the footing out from under the whole line.' },
+    { name: 'Barricade', learnLevel: 380, type: 'control', channel: 'support', target: 'self', cooldown: 6, accuracy: 100, power: 0, mana: 26, effects: { defBuff: 8, duration: 3 }, desc: 'Throws up cover and settles in behind it — the crossing in front becomes slow and costly.' },
+    { name: 'Tremor', learnLevel: 460, type: 'damage', channel: 'melee', target: 'allEnemies', cooldown: 4, accuracy: 88, power: 22, mana: 28, variance: 0.2, desc: 'The ground shudders. Everything nearby is slowed and staggered.' },
+    { name: 'Zone of Control', learnLevel: 520, type: 'control', channel: 'support', target: 'self', cooldown: 5, accuracy: 100, power: 0, mana: 28, effects: { thorns: 6, duration: 4 }, desc: 'Nothing moves well beside it, and everything that tries gets clipped.' },
+    { name: 'Crushing Grip', learnLevel: 620, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 4, accuracy: 90, power: 30, mana: 26, variance: 0.15, desc: 'Takes hold and squeezes. It is not going anywhere while this lasts.' },
+    { name: 'Earthen Grasp', learnLevel: 700, type: 'damage', channel: 'melee', target: 'allEnemies', cooldown: 6, accuracy: 85, power: 22, mana: 36, variance: 0.15, desc: 'Stone closes on every ankle in reach. The Warden capstone: nobody leaves.' },
+
+    // ── Guardian — protection pointed OUTWARD, at somebody else ──────────────
+    { name: 'Taunt', learnLevel: 90, type: 'debuff', channel: 'support', target: 'enemy', cooldown: 4, accuracy: 100, power: 0, mana: 10, effects: { atkDebuff: 0.1, duration: 3, tauntForce: true }, desc: 'Enrages one of them into coming for you, and swinging softer for it.' },
+    { name: 'Barbed Carapace', learnLevel: 120, type: 'buff', channel: 'support', target: 'team', cooldown: 5, accuracy: 100, power: 0, mana: 24, effects: { defBuff: 4, thorns: 6, duration: 3 }, desc: 'The whole line bristles: +4 mitigation and 6 damage returned on every hit.' },
+    { name: 'Steady Vigil', learnLevel: 200, type: 'buff', channel: 'support', target: 'ally', cooldown: 4, accuracy: 100, power: 20, mana: 18, effects: { hpRegenBuff: 5, duration: 3 }, desc: 'Stands over a wounded ally: heals, then keeps healing.' },
+    { name: 'Interpose', learnLevel: 340, type: 'buff', channel: 'support', target: 'ally', cooldown: 5, accuracy: 100, power: 0, mana: 24, effects: { ward: 34, defBuff: 8, duration: 3 }, desc: 'Steps in front of an ally: a 34 HP shield and +8 mitigation, put where it is needed rather than kept.' },
+    { name: "Bulwark's Challenge", learnLevel: 650, type: 'debuff', channel: 'support', target: 'allEnemies', cooldown: 6, accuracy: 100, power: 0, mana: 40, effects: { guard: 20, tauntForce: true, duration: 2 }, desc: 'Plants its feet and roars: massive guard, and the WHOLE enemy team comes for it.' },
+    { name: 'Aegis of the Fallen', learnLevel: 760, type: 'buff', channel: 'support', target: 'team', cooldown: 7, accuracy: 100, power: 0, mana: 48, effects: { ward: 45, defBuff: 6, duration: 3 }, desc: 'A shield over every ally at once — 45 HP of absorb each, and armour under it.' },
+
+    // ── Bulwark — self-shielding, and damage conditional on being unbroken ───
+    { name: 'Brace', learnLevel: 40, type: 'buff', channel: 'support', target: 'self', cooldown: 2, accuracy: 100, power: 0, mana: 5, effects: { guard: 6 }, desc: 'Small, cheap, always there.' },
+    { name: 'Bastion', learnLevel: 240, type: 'buff', channel: 'support', target: 'self', cooldown: 4, accuracy: 100, power: 0, mana: 16, effects: { ward: 25 }, desc: 'Raise a 25 HP absorb shield. Fortify is the version for everyone else.' },
+    { name: 'Overrun', learnLevel: 280, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 3, accuracy: 88, power: 26, mana: 18, variance: 0.2, status: { kind: 'knockback', chance: 40, duration: 2 }, desc: 'Charges straight through: damage and a shove, paid for with momentum.' },
+    { name: 'Shell Slam', learnLevel: 380, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 3, accuracy: 85, power: 28, mana: 22, variance: 0.2, effects: { recoil: 0.1, hpScale: { atFull: 1.4, atEmpty: 0.8 } }, desc: 'Hits hardest while the shell is whole, and fades as its own health fails.' },
+    { name: 'Fortify', learnLevel: 430, type: 'buff', channel: 'support', target: 'team', cooldown: 5, accuracy: 100, power: 0, mana: 44, effects: { ward: 40 }, desc: 'A 40 HP absorb shield on every ally. Uncapped reach, priced in mana.' },
+    { name: 'Retaliate', learnLevel: 600, type: 'buff', channel: 'support', target: 'self', cooldown: 4, accuracy: 100, power: 0, mana: 22, effects: { thorns: 16, defBuff: 6, duration: 2 }, desc: 'Answers everything: 16 damage returned per hit for 2 rounds.' },
+    { name: 'Vital Surge', learnLevel: 780, type: 'buff', channel: 'support', target: 'self', cooldown: 6, accuracy: 100, power: 50, mana: 34, effects: { cleanse: true }, desc: 'Shrugs it all off and knits shut. CON heals ITSELF; healing others is WIS.' },
+    { name: 'Colossus Crash', learnLevel: 850, type: 'damage', channel: 'melee', target: 'enemy', cooldown: 5, accuracy: 85, power: 36, mana: 32, variance: 0.2, effects: { guard: 10, maxHpDmg: 0.03, consumeWard: 0.015 }, desc: 'A crushing advance that braces after the blow; the bigger they are, the more it takes.' },
   ],
   WIS: [
     { name: 'Focus', learnLevel: 40, type: 'buff', channel: 'support', target: 'self', cooldown: 4, accuracy: 100, power: 0, effects: { regenBuff: 2, duration: 3 }, desc: 'Centre the mind: +2 mana regen for 3 rounds.' },

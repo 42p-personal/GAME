@@ -137,7 +137,7 @@ describe('area shapes replace the row targets', () => {
     // author an `area` and bump this deliberately.
     const rowMoves = ALL_MOVES.filter((m: Move) =>
       m.target === 'allEnemies' || m.target === 'frontRow' || m.target === 'backRow')
-    expect(rowMoves.length).toBe(21) // +Intimidate, +Whirlwind (STR Warcry line)
+    expect(rowMoves.length).toBe(23) // +Intimidate, +Whirlwind (STR Warcry line)
     const missing = rowMoves.filter((m: Move) => !spatialOf(m.name)?.area).map((m: Move) => m.name)
     expect(missing).toEqual([])
   })

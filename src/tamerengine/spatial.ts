@@ -38,6 +38,13 @@ export const SPATIAL_MOVES: Record<string, MoveSpatial> = {
     area: { shape: 'circle', centre: 'self', radius: 5.2 } },
   // Zone `power` on a slow zone is the speed MULTIPLIER, not a magnitude.
   'Shield Wall': { zone: { radius: 4.5, duration: 6, effect: 'slow', power: 0.55, centre: 'self' } },
+  // CON's Warden kit. Geometry is the whole line, so nearly all of it is spatial.
+  'Barricade': { zone: { radius: 5, duration: 7, effect: 'slow', power: 0.5, centre: 'self' } },
+  'Zone of Control': { zone: { radius: 3.6, duration: 8, effect: 'slow', power: 0.6, centre: 'self' } },
+  'Crushing Grip': { root: 2.0 },
+  'Tremor': { slow: { mult: 0.6, duration: 2.5 }, area: { shape: 'circle', centre: 'self', radius: 5.4 } },
+  'Earthen Grasp': { root: 1.8, area: { shape: 'circle', centre: 'self', radius: 5.8 } },
+  'Overrun': { move: { kind: 'dash', to: 'target', maxRange: 7 }, push: 3 },
 
   // ── GAP CLOSERS ───────────────────────────────────────────────────────────
   // The counter to kiting. A charge crosses the ground, so cover still stops

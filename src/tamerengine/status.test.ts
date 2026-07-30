@@ -218,7 +218,9 @@ describe('field — non-damage moves are actually cast', () => {
   it('a healer actually heals', () => {
     let healed = 0
     for (let i = 0; i < 8; i++) {
-      const A = [mk(`ha${i}`, [move('Second Wind'), move('Cleave')]), mk(`hc${i}`)]
+      // ⚠️ Second Wind was absorbed in the CON rework. WIS is now the designated
+      // healing stat (CON heals only ITSELF), so Mend is the right exemplar.
+      const A = [mk(`ha${i}`, [move('Mend'), move('Cleave')]), mk(`hc${i}`)]
       const B = [mk(`hb${i}`), mk(`hd${i}`)]
       healed += of(run(A, B, 'h' + i).events, 'heal').length
     }

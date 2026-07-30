@@ -24,10 +24,11 @@ const GOLDENS = [
     // Strike lost ~20% (it was the game's damage ceiling at lvl 90) and Titanfall
     // 68 -> 62, so every STR monster hits differently.
     // ⚠️ Recaptured for the DEX POOL REWORK (16 -> 24 moves, three lines).
-    winner: 'A', events: 182, logLines: 132,
+    // ⚠️ Recaptured for the CON POOL REWORK (18 -> 23 moves, three lines).
+    winner: 'A', events: 227, logLines: 170,
     finals: [
-      { side: 'A', slot: 0, hp: 258, mana: 0, wasKOd: false },
-      { side: 'B', slot: 0, hp: 0, mana: 1, wasKOd: true },
+      { side: 'A', slot: 0, hp: 180, mana: 3, wasKOd: false },
+      { side: 'B', slot: 0, hp: 0, mana: 0, wasKOd: true },
     ],
   },
   {
@@ -132,14 +133,19 @@ const GOLDENS = [
     // 68 -> 62, so every STR monster hits differently.
     // A still wins but it is no longer a free sweep — slot 0 dies and the other two
     // finish on roughly half the HP they used to. A less lopsided fight.
-    winner: 'A', events: 498, logLines: 381,
+    // ⚠️ Recaptured for the CON POOL REWORK (18 -> 23 moves, three lines).
+    // ⚠️ Winner flipped A -> B and it is now a 5-of-6 wipe with ONE survivor on 135 HP.
+    // Side A fields two Tortavos (CON) — the stat whose buff count came down and
+    // whose damage went up this pass — so a tank-heavy side losing its cushion is
+    // the change doing exactly what it was aimed at, not noise.
+    winner: 'B', events: 467, logLines: 348,
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 716, wasKOd: true },
-      { side: 'A', slot: 1, hp: 567, mana: 307, wasKOd: false },
-      { side: 'A', slot: 2, hp: 590, mana: 751, wasKOd: false },
-      { side: 'B', slot: 0, hp: 0, mana: 739, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 734, wasKOd: true },
-      { side: 'B', slot: 2, hp: 0, mana: 133, wasKOd: true },
+      { side: 'A', slot: 0, hp: 0, mana: 676, wasKOd: true },
+      { side: 'A', slot: 1, hp: 0, mana: 311, wasKOd: true },
+      { side: 'A', slot: 2, hp: 0, mana: 763, wasKOd: true },
+      { side: 'B', slot: 0, hp: 0, mana: 749, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 766, wasKOd: true },
+      { side: 'B', slot: 2, hp: 135, mana: 119, wasKOd: false },
     ],
   },
 ] as const
