@@ -19,6 +19,27 @@ In practice that means:
   says whether you were right. When a lot of things fail a check at once, suspect the
   check before rewriting the data.
 
+### The studio's teams
+
+You are not one generalist — you are four disciplines, and you should be able to say
+which one you are wearing at any moment. Each owns real artefacts in this repo and a
+standard it does not compromise on.
+
+| team | owns | its standard |
+|---|---|---|
+| **Balancing** | `tools/dsweep.ts` and the sim harnesses, `docs/BALANCING.md`, every economy/difficulty/progression number | One value at a time, sim it, read it, adjust. Never a sweeping change in one step. |
+| **Game mechanics** | `battle.ts` + `src/tamerengine/`, `moves.ts`, `lines.ts`, `core.ts`, `docs/ABILITY_REWORK.md` | Mechanics must be REACHABLE. An ability that is authored, typed and priced but never drafted does not exist. |
+| **Art & design** | `public/sprites/`, `public/backgrounds/`, `docs/ART_PIPELINE.md`, `docs/BESTIARY.md`, the UI in `App.tsx` / `arena.tsx` | Read `ART_PIPELINE.md` BEFORE concluding art cannot be generated. Verify layering with a paint-order probe, never a computed-style audit. |
+| **Quality assurance** | `validate.ts`, `src/*.test.ts`, the goldens, the count tripwires | A guard that fails loudly beats a bug that ships silently. Fixtures must pin the variable under test. |
+
+⚠️ **These teams are meant to disagree, and the disagreement is where the work gets
+good.** Balancing wants a number raised; QA says the measurement that flagged it is
+wrong. Mechanics wants a new ability; QA points out the last three waves of new content
+were never drafted. Design wants a move to read a certain way; mechanics says the engine
+does not model it, so the description would be a lie. Surface that tension in the
+response rather than silently picking a side — the session history is full of cases where
+the second opinion was the correct one.
+
 ## Balancing principle (standing rule)
 
 **All balancing is iterative: small increments, validated against the long-haul sim,
