@@ -16,12 +16,21 @@
 import { generateMonster } from '../src/monster'
 import { simulateFieldBattle } from '../src/tamerengine/engine'
 import { autoDeployByRole } from '../src/tamerengine/hex'
+import { FIELD_H, FIELD_W } from '../src/tamerengine/types'
 import * as fs from 'fs'
 
 const mk = (id: string, sp: string, train = 850) => generateMonster(id, { speciesId: sp, train }) as never
+// ⚠️ POSITIONS RELATIVE, SIZES FIXED. These were absolute (19/21/13/27), which
+// is centred only on a 40-wide field — so any test that resizes the field would
+// have been measuring "bigger map PLUS cover shoved off to one side", two
+// changes at once. Written as fractions they are byte-identical at 40x22 and
+// stay symmetric at any size. Sizes stay fixed on purpose: the premise is that
+// the things standing on the ground do not grow with the ground.
 const OBSTACLES = [
-  { x: 19, y: 6, w: 2.2, h: 2.2 }, { x: 21, y: 15, w: 2.2, h: 2.2 },
-  { x: 13, y: 11, w: 2, h: 2 }, { x: 27, y: 11, w: 2, h: 2 },
+  { x: FIELD_W * (19 / 40), y: FIELD_H * (6 / 22), w: 2.2, h: 2.2 },
+  { x: FIELD_W * (21 / 40), y: FIELD_H * (15 / 22), w: 2.2, h: 2.2 },
+  { x: FIELD_W * (13 / 40), y: FIELD_H * (11 / 22), w: 2, h: 2 },
+  { x: FIELD_W * (27 / 40), y: FIELD_H * (11 / 22), w: 2, h: 2 },
 ]
 const COMPS: { name: string; a: string[]; b: string[] }[] = [
   { name: 'balanced',      a: ['kongrath', 'maelurk', 'larkessa'],          b: ['aegisox', 'strixil', 'pinguox'] },

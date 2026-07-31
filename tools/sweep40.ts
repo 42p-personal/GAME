@@ -21,13 +21,18 @@
 import { generateMonster } from '../src/monster'
 import { simulateFieldBattle } from '../src/tamerengine/engine'
 import { autoDeployByRole } from '../src/tamerengine/hex'
+import { FIELD_H, FIELD_W } from '../src/tamerengine/types'
 import { classForStats } from '../src/core'
 
 const mk = (id: string, sp: string, train = 850) =>
   generateMonster(id, { speciesId: sp, train }) as never
+// Positions relative, sizes fixed — identical at 40x22, symmetric at any size.
+// See the same note in tools/ab.ts.
 const OBSTACLES = [
-  { x: 19, y: 6, w: 2.2, h: 2.2 }, { x: 21, y: 15, w: 2.2, h: 2.2 },
-  { x: 13, y: 11, w: 2, h: 2 }, { x: 27, y: 11, w: 2, h: 2 },
+  { x: FIELD_W * (19 / 40), y: FIELD_H * (6 / 22), w: 2.2, h: 2.2 },
+  { x: FIELD_W * (21 / 40), y: FIELD_H * (15 / 22), w: 2.2, h: 2.2 },
+  { x: FIELD_W * (13 / 40), y: FIELD_H * (11 / 22), w: 2, h: 2 },
+  { x: FIELD_W * (27 / 40), y: FIELD_H * (11 / 22), w: 2, h: 2 },
 ]
 
 /** Ten compositions spanning the real range of teams a player can field. */
