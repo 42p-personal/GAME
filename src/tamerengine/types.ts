@@ -109,13 +109,20 @@ export const ESCAPE_LOCKOUT = 5 // seconds either escape locks the other
 //
 // A BLINK still snaps, because that is what a teleport is, and it emits its own
 // event so a renderer can draw the discontinuity deliberately.
-// ⚠️ 4 -> 2.2. At 4x a 7-unit Backstep crossed in half a second, which still
-// read as a jump rather than a leap — travelling is not enough on its own, it
-// has to travel at a speed the eye can follow. 2.2x puts the same dash at ~1s.
-export const DASH_SPEED_MULT = 2.2 // times normal speed while dashing
-// Raised with it: a slower dash needs longer to arrive, or it releases short of
-// its destination and the escape silently does half its job.
-export const DASH_MAX_TIME = 1.8 // seconds before a dash gives up and releases
+// ⚠️ 4 -> 2.2 -> 1.35, and the last step came with a change of mind about what a
+// dash IS. Chasing "fast enough to feel like an ability" kept producing
+// something that read as a spring backwards — because a monster crossing seven
+// units in under a second is not retreating, it is being thrown.
+//
+// THE ESCAPE'S VALUE IS NOT RAW SPEED. It is covering ground while EXEMPT from
+// the 0.6x backpedal penalty that taxes every ordinary retreat. At 1.35x a
+// dashing unit still moves 2.2x a normal fleeing one (1.35 / 0.6) — the mechanic
+// is untouched — while looking like a monster running away rather than recoiling
+// off a spring.
+export const DASH_SPEED_MULT = 1.35 // times normal speed while dashing
+// Scales with the slowdown: at 1.35x a 7-unit dash needs ~1.5s, so the release
+// has to sit well beyond that or the escape silently does half its job.
+export const DASH_MAX_TIME = 3.0 // seconds before a dash gives up and releases
 // ⚠️ FALL BACK'S SPEED CHANGE IS RAMPED, NOT SWITCHED. Lifting the 0.6x
 // backpedal penalty in a single tick is a 67% instantaneous speed jump — the
 // same class of discontinuity as the snapping dash, just smaller. Easing into
