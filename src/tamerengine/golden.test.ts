@@ -90,8 +90,10 @@ const GOLDENS: Golden[] = [
     // Stage 3b: 15.1s -> 24.2s. Both duellists now carry a movement ability,
     // so the loser keeps breaking contact and the fight takes far longer to
     // close. The clearest single illustration of what escapes cost in tempo.
-    winner: 'B', duration: 24.2, survivors: [0, 1],
-    casts: 49, hits: 33, deaths: 1, finalHp: [0, 309],
+    // Dashes travel now instead of snapping: 24.2s -> 21.7s, because a
+    // Backstep costs half a second of ground rather than teleporting free.
+    winner: 'B', duration: 21.7, survivors: [0, 1],
+    casts: 47, hits: 31, deaths: 1, finalHp: [0, 405],
   },
   {
     // Ranged vs melee across the full width — pins approach, stand-off and the
@@ -153,8 +155,8 @@ const GOLDENS: Golden[] = [
     // ⚠️ Stage 3a flipped this back to A, 2-0. Retreat helps whichever side is
     // losing the exchange at the moment it triggers, so a golden that was close
     // is exactly the one it can tip. The paired sweep is the arbiter, not this.
-    winner: 'B', duration: 22.4, survivors: [0, 2],
-    casts: 118, hits: 72, deaths: 4, finalHp: [0, 0, 0, 0, 183, 241],
+    winner: 'B', duration: 21.5, survivors: [0, 2],
+    casts: 108, hits: 67, deaths: 4, finalHp: [0, 0, 0, 0, 213, 282],
   },
 ]
 

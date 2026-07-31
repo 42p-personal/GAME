@@ -9,7 +9,7 @@ import { Channel, Monster, Move, MoveArea, MoveSpatial, Stat, aoeFalloff, statSc
 import { chooseLoadout, learnedMoves, manaCost, maxHp, maxMana } from '../monster'
 import {
   DT, FIELD_H, FIELD_W, FieldEvent, FieldResult, FieldSetup, FieldSide, FieldUnit,
-  PURSUIT_PATIENCE, PURSUIT_IGNORE, PURSUIT_PROGRESS,
+  PURSUIT_PATIENCE, PURSUIT_IGNORE, PURSUIT_PROGRESS, DASH_SPEED_MULT, DASH_MAX_TIME,
   FALL_BACK_CD, FALL_BACK_DUR, FALL_BACK_HP, FALL_BACK_NEAR, ESCAPE_LOCKOUT,
   MAX_TICKS, Obstacle, RETARGET_EVERY, UnitVisState, Vec2, CONTAGION_RADIUS, TEAM_AURA_RADIUS,
   CHANNEL_CAST_TIME, CHANNEL_RANGE, DEPLOY_DEPTH, SECONDS_PER_ROUND,
@@ -216,6 +216,8 @@ function buildUnit(m0: Monster, side: FieldSide, slot: number, pos: Vec2): Field
     fallBackAt: 0,
     fallBackUntil: 0,
     fallBackTo: null,
+    dashTo: null,
+    dashUntil: 0,
     escapeLockUntil: 0,
     dead: false,
   }
@@ -998,6 +1000,14 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
         events.push({ t: +t.toFixed(2), kind: 'fallback', id: u.id })
       }
 
+      // A dash in flight owns the unit's movement until it lands or times out.
+      if (u.dashTo && t < u.dashUntil && dist(u.pos, u.dashTo) > 0.4) {
+        stepToward(u, u.dashTo, mates, obstacles, t)
+        vis.set(u.id, 'move')
+        continue
+      }
+      u.dashTo = null
+
       let goal = desiredGoal(u, target, mates, foes, (a, b) => hasLineOfSight(a, b, obstacles))
       // A committed retreat overrides the ordinary goal: get away from whatever
       // is closest, for as long as it lasts.
@@ -1651,6 +1661,14 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     dest = clampToField(dest)
     if (obs.some((o) => insideObstacle(dest, o, u.radius * 0.6))) return // never land inside rock
     if (sp.move.kind === 'dash' && !hasLineOfSight(from, dest, obs)) return // a charge is blocked by cover
+    if (sp.move.kind === 'dash') {
+      // ⚠️ TRAVEL, DO NOT SNAP. The destination is handed to the movement step
+      // and crossed over ~0.2-0.5s at DASH_SPEED_MULT. Fast enough to read as a
+      // lunge, slow enough to be a movement rather than a jump cut.
+      u.dashTo = dest
+      u.dashUntil = t + DASH_MAX_TIME
+      return
+    }
     u.pos = dest
     if (sp.move.kind === 'blink') {
       events.push({ t, kind: 'blink', id: u.id,
@@ -1745,7 +1763,12 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
         }
       }
     }
-    const step = u.speed * backpedal * u.slowMult * statusSpeedMult(u) * DT
+    // ⚠️ A dash ignores the backpedal penalty as well as being faster: it is a
+    // committed leap, not giving ground, and halving it would make Backstep
+    // travel less than a walk.
+    const dashing = !!u.dashTo && now < u.dashUntil
+    const step = u.speed * (dashing ? DASH_SPEED_MULT : backpedal)
+      * u.slowMult * statusSpeedMult(u) * DT
     const tryMove = (nx: number, ny: number) => {
       const p = { x: nx, y: ny }
       // ⚠️ A CANDIDATE THAT DOES NOT MOVE IS NOT A MOVE. Walk straight at a

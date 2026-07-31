@@ -100,6 +100,17 @@ export const FALL_BACK_NEAR = 3.5 // trigger: a melee threat this close
 // because the whole burst happens inside a single window, which is why this is
 // a second and much SHORTER constant rather than a bigger first one.
 export const ESCAPE_LOCKOUT = 5 // seconds either escape locks the other
+
+// ⚠️ A DASH CROSSES THE GROUND. It did not: `u.pos = dest` set the destination
+// in a single tick, so a 7-unit Backstep was an instantaneous 7-unit jump —
+// visually a teleport with no explanation, and mechanically un-interruptible.
+// The comment on `MoveSpatial.move` has always said a dash "crosses the ground
+// and IS stopped by cover"; only the second half was true.
+//
+// A BLINK still snaps, because that is what a teleport is, and it emits its own
+// event so a renderer can draw the discontinuity deliberately.
+export const DASH_SPEED_MULT = 4 // times normal speed while dashing
+export const DASH_MAX_TIME = 0.9 // seconds before a dash gives up and releases
 // Move statuses author their duration in ROUNDS, a unit the field has no
 // concept of. A turn-based round — everyone acting once — is worth roughly
 // this many seconds here. One constant, so restating it is impossible.
@@ -230,6 +241,10 @@ export interface FieldUnit {
   fallBackAt: number
   /** While `t` is under this, the unit is in a committed retreat. */
   fallBackUntil: number
+  /** Mid-dash destination, travelled over several ticks rather than snapped. */
+  dashTo: Vec2 | null
+  /** When the dash gives up, so a blocked dash cannot strand the unit. */
+  dashUntil: number
   /** Where that retreat is heading. ⚠️ Chosen ONCE when it triggers, not
    *  re-scored per tick — a committed retreat that re-picks its destination as
    *  the threat moves oscillates on the spot instead of going anywhere. */
