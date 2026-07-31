@@ -87,8 +87,11 @@ const GOLDENS: Golden[] = [
     // Stage 3a (Fall Back): 15s -> 13.1s and the winner finishes on 604 not
     // 428. A hurt unit that breaks contact for two seconds takes less on the
     // way, so the fight is shorter and the survivor healthier.
-    winner: 'B', duration: 15.1, survivors: [0, 1],
-    casts: 48, hits: 33, deaths: 1, finalHp: [0, 390],
+    // Stage 3b: 15.1s -> 24.2s. Both duellists now carry a movement ability,
+    // so the loser keeps breaking contact and the fight takes far longer to
+    // close. The clearest single illustration of what escapes cost in tempo.
+    winner: 'B', duration: 24.2, survivors: [0, 1],
+    casts: 49, hits: 33, deaths: 1, finalHp: [0, 309],
   },
   {
     // Ranged vs melee across the full width — pins approach, stand-off and the
@@ -114,7 +117,7 @@ const GOLDENS: Golden[] = [
     // Cover-seeking retreat: the caster now runs to the rock rather than
     // straight backwards, and the fight lasts longer for it.
     winner: 'B', duration: 8.6, survivors: [0, 1],
-    casts: 12, hits: 9, deaths: 1, finalHp: [0, 105],
+    casts: 12, hits: 8, deaths: 1, finalHp: [0, 178],
   },
   {
     // Front line + damage + support on both sides: targeting, taunt, healing and
@@ -150,8 +153,8 @@ const GOLDENS: Golden[] = [
     // ⚠️ Stage 3a flipped this back to A, 2-0. Retreat helps whichever side is
     // losing the exchange at the moment it triggers, so a golden that was close
     // is exactly the one it can tip. The paired sweep is the arbiter, not this.
-    winner: 'B', duration: 23, survivors: [0, 2],
-    casts: 97, hits: 59, deaths: 4, finalHp: [0, 0, 0, 0, 263, 282],
+    winner: 'B', duration: 22.2, survivors: [0, 2],
+    casts: 117, hits: 72, deaths: 4, finalHp: [0, 0, 0, 0, 183, 241],
   },
 ]
 

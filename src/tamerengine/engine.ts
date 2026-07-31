@@ -101,6 +101,7 @@ function pushOutOfObstacles(p: Vec2, obs: Obstacle[], radius: number): Vec2 {
 }
 
 import { buildNavGraph, nextWaypoint, bestCoverPoint, NavGraph } from './navgraph'
+import { isEscapeMove, movementMoveFor } from './fieldMoves'
 
 // ── Setup ───────────────────────────────────────────────────────────────────
 /** Default cover: a symmetric pair of blocks so neither side is advantaged. */
@@ -132,14 +133,43 @@ function autoPlace(team: Monster[], side: FieldSide): Vec2[] {
  * Deterministic — `chooseLoadout` is a pure ranking over the learned pool, no rng
  * — so a replay reproduces.
  */
+/** The monster's own best stat — which movement ability it has trained into. */
+function topStat(stats: Record<string, number>): Stat {
+  return (['STR', 'DEX', 'CON', 'WIS', 'INT', 'CHA'] as Stat[])
+    .reduce((a, b) => ((stats[b] ?? 0) > (stats[a] ?? 0) ? b : a))
+}
+
 export function fieldLoadout(m: Monster): Move[] {
   // ⚠️ Only top up a STANDARD FULL KIT. A monster handed a deliberately narrow
   // loadout (a scenario, or a test isolating one move) means it — padding that
   // dilutes the construction and the pinned move stops being chosen.
   if (m.loadout.length < 3 || m.loadout.length >= FIELD_LOADOUT_SIZE) return m.loadout
+  // ⚠️ THE 18 FIELD MOVES WERE UNREACHABLE. `learnedMoves` filters ALL_MOVES
+  // only, and `ALL_FIELD_MOVES` appeared nowhere in production code outside its
+  // own file — Charge, Backstep, Blink, Fade, Beckon, Meteor and the rest were
+  // authored, priced, spatially wired and TESTED, and no monster could ever
+  // equip one. The same failure as the control moves before LINES and the heals
+  // before the draft fix, at the largest scale yet.
+  //
+  // The FIELD's extra slot is now that movement ability, chosen by the stat the
+  // monster actually trained. ⚠️ Granted rather than drafted, deliberately: a
+  // zero-power utility move cannot out-rank a damage move on `expectedOutput`,
+  // so leaving it to the draft is how it stayed at zero uses. The trade is that
+  // it is universal rather than a build choice — worth revisiting once the
+  // escape tier is proven, but reachability first.
   const extra = chooseLoadout(learnedMoves(m.stats), m.stats, FIELD_LOADOUT_SIZE)
     .filter((mv) => !m.loadout.some((x) => x.id === mv.id))
-  return [...m.loadout, ...extra].slice(0, FIELD_LOADOUT_SIZE)
+  const drafted = [...m.loadout, ...extra].slice(0, FIELD_LOADOUT_SIZE)
+  // ⚠️ ITS OWN SLOT, NOT ONE TAKEN FROM THE DRAFT. Appending the mover INSIDE
+  // the 4 displaced the 4th pick — which is the best remaining DAMAGE move — and
+  // `basicAttack.test.ts` caught the consequence immediately: for a weak kit the
+  // free attack started out-DPSing everything the monster owned (11.38 vs
+  // 10.53). Movement is what the FIELD adds to a turn-engine kit, so it is an
+  // extra slot rather than a sacrifice.
+  const mover = movementMoveFor(topStat(m.stats))
+  const granted = mover && (m.stats[mover.stat] ?? 0) >= mover.learnLevel
+    && !drafted.some((x) => x.id === mover.id) ? [mover] : []
+  return [...drafted, ...granted]
 }
 
 function buildUnit(m0: Monster, side: FieldSide, slot: number, pos: Vec2): FieldUnit {
@@ -918,7 +948,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
         // to the situation wins outright — no priority order to get wrong. The
         // floor stops a unit with nothing better to do burning cooldowns on
         // effects worth almost nothing.
-        const best = bestUtility(u, target, mates, foes, obstacles)
+        const best = bestUtility(u, target, mates, foes, obstacles, t)
         if (best && best.score > Math.max(UTILITY_FLOOR, mv?.power ?? 0)) { mv = best.mv; aim = best.aim }
       }
       if (mv) {
@@ -1193,12 +1223,17 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
   }
 
   /** The best utility cast available to this unit right now, if any. */
-  function bestUtility(u: FieldUnit, target: FieldUnit, mates: FieldUnit[], foes: FieldUnit[], obs: Obstacle[]) {
+  function bestUtility(u: FieldUnit, target: FieldUnit, mates: FieldUnit[], foes: FieldUnit[], obs: Obstacle[], tNow: number) {
     let best: { mv: Move; aim: FieldUnit; score: number } | null = null
     for (const mv of u.m.loadout) {
       if (mv.type === 'damage') continue
       if ((u.cooldowns[mv.id] ?? 0) > 0) continue
       if (u.mp < mpCost(mv)) continue
+      // ⚠️ THE LOCKOUT MUST BLOCK AS WELL AS BE SPENT, or it is one-directional:
+      // Fall Back would lock the ability but the ability could still be fired
+      // the instant after a Fall Back, which is the exact two-in-two-seconds
+      // burst the constant exists to prevent.
+      if (isEscapeMove(mv) && u.escapeLockUntil > tNow) continue
       const got = utilityScore(u, mv, mates, foes)
       if (!got) continue
       // Same reach and cover rules as a damage cast — a support cannot heal
@@ -1592,6 +1627,11 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
    */
   function applyCasterMovement(u: FieldUnit, target: FieldUnit, mv: Move, t: number, obs: Obstacle[]) {
     const sp = spatialOf(mv.name)
+    // ⚠️ AN ESCAPE ABILITY SPENDS THE SHARED LOCKOUT, exactly as Fall Back does.
+    // Independent cooldowns are the design; what must not happen is both being
+    // spent in the same breath, which is what makes an assassin's commitment
+    // unanswerable. See docs/PATHFINDING_DESIGN.md §5.
+    if (isEscapeMove(mv)) u.escapeLockUntil = Math.max(u.escapeLockUntil, t + ESCAPE_LOCKOUT)
     if (!sp?.move) return
     const from = { ...u.pos }
     const dir = norm(sub(target.pos, u.pos))
