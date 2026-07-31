@@ -34,6 +34,13 @@ const COMMIT: Opt<Tactics['commit']>[] = [
   { id: 'dive', icon: '⚡', name: 'Dive' },
   { id: 'hold', icon: '🛑', name: 'Hold line' },
 ]
+// ⚠️ NO 'default' ENTRY. Every other order here can be left unset; a heal policy
+// cannot, because "unset" silently means triage and the player would have no way
+// to see which one is running. Both states are explicit and pickable.
+const HEALS: Opt<'steady' | 'triage'>[] = [
+  { id: 'triage', icon: '🚑', name: 'Save for low HP' },
+  { id: 'steady', icon: '💧', name: 'Heal freely' },
+]
 const COVER: Opt<boolean | undefined>[] = [
   { id: undefined, icon: '◦', name: 'Ignore' },
   { id: true, icon: '🧱', name: 'Use cover' },
@@ -73,6 +80,8 @@ export function TacticsPanel({ name, value, onChange }: {
       <Row label="Spacing" cur={value.spacing} opts={SPACING} onPick={(v) => set({ spacing: v })} />
       <Row label="Commit" cur={value.commit} opts={COMMIT} onPick={(v) => set({ commit: v })} />
       <Row label="Cover" cur={value.useCover} opts={COVER} onPick={(v) => set({ useCover: v || undefined })} />
+      <Row label="Healing" cur={value.healPolicy ?? 'triage'} opts={HEALS}
+        onPick={(v) => set({ healPolicy: v })} />
       <Row label="Survival" cur={value.preserve ?? 'off'}
         opts={PRESERVE_INFO.map((o) => ({ id: o.id, icon: o.icon, name: o.name }))}
         onPick={(v) => set({ preserve: v })} />

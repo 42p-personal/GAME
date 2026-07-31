@@ -420,6 +420,19 @@ export interface Tactics {
   useCover?: boolean // prefer ground where an obstacle breaks enemy line of sight
   commit?: 'dive' | 'hold' // chase past the enemy front line, or refuse to over-extend
   /**
+   * WHEN a restore is spent. 'triage' holds it until an ally is actually hurt;
+   * 'steady' fires it whenever it is up.
+   *
+   * ⚠️ TRIAGE IS THE DEFAULT, AND IT IS A MEASURED CHOICE. Three paired A/Bs on
+   * HEAL_MULT (1.3, 2.5, 1.3 on a richer pool) all read NULL, and every one
+   * showed support-heavy sides getting FASTER with stronger healing — Vanguard v
+   * Choir -18.3s at 2.5x. Healing was acting as a tempo multiplier rather than an
+   * attrition brake, and the leading explanation is that heals were scored
+   * alongside buffs and fired at full health, which is wasted throughput.
+   * 'steady' keeps that behaviour for anyone who wants it.
+   */
+  healPolicy?: 'steady' | 'triage'
+  /**
    * How the monster spends its BIGGEST move. 'nuke' holds it for a target worth
    * finishing; 'steady' fires it the moment it is up.
    * ⚠️ This was a HIDDEN stat. It is derived from CON+WIS-DEX as `patience` in
@@ -430,7 +443,9 @@ export interface Tactics {
    */
   burst?: 'nuke' | 'steady'
 }
-export const DEFAULT_TACTICS: Tactics = { temperament: 'balanced', targetPriority: 'weakest' }
+export const DEFAULT_TACTICS: Tactics = {
+  temperament: 'balanced', targetPriority: 'weakest', healPolicy: 'triage',
+}
 
 // --- Per-fight orders (v0.81): tactics are chosen fresh before EACH battle the
 // player fights (like abilities are chosen before a tournament), not stored as a
@@ -548,7 +563,7 @@ export const GAMEPLANS: Record<TeamGameplan, GameplanInfo> = {
     name: 'Rushdown', icon: '🔥',
     tell: 'Fast, aggressive, no support — all pressure.',
     counter: "They rush your softest monster and spend big early. Put a tank up front, or burst them before they snowball.",
-    tactics: { temperament: 'aggressive', targetPriority: 'weakest', manaPolicy: 'burst' },
+    tactics: { temperament: 'aggressive', targetPriority: 'weakest', manaPolicy: 'burst', healPolicy: 'steady' },
     winCon: 'Kill something in the first three rounds and snowball the numbers advantage.',
     mix: { damage: 5, support: 1 },
   },

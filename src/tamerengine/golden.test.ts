@@ -179,8 +179,12 @@ const GOLDENS: Golden[] = [
     // no-teleport tripwire.
     // ⚠️ Mitigation 1400 -> 1250 and +2 hpRegenBuff on every regen move — the
     // 'less bursty' pass. Survivors end healthier and fights run slightly longer.
-    winner: 'A', duration: 14.4, survivors: [3, 0],
-    casts: 84, hits: 52, deaths: 3, finalHp: [18, 328, 282, 0, 0, 0],
+    // ⚠️ TRIAGE. Heals are now held until an ally is actually hurt, so the WIS
+    // monster stops topping up a full-health team and spends the time elsewhere.
+    // 14.4s -> 16.9s and the worst-off survivor ends on 303 rather than 18 —
+    // the same mana buying a save instead of overheal.
+    winner: 'A', duration: 16.9, survivors: [3, 0],
+    casts: 78, hits: 50, deaths: 3, finalHp: [303, 196, 282, 0, 0, 0],
   },
 ]
 

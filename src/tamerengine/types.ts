@@ -221,6 +221,16 @@ export const HEAL_MULT = 1.0
  */
 export const MIT_DIVISOR = 1250
 
+/**
+ * TRIAGE THRESHOLD — under `healPolicy: 'triage'` a restore is held until its best
+ * recipient is at or below this fraction of max HP.
+ *
+ * ⚠️ 0.55, not lower: a heal has a cast time and a cooldown, so waiting for 25%
+ * means waiting until the ally is already dead. High enough to catch someone
+ * genuinely in trouble, low enough that a full-health target is never topped up.
+ */
+export const TRIAGE_AT = 0.55
+
 export const KNOCKBACK_SPEED = 12
 /** Floor on the stagger, so even a 1-unit nudge is legible rather than a snap. */
 export const KNOCKBACK_MIN_TIME = 0.15

@@ -5,7 +5,7 @@
 // depends on `simulateFieldBattle` being a pure function of
 // (monsters + placement + obstacles + seed). So: fixed dt, fixed unit order,
 // one seeded rng stream, and no wall-clock or Math.random anywhere.
-import { Monster, Move, MoveArea, MoveSpatial, Stat, aoeFalloff, statScaleOf, mulberry32, hashString, StatusKind, rollVariance, SPREADABLE_STATUSES, classForStats} from '../core'
+import { Monster, Move, MoveArea, MoveSpatial, Stat, aoeFalloff, statScaleOf, mulberry32, hashString, StatusKind, rollVariance, SPREADABLE_STATUSES, classForStats, DEFAULT_TACTICS} from '../core'
 import { chooseLoadout, learnedMoves, manaCost, maxHp, maxMana } from '../monster'
 import {
   DT, FIELD_H, FIELD_W, FieldEvent, FieldResult, FieldSetup, FieldSide, FieldUnit,
@@ -17,7 +17,7 @@ import {
   SUDDEN_DEATH_AT, SUDDEN_DEATH_BASE, SUDDEN_DEATH_RAMP, KITE_MAX, KITE_REFILL, BLOCK_DR,
   BASIC_STAT_TIER, BASIC_BASE_POWER, BASIC_STAT_SCALE,
   MANA_ON_HIT_TAKEN, MANA_ON_HIT_DEALT, MANA_SUPPORT_PER_SEC, WIS_REGEN_DIVISOR, FIELD_MANA_COST_MULT,
-  FIELD_LOADOUT_SIZE, CC_DR_STEP, CC_DR_RESET, CLEANSE_CC_IMMUNITY, CLASS_BASIC, KNOCKBACK_SPEED, KNOCKBACK_MIN_TIME, HEAL_MULT, MIT_DIVISOR} from './types'
+  FIELD_LOADOUT_SIZE, CC_DR_STEP, CC_DR_RESET, CLEANSE_CC_IMMUNITY, CLASS_BASIC, KNOCKBACK_SPEED, KNOCKBACK_MIN_TIME, HEAL_MULT, MIT_DIVISOR, TRIAGE_AT} from './types'
 import { archetypeOf, desiredGoal, dist, isMelee, manaRoleOf, norm, pickTarget, reachOf, spacingRadius, sub, threatOf, traitsFor, wantsToKite } from './decide'
 import { personalityOf, spendAboveFor } from './personality'
 import { spatialOf } from './spatial'
@@ -1264,6 +1264,17 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
   }
 
   /** The best utility cast available to this unit right now, if any. */
+  /**
+   * A move that puts HP back — direct (`power` on a friendly) or over time.
+   * ⚠️ A `function`, not a `const` arrow: `bestUtility` is hoisted and called
+   * from the tick loop far above this line, so an arrow here is in its temporal
+   * dead zone and throws on the first utility cast of the first fight.
+   */
+  function isRestore(mv: Move) {
+    return (mv.target === 'ally' || mv.target === 'team' || mv.target === 'self')
+      && ((mv.power ?? 0) > 0 || !!mv.effects?.hpRegenBuff)
+  }
+
   function bestUtility(u: FieldUnit, target: FieldUnit, mates: FieldUnit[], foes: FieldUnit[], obs: Obstacle[], tNow: number) {
     let best: { mv: Move; aim: FieldUnit; score: number } | null = null
     for (const mv of u.m.loadout) {
@@ -1277,6 +1288,15 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       if (isEscapeMove(mv) && u.escapeLockUntil > tNow) continue
       const got = utilityScore(u, mv, mates, foes)
       if (!got) continue
+      // ⚠️ TRIAGE. A restore is held until someone actually needs it. Heals used
+      // to be scored alongside buffs and fired at full health, which is wasted
+      // throughput — the leading explanation for why three HEAL_MULT A/Bs all
+      // read null while support sides got FASTER with stronger healing. Gated
+      // here rather than in `utilityScore` because the recipient is only known
+      // once a target has been chosen. `healPolicy: 'steady'` opts out.
+      if ((u.m.tactics?.healPolicy ?? DEFAULT_TACTICS.healPolicy) === 'triage'
+        && isRestore(mv) && got.aim.side === u.side
+        && got.aim.hp / got.aim.maxHp > TRIAGE_AT) continue
       // Same reach and cover rules as a damage cast — a support cannot heal
       // through a rock any more than a mage can burn through one.
       if (dist(u.pos, got.aim.pos) > rangeOf(mv)) continue
