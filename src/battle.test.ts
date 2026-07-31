@@ -117,12 +117,15 @@ const GOLDENS = [
     // ⚠️ Recaptured for the ELEMENT REMOVAL — body-type resist/weak no longer
     // multiplies damage, so every fight involving a resisted or super-effective
     // move resolves differently. Deliberate; elements are gone from the game.
-    winner: 'A', events: 79, logLines: 67,
+    // ⚠️ Recaptured for the REACHABILITY repricing — Tranquility lv430 -> 320. It
+    // was a mid-line Mender heal above WIS's p90 (355), so nobody could learn it;
+    // now a WIS monster drafts it and the fight runs longer (79 -> 107 events).
+    winner: 'A', events: 107, logLines: 84,
     finals: [
-      { side: 'A', slot: 0, hp: 28, mana: 285, wasKOd: false },
-      { side: 'A', slot: 1, hp: 152, mana: 211, wasKOd: false },
+      { side: 'A', slot: 0, hp: 42, mana: 281, wasKOd: false },
+      { side: 'A', slot: 1, hp: 152, mana: 214, wasKOd: false },
       { side: 'B', slot: 0, hp: 0, mana: 224, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 339, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 323, wasKOd: true },
     ],
   },
   {

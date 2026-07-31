@@ -186,7 +186,7 @@ const POOLS: Record<Stat, Row[]> = {
     { name: 'Mend', learnLevel: 40, type: 'buff', channel: 'support', target: 'ally', cooldown: 3, accuracy: 100, power: 16, mana: 8, range: 8.2, desc: 'Soothing focus, given to somebody else. WIS is the only stat that can.' },
     { name: 'Clarity', learnLevel: 120, type: 'buff', channel: 'support', target: 'ally', cooldown: 3, accuracy: 100, power: 0, mana: 12, effects: { cleanse: true }, range: 8, desc: "Clears an ally's head — confusion, charm, fear, all of it." },
     { name: 'Renewal', learnLevel: 260, type: 'buff', channel: 'support', target: 'ally', cooldown: 4, accuracy: 100, power: 8, mana: 18, effects: { hpRegenBuff: 8, duration: 4 }, range: 8.5, desc: 'Not a burst but a tide: 8 HP a round for four rounds.' },
-    { name: 'Tranquility', learnLevel: 430, type: 'buff', channel: 'support', target: 'ally', cooldown: 5, accuracy: 100, power: 34, mana: 26, range: 7.3, desc: 'Deep restorative calm channelled into one ally.' },
+    { name: 'Tranquility', learnLevel: 320, type: 'buff', channel: 'support', target: 'ally', cooldown: 5, accuracy: 100, power: 34, mana: 26, range: 7.3, desc: 'Deep restorative calm channelled into one ally.' },
     { name: 'Rebuke', learnLevel: 560, type: 'damage', channel: 'support', target: 'enemy', cooldown: 4, accuracy: 90, power: 37, mana: 24, variance: 0.2, range: 7.2, desc: 'The healer answers back. A mender is not the same thing as a bystander.' },
     { name: 'Ward Against Ruin', learnLevel: 650, type: 'buff', channel: 'support', target: 'team', cooldown: 7, accuracy: 100, power: 20, mana: 46, effects: { cleanse: true, regenBuff: 3, duration: 3 }, range: 8, desc: "Clears the whole team's ailments and mends 20 HP each. The Mender capstone." },
 
