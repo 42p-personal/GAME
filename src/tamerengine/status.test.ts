@@ -118,13 +118,22 @@ describe('field statuses — the three that gained geometry', () => {
     expect(feared.length).toBeGreaterThan(0)
     const t0 = feared[0].t
     const snaps = of(r.events, 'snapshot')
-    const gapAt = (tt: number) => {
-      const s = snaps.reduce((best, s) => (Math.abs(s.t - tt) < Math.abs(best.t - tt) ? s : best))
-      return Math.abs(s.units[0].x - s.units[1].x)
+    const at = (tt: number) =>
+      snaps.reduce((best, s) => (Math.abs(s.t - tt) < Math.abs(best.t - tt) ? s : best))
+    // ⚠️ MEASURE THE VICTIM'S OWN FLIGHT, NOT THE GAP BETWEEN THE TWO. The gap
+    // is confounded by how fast the SCREAMER closes, and once units had to TURN
+    // rather than pivot instantly, the victim's ~0.45s about-face let the
+    // screamer gain more than the victim escaped — the gap shrank while fear was
+    // working perfectly. This fixture claims to assert "fear's OWN mechanic", so
+    // it now does: how far the victim has fled from the spot it was frightened
+    // at, which no behaviour of the chaser can distort.
+    const scared = at(t0)
+    const origin = { x: scared.units[1].x, y: scared.units[1].y }
+    const fledBy = (tt: number) => {
+      const u = at(tt).units[1]
+      return Math.hypot(u.x - origin.x, u.y - origin.y)
     }
-    // Distance from the attacker is greater a moment after fear lands than at
-    // the instant it landed — the victim is running.
-    expect(gapAt(t0 + 1.0)).toBeGreaterThan(gapAt(t0))
+    expect(fledBy(t0 + 1.5)).toBeGreaterThan(1)
   })
 
   it('CONFUSION sends the victim off its intended heading', () => {
