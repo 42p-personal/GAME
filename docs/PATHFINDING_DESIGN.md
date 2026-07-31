@@ -1,7 +1,8 @@
 # Pathfinding — design plan
 
 **Status:** planning. **Change freeze in effect** on `src/tamerengine/` while this is
-agreed. **Branch:** `3doverhal`.
+agreed. Stage 3 is **DECIDED** (§5: A + F on independent cooldowns); stages 0–2 and
+the instrument order are settled; nothing is built yet. **Branch:** `3doverhal`.
 
 The goal, in the user's words: *monsters that navigate around obstacles, use them to
 their advantage, and — ideally — a support running around a pillar to escape an
@@ -168,7 +169,64 @@ system, and it stays as it is.
 | **E. Diminishing effect** | each retreat moves you less | 2 numbers | low | reads as the unit silently degrading |
 | **F. Make it an ability** | Disengage / Shadowstep: MP + slot + cooldown | **0 new systems** | high | only monsters that drafted it can do it |
 
-### Recommendation — **A as baseline, F as the premium tier**
+### DECIDED — **A and F, on independent cooldowns**
+
+Both tiers ship. A monster therefore has **two escapes**, and the ability does *not*
+consume the baseline cooldown. That is deliberate: it creates the two-beat moment
+(*caught → Disengage → still caught → Fall Back*) and keeps the ability strictly
+premium rather than a sidegrade.
+
+- **A — Fall Back.** Universal, ~15s cooldown, trigger-gated. Ordinary movement speed.
+- **F — an ability.** Own cooldown, MP cost, occupies a loadout slot. **Faster to its
+  destination**, which is the whole reason to draft it.
+
+**Suggested mechanic for Fall Back, using a lever that already exists:** for its ~2s
+duration it **suspends the 0.6× `BACKPEDAL_MULT` penalty**. That is what separates a
+retreat from ordinary kiting — the unit genuinely outruns its pursuer for two seconds
+— and it needs no new speed constant.
+
+#### The three ability flavours map onto vocabulary the engine already has
+
+`core.ts:300` already carries the exact distinction, and its comment already states
+it: *"`dash` crosses the ground and IS blocked by cover; `blink` is instantaneous and
+ignores it — that difference is the whole reason to want a blink."*
+
+```ts
+move?: { kind: 'dash' | 'blink'; to: 'target' | 'behindTarget' | 'awayFromTarget' | 'ally'; maxRange: number }
+```
+
+| flavour | encoding | respects geometry? | range | needs Stage 1? |
+|---|---|---|---|---|
+| **Disengage** | `dash`, `awayFromTarget`, short `maxRange` | yes | shortest | **no** — short enough for a straight-line check |
+| **Dash** | `dash`, longer `maxRange` | yes — blocked by cover | medium | **YES** — must follow a path or it runs into a wall |
+| **Teleport** | `blink` | **no** — ignores cover entirely | longest | **no** — ignores geometry by definition |
+
+⚠️ **This inverts the obvious build order.** Disengage and Teleport need no
+pathfinding at all and could ship before Stage 1; **Dash is the one that depends on
+it**, because a ground-crossing leap without a path just accelerates into the nearest
+obstacle. `sp.move` is already implemented (`engine.ts:432`), so the ability tier is
+closer to working than the baseline tier is.
+
+`fade` (drop off the targeting radar, `core.ts:313`) is a **fourth** escape flavour
+that is not movement at all, and it composes: fade + reposition is a genuine vanish.
+Worth holding back as a later tier rather than shipping alongside these.
+
+#### ⚠️ Teleport is the one that can break the bound
+
+Cut-off pursuit (§4) is what converts a cooldown into a real limit — and **it does not
+apply to `blink`**, which ignores the geometry the interception is computed over. A
+blink with generous range and a modest cooldown produces an unkillable support, which
+is the §5 failure in its purest form. Price it hardest: longest cooldown, highest MP,
+and consider a cast time so it can be reacted to. Do not let its `maxRange` be tuned
+casually.
+
+#### ⚠️ Sim the combined budget, not the baseline
+
+Two independent cooldowns means the escape budget per fight is *baseline + ability*.
+The acceptance run must use a support **with the ability drafted** — testing baseline
+Fall Back alone will look fine and ship an unkillable premium build.
+
+### Why A, and why F (recorded rationale)
 
 **A** because a cooldown is the only option on that list the **player can see and plan
 around**, and it reuses a concept the game already teaches on every ability. One
@@ -234,7 +292,9 @@ commit once Stage 1 lands.
 | **4a** | `stuck%` + `wander` instruments | must precede 0 to prove it |
 | **1** | visibility graph + A*, waypoints into `stepToward` | `wander` < 1.5; goldens recaptured |
 | **2** | LoS-break flight, peek, cut-off pursuit | escape success positive |
-| **3** | retreat cooldown + trigger; then Disengage/Shadowstep | resolved ≥ baseline; escape bounded |
+| **3a** | Fall Back: ~15s cooldown, trigger, backpedal suspended | resolved ≥ baseline; escape bounded |
+| **3b** | Disengage + Teleport (no Stage 1 dependency) | escape bounded **with the ability drafted** |
+| **3c** | Dash (needs Stage 1) | wander unchanged; no dashing into cover |
 
 **Stage 4a genuinely comes first.** Building Stage 0 without the instrument means
 grading the fix on `resolved`, which is exactly the number that already hid the bug.
