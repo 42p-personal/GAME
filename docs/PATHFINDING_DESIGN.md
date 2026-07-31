@@ -28,7 +28,37 @@ re-decides from scratch, so a unit slides left, the goal vector shifts a degree,
 it slides back right. Cover is not something a monster understands; it is something it
 bumps into.
 
-### The measurement
+### The measurement — BASELINE (`npx tsx tools/navdiag.ts`)
+
+⚠️ **Built first, before any fix.** These are the numbers Stage 0 and Stage 1 are
+graded on. `sweep40` reported Titan's Rest at an ordinary-looking 38/40 while a third
+of its unit-fights were inert, so nothing here gets graded on `resolved`.
+
+| arena | size | resolved | **deadlocked** | stuck% | of which cover | wander |
+|---|---|---:|---:|---:|---:|---:|
+| Dustbowl | 34×20 | 37/40 | **0**/240 | 1.3% | 100% | 2.16 |
+| The Ossuary | 48×26 | 30/40 | **3**/240 | 37.6% | 100% | 2.48 |
+| Titan's Rest | 64×34 | 0/40 | **80**/240 | 56.6% | 100% | 3.31 |
+
+Three things the first hand-probe got wrong or could not see:
+
+- **It is not two units, it is all six.** The probe read one seed and found Zarok and
+  Sylix. Across 40 fights every slot on Titan's Rest deadlocks in some of them —
+  A0 16×, B1 18×, A1 13×, B0 13×, A2 11×, B2 9×. It is a property of the arena, not of
+  two unlucky spawns.
+- **The Ossuary was hiding it.** 30/40 resolved looks merely mediocre; 37.6% of all
+  movement attempts failing does not.
+- **⚠️ `of which cover` is 100% on all three arenas.** Every stuck tick, everywhere, is
+  against an obstacle. That is an unusually clean attribution: there is no second,
+  unrelated cause to hunt, and Stages 0–1 are aimed at the whole problem rather than
+  part of it.
+
+**The two bugs separate exactly as designed.** Dustbowl has ~no deadlock (1.3% stuck)
+but still wanders 2.16× — chronic without catastrophic. A single blended "navigation
+health" number would have hidden that; two numbers show a map can be fine at one and
+bad at the other.
+
+### The original single-seed probe
 
 Per-unit, from the three arena dumps. `frozen` = ticks where the unit moved < 0.02
 units; `hugging` = ticks spent within 1.2 units of an obstacle; `wander` = path length
