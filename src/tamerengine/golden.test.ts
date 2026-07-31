@@ -18,6 +18,10 @@
 // fixed training, fixed placement, fixed obstacles. The only free variable left
 // is the simulation itself.
 //
+// RECAPTURED AT STAGE 1 (visibility-graph pathfinding): two of the three moved
+// again. Both moved the same way — the side that has to cross the arena arrives
+// sooner and healthier, because it rounds cover instead of scraping it.
+//
 // RECAPTURED ONCE, DELIBERATELY, at Stage 0 of docs/PATHFINDING_DESIGN.md —
 // push-out at spawn, a real escape scan, and the rejection of zero-displacement
 // "moves". All three moved and two flipped their winner, which is the fix
@@ -96,8 +100,11 @@ const GOLDENS: Golden[] = [
     // brawler now reaches the caster instead of scraping along cover on the way
     // in. Melee that can navigate beats a caster at this range — the matchup
     // working rather than breaking.
-    winner: 'B', duration: 9.9, survivors: [0, 1],
-    casts: 16, hits: 12, deaths: 1, finalHp: [0, 222],
+    // Stage 1 (pathfinding): 9.9s -> 6.8s and the brawler finishes on 530 not
+    // 222. It now walks ROUND the rock rather than scraping along it, so it
+    // arrives sooner and takes far less on the way in.
+    winner: 'B', duration: 6.8, survivors: [0, 1],
+    casts: 14, hits: 9, deaths: 1, finalHp: [0, 530],
   },
   {
     // Front line + damage + support on both sides: targeting, taunt, healing and
@@ -119,8 +126,11 @@ const GOLDENS: Golden[] = [
     // ⚠️ WINNER FLIPPED B -> A at Stage 0. Same cause: A's front line reaches
     // the fight instead of hanging on geometry, so its wall+bruiser pairing does
     // the job it was built for.
-    winner: 'A', duration: 17, survivors: [2, 0],
-    casts: 98, hits: 64, deaths: 4, finalHp: [0, 188, 282, 0, 0, 0],
+    // Stage 1: A now wins 3-0 rather than 2-0 — one fewer death on the winning
+    // side, because its front line spends the approach walking instead of
+    // grinding along cover.
+    winner: 'A', duration: 17.4, survivors: [3, 0],
+    casts: 100, hits: 64, deaths: 3, finalHp: [101, 170, 282, 0, 0, 0],
   },
 ]
 

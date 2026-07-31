@@ -98,6 +98,8 @@ function pushOutOfObstacles(p: Vec2, obs: Obstacle[], radius: number): Vec2 {
   return p // nowhere free within 14 units: the arena is pathological, not the unit
 }
 
+import { buildNavGraph, nextWaypoint, NavGraph } from './navgraph'
+
 // ── Setup ───────────────────────────────────────────────────────────────────
 /** Default cover: a symmetric pair of blocks so neither side is advantaged. */
 export const DEFAULT_OBSTACLES: Obstacle[] = [
@@ -673,6 +675,16 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
   // put a pillar by the start line, which is a real design tool.
   for (const u of units) u.pos = pushOutOfObstacles(u.pos, setup.obstacles ?? [], u.radius)
 
+  // ⚠️ BUILT ONCE. Obstacles never move, so the visibility graph is a constant
+  // of the arena — the per-tick cost is the two attach passes in nextWaypoint,
+  // and even those only run when the goal is NOT directly visible, which is most
+  // ticks. `navPad` must EXCEED tryMove's `radius * 0.6` inflation or every
+  // corner is somewhere the unit is forbidden to stand and each path aims at an
+  // unreachable point.
+  const navPad = Math.max(...units.map((u) => u.radius), 0.9) * 0.6 + 0.25
+  const navLos: (a: Vec2, b: Vec2) => boolean = (a, b) => hasLineOfSight(a, b, obstacles)
+  const navGraph: NavGraph = buildNavGraph(obstacles, navPad, navLos, { w: FIELD_W, h: FIELD_H })
+
   const byId = new Map(units.map((u) => [u.id, u]))
   const events: FieldEvent[] = []
   // Persistent patches of ground. The arena's own contribution to tactics: a
@@ -951,7 +963,11 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
         else vis.set(u.id, 'idle')
         continue
       }
-      stepToward(u, goal, mates, obstacles)
+      // ⚠️ THE ONLY LINE THAT CHANGES FOR PATHFINDING. The global layer picks
+      // which way round the cover; the local layer below still owns separation,
+      // backpedal, collision-slide and the escape scan. Everything tuned into
+      // stepToward survives untouched.
+      stepToward(u, nextWaypoint(u.pos, goal, navGraph, navLos), mates, obstacles)
       vis.set(u.id, 'move')
     }
 

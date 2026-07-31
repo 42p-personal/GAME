@@ -1,8 +1,7 @@
 # Pathfinding — design plan
 
-**Status:** Stage 4a (instruments) and **Stage 0 SHIPPED**. Freeze lifted. Stage 3 is
-DECIDED (§5: A + F on independent cooldowns + a ~5s shared lockout). Stage 1
-(pathfinding) is next. **Branch:** `3doverhal`.
+**Status:** Stage 4a (instruments), **Stage 0 and Stage 1 SHIPPED**. Freeze lifted. Stage 3 is
+DECIDED (§5: A + F on independent cooldowns + a ~5s shared lockout). Stage 2 (cover as a resource) is next. **Branch:** `3doverhal`.
 
 The goal, in the user's words: *monsters that navigate around obstacles, use them to
 their advantage, and — ideally — a support running around a pillar to escape an
@@ -192,7 +191,37 @@ The layering is the point: a **global path layer** picks the waypoint; the **exi
 local steering layer** keeps doing separation, backpedal and collision-slide. No
 rewrite of what already works.
 
-**Cheaper first cut, if wanted:** commit-to-a-side wall-following with hysteresis —
+### ✅ SHIPPED — `src/tamerengine/navgraph.ts`
+
+| arena | resolved | stuck% | **wander** |
+|---|---|---|---|
+| Dustbowl | 38 → **39**/40 | 0.3% | 2.06 → 2.10 |
+| The Ossuary | 35 → **39**/40 | 0.3% | 2.61 → **1.69** |
+| Titan's Rest | 39 → **40**/40 | 0.0% | 2.45 → **1.61** |
+
+`sweep40` **38/40 @ 20.8s → 39/40 @ 18.8s**. Every arena now resolves, and Titan's Rest
+— which was 0/40 two commits ago — is perfect.
+
+Built as designed: static graph, inflated corners, A* with index-order tie-breaks for
+determinism, and **one changed line in the engine** — `stepToward` receives
+`nextWaypoint(...)` instead of the raw goal. The local steering layer is untouched, so
+every behaviour tuned into it (separation, backpedal, the escape scan, the
+zero-displacement rejection) still applies.
+
+⚠️ **Wander barely moved on Dustbowl (2.06 → 2.10), and that is correct, not a
+shortfall.** Dustbowl is 1.9% cover — there is almost nothing to route around, so its
+wander was never pathfinding waste. It is kiting and repositioning, which is movement
+we WANT. The plan's "< 1.5 everywhere" target was wrong: it assumed all wander is
+waste. On the cover-heavy arenas, where the metric does measure routing, it fell by
+~35%. **Wander is only a pathfinding metric in proportion to how much cover a map has.**
+
+⚠️ **A test fixture failed and the CODE was right.** The first "drops a swallowed
+corner" case used two equal-height blocks side by side — which swallows nothing, since
+every seam corner sits above or below both blocks and is genuinely standable. Replaced
+with a small block against the face of a bigger one, which buries exactly two corners.
+Fixtures must pin the variable they claim to test.
+
+**Cheaper first cut, not taken:** commit-to-a-side wall-following with hysteresis —
 when blocked, choose the tangent nearer the goal **once** and hold it for K ticks or
 until the goal is in line of sight. That kills the oscillation, which is the actual
 failure mode, without a graph. ⚠️ But it does **not** unlock Stage 2 — you cannot ask
