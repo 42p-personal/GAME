@@ -20,8 +20,16 @@ STEP = int(sys.argv[3]) if len(sys.argv) > 3 else 2   # take every Nth tick
 FPS = int(sys.argv[4]) if len(sys.argv) > 4 else 20
 
 d = json.load(open(src, encoding='utf-8'))
-FW, FH = 40.0, 22.0
-SC = 24                       # px per field unit
+# ⚠️ Read the field from the DUMP. These were hardcoded 40x22, which silently
+# drew every other arena at the wrong scale — units walking off the painted
+# pitch, obstacles landing in the wrong place — while looking like a plausible
+# render. A dump that carries its own dimensions cannot disagree with itself.
+MAP = d.get('map', {})
+FW, FH = float(MAP.get('w', 40.0)), float(MAP.get('h', 22.0))
+# Scale to a roughly constant OUTPUT width so three arenas of different sizes
+# arrive as comparable images. Sprites are drawn in world units, so on a bigger
+# map they correctly come out smaller — that IS the thing being shown.
+SC = max(11, min(24, int(1180 / FW)))
 PAD_T, PAD_B = 46, 96   # bottom pad holds the roster
 W, H = int(FW * SC), int(FH * SC) + PAD_T + PAD_B
 
@@ -145,7 +153,7 @@ for fi in range(0, len(frames), STEP):
     # ── HUD ──────────────────────────────────────────────────────────────────
     aliveA = sum(1 for u in fr['units'] if u['id'][0] == 'A' and u['id'] not in dead and u['hp'] > 0)
     aliveB = sum(1 for u in fr['units'] if u['id'][0] == 'B' and u['id'] not in dead and u['hp'] > 0)
-    g.text((14, 10), 'tamerengine', font=F_TITLE, fill=INK)
+    g.text((14, 10), MAP.get('name', 'tamerengine'), font=F_TITLE, fill=INK)
     g.text((14 + 128, 14), '5 v 5  ·  field battle', font=F_SM, fill=DIM)
     g.text((W - 14, 12), f"{fr['t']:.1f}s", font=F_HUD, fill=INK, anchor='ra')
     g.text((W / 2 - 30, 14), f'{aliveA}', font=F_HUD, fill=A_COL, anchor='ra')
@@ -179,6 +187,9 @@ for fi in range(0, len(frames), STEP):
 
     foot = (f"seed {d['seed']}  ·  winner {d['winner']}  ·  "
             f"{d['duration']}s  ·  {d['survivorsA']}v{d['survivorsB']} standing")
+    if MAP:
+        g.text((14, H - 16), f"{MAP['w']:g} x {MAP['h']:g}  ·  {MAP['brief']}",
+               font=F_SM, fill=(84, 81, 96))
     g.text((W - 14, H - 16), foot, font=F_SM, fill=(84, 81, 96), anchor='ra')
 
     out.append(im.convert('P', palette=Image.ADAPTIVE, colors=128))

@@ -10,6 +10,7 @@ import { LINES, CLASS_LINES, LINE_OF } from './lines'
 import { SPECIES } from './species'
 import { ALL_MOVES } from './moves'
 import { ALL_FIELD_MOVES } from './tamerengine/fieldMoves'
+import { MAPS, mapProblems } from './tamerengine/maps'
 import { ALL_SIGNATURE_MOVES, SIGNATURE_LISTS, signatureChoicesFor } from './signatureMoves'
 import { LEAGUE_TOP_GOLD, trainingProfileFor } from './game'
 import { activeQuartersFor, BREEDING_BONUS, CIRCUIT_REWARDS, EVENTS, LICENSE_COSTS, MAX_POTENTIAL, PRESTIGE_EVENTS, TEAM_SIZE_BY_LEAGUE, breedPotential, tournamentCalendarFor } from './town'
@@ -17,6 +18,13 @@ import { INNATE_EFFECTS } from './battle'
 
 export function designProblems(): string[] {
   const problems: string[] = []
+
+  // ─── ARENAS ───────────────────────────────────────────────────────────────
+  // ⚠️ An arena that favours one side biases every measurement taken on it, in
+  // one direction, silently — and a sweep would report it as a balance finding
+  // about the monsters rather than about the ground. `mirror()` makes that
+  // unwritable; this catches a later hand edit that bypasses it.
+  for (const m of MAPS) problems.push(...mapProblems(m))
 
   // ─── ABILITY LINES (P4) ───────────────────────────────────────────────────
   // ⚠️ A move with no line is INVISIBLE to line affinity, so it silently loses

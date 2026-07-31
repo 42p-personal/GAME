@@ -17,7 +17,10 @@ export const norm = (a: Vec2): Vec2 => {
   return l < 1e-6 ? { x: 0, y: 0 } : { x: a.x / l, y: a.y / l }
 }
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n))
-const FIELD_DIAG = Math.hypot(FIELD_W, FIELD_H)
+// ⚠️ Computed PER CALL, not once at module load. As a load-time const it froze
+// at whatever the field was when the module was first imported, so on any arena
+// but the default the proximity term below silently used the wrong diagonal.
+const fieldDiag = () => Math.hypot(FIELD_W, FIELD_H)
 
 // ── The two new stats ───────────────────────────────────────────────────────
 // Derived from the coaching the player ALREADY sets (tactics) plus the
@@ -153,7 +156,7 @@ export function pickTarget(self: FieldUnit, enemies: FieldUnit[], allies: FieldU
   let bestScore = -Infinity
   for (const e of live) {
     const d = dist(self.pos, e.pos)
-    const proximity = 1 - clamp01(d / FIELD_DIAG)
+    const proximity = 1 - clamp01(d / fieldDiag())
     const wounded = 1 - clamp01(e.hp / e.maxHp)
     const value = valueOf(e)
     const focus = clamp01((focusCount.get(e.id) ?? 0) / allyN)

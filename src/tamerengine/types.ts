@@ -15,8 +15,27 @@ export interface Vec2 { x: number; y: number }
 
 // The arena in world units. Roughly 40x22 gives a wide pitch with room for two
 // deployment zones, a no-man's land, and cover in the middle.
-export const FIELD_W = 40
-export const FIELD_H = 22
+// ⚠️ `let`, NOT `const` — arenas differ in size (see `maps.ts`), and the whole
+// engine reads these as module-level bindings rather than threading dimensions
+// through every call site. ES live bindings mean `setFieldSize` is seen by every
+// importer, which is what makes a per-map size possible without a refactor that
+// would touch ~15 clamp sites across engine.ts, decide.ts and hex.ts.
+//
+// The trade, stated plainly: this is MUTABLE GLOBAL STATE. It is safe only
+// because the engine is synchronous and single-threaded — one battle runs to
+// completion before the next starts. Do NOT interleave battles at different
+// sizes, and always set the size BEFORE `simulateFieldBattle`, never during.
+// The game itself never calls the setter; it is for maps and harnesses.
+export let FIELD_W = 40
+export let FIELD_H = 22
+
+/** Select the arena dimensions. Returns the previous pair so a caller can restore. */
+export function setFieldSize(w: number, h: number): [number, number] {
+  const prev: [number, number] = [FIELD_W, FIELD_H]
+  FIELD_W = w
+  FIELD_H = h
+  return prev
+}
 // A side deploys within this many units of its own edge.
 export const DEPLOY_DEPTH = 11
 
