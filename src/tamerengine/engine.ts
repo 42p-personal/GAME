@@ -9,6 +9,7 @@ import { Channel, Monster, Move, MoveArea, MoveSpatial, Stat, aoeFalloff, statSc
 import { chooseLoadout, learnedMoves, manaCost, maxHp, maxMana } from '../monster'
 import {
   DT, FIELD_H, FIELD_W, FieldEvent, FieldResult, FieldSetup, FieldSide, FieldUnit,
+  PURSUIT_PATIENCE, PURSUIT_IGNORE, PURSUIT_PROGRESS,
   MAX_TICKS, Obstacle, RETARGET_EVERY, UnitVisState, Vec2, CONTAGION_RADIUS, TEAM_AURA_RADIUS,
   CHANNEL_CAST_TIME, CHANNEL_RANGE, DEPLOY_DEPTH, SECONDS_PER_ROUND,
   SUDDEN_DEATH_AT, SUDDEN_DEATH_BASE, SUDDEN_DEATH_RAMP, KITE_MAX, KITE_REFILL, BLOCK_DR,
@@ -178,6 +179,9 @@ function buildUnit(m0: Monster, side: FieldSide, slot: number, pos: Vec2): Field
     lastCcAt: -999,
     ccImmuneUntil: 0,
     hasAttacked: false,
+    chaseFor: 0,
+    chaseBest: Infinity,
+    gaveUp: {},
     dead: false,
   }
 }
@@ -812,8 +816,38 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       // units and swallowed the re-target that used to rescue this by accident.
       const engaged = !!cur && !cur.dead && isMelee(u) && foes.includes(cur)
         && dist(u.pos, cur.pos) <= reachOf(u) + 1.5
-      if (!cur || cur.dead || (u.retargetIn <= 0 && !engaged)) {
-        const pick = pickTarget(u, foes, mates, t, navLos)
+
+      // ── GIVING UP A CHASE ─────────────────────────────────────────────────
+      // Progress is measured against the CLOSEST this unit has ever come to
+      // this target, not against last tick — otherwise a pursuer that is being
+      // kited in a circle registers "progress" on every inward arc and chases
+      // forever, which is the exact behaviour this exists to stop.
+      let abandoned = false
+      if (cur && !cur.dead && !engaged) {
+        const d = dist(u.pos, cur.pos)
+        if (d < u.chaseBest - PURSUIT_PROGRESS) { u.chaseBest = d; u.chaseFor = 0 }
+        else u.chaseFor += DT
+        if (u.chaseFor >= PURSUIT_PATIENCE) {
+          // ⚠️ NEVER ABANDON THE LAST ONE. With nobody else to turn to, giving
+          // up is just refusing to fight, and the battle runs to sudden death.
+          const others = foes.filter((f) => !f.dead && f.id !== cur.id
+            && (u.gaveUp[f.id] ?? 0) <= t)
+          if (others.length) {
+            u.gaveUp[cur.id] = t + PURSUIT_IGNORE
+            u.targetId = null
+            abandoned = true
+            events.push({ t: +t.toFixed(2), kind: 'giveup', id: u.id, targetId: cur.id })
+          }
+          u.chaseFor = 0
+        }
+      }
+
+      if (!cur || cur.dead || abandoned || (u.retargetIn <= 0 && !engaged)) {
+        // A taunt still overrides this below; the ignore list only filters the
+        // unit's OWN judgement.
+        const open = foes.filter((f) => (u.gaveUp[f.id] ?? 0) <= t)
+        const pick = pickTarget(u, open.length ? open : foes, mates, t, navLos)
+        if (pick?.id !== u.targetId) { u.chaseFor = 0; u.chaseBest = Infinity }
         u.targetId = pick?.id ?? null
         u.retargetIn = RETARGET_EVERY
       }

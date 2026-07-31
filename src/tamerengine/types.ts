@@ -56,6 +56,23 @@ export const KITE_REFILL = 0.5
 // LEASH. No unit may aim to stand more than this far from the fight's centre of
 // mass, so nothing can wander off across the map however it is steered.
 export const LEASH_RADIUS = 12
+
+// ── GIVING UP A CHASE ───────────────────────────────────────────────────────
+// ⚠️ THE COUNTERWEIGHT TO PATHFINDING. Once units route around cover properly, a
+// pursuer never loses the trail — which is the opposite failure to the one that
+// was just fixed, and it makes any escape budget irrelevant: a support can spend
+// every cooldown it owns and still be caught. A chase has to be able to fail.
+//
+// ⚠️ MEASURED AS TIME WITHOUT PROGRESS, NOT TIME SPENT CHASING. A bruiser closing
+// steadily from across a 64-unit arena is doing exactly what it should; abandoning
+// it mid-approach because a stopwatch expired would undo the approach work
+// entirely. What earns a give-up is failing to get any NEARER.
+export const PURSUIT_PATIENCE = 3.0 // seconds without closing before giving up
+// ⚠️ WITHOUT THIS, GIVING UP THRASHES. Drop B, take C, drop C, take B again, and
+// nobody ever dies — a new way to stall a fight dressed up as a fix. A unit that
+// has just been abandoned is off the menu for a while.
+export const PURSUIT_IGNORE = 5.0 // seconds an abandoned target is skipped
+export const PURSUIT_PROGRESS = 0.35 // world units of closing that counts as progress
 // Move statuses author their duration in ROUNDS, a unit the field has no
 // concept of. A turn-based round — everyone acting once — is worth roughly
 // this many seconds here. One constant, so restating it is impossible.
@@ -168,6 +185,12 @@ export interface FieldUnit {
    *  no rounds, so "hasn't reacted yet" becomes "hasn't thrown a blow yet". Makes
    *  first-strike bonuses an OPENING-burst reward rather than a per-round one. */
   hasAttacked: boolean
+  /** Seconds spent chasing the current target without getting closer. */
+  chaseFor: number
+  /** Closest this unit has come to its current target — the progress yardstick. */
+  chaseBest: number
+  /** Targets recently given up on, and the time each becomes fair game again. */
+  gaveUp: Record<string, number>
   /** TAUNT. While this holds, the unit must attack the taunter — the one thing
    *  that lets a tank protect a back line it is not standing on. */
   forcedTargetId: string | null
@@ -210,6 +233,11 @@ export type FieldEvent =
   | { t: number; kind: 'cast'; id: string; targetId: string | null; move: string; channel: Channel }
   | { t: number; kind: 'hit'; id: string; targetId: string; move: string; channel: Channel; dmg: number; crit: boolean }
   | { t: number; kind: 'miss'; id: string; targetId: string; move: string }
+  /** ⚠️ A CHASE THAT FAILED — emitted, not merely tallied, because the whole
+   *  point of a give-up is that a watcher can SEE the assassin break off. It is
+   *  also the only way to tell "the support escaped" from "the support was never
+   *  chased", which no outcome metric can distinguish. */
+  | { t: number; kind: 'giveup'; id: string; targetId: string }
   | { t: number; kind: 'heal'; id: string; targetId: string; move: string; amount: number }
   | { t: number; kind: 'status'; id: string; by: string; status: StatusKind }
   | { t: number; kind: 'blink'; id: string; fromX: number; fromY: number; toX: number; toY: number }

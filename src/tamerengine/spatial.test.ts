@@ -16,7 +16,7 @@ const unit = (id: string, over: Partial<FieldUnit>): FieldUnit => ({
   radius: 0.9, speed: 3, hp: 500, maxHp: 500, mp: 60, maxMp: 60,
   traits: { cohesion: .5, predation: .5 }, targetId: null, retargetIn: 0,
   cooldowns: {}, castingFor: 0, castMoveId: null, castTargetId: null, statuses: [], mods: [], forcedTargetId: null, forcedUntil: 0,
-  rootedFor: 0, fadedUntil: 0, slowMult: 1, slowFor: 0, disengageFor: 0, kiteFor: 99, blockingUntil: 0, ward: 0, ccResist: 0, lastCcAt: -999, ccImmuneUntil: 0, hasAttacked: false, dead: false, ...over,
+  rootedFor: 0, fadedUntil: 0, slowMult: 1, slowFor: 0, disengageFor: 0, kiteFor: 99, blockingUntil: 0, ward: 0, ccResist: 0, lastCcAt: -999, ccImmuneUntil: 0, hasAttacked: false, chaseFor: 0, chaseBest: Infinity, gaveUp: {}, dead: false, ...over,
 })
 
 describe('the spatial table is honest', () => {

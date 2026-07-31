@@ -138,8 +138,12 @@ const GOLDENS: Golden[] = [
     // across 40 paired fights (p=0.69, 34 identical) still moved this one by
     // 5.6s — which is exactly why the sign test is the arbiter here and a
     // single golden is not. It is a fixture, not evidence.
-    winner: 'B', duration: 17, survivors: [0, 2],
-    casts: 101, hits: 65, deaths: 4, finalHp: [0, 0, 0, 0, 223, 215],
+    // Stage 2b (pursuit give-up): 17s -> 21s, and B finishes on 150/13 rather
+    // than 223/215. Longer and bloodier is the mechanic working — a chase that
+    // stalls now breaks off and finds someone reachable instead of following
+    // one target to the end of the fight.
+    winner: 'B', duration: 21, survivors: [0, 2],
+    casts: 123, hits: 82, deaths: 4, finalHp: [0, 0, 0, 0, 150, 13],
   },
 ]
 

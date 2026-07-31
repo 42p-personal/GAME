@@ -430,6 +430,36 @@ at full health.
 - committed retreat duration **~2s**
 - keep the 0.6× backpedal penalty and `KITE_MAX` exactly as they are
 
+### ✅ SHIPPED — the pursuit give-up (the counterweight)
+
+⚠️ **Pathfinding created this problem.** Once units route around cover properly a
+pursuer never loses the trail, which makes any escape budget irrelevant: a support can
+spend every cooldown it owns and still be caught. A chase has to be able to fail.
+
+Three constants, and each guards a specific failure:
+
+| | | why |
+|---|---|---|
+| `PURSUIT_PATIENCE` | 3.0s | time **without progress**, not time chasing — a bruiser closing steadily across a 64-unit arena is doing its job, and a stopwatch would abandon it mid-approach |
+| `PURSUIT_IGNORE` | 5.0s | ⚠️ without it, giving up **thrashes**: drop B, take C, drop C, take B, and nobody dies — a new way to stall dressed as a fix |
+| `PURSUIT_PROGRESS` | 0.35 | measured against the **closest ever approach**, not last tick, or a unit kited in a circle registers progress on every inward arc and chases forever |
+
+⚠️ **Never abandon the last living enemy.** With nobody else to turn to, giving up is
+just refusing to fight.
+
+**It fires, and not too much:** ~4 give-ups per fight across 24 fights per arena, in
+19–22 of them — about 0.67 per unit, so most units never break off and some do once.
+`sweep40` holds at **40/40 @ 17.8s**; per-arena resolution 24/24, 23/24, 24/24.
+
+⚠️ **Emitted as a `giveup` EVENT, not merely tallied.** A give-up you cannot see is
+indistinguishable from a unit wandering off, and it is the only way to tell *"the
+support escaped"* from *"the support was never chased"* — which no outcome metric can
+separate. It also feeds the battle report.
+
+**Still owed:** an `escape success` instrument (§6). The acceptance test — *does a
+fleeing support buy ~4s and then die anyway* — cannot be judged without it, and
+give-up count alone does not answer it.
+
 ### ⚠️ The pursuer must be allowed to win
 
 A cooldown alone does **not** guarantee resolution. If the assassin follows the
