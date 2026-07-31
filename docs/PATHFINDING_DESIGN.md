@@ -220,6 +220,35 @@ is the §5 failure in its purest form. Price it hardest: longest cooldown, highe
 and consider a cast time so it can be reacted to. Do not let its `maxRange` be tuned
 casually.
 
+#### DECIDED — a short shared **escape lockout**
+
+The two cooldowns stay independent, **plus** using either escape puts the other on a
+short lockout. One symmetric constant, **4–6s**, starting at 5.
+
+⚠️ **The hazard was never "two escapes in a fight" — it is "two escapes in two
+seconds".** Two escapes across a 45s fight is the premium build working as intended.
+Two inside one window is what makes an assassin's commitment unanswerable: it lands,
+the support Disengages, it re-closes, the support instantly Falls Back, and it has
+spent eight seconds achieving nothing. **No value of the 15s cooldown catches that**,
+because the whole burst happens inside a single window — which is exactly why a second,
+much shorter constant is the right shape rather than a bigger version of the first.
+
+Sizing: a Disengage buys ~2s of separation and an assassin needs ~2s to re-close and
+land, so ~5s lets roughly one full exchange resolve between escapes. Under ~3s it is
+decorative; over ~8s it collapses the two tiers into one and the ability stops being a
+separate system.
+
+It also improves the drama rather than taxing it. `Disengage → instantly Fall Back` is
+a double-tap that reads as the support shrugging off the engagement. `Disengage →
+assassin re-closes → Fall Back` is a chase with a middle, and the lockout is what
+creates the middle.
+
+⚠️ **Symmetric, and one number, to start.** The tempting refinement is for Fall Back to
+impose a shorter lockout than the ability does, since Fall Back is the weaker option.
+That is probably right eventually, but it is two numbers interacting with two cooldowns
+and a trigger — and the standing rule is one value at a time. Start symmetric, sim,
+split only if the data asks.
+
 #### ⚠️ Sim the combined budget, not the baseline
 
 Two independent cooldowns means the escape budget per fight is *baseline + ability*.
@@ -273,6 +302,10 @@ first, then changes.
 - **`wander`** — path ÷ net displacement. Target < ~1.5 on all three arenas.
 - **`escape success`** — seconds a fleeing support survives with cover available vs
   without. Must be **positive but bounded**; unbounded is the §5 failure.
+- **`min escape gap`** — the shortest interval between two escapes by the same unit.
+  ⚠️ Sharper than "escapes per fight", which is blunt: it is the BACK-TO-BACK pair that
+  breaks a fight, not the total. The lockout puts a floor under this directly, so the
+  metric and the mechanism check each other.
 - **per-arena resolved** — `tools/mapsweep.ts` already does this.
 
 The three arenas become the regression suite. **Titan's Rest is the gate:** it is kept
@@ -292,7 +325,7 @@ commit once Stage 1 lands.
 | **4a** | `stuck%` + `wander` instruments | must precede 0 to prove it |
 | **1** | visibility graph + A*, waypoints into `stepToward` | `wander` < 1.5; goldens recaptured |
 | **2** | LoS-break flight, peek, cut-off pursuit | escape success positive |
-| **3a** | Fall Back: ~15s cooldown, trigger, backpedal suspended | resolved ≥ baseline; escape bounded |
+| **3a** | Fall Back: ~15s cooldown, trigger, backpedal suspended, ~5s shared lockout | resolved ≥ baseline; `min escape gap` ≥ lockout |
 | **3b** | Disengage + Teleport (no Stage 1 dependency) | escape bounded **with the ability drafted** |
 | **3c** | Dash (needs Stage 1) | wander unchanged; no dashing into cover |
 
