@@ -84,8 +84,11 @@ const GOLDENS: Golden[] = [
     // ⚠️ 57.7s -> 14.6s at Stage 0. This golden is titled "a bruiser against a
     // wall", and that turned out to be literal: the fight ran to sudden death
     // because the melee could not get past the rock. It now resolves.
-    winner: 'B', duration: 15, survivors: [0, 1],
-    casts: 39, hits: 28, deaths: 1, finalHp: [0, 428],
+    // Stage 3a (Fall Back): 15s -> 13.1s and the winner finishes on 604 not
+    // 428. A hurt unit that breaks contact for two seconds takes less on the
+    // way, so the fight is shorter and the survivor healthier.
+    winner: 'B', duration: 13.1, survivors: [0, 1],
+    casts: 40, hits: 27, deaths: 1, finalHp: [0, 604],
   },
   {
     // Ranged vs melee across the full width — pins approach, stand-off and the
@@ -108,8 +111,8 @@ const GOLDENS: Golden[] = [
     // tick — so the FIELD engine re-drafts its own 4-slot kit (FIELD_LOADOUT_SIZE)
     // rather than using the pinned 3. Worth knowing: the pinning is real for the
     // turn engine and only partial here.
-    winner: 'B', duration: 7, survivors: [0, 1],
-    casts: 15, hits: 11, deaths: 1, finalHp: [0, 263],
+    winner: 'B', duration: 7.8, survivors: [0, 1],
+    casts: 9, hits: 7, deaths: 1, finalHp: [0, 272],
   },
   {
     // Front line + damage + support on both sides: targeting, taunt, healing and
@@ -142,8 +145,11 @@ const GOLDENS: Golden[] = [
     // than 223/215. Longer and bloodier is the mechanic working — a chase that
     // stalls now breaks off and finds someone reachable instead of following
     // one target to the end of the fight.
-    winner: 'B', duration: 21, survivors: [0, 2],
-    casts: 123, hits: 82, deaths: 4, finalHp: [0, 0, 0, 0, 150, 13],
+    // ⚠️ Stage 3a flipped this back to A, 2-0. Retreat helps whichever side is
+    // losing the exchange at the moment it triggers, so a golden that was close
+    // is exactly the one it can tip. The paired sweep is the arbiter, not this.
+    winner: 'A', duration: 23.3, survivors: [2, 0],
+    casts: 109, hits: 73, deaths: 4, finalHp: [153, 0, 109, 0, 0, 0],
   },
 ]
 

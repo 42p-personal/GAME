@@ -10,6 +10,7 @@ import { chooseLoadout, learnedMoves, manaCost, maxHp, maxMana } from '../monste
 import {
   DT, FIELD_H, FIELD_W, FieldEvent, FieldResult, FieldSetup, FieldSide, FieldUnit,
   PURSUIT_PATIENCE, PURSUIT_IGNORE, PURSUIT_PROGRESS,
+  FALL_BACK_CD, FALL_BACK_DUR, FALL_BACK_HP, FALL_BACK_NEAR, ESCAPE_LOCKOUT,
   MAX_TICKS, Obstacle, RETARGET_EVERY, UnitVisState, Vec2, CONTAGION_RADIUS, TEAM_AURA_RADIUS,
   CHANNEL_CAST_TIME, CHANNEL_RANGE, DEPLOY_DEPTH, SECONDS_PER_ROUND,
   SUDDEN_DEATH_AT, SUDDEN_DEATH_BASE, SUDDEN_DEATH_RAMP, KITE_MAX, KITE_REFILL, BLOCK_DR,
@@ -182,6 +183,9 @@ function buildUnit(m0: Monster, side: FieldSide, slot: number, pos: Vec2): Field
     chaseFor: 0,
     chaseBest: Infinity,
     gaveUp: {},
+    fallBackAt: 0,
+    fallBackUntil: 0,
+    escapeLockUntil: 0,
     dead: false,
   }
 }
@@ -935,7 +939,36 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       // A ROOTED unit may still act — it simply cannot travel, which is what
       // makes a root a genuine answer to a fast diver rather than a stun.
       if (u.rootedFor > 0) { vis.set(u.id, 'idle'); continue }
+
+      // ── FALL BACK ─────────────────────────────────────────────────────────
+      // ⚠️ GATED ON A TRIGGER, NOT JUST A TIMER. With a bare cooldown a unit
+      // burns it wandering at full health and has nothing left when it is
+      // actually being killed, which is the one moment it exists for.
+      const nearestFoeD = foes.reduce((m, f) =>
+        f.dead ? m : Math.min(m, dist(u.pos, f.pos)), Infinity)
+      const wantsOut = u.hp / u.maxHp < FALL_BACK_HP
+        || (nearestFoeD <= FALL_BACK_NEAR && archetypeOf(u) !== 'anchor')
+      if (wantsOut && t >= u.fallBackAt && t >= u.escapeLockUntil
+        && u.fallBackUntil <= t && Number.isFinite(nearestFoeD)) {
+        u.fallBackUntil = t + FALL_BACK_DUR
+        u.fallBackAt = t + FALL_BACK_CD
+        // ⚠️ The lockout is SHARED. An escape ABILITY will set the same field,
+        // so the two tiers cannot be spent in the same breath — see §5.
+        u.escapeLockUntil = t + ESCAPE_LOCKOUT
+        events.push({ t: +t.toFixed(2), kind: 'fallback', id: u.id })
+      }
+
       let goal = desiredGoal(u, target, mates, foes, (a, b) => hasLineOfSight(a, b, obstacles))
+      // A committed retreat overrides the ordinary goal: get away from whatever
+      // is closest, for as long as it lasts.
+      if (u.fallBackUntil > t) {
+        const near = foes.filter((f) => !f.dead)
+          .sort((a, b) => dist(u.pos, a.pos) - dist(u.pos, b.pos))[0]
+        if (near) {
+          const away = norm(sub(u.pos, near.pos))
+          goal = clampToField({ x: u.pos.x + away.x * 10, y: u.pos.y + away.y * 10 })
+        }
+      }
       // THE THREE SPATIAL STATUSES. On the field these words can mean something
       // a turn counter cannot express, so they hijack the goal outright rather
       // than rolling a chance to misbehave.
@@ -1001,7 +1034,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       // which way round the cover; the local layer below still owns separation,
       // backpedal, collision-slide and the escape scan. Everything tuned into
       // stepToward survives untouched.
-      stepToward(u, nextWaypoint(u.pos, goal, navGraph, navLos), mates, obstacles)
+      stepToward(u, nextWaypoint(u.pos, goal, navGraph, navLos), mates, obstacles, t)
       vis.set(u.id, 'move')
     }
 
@@ -1615,7 +1648,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     }
   }
 
-  function stepToward(u: FieldUnit, goal: Vec2, mates: FieldUnit[], obs: Obstacle[]) {
+  function stepToward(u: FieldUnit, goal: Vec2, mates: FieldUnit[], obs: Obstacle[], now: number) {
     let dir = norm(sub(goal, u.pos))
     // Separation: don't pile into the same square metre as an ally. The
     // SPACING order widens (spread, vs AoE) or tightens (focus-fire) this.
@@ -1644,7 +1677,14 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       }
       if (nearest) {
         const toFoe = norm(sub(nearest.pos, u.pos))
-        if (dir.x * toFoe.x + dir.y * toFoe.y < -0.25) backpedal = BACKPEDAL_MULT
+        // ⚠️ FALL BACK'S ENTIRE EFFECT IS HERE. Giving ground normally costs 40%
+        // of your speed, and that penalty is what lets a committed attacker ever
+        // close — without it a chase never resolves. Lifting it for two seconds
+        // is what makes a retreat a retreat rather than a shuffle, and it adds
+        // no new speed constant to tune.
+        if (dir.x * toFoe.x + dir.y * toFoe.y < -0.25 && u.fallBackUntil <= now) {
+          backpedal = BACKPEDAL_MULT
+        }
       }
     }
     const step = u.speed * backpedal * u.slowMult * statusSpeedMult(u) * DT

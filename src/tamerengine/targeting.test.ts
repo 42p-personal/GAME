@@ -16,7 +16,7 @@ function unit(m: Monster, side: FieldSide, pos: Vec2, hp = 500, maxHp = 500): Fi
     radius: 0.9, speed: 4, hp, maxHp, mp: 100, maxMp: 100, traits: traitsFor(m),
     targetId: null, retargetIn: 0, cooldowns: {}, castingFor: 0, castMoveId: null,
     castTargetId: null, statuses: [], mods: [], forcedTargetId: null, forcedUntil: 0,
-    rootedFor: 0, fadedUntil: 0, slowMult: 1, slowFor: 0, disengageFor: 0, kiteFor: 99, blockingUntil: 0, ward: 0, ccResist: 0, lastCcAt: -999, ccImmuneUntil: 0, hasAttacked: false, chaseFor: 0, chaseBest: Infinity, gaveUp: {}, dead: false,
+    rootedFor: 0, fadedUntil: 0, slowMult: 1, slowFor: 0, disengageFor: 0, kiteFor: 99, blockingUntil: 0, ward: 0, ccResist: 0, lastCcAt: -999, ccImmuneUntil: 0, hasAttacked: false, chaseFor: 0, chaseBest: Infinity, gaveUp: {}, fallBackAt: 0, fallBackUntil: 0, escapeLockUntil: 0, dead: false,
   }
 }
 // ⚠️ Both PIN their loadout instead of trusting whatever chooseLoadout happens to

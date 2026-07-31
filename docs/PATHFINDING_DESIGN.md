@@ -320,6 +320,37 @@ system, and it stays as it is.
 | **E. Diminishing effect** | each retreat moves you less | 2 numbers | low | reads as the unit silently degrading |
 | **F. Make it an ability** | Disengage / Shadowstep: MP + slot + cooldown | **0 new systems** | high | only monsters that drafted it can do it |
 
+### ✅ SHIPPED — 3a, Fall Back
+
+`FALL_BACK_CD` 15s · `FALL_BACK_DUR` 2s · `ESCAPE_LOCKOUT` 5s · triggers at
+`FALL_BACK_HP` 40% or a melee threat inside `FALL_BACK_NEAR` 3.5 (anchors excepted —
+a tank holding a line is not supposed to leave it).
+
+**Acceptance, both halves, measured:**
+
+| | before 3a | after 3a |
+|---|---|---|
+| survival rate of hunted units | 33–39% | **36–40%** |
+| mean `survivedFor` | 9.4–11.5s | **9.8–12.0s** |
+| `sweep40` | 40/40 @ 17.8s | **40/40 @ 19.3s** |
+| min gap between one unit's fall-backs | — | **15.00s** (exactly the cooldown) |
+
+✅ Positive — hunted units last longer. ✅ Bounded — survival rose ~3 points and is
+nowhere near 1.0; prey still dies ~60% of the time. ✅ Fights still resolve, 40/40, at
+a cost of 1.5s.
+
+Fires ~4.8 times per fight across six units, i.e. **about once each** — all a 15s
+cooldown allows in a ~19s fight — and appears in 23–24 of every 24 fights. The min-gap
+floor confirms the cooldown is real rather than nominal.
+
+⚠️ **AND IT WEAKENED THE THING IT WAS MEANT TO SUPPORT.** Cover's contribution to
+survival was +13%/+17% on the two cover-heavy arenas before 3a; now Dustbowl and
+Titan's Rest read *slightly negative* and only Ossuary stays positive. A universal
+escape that works anywhere makes the ground matter less — which is the opposite of the
+arena play this whole line of work is for. Not a bug, a genuine design tension, and an
+argument for keeping Fall Back weak and letting the ABILITY tier (3b) be the one that
+uses cover properly.
+
 ### DECIDED — **A and F, on independent cooldowns**
 
 Both tiers ship. A monster therefore has **two escapes**, and the ability does *not*

@@ -73,6 +73,33 @@ export const PURSUIT_PATIENCE = 3.0 // seconds without closing before giving up
 // has just been abandoned is off the menu for a while.
 export const PURSUIT_IGNORE = 5.0 // seconds an abandoned target is skipped
 export const PURSUIT_PROGRESS = 0.35 // world units of closing that counts as progress
+
+// ── FALL BACK ───────────────────────────────────────────────────────────────
+// The universal escape: every monster has one, on a long cooldown, so breaking
+// contact is an EVENT a player can see and plan around rather than a continuous
+// drift nobody can observe. A cooldown was chosen over a stamina budget for
+// exactly that reason — see docs/PATHFINDING_DESIGN.md §5.
+//
+// ⚠️ NOT A SMALLER VERSION OF MICRO-KITING. `KITE_MAX` (1.2s) is a ranged unit
+// shuffling back to hold range, continuously, every second. This is a discrete
+// decision to break contact, two or three times a fight. Putting a cooldown on
+// the former would walk archers into melee; they stay separate systems.
+export const FALL_BACK_CD = 15 // seconds between uses
+export const FALL_BACK_DUR = 2 // seconds of committed retreat
+// ⚠️ ITS TEETH COME FROM SUSPENDING BACKPEDAL_MULT, not from a speed bonus.
+// Giving ground normally costs 40% of your speed — that penalty is what lets a
+// committed attacker ever close. Lifting it briefly is what separates a real
+// retreat from a shuffle, and it needs no new speed constant.
+export const FALL_BACK_HP = 0.4 // trigger: below this fraction of max HP
+export const FALL_BACK_NEAR = 3.5 // trigger: a melee threat this close
+// ⚠️ THE HAZARD IS NOT "TWO ESCAPES IN A FIGHT", IT IS "TWO IN TWO SECONDS".
+// Two across a 45s fight is the premium build working. Two inside one window
+// makes an assassin's commitment unanswerable — it lands, the support
+// Disengages, it re-closes, the support instantly Falls Back, and it has spent
+// eight seconds achieving nothing. No value of FALL_BACK_CD catches that,
+// because the whole burst happens inside a single window, which is why this is
+// a second and much SHORTER constant rather than a bigger first one.
+export const ESCAPE_LOCKOUT = 5 // seconds either escape locks the other
 // Move statuses author their duration in ROUNDS, a unit the field has no
 // concept of. A turn-based round — everyone acting once — is worth roughly
 // this many seconds here. One constant, so restating it is impossible.
@@ -191,6 +218,12 @@ export interface FieldUnit {
   chaseBest: number
   /** Targets recently given up on, and the time each becomes fair game again. */
   gaveUp: Record<string, number>
+  /** Time Fall Back becomes available again. */
+  fallBackAt: number
+  /** While `t` is under this, the unit is in a committed retreat. */
+  fallBackUntil: number
+  /** Shared escape lockout — set by ANY escape, checked by all of them. */
+  escapeLockUntil: number
   /** TAUNT. While this holds, the unit must attack the taunter — the one thing
    *  that lets a tank protect a back line it is not standing on. */
   forcedTargetId: string | null
@@ -243,6 +276,9 @@ export type FieldEvent =
    *  also the only way to tell "the support escaped" from "the support was never
    *  chased", which no outcome metric can distinguish. */
   | { t: number; kind: 'giveup'; id: string; targetId: string }
+  /** A committed retreat began. Visible so a player can see the break, and so
+   *  the escape instrument can tell a retreat from a rout. */
+  | { t: number; kind: 'fallback'; id: string }
   | { t: number; kind: 'heal'; id: string; targetId: string; move: string; amount: number }
   | { t: number; kind: 'status'; id: string; by: string; status: StatusKind }
   | { t: number; kind: 'blink'; id: string; fromX: number; fromY: number; toX: number; toY: number }
