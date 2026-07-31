@@ -153,8 +153,8 @@ const GOLDENS: Golden[] = [
     // ⚠️ Stage 3a flipped this back to A, 2-0. Retreat helps whichever side is
     // losing the exchange at the moment it triggers, so a golden that was close
     // is exactly the one it can tip. The paired sweep is the arbiter, not this.
-    winner: 'B', duration: 22.2, survivors: [0, 2],
-    casts: 117, hits: 72, deaths: 4, finalHp: [0, 0, 0, 0, 183, 241],
+    winner: 'B', duration: 22.4, survivors: [0, 2],
+    casts: 118, hits: 72, deaths: 4, finalHp: [0, 0, 0, 0, 183, 241],
   },
 ]
 

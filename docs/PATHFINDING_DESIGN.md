@@ -384,6 +384,43 @@ Three details that each prevent a specific failure:
   cannot see its allies cannot heal them; a corner that abandons the fight is worth
   less than one that merely breaks the chase.
 
+### ✅ SHIPPED — 3b, the escape abilities (and the cooldown that makes them premium)
+
+⚠️ **They already existed and nothing could equip them.** All 18 field moves were
+unreachable — `learnedMoves` filters `ALL_MOVES` only. Backstep *is* Disengage, Blink
+*is* Teleport, Fade is the fourth flavour. 3b was wiring, not authoring.
+
+**The cooldown was the whole design, and it took three passes to price:**
+
+| | authored | first fix | final | result |
+|---|---:|---:|---:|---|
+| Backstep | 5 | 12 | **19** | |
+| Fade | 7 | 13 | **21** | |
+| Beckon | 6 | 11 | **17** | |
+| Blink | 6 | 16 | **26** | longest — it ignores cover |
+| `sweep40` | 34/40 @ 26.8s | 37/40 @ 20.2s | **38/40 @ 20.3s** | |
+| escapes/hunt | ~1.2 | ~1.2 | **~0.7** | |
+
+⚠️ **"PREMIUM" MEANS ONCE A FIGHT, NOT MERELY RARER.** At 12s against a ~20s fight an
+escape still bought two uses — a rhythm rather than a decision, and fights sagged to
+26.8s with cover's contribution *inverted*. At ~19–21s a monster gets exactly one, and
+drafting Blink buys ONE guaranteed unanswerable escape.
+
+**And that is what finally made cover a strong mechanic — on every arena:**
+
+| arena | with cover | none | delta |
+|---|---:|---:|---:|
+| Dustbowl | 11.7s | 10.1s | **+16%** |
+| The Ossuary | 12.8s | 11.0s | **+16%** |
+| Titan's Rest | 13.3s | 11.4s | **+17%** |
+
+Survival 31–38%, still inside the band — on Ossuary cover pairs with a *lower* rate
+than no cover (31% vs 37%), which is exactly right: **cover buys time, not immunity.**
+
+⚠️ The lesson generalises past this feature: **a cheap escape does not make escaping
+matter, it makes committing impossible.** Every earlier number moved the wrong way
+until the ability became a once-per-fight decision.
+
 ### DECIDED — **A and F, on independent cooldowns**
 
 Both tiers ship. A monster therefore has **two escapes**, and the ability does *not*

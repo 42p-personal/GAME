@@ -26,13 +26,15 @@ export const MOVEMENT_MOVES: Move[] = [
     desc: 'Barrel across the ground into a foe, driving it back a step.',
   },
   {
-    // ⚠️ cd 5 -> 12. An escape must be PREMIUM, not FREQUENT. At 5s this fired
+    // ⚠️ cd 5 -> 12 -> 19. An escape must be PREMIUM, not FREQUENT — and
+    // "premium" means ONCE A FIGHT. A ~20s fight against a 12s cooldown still
+    // bought two, which is a rhythm rather than a decision. At 5s this fired
     // three or four times a fight against Fall Back's one, and the sweep fell
     // 39/40 -> 34/40 with fights +7.4s — escapes so cheap that nothing could be
     // committed to. Better, further and cover-ignoring is the premium; more
     // often is just the §5 failure.
     id: 'FLD-DEX-move', name: 'Backstep', stat: 'DEX', learnLevel: 200, type: 'buff',
-    channel: 'support', target: 'self', cooldown: 12, accuracy: 100, power: 0,
+    channel: 'support', target: 'self', cooldown: 19, accuracy: 100, power: 0,
     range: 6, castTime: 0.1,
     spatial: { move: { kind: 'dash', to: 'awayFromTarget', maxRange: 7 } },
     desc: 'Break away from whatever is on you and reset the distance.',
@@ -50,18 +52,19 @@ export const MOVEMENT_MOVES: Move[] = [
   {
     // cd 7 -> 13. Dropping off the radar is an escape by another route.
     id: 'FLD-WIS-move', name: 'Fade', stat: 'WIS', learnLevel: 200, type: 'buff',
-    channel: 'support', target: 'self', cooldown: 13, accuracy: 100, power: 0,
+    channel: 'support', target: 'self', cooldown: 21, accuracy: 100, power: 0,
     range: 6, castTime: 0.2,
     spatial: { fade: { duration: 2.5 } },
     desc: 'Slip out of notice. Attackers look for someone else.',
   },
   {
-    // ⚠️ cd 6 -> 16, the LONGEST of the set. Blink ignores cover, so cut-off
+    // ⚠️ cd 6 -> 16 -> 26, the LONGEST of the set by a wide margin — longer than
+    // most fights, so drafting Blink buys ONE guaranteed unanswerable escape. Blink ignores cover, so cut-off
     // pursuit — the thing that makes any escape budget a real bound — simply
     // does not apply to it. It is the one escape that cannot be answered by
     // geometry, so it is priced hardest. See docs/PATHFINDING_DESIGN.md §5.
     id: 'FLD-INT-move', name: 'Blink', stat: 'INT', learnLevel: 200, type: 'buff',
-    channel: 'magic', target: 'self', cooldown: 16, accuracy: 100, power: 0,
+    channel: 'magic', target: 'self', cooldown: 26, accuracy: 100, power: 0,
     range: 12, castTime: 0.25,
     spatial: { move: { kind: 'blink', to: 'awayFromTarget', maxRange: 10 } },
     desc: 'Step out of the world and back into it, somewhere safer.',
@@ -73,7 +76,7 @@ export const MOVEMENT_MOVES: Move[] = [
     // other stat has, and it pairs with the protect order.
     // cd 6 -> 11: hauling an ally clear is an escape granted to someone else.
     id: 'FLD-CHA-move', name: 'Beckon', stat: 'CHA', learnLevel: 200, type: 'buff',
-    channel: 'voice', target: 'ally', cooldown: 11, accuracy: 100, power: 0,
+    channel: 'voice', target: 'ally', cooldown: 17, accuracy: 100, power: 0,
     range: 10, castTime: 0.3,
     spatial: { haulAlly: 8 },
     desc: 'Call a struggling ally back to your side, whether it likes it or not.',
