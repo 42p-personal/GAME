@@ -6,9 +6,10 @@
 // list so the vitest suite can assert it's empty; `validateDesign()` is the
 // console wrapper main.tsx runs in dev.
 import { CLASSES, GAMEPLANS, LEAGUES, STATS, STATUS_INFO, StatusKind, TARGET_PRIORITY_INFO, TEMPERAMENT_INFO, classForStats } from './core'
-import { LINES, CLASS_LINES } from './lines'
+import { LINES, CLASS_LINES, LINE_OF } from './lines'
 import { SPECIES } from './species'
 import { ALL_MOVES } from './moves'
+import { ALL_FIELD_MOVES } from './tamerengine/fieldMoves'
 import { ALL_SIGNATURE_MOVES, SIGNATURE_LISTS, signatureChoicesFor } from './signatureMoves'
 import { LEAGUE_TOP_GOLD, trainingProfileFor } from './game'
 import { activeQuartersFor, BREEDING_BONUS, CIRCUIT_REWARDS, EVENTS, LICENSE_COSTS, MAX_POTENTIAL, PRESTIGE_EVENTS, TEAM_SIZE_BY_LEAGUE, breedPotential, tournamentCalendarFor } from './town'
@@ -29,6 +30,24 @@ export function designProblems(): string[] {
       problems.push(`${mv.stat}/${mv.name}: line "${mv.line}" belongs to another stat`)
     }
   }
+  // ⚠️ AND THE REVERSE DIRECTION, which was missing. The guard above catches a
+  // move with no line; nothing caught a LINE_OF entry naming a move that no
+  // longer exists. Nine accumulated that way during the rework (Jab, War Cry,
+  // Berserk, Rending Blow, Flurry of Blows, Shadow Barrage, Foresight,
+  // Polymorph, Rally) — renamed or cut moves whose line entries stayed behind.
+  // Harmless in itself, but it is dead data that reads as real: anyone auditing
+  // line coverage counts 146 entries against a 137-move pool and has to work out
+  // which nine are lies. A mapping should not outlive the thing it maps.
+  const realNames = new Set<string>([
+    ...ALL_MOVES.map((m) => m.name),
+    ...ALL_FIELD_MOVES.map((m) => m.name),
+  ])
+  for (const name of Object.keys(LINE_OF)) {
+    if (!realNames.has(name)) {
+      problems.push(`LINE_OF: "${name}" is not a real move — remove it from lines.ts`)
+    }
+  }
+
   // Every line must actually be reachable by at least one class, or the moves in
   // it are content nobody is ever steered toward.
   const claimed = new Set(Object.values(CLASS_LINES).flat())

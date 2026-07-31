@@ -82,19 +82,17 @@ export const CLASS_LINES: Record<string, readonly string[]> = {
  */
 export const LINE_OF: Record<string, string> = {
   // ── STR ────────────────────────────────────────────────────────────────────
-  Jab: 'Bloodrage', Scrap: 'Bloodrage', 'War Cry': 'Bloodrage', Enrage: 'Bloodrage',
-  'Reckless Slam': 'Bloodrage', Berserk: 'Bloodrage', 'Last Stand': 'Bloodrage',
+  Scrap: 'Bloodrage', Enrage: 'Bloodrage',
+  'Reckless Slam': 'Bloodrage', 'Last Stand': 'Bloodrage',
   Titanfall: 'Bloodrage', 'Blood Price': 'Bloodrage', 'Blood Fury': 'Bloodrage',
   'Power Strike': 'Duelist', Sunder: 'Duelist', Riposte: 'Duelist', Bonebreaker: 'Duelist',
-  'Rending Blow': 'Duelist', Rend: 'Duelist', 'Flurry of Blows': 'Duelist',
-  Bloodletter: 'Duelist', Executioner: 'Duelist', Headbutt: 'Duelist',
+  Rend: 'Duelist', Bloodletter: 'Duelist', Executioner: 'Duelist', Headbutt: 'Duelist',
   Guard: 'Warcry', Cleave: 'Warcry', Intimidate: 'Warcry', Challenge: 'Warcry',
   Bracer: 'Warcry', Earthshaker: 'Warcry', Whirlwind: 'Warcry', "Warlord's Roar": 'Warcry',
 
   // ── DEX ────────────────────────────────────────────────────────────────────
   Shadowstep: 'Assassin', Ambush: 'Assassin', Vanish: 'Assassin', Hamstring: 'Assassin',
-  'Throat Cut': 'Assassin', Heartseeker: 'Assassin', 'Shadow Barrage': 'Assassin',
-  'Smoke Bomb': 'Assassin',
+  'Throat Cut': 'Assassin', Heartseeker: 'Assassin', 'Smoke Bomb': 'Assassin',
   'Piercing Shot': 'Venomcraft', 'Toxin Stack': 'Venomcraft', 'Twin Fangs': 'Venomcraft',
   'Paralytic Dart': 'Venomcraft', Virulence: 'Venomcraft', 'Plague Shot': 'Venomcraft',
   Sling: 'Volley', Sidestep: 'Volley', Acrobatics: 'Volley', 'Focus Aim': 'Volley',
@@ -117,8 +115,7 @@ export const LINE_OF: Record<string, string> = {
   Overrun: 'Bulwark',
 
   // ── WIS ────────────────────────────────────────────────────────────────────
-  'Silencing Spike': 'Disruptor', 'Null Field': 'Disruptor', Foresight: 'Disruptor',
-  'Field of Doom': 'Disruptor', 'Dread Whisper': 'Disruptor', 'Mind Crush': 'Disruptor',
+  'Silencing Spike': 'Disruptor', 'Null Field': 'Disruptor', 'Field of Doom': 'Disruptor', 'Dread Whisper': 'Disruptor', 'Mind Crush': 'Disruptor',
   Enfeeble: 'Disruptor', Wither: 'Disruptor', Hush: 'Disruptor',
   Mend: 'Mender', Clarity: 'Mender', Renewal: 'Mender', Tranquility: 'Mender',
   'Ward Against Ruin': 'Mender', Rebuke: 'Mender',
@@ -132,13 +129,10 @@ export const LINE_OF: Record<string, string> = {
   Firewall: 'Elementalist', Inferno: 'Elementalist', 'Seismic Crush': 'Elementalist',
   'World Ender': 'Elementalist', Spark: 'Arcanist', 'Phase Step': 'Arcanist', 'Mirror Image': 'Arcanist', 'Static Chain': 'Arcanist',
   'Mana Leech': 'Arcanist', Displace: 'Arcanist', 'Void Lance': 'Arcanist',
-  'Arcane Overload': 'Arcanist', Unmake: 'Arcanist', Polymorph: 'Arcanist',
-
-  // ── CHA ────────────────────────────────────────────────────────────────────
+  'Arcane Overload': 'Arcanist', Unmake: 'Arcanist', // ── CHA ────────────────────────────────────────────────────────────────────
   Discord: 'Enchanter', Screech: 'Enchanter', 'Sonic Boom': 'Enchanter', Lullaby: 'Enchanter',
   Cacophony: 'Enchanter', 'Mass Hysteria': 'Enchanter',
-  'Rallying Song': 'Captain', Bravura: 'Captain', 'Battle Hymn': 'Captain', Rally: 'Captain',
-  'Hymn of Shields': 'Captain', 'Standing Ovation': 'Captain', 'Anthem of Iron': 'Captain',
+  'Rallying Song': 'Captain', Bravura: 'Captain', 'Battle Hymn': 'Captain', 'Hymn of Shields': 'Captain', 'Standing Ovation': 'Captain', 'Anthem of Iron': 'Captain',
   Inspire: 'Captain', Fanfare: 'Captain', Triumph: 'Captain',
   'Grand Mockery': 'Demagogue', Captivate: 'Demagogue', Demoralize: 'Demagogue',
   'Crowd Surge': 'Demagogue', Dirge: 'Demagogue', "Siren's Call": 'Demagogue',
