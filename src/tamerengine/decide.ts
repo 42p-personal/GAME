@@ -22,6 +22,9 @@ const clamp01 = (n: number) => Math.min(1, Math.max(0, n))
 // but the default the proximity term below silently used the wrong diagonal.
 const fieldDiag = () => Math.hypot(FIELD_W, FIELD_H)
 
+/** Injected clearance test — decide.ts must not import engine (engine imports it). */
+export type LosFn = (a: Vec2, b: Vec2) => boolean
+
 // ── The two new stats ───────────────────────────────────────────────────────
 // Derived from the coaching the player ALREADY sets (tactics) plus the
 // monster's emergent class, so the feature needs no new authored data to work.
@@ -123,7 +126,60 @@ export const centroid = (us: FieldUnit[]): Vec2 => {
 // A weighted score per enemy. The weights themselves are bent by the unit's
 // traits, which is what makes an assassin and an anchor behave differently while
 // running identical code.
-export function pickTarget(self: FieldUnit, enemies: FieldUnit[], allies: FieldUnit[], now = 0): FieldUnit | null {
+/**
+ * Is this enemy currently cut off from its own support?
+ *
+ * ⚠️ THE OFFENSIVE HALF OF LINE OF SIGHT, and the reason it is worth having:
+ * today's focus-fire signal is `focusCount` — how many allies already committed
+ * to a target — which is FOLLOW-THE-HERD and self-referential. It has no anchor
+ * outside itself, so it amplifies whatever arbitrary choice happened first and
+ * converges weakly. That is the likeliest reason two numeric levers against
+ * FOCUS FIRE (the mitigation cap, the maxHp coefficient) both measured null.
+ *
+ * "Cut off from its healer" is EXOGENOUS: every attacker reads it off the same
+ * geometry, independently, and agrees without watching each other. It also
+ * brings timing — the window opens and shuts as the enemy healer repositions —
+ * and puts the pressure on the enemy support's POSITIONING rather than its
+ * health bar. This is what high-level arena players mean by capitalising on
+ * someone out of line of their healer.
+ *
+ * ⚠️ MEASURED NULL ON ARRIVAL, AND THE REASON MATTERS. Paired A/B: 2 better /
+ * 4 worse of 6 that moved, p=0.69, and 34 of 40 fights BYTE-IDENTICAL. The term
+ * is not too weak — it barely fires. Only 16 of 40 teams draft a heal-capable
+ * monster at all, and where one exists a unit is out of its line just 3.1% of
+ * the time, so the condition is true in roughly 1% of unit-ticks.
+ *
+ * ⚠️ IT IS DOWNSTREAM OF THE DEFENSIVE BEHAVIOUR, which the plan had as an
+ * independent item. Supports only BECOME cut off once they start running behind
+ * cover to escape — so the offensive read has nothing to see until Stage 2b
+ * gives it something. Kept because the rule is right and costs nothing; RE-TEST
+ * IT after flee-to-cover lands, and if it is still null then, delete it rather
+ * than leave a term that fires 1% of the time pretending to be a focus-fire fix.
+ *
+ * ⚠️ Returns 0 when the enemy team has NO healer at all. Otherwise every target
+ * scores the bonus, the term is constant across candidates, and a constant added
+ * to every score discriminates nothing while looking like it does something.
+ */
+function unsupported(e: FieldUnit, itsTeam: FieldUnit[], los: LosFn): number {
+  let hasHealer = false
+  for (const a of itsTeam) {
+    if (a.dead || a.id === e.id) continue
+    // ⚠️ Mirrors engine.ts:361's own definition of a heal — power > 0 on a
+    // buff/control aimed at an ally — so the two cannot drift apart. `self` is
+    // excluded on purpose: a self-heal supports nobody.
+    if (!a.m.loadout.some((mv) => mv.power > 0
+      && (mv.type === 'buff' || mv.type === 'control')
+      && (mv.target === 'ally' || mv.target === 'team'))) continue
+    hasHealer = true
+    if (los(a.pos, e.pos)) return 0 // a healer can see it: supported
+  }
+  return hasHealer ? 1 : 0
+}
+
+export function pickTarget(
+  self: FieldUnit, enemies: FieldUnit[], allies: FieldUnit[], now = 0,
+  los: LosFn = () => true,
+): FieldUnit | null {
   const live = enemies.filter((e) => !e.dead)
   if (!live.length) return null
 
@@ -160,6 +216,10 @@ export function pickTarget(self: FieldUnit, enemies: FieldUnit[], allies: FieldU
     const wounded = 1 - clamp01(e.hp / e.maxHp)
     const value = valueOf(e)
     const focus = clamp01((focusCount.get(e.id) ?? 0) / allyN)
+    // ⚠️ MELEE NEVER REACHES THIS. It returned above on nearest-target, and
+    // decide.ts's own note says why: "that cross-map hunt is exactly what made
+    // melee race around the map". The isolation read is for ranged and casters.
+    const isolated = unsupported(e, live, los)
 
     // A predator discounts distance (it will cross the field for the right
     // kill) and weights value heavily. A team player weights whatever its
@@ -171,6 +231,7 @@ export function pickTarget(self: FieldUnit, enemies: FieldUnit[], allies: FieldU
       0.85 * wounded * (0.5 + predation) +
       0.90 * value * predation +
       0.80 * focus * cohesion +
+      0.90 * isolated +
       1.10 * diveThreat(self, e, allies) +
       priorityBias(self, e)
 

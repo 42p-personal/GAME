@@ -129,8 +129,12 @@ const GOLDENS: Golden[] = [
     // Stage 1: A now wins 3-0 rather than 2-0 — one fewer death on the winning
     // side, because its front line spends the approach walking instead of
     // grinding along cover.
-    winner: 'A', duration: 17.4, survivors: [3, 0],
-    casts: 100, hits: 64, deaths: 3, finalHp: [101, 170, 282, 0, 0, 0],
+    // Stage 2a (isolation targeting): 17.4s -> 23s. ⚠️ A term measured NULL
+    // across 40 paired fights (p=0.69, 34 identical) still moved this one by
+    // 5.6s — which is exactly why the sign test is the arbiter here and a
+    // single golden is not. It is a fixture, not evidence.
+    winner: 'A', duration: 23, survivors: [3, 0],
+    casts: 99, hits: 57, deaths: 3, finalHp: [402, 4, 282, 0, 0, 0],
   },
 ]
 

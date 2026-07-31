@@ -813,7 +813,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       const engaged = !!cur && !cur.dead && isMelee(u) && foes.includes(cur)
         && dist(u.pos, cur.pos) <= reachOf(u) + 1.5
       if (!cur || cur.dead || (u.retargetIn <= 0 && !engaged)) {
-        const pick = pickTarget(u, foes, mates, t)
+        const pick = pickTarget(u, foes, mates, t, navLos)
         u.targetId = pick?.id ?? null
         u.retargetIn = RETARGET_EVERY
       }
