@@ -16,7 +16,7 @@ function trace(id: string, steps: [number, number, UnitVisState][]): FieldEvent[
     t: i * 0.1,
     kind: 'snapshot' as const,
     units: [{
-      id, x, y, facing: 0, state,
+      id, x, y, facing: 0, state, targetId: null,
       hp: 100, maxHp: 100, mp: 10, maxMp: 10, buffs: [], debuffs: [],
     }],
   }))

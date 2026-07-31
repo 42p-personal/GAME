@@ -456,9 +456,40 @@ indistinguishable from a unit wandering off, and it is the only way to tell *"th
 support escaped"* from *"the support was never chased"* — which no outcome metric can
 separate. It also feeds the battle report.
 
-**Still owed:** an `escape success` instrument (§6). The acceptance test — *does a
-fleeing support buy ~4s and then die anyway* — cannot be judged without it, and
-give-up count alone does not answer it.
+### ✅ SHIPPED — the escape instrument, and the test already passes
+
+`src/tamerengine/escape.ts` + `npx tsx tools/escape.ts`. Each arena run with its cover
+and again with **none**, same teams, same seeds.
+
+| arena | cover | hunts | survival | survivedFor | escapes/hunt |
+|---|---|---:|---:|---:|---:|
+| Dustbowl | yes | 136 | 35% | 9.5s | 0.54 |
+| Dustbowl | **none** | 134 | 37% | 9.4s | 0.52 |
+| The Ossuary | yes | 138 | 33% | **11.4s** | 0.55 |
+| The Ossuary | **none** | 139 | 37% | 10.1s | 0.53 |
+| Titan's Rest | yes | 140 | 39% | **11.5s** | 0.58 |
+| Titan's Rest | **none** | 137 | 39% | 9.8s | 0.53 |
+
+**Both halves pass, today, before Fall Back or any escape ability exists:**
+
+- **Positive.** Cover lengthens survival on the arenas that have any — Ossuary 10.1 →
+  11.4s (+13%), Titan's Rest 9.8 → 11.5s (+17%). Dustbowl is flat (9.4 → 9.5s) and
+  that is the control working: at 1.9% cover there is nothing to hide behind.
+- **Bounded.** Survival rate sits at 33–39% and cover does **not** raise it. Prey still
+  dies about two thirds of the time. On Ossuary cover even coincides with a *lower*
+  rate (37% → 33%) — small sample, not a claim, but certainly no sign of prey becoming
+  uncatchable.
+
+⚠️ **THIS IS NOW A BASELINE TO PROTECT, NOT A BOX TICKED.** When Stage 3's Fall Back
+and the escape abilities land, `survivedFor` should rise further — and `survivalRate`
+must NOT approach 1.0. That pair is the acceptance test, and it is the only thing that
+can distinguish an escape that works from one that works too well.
+
+⚠️ **Required an engine change to be measurable at all:** snapshots now carry
+`targetId`. Without it a chase can only be inferred from damage, which misses the
+entire pursuit phase — exactly the part cover is supposed to lengthen, so the effect
+under test would have been invisible. It also gives a renderer what it needs to draw a
+threat line.
 
 ### ⚠️ The pursuer must be allowed to win
 

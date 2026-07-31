@@ -1059,6 +1059,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
           id: u.id, x: +u.pos.x.toFixed(2), y: +u.pos.y.toFixed(2),
           facing: u.side === 'A' ? 1 : -1,
           state: vis.get(u.id) ?? 'idle',
+          targetId: u.targetId ?? null,
           hp: Math.round(u.hp), maxHp: Math.round(u.maxHp),
           mp: Math.round(u.mp), maxMp: Math.round(u.maxMp),
           buffs: fx.buffs, debuffs: fx.debuffs,

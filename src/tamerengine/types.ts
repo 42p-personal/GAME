@@ -224,6 +224,11 @@ export type FieldEvent =
       t: number; kind: 'snapshot'
       units: {
         id: string; x: number; y: number; facing: number; state: UnitVisState
+        /** ⚠️ WHO THIS UNIT IS HUNTING. Added for the escape instrument: without
+         *  it a "chase" can only be inferred from damage, which misses the whole
+         *  pursuit phase — precisely the part cover is meant to extend. Also what
+         *  a renderer needs to draw a threat line. */
+        targetId: string | null
         hp: number; maxHp: number; mp: number; maxMp: number
         // Active-effect icon keys, split by sign so the renderer draws its two
         // rows (debuffs above buffs, above the HP bar) directly. Usually 0–3.
