@@ -291,9 +291,15 @@ The pool rework is DONE (137 moves, 18 lines, all six stats). Still outstanding,
 3. **+7 classes** — every stat has 3 primaries except WIS (1). 19 of 30 ordered stat pairs map to no
    class, which is why ~15% of all monsters are Generalist.
 4. **`spreadStatus`** (contagion) — the one effect from P2 deliberately left unbuilt; sim it alone.
-5. **Freeze the goldens.** They moved 22 times in one day during the rework. A golden that moves that
+5. **Move ability geometry onto `Move.area`** and retire the `spatial.ts` side
+   table — a move's AoE is currently attached by NAME, so renaming an ability
+   silently detaches it and the move quietly becomes single-target. Pure
+   refactor, no gameplay change. ⚠️ Two attempts were reverted on scripting
+   errors; every trap and exact line number is written up in
+   **`docs/HANDOVER_area_consolidation.md`** — read it before starting.
+6. **Freeze the goldens.** They moved 22 times in one day during the rework. A golden that moves that
    often is a changelog, not a regression detector — capture once now the pool is stable.
-6. **`docs/ABILITIES.md` is stale** — still the pre-rework 90.
+7. **`docs/ABILITIES.md` is stale** — still the pre-rework 90.
 
 ---
 
