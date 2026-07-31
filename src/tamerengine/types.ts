@@ -187,9 +187,25 @@ export const FALL_BACK_RAMP = 0.5 // seconds to reach full retreat speed
  * in them whatsoever. Healing is 4.1% of casts and 0-9% of the damage dealt
  * against it: multiplying something that rarely happens does not make it matter.
  *
- * ⚠️ VOLUME AND REACHABILITY FIRST, COEFFICIENT SECOND — the same shape as the
- * control moves before LINES. Re-test this constant once the sustain content is
- * thick enough to be drafted regularly; until then it will keep reading null.
+ * ⚠️ RE-TESTED AFTER THE SUSTAIN PASS AND STILL NULL. Two direct heals added and
+ * made draftable (10/320 monsters, 21 casts), Tranquility and Standing Ovation
+ * repriced into reach, +2 regen on every restore — then 1.0 -> 1.3 again:
+ *   4 better / 13 worse of 14 that moved, p = 0.18   NO EFFECT
+ * Only 14 of 40 fights moved even now, so most fights still contain no healing.
+ *
+ * ⚠️ AND THE SIGN IS THE INTERESTING PART. Across three A/Bs at three magnitudes
+ * (1.3, 2.5, and 1.3 again on a richer pool) the support-heavy compositions get
+ * FASTER with stronger healing, never slower:
+ *   Vanguard v Choir  -18.3s (at 2.5x)   -4.7s (at 1.3x)
+ *   Wolfpack v Choir   -2.0s             Choir v Coven -1.4s
+ * Healing is behaving as a TEMPO multiplier, not an attrition brake: it keeps the
+ * side that is already winning alive, so more of their output survives to land.
+ * If the goal is "less bursty", healing is not the mechanism — it shortens the
+ * fights it touches. Mitigation (MIT_DIVISOR) is the one that lengthens them.
+ *
+ * Do not raise this expecting longer fights. The open question is whether heals
+ * should be reactive (cast when an ALLY is low) rather than folded into the same
+ * utility scoring as a buff — that is a `bestUtility` question, not a coefficient.
  */
 export const HEAL_MULT = 1.0
 
