@@ -100,8 +100,10 @@ const GOLDENS: Golden[] = [
     // ⚠️ Knockbacks TRAVEL now (KNOCKBACK_SPEED) instead of assigning position,
     // and cost the shoved unit control for the flight — see spatial.test.ts's
     // no-teleport tripwire.
-    winner: 'B', duration: 15, survivors: [0, 1],
-    casts: 59, hits: 38, deaths: 1, finalHp: [0, 127],
+    // ⚠️ Mitigation 1400 -> 1250 and +2 hpRegenBuff on every regen move — the
+    // 'less bursty' pass. Survivors end healthier and fights run slightly longer.
+    winner: 'B', duration: 15.3, survivors: [0, 1],
+    casts: 61, hits: 39, deaths: 1, finalHp: [0, 169],
   },
   {
     // Ranged vs melee across the full width — pins approach, stand-off and the
@@ -130,8 +132,10 @@ const GOLDENS: Golden[] = [
     // cannot kite instantly — the brawler closes because the caster has to
     // commit to a heading before it can run. Natural movement is not free.
     // ⚠️ Moved by the per-ability range + authored free-attack pass — see duel-melee.
+    // ⚠️ Mitigation 1400 -> 1250 and +2 hpRegenBuff on every regen move — the
+    // 'less bursty' pass. Survivors end healthier and fights run slightly longer.
     winner: 'B', duration: 7, survivors: [0, 1],
-    casts: 16, hits: 9, deaths: 1, finalHp: [0, 451],
+    casts: 16, hits: 9, deaths: 1, finalHp: [0, 453],
   },
   {
     // Front line + damage + support on both sides: targeting, taunt, healing and
@@ -173,8 +177,10 @@ const GOLDENS: Golden[] = [
     // ⚠️ Knockbacks TRAVEL now (KNOCKBACK_SPEED) instead of assigning position,
     // and cost the shoved unit control for the flight — see spatial.test.ts's
     // no-teleport tripwire.
-    winner: 'A', duration: 14.6, survivors: [3, 0],
-    casts: 90, hits: 56, deaths: 3, finalHp: [120, 190, 272, 0, 0, 0],
+    // ⚠️ Mitigation 1400 -> 1250 and +2 hpRegenBuff on every regen move — the
+    // 'less bursty' pass. Survivors end healthier and fights run slightly longer.
+    winner: 'A', duration: 14.4, survivors: [3, 0],
+    casts: 84, hits: 52, deaths: 3, finalHp: [18, 328, 282, 0, 0, 0],
   },
 ]
 

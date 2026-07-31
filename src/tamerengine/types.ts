@@ -193,6 +193,18 @@ export const FALL_BACK_RAMP = 0.5 // seconds to reach full retreat speed
  */
 export const HEAL_MULT = 1.0
 
+/**
+ * MITIGATION DIVISOR — damage reduction is `min(MIT_CAP, defStat / MIT_DIVISOR)`,
+ * where defStat is CON against physical and WIS against magic/voice/support.
+ *
+ * ⚠️ THE LEVER WITH THE MOST REACH IN THE GAME: it touches every hit, unlike
+ * healing which reaches 4% of casts. 1400 -> 1250 lifts a CON-300 monster from
+ * 21.4% to 24.0% reduction. Deliberately small — one value, nudged.
+ *
+ * The 0.55 cap is a SECOND value and is left alone; move one at a time.
+ */
+export const MIT_DIVISOR = 1250
+
 export const KNOCKBACK_SPEED = 12
 /** Floor on the stagger, so even a 1-unit nudge is legible rather than a snap. */
 export const KNOCKBACK_MIN_TIME = 0.15

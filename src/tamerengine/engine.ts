@@ -17,7 +17,7 @@ import {
   SUDDEN_DEATH_AT, SUDDEN_DEATH_BASE, SUDDEN_DEATH_RAMP, KITE_MAX, KITE_REFILL, BLOCK_DR,
   BASIC_STAT_TIER, BASIC_BASE_POWER, BASIC_STAT_SCALE,
   MANA_ON_HIT_TAKEN, MANA_ON_HIT_DEALT, MANA_SUPPORT_PER_SEC, WIS_REGEN_DIVISOR, FIELD_MANA_COST_MULT,
-  FIELD_LOADOUT_SIZE, CC_DR_STEP, CC_DR_RESET, CLEANSE_CC_IMMUNITY, CLASS_BASIC, KNOCKBACK_SPEED, KNOCKBACK_MIN_TIME, HEAL_MULT} from './types'
+  FIELD_LOADOUT_SIZE, CC_DR_STEP, CC_DR_RESET, CLEANSE_CC_IMMUNITY, CLASS_BASIC, KNOCKBACK_SPEED, KNOCKBACK_MIN_TIME, HEAL_MULT, MIT_DIVISOR} from './types'
 import { archetypeOf, desiredGoal, dist, isMelee, manaRoleOf, norm, pickTarget, reachOf, spacingRadius, sub, threatOf, traitsFor, wantsToKite } from './decide'
 import { personalityOf, spendAboveFor } from './personality'
 import { spatialOf } from './spatial'
@@ -1559,7 +1559,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     // 12-point shred takes a tank from 25% mitigation to 13%, which is what
     // makes it a real answer to trained CON rather than a rounding error.
     // Floored at 0: a shred can strip armour, never invert it into a bonus.
-    const mitFrac = Math.max(0, Math.min(0.55, mitigation / 1400) - modMitDebuff(target) / 100)
+    const mitFrac = Math.max(0, Math.min(0.55, mitigation / MIT_DIVISOR) - modMitDebuff(target) / 100)
     const afterMult = raw * (1 - mitFrac) * statusDamageTaken(target) * modDmgTaken(target) * blocked
     const dmg = Math.max(1, Math.round(afterMult - modGuard(target)))
     // WARD soaks BEFORE health — an absorb pool that depletes, not a multiplier.

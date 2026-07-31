@@ -147,7 +147,7 @@ const POOLS: Record<Stat, Row[]> = {
     // ── Guardian — protection pointed OUTWARD, at somebody else ──────────────
     { name: 'Taunt', learnLevel: 90, type: 'debuff', channel: 'support', target: 'enemy', cooldown: 4, accuracy: 100, power: 0, mana: 10, effects: { atkDebuff: 0.1, duration: 3, tauntForce: true }, range: 4.5, desc: 'Enrages one of them into coming for you, and swinging softer for it.' },
     { name: 'Barbed Carapace', learnLevel: 120, type: 'buff', channel: 'support', target: 'team', cooldown: 5, accuracy: 100, power: 0, mana: 24, effects: { defBuff: 4, thorns: 6, duration: 3 }, range: 6, desc: 'The whole line bristles: +4 mitigation and 6 damage returned on every hit.' },
-    { name: 'Steady Vigil', learnLevel: 200, type: 'buff', channel: 'support', target: 'ally', cooldown: 4, accuracy: 100, power: 20, mana: 18, effects: { hpRegenBuff: 5, duration: 3 }, range: 6, desc: 'Stands over a wounded ally: heals, then keeps healing.' },
+    { name: 'Steady Vigil', learnLevel: 200, type: 'buff', channel: 'support', target: 'ally', cooldown: 4, accuracy: 100, power: 20, mana: 18, effects: { hpRegenBuff: 7, duration: 3 }, range: 6, desc: 'Stands over a wounded ally: heals, then keeps healing.' },
     { name: 'Interpose', learnLevel: 340, type: 'buff', channel: 'support', target: 'ally', cooldown: 5, accuracy: 100, power: 0, mana: 24, effects: { ward: 34, defBuff: 8, duration: 3 }, range: 6, desc: 'Steps in front of an ally: a 34 HP shield and +8 mitigation, put where it is needed rather than kept.' },
     { name: "Bulwark's Challenge", learnLevel: 650, type: 'debuff', channel: 'support', target: 'allEnemies', cooldown: 6, accuracy: 100, power: 0, mana: 40, effects: { guard: 20, tauntForce: true, duration: 2 }, range: 3.8, desc: 'Plants its feet and roars: massive guard, and the WHOLE enemy team comes for it.' },
     { name: 'Aegis of the Fallen', learnLevel: 760, type: 'buff', channel: 'support', target: 'team', cooldown: 7, accuracy: 100, power: 0, mana: 48, effects: { ward: 45, defBuff: 6, duration: 3 }, range: 6, desc: 'A shield over every ally at once — 45 HP of absorb each, and armour under it.' },
@@ -185,7 +185,7 @@ const POOLS: Record<Stat, Row[]> = {
     // ── Mender — the only real team healing in the game ──────────────────────
     { name: 'Mend', learnLevel: 40, type: 'buff', channel: 'support', target: 'ally', cooldown: 3, accuracy: 100, power: 16, mana: 8, range: 8.2, desc: 'Soothing focus, given to somebody else. WIS is the only stat that can.' },
     { name: 'Clarity', learnLevel: 120, type: 'buff', channel: 'support', target: 'ally', cooldown: 3, accuracy: 100, power: 0, mana: 12, effects: { cleanse: true }, range: 8, desc: "Clears an ally's head — confusion, charm, fear, all of it." },
-    { name: 'Renewal', learnLevel: 260, type: 'buff', channel: 'support', target: 'ally', cooldown: 4, accuracy: 100, power: 8, mana: 18, effects: { hpRegenBuff: 8, duration: 4 }, range: 8.5, desc: 'Not a burst but a tide: 8 HP a round for four rounds.' },
+    { name: 'Renewal', learnLevel: 260, type: 'buff', channel: 'support', target: 'ally', cooldown: 4, accuracy: 100, power: 8, mana: 18, effects: { hpRegenBuff: 10, duration: 4 }, range: 8.5, desc: 'Not a burst but a tide: 8 HP a round for four rounds.' },
     { name: 'Tranquility', learnLevel: 320, type: 'buff', channel: 'support', target: 'ally', cooldown: 5, accuracy: 100, power: 34, mana: 26, range: 7.3, desc: 'Deep restorative calm channelled into one ally.' },
     { name: 'Rebuke', learnLevel: 560, type: 'damage', channel: 'support', target: 'enemy', cooldown: 4, accuracy: 90, power: 37, mana: 24, variance: 0.2, range: 7.2, desc: 'The healer answers back. A mender is not the same thing as a bystander.' },
     { name: 'Ward Against Ruin', learnLevel: 650, type: 'buff', channel: 'support', target: 'team', cooldown: 7, accuracy: 100, power: 20, mana: 46, effects: { cleanse: true, regenBuff: 3, duration: 3 }, range: 8, desc: "Clears the whole team's ailments and mends 20 HP each. The Mender capstone." },
@@ -213,7 +213,7 @@ const POOLS: Record<Stat, Row[]> = {
     // one monster that could learn it did draft it. 300 clears the median and
     // leaves it a real mid-game unlock. Renewal (260) is the peer that works.
     { name: 'Mending Surge', learnLevel: 300, type: 'buff', channel: 'support', target: 'ally', cooldown: 6, accuracy: 100, power: 105, mana: 34, range: 8.0, desc: 'A flood of restoration into one body — the burst answer to burst.' },
-    { name: 'Providence', learnLevel: 850, type: 'buff', channel: 'support', target: 'team', cooldown: 7, accuracy: 100, power: 12, mana: 40, effects: { cleanse: true, hpRegenBuff: 6, duration: 3 }, range: 6.8, desc: 'Sees what is coming: clears the team and steadies it. Restoration — empowerment is CHA.' },
+    { name: 'Providence', learnLevel: 850, type: 'buff', channel: 'support', target: 'team', cooldown: 7, accuracy: 100, power: 12, mana: 40, effects: { cleanse: true, hpRegenBuff: 8, duration: 3 }, range: 6.8, desc: 'Sees what is coming: clears the team and steadies it. Restoration — empowerment is CHA.' },
   ],
   // ══ INT ══ magic · elements · ground AoE + stun · frost root/slow · teleports ═
   // HEXER stacks statuses and then detonates them. ELEMENTALIST makes ground you
@@ -292,7 +292,7 @@ const POOLS: Record<Stat, Row[]> = {
     // ⚠️ learnLevel 340, NOT 480 — CHA-primary measures median 330 / p90 396, so
     // 480 was unlearnable by everyone. See Mending Surge above.
     { name: 'Second Wind', learnLevel: 340, type: 'buff', channel: 'support', target: 'team', cooldown: 9, accuracy: 100, power: 48, mana: 42, range: 7.5, desc: 'A cry that puts the whole line back on its feet — none of them fully.' },
-    { name: 'Standing Ovation', learnLevel: 540, type: 'buff', channel: 'support', target: 'team', cooldown: 6, accuracy: 100, power: 0, mana: 42, effects: { atkBuff: 0.2, accBuff: 10, hpRegenBuff: 4, duration: 3 }, range: 7.5, desc: 'Feeds on applause and hands it straight back to the team.' },
+    { name: 'Standing Ovation', learnLevel: 380, type: 'buff', channel: 'support', target: 'team', cooldown: 6, accuracy: 100, power: 0, mana: 42, effects: { atkBuff: 0.2, accBuff: 10, hpRegenBuff: 6, duration: 3 }, range: 7.5, desc: 'Feeds on applause and hands it straight back to the team.' },
     { name: 'Triumph', learnLevel: 880, type: 'buff', channel: 'support', target: 'team', cooldown: 8, accuracy: 100, power: 0, mana: 56, effects: { atkBuff: 0.32, accBuff: 14, dodgeBuff: 10, duration: 2 }, range: 7.5, desc: 'The empowerment capstone: everything at once, for two rounds only.' },
 
     // ── Demagogue — team debuffs and morale ──────────────────────────────────

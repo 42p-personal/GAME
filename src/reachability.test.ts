@@ -51,8 +51,10 @@ describe('pool reachability at the training level we balance at', () => {
     // doing their job. It fails if the number MOVES, so that adding an ability
     // nobody can draft is a decision someone made on purpose rather than an
     // accident nobody noticed. Update it deliberately, and say which way.
+    // 68 -> 67: Standing Ovation lv540 -> 380, so the CHA team regen is now
+    // reachable and its buff can actually land. Down is the good direction.
     expect(unreachable.length, `unreachable at train ${SWEEP_TRAIN}:\n  ${unreachable.join('\n  ')}`)
-      .toBe(68)
+      .toBe(67)
   })
 
   it('⚠️ every support STAT can reach a restore before its capstone', () => {
