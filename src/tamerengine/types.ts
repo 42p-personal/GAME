@@ -171,6 +171,33 @@ export const FALL_BACK_RAMP = 0.5 // seconds to reach full retreat speed
  * 12 covers a 3-unit shove in 0.25s: two or three ticks, which reads as an
  * impact rather than a blink, and still clearly faster than anyone can run.
  */
+/**
+ * HEALING MULTIPLIER on a heal move's authored power.
+ *
+ * ⚠️ HELD AT 1.0 BECAUSE HEALING IS NOT A TUNABLE LEVER FROM THIS AXIS. Measured
+ * as paired A/Bs on the 2v2-6v6 sweep:
+ *   1.0 -> 1.3   20 better / 20 worse, p = 1.00   NO EFFECT
+ *   1.0 -> 2.5    8 better / 13 worse, p = 0.38   NO EFFECT
+ * A 2.5x heal buff — not a nudge — moved nothing, and only 21 of 40 fights moved
+ * AT ALL, so 19 had no heal influence whatsoever.
+ *
+ * The arithmetic says why: heals are 4.1% of casts (194 events over 40 fights)
+ * and restore 0-9% of the damage dealt against them. Multiplying a thing that
+ * rarely happens does not make it matter. This is the same shape as the control
+ * moves before LINES existed and the isolation term — the bottleneck is
+ * REACHABILITY, not magnitude, and no coefficient reaches it.
+ *
+ * ⚠️ So do NOT raise this hoping for less bursty fights. The upstream questions
+ * are how often a support DRAFTS a heal and how `bestUtility` scores casting one
+ * against dealing damage. Mitigation is the lever with real leverage: it touches
+ * every hit in the game rather than 4% of casts.
+ *
+ * The constant stays because the multiplier is the right shape for the lever once
+ * the reachability problem is fixed, and because the null is worth keeping next to
+ * the number it refutes.
+ */
+export const HEAL_MULT = 1.0
+
 export const KNOCKBACK_SPEED = 12
 /** Floor on the stagger, so even a 1-unit nudge is legible rather than a snap. */
 export const KNOCKBACK_MIN_TIME = 0.15
