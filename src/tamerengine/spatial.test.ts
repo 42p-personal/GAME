@@ -16,7 +16,7 @@ const unit = (id: string, over: Partial<FieldUnit>): FieldUnit => ({
   radius: 0.9, speed: 3, hp: 500, maxHp: 500, mp: 60, maxMp: 60,
   traits: { cohesion: .5, predation: .5 }, targetId: null, retargetIn: 0,
   cooldowns: {}, castingFor: 0, castMoveId: null, castTargetId: null, statuses: [], mods: [], forcedTargetId: null, forcedUntil: 0,
-  rootedFor: 0, fadedUntil: 0, slowMult: 1, slowFor: 0, disengageFor: 0, kiteFor: 99, blockingUntil: 0, ward: 0, ccResist: 0, lastCcAt: -999, ccImmuneUntil: 0, hasAttacked: false, chaseFor: 0, chaseBest: Infinity, gaveUp: {}, fallBackAt: 0, fallBackUntil: 0, fallBackTo: null, dashTo: null, dashUntil: 0, escapeLockUntil: 0, dead: false, ...over,
+  rootedFor: 0, fadedUntil: 0, slowMult: 1, slowFor: 0, disengageFor: 0, kiteFor: 99, blockingUntil: 0, ward: 0, ccResist: 0, lastCcAt: -999, ccImmuneUntil: 0, hasAttacked: false, chaseFor: 0, chaseBest: Infinity, gaveUp: {}, fallBackAt: 0, fallBackUntil: 0, fallBackTo: null, shoveTo: null, shoveUntil: 0, dashTo: null, dashUntil: 0, escapeLockUntil: 0, dead: false, ...over,
 })
 
 describe('the spatial table is honest', () => {
@@ -182,5 +182,61 @@ describe('area shapes replace the row targets', () => {
     })
     // Different formations must produce genuinely different fights.
     expect(JSON.stringify(clumped.events)).not.toBe(JSON.stringify(spread.events))
+  })
+})
+
+// ── NOTHING TELEPORTS ────────────────────────────────────────────────────────
+describe('tamerengine — every displacement travels', () => {
+  it('⚠️ no unit moves further in one tick than a knockback can carry it', () => {
+    // ⚠️ THE TRIPWIRE FOR AN ENTIRE BUG FAMILY. `applyOnTarget` used to write
+    // `target.pos = dest`, so Body Slam's `push: 3` landed three units inside
+    // one 0.1s tick — 30 units/second, and the most teleport-looking thing in
+    // the game. Measured on a 3v3 before the fix: 1532 ticks moved <=0.5 units
+    // and nine moved 1.8-3.1 with NOTHING in between, because shoves bypassed
+    // the movement step. `haulAlly` did the same.
+    //
+    // This does not test the shove specifically — it tests that NO mechanism
+    // moves a unit faster than the fastest legal one. Any future code that
+    // assigns a position directly trips it, which is the point: the bug was
+    // never in one function, it was in the habit.
+    // ⚠️ THIS IS A TELEPORT DETECTOR, NOT A SPEED LIMIT. The bound is deliberately
+    // loose. Legal travel stacks several multipliers — unit speed
+    // (2.4 + DEX/1000*3.6), DASH_SPEED_MULT, the Fall Back ramp, haste's
+    // `speedMult` — and the fastest observed legal step is 1.58 units/tick. I
+    // could not enumerate every combination with confidence, so rather than
+    // assert a derived maximum I have not verified, the ceiling is set above the
+    // fastest observed movement and below an instant reposition, and says so.
+    //
+    // The bug it exists for is not "slightly too fast" — it is `target.pos =
+    // dest`, which put Body Slam's `push: 3` on the board in a single tick at
+    // 3.0 units, nearly double this. Anything that assigns position still trips.
+    //
+    // ⚠️ A first version tried `max(KNOCKBACK_SPEED, MAX_SPEED * DASH_SPEED_MULT)`
+    // and failed at 1.58 on legal dash movement. A tripwire that fires on correct
+    // behaviour gets weakened until it fires on nothing — better an honest loose
+    // bound than a tight one nobody trusts.
+    const CEIL = 2.0
+    for (const seed of ['tp0', 'tp1', 'tp2', 'tp3']) {
+      const r = simulateFieldBattle({
+        seed,
+        teamA: [mk(`${seed}a0`), mk(`${seed}a1`), mk(`${seed}a2`)],
+        teamB: [mk(`${seed}b0`), mk(`${seed}b1`), mk(`${seed}b2`)],
+      })
+      const prev = new Map<string, { x: number; y: number }>()
+      for (const e of r.events) {
+        if (e.kind !== 'snapshot') continue
+        for (const u of e.units) {
+          const p = prev.get(u.id)
+          if (p) {
+            const d = Math.hypot(u.x - p.x, u.y - p.y)
+            expect(
+              d,
+              `${u.id} moved ${d.toFixed(2)} units in one tick at t=${e.t} (seed ${seed})`,
+            ).toBeLessThanOrEqual(CEIL)
+          }
+          prev.set(u.id, { x: u.x, y: u.y })
+        }
+      }
+    }
   })
 })

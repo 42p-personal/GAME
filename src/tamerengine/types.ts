@@ -138,6 +138,28 @@ export const FALL_BACK_RAMP = 0.5 // seconds to reach full retreat speed
 //
 // A creature turns at a rate. 7 rad/s puts a full about-face at ~0.45s, which
 // reads as an animal reacting rather than a sprite being repointed.
+/**
+ * KNOCKBACK — how fast a shoved unit travels, in world units per second.
+ *
+ * ⚠️ A SHOVE USED TO BE AN ASSIGNMENT. `applyOnTarget` wrote `target.pos = dest`,
+ * so Body Slam's `push: 3` landed all three units inside one 0.1s tick — 30
+ * units/second, about 7x a walk, and the single most teleport-looking thing in
+ * the game. Measured on a 3v3: 1532 ticks moved <=0.5 units and nine moved
+ * 1.8-3.1, with NOTHING in between, because shoves bypassed the movement step
+ * entirely. Every one of those nine matched a `shove` event exactly.
+ *
+ * ⚠️ AND IT IS WHY TUNING THE DASH DID NOTHING. Three commits moved
+ * DASH_SPEED_MULT chasing "retreats look like teleports" — but the jumps were
+ * never retreats, they were knockbacks on a different code path. Measure which
+ * mechanic is firing before tuning the one you assume is.
+ *
+ * 12 covers a 3-unit shove in 0.25s: two or three ticks, which reads as an
+ * impact rather than a blink, and still clearly faster than anyone can run.
+ */
+export const KNOCKBACK_SPEED = 12
+/** Floor on the stagger, so even a 1-unit nudge is legible rather than a snap. */
+export const KNOCKBACK_MIN_TIME = 0.15
+
 export const TURN_RATE = 7 // radians per second
 // Move statuses author their duration in ROUNDS, a unit the field has no
 // concept of. A turn-based round — everyone acting once — is worth roughly
@@ -270,6 +292,10 @@ export interface FieldUnit {
   /** While `t` is under this, the unit is in a committed retreat. */
   fallBackUntil: number
   /** Mid-dash destination, travelled over several ticks rather than snapped. */
+  /** Where a knockback is carrying this unit, and until when. Control is lost
+   * for the duration — being shoved is a brief stagger, not a free reposition. */
+  shoveTo: Vec2 | null
+  shoveUntil: number
   dashTo: Vec2 | null
   /** When the dash gives up, so a blocked dash cannot strand the unit. */
   dashUntil: number

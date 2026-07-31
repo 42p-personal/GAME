@@ -97,8 +97,11 @@ const GOLDENS: Golden[] = [
     // stands at the shorter of its best weapon and its own free attack rather
     // than at whatever the longest thing in its kit happened to reach. Melee
     // classes close instead of standing off shooting.
+    // ⚠️ Knockbacks TRAVEL now (KNOCKBACK_SPEED) instead of assigning position,
+    // and cost the shoved unit control for the flight — see spatial.test.ts's
+    // no-teleport tripwire.
     winner: 'B', duration: 15, survivors: [0, 1],
-    casts: 59, hits: 40, deaths: 1, finalHp: [0, 98],
+    casts: 59, hits: 38, deaths: 1, finalHp: [0, 127],
   },
   {
     // Ranged vs melee across the full width — pins approach, stand-off and the
@@ -167,8 +170,11 @@ const GOLDENS: Golden[] = [
     // ⚠️ Slower escapes cost the ESCAPER, not the fight. A retreat you can watch
     // is a retreat that can be caught.
     // ⚠️ Moved by the per-ability range + authored free-attack pass — see duel-melee.
-    winner: 'A', duration: 11.9, survivors: [3, 0],
-    casts: 75, hits: 48, deaths: 3, finalHp: [103, 416, 282, 0, 0, 0],
+    // ⚠️ Knockbacks TRAVEL now (KNOCKBACK_SPEED) instead of assigning position,
+    // and cost the shoved unit control for the flight — see spatial.test.ts's
+    // no-teleport tripwire.
+    winner: 'A', duration: 14.6, survivors: [3, 0],
+    casts: 90, hits: 56, deaths: 3, finalHp: [120, 190, 272, 0, 0, 0],
   },
 ]
 

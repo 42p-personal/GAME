@@ -17,7 +17,7 @@ import {
   SUDDEN_DEATH_AT, SUDDEN_DEATH_BASE, SUDDEN_DEATH_RAMP, KITE_MAX, KITE_REFILL, BLOCK_DR,
   BASIC_STAT_TIER, BASIC_BASE_POWER, BASIC_STAT_SCALE,
   MANA_ON_HIT_TAKEN, MANA_ON_HIT_DEALT, MANA_SUPPORT_PER_SEC, WIS_REGEN_DIVISOR, FIELD_MANA_COST_MULT,
-  FIELD_LOADOUT_SIZE, CC_DR_STEP, CC_DR_RESET, CLEANSE_CC_IMMUNITY, CLASS_BASIC} from './types'
+  FIELD_LOADOUT_SIZE, CC_DR_STEP, CC_DR_RESET, CLEANSE_CC_IMMUNITY, CLASS_BASIC, KNOCKBACK_SPEED, KNOCKBACK_MIN_TIME} from './types'
 import { archetypeOf, desiredGoal, dist, isMelee, manaRoleOf, norm, pickTarget, reachOf, spacingRadius, sub, threatOf, traitsFor, wantsToKite } from './decide'
 import { personalityOf, spendAboveFor } from './personality'
 import { spatialOf } from './spatial'
@@ -216,6 +216,8 @@ function buildUnit(m0: Monster, side: FieldSide, slot: number, pos: Vec2): Field
     fallBackAt: 0,
     fallBackUntil: 0,
     fallBackTo: null,
+    shoveTo: null,
+    shoveUntil: 0,
     dashTo: null,
     dashUntil: 0,
     escapeLockUntil: 0,
@@ -775,6 +777,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     for (const u of units) {
       if (u.dead) { vis.set(u.id, 'dead'); continue }
 
+
       // timers
       for (const k of Object.keys(u.cooldowns)) u.cooldowns[k] = Math.max(0, u.cooldowns[k] - DT)
       u.retargetIn -= DT
@@ -802,6 +805,39 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       if (u.ccResist > 0 && t - u.lastCcAt >= CC_DR_RESET) u.ccResist = 0
       tickStatuses(u, t)
       if (u.dead) { vis.set(u.id, 'dead'); continue }
+
+      // ── KNOCKBACK ─────────────────────────────────────────────────────────
+      // ⚠️ AFTER THE TIMERS, BEFORE THE DECISION — and the order is load-bearing
+      // in both directions. Being shoved is a brief loss of control: no casting,
+      // no steering, no retreat decision, the unit is travelling and that is all.
+      // But it is NOT a stun: cooldowns, mana, HP regen and status durations all
+      // tick first, so a stagger costs you tempo without also freezing your
+      // recovery. This block was first placed ABOVE the timers and the duel-melee
+      // golden went 15s -> 91.5s — knockbacks are frequent enough that pausing
+      // every clock turned a 0.25s stagger into a fight-long stalemate.
+      if (u.shoveTo && t < u.shoveUntil) {
+        const left = dist(u.pos, u.shoveTo)
+        if (left > 0.05) {
+          const step = Math.min(left, KNOCKBACK_SPEED * DT)
+          const dir = norm(sub(u.shoveTo, u.pos))
+          const cand = clampToField({ x: u.pos.x + dir.x * step, y: u.pos.y + dir.y * step })
+          // ⚠️ A SHOVE COLLIDES. Assigning the destination let a knockback post a
+          // unit straight through a pillar; a body slammed into a wall now stops
+          // at the wall, which is both correct and what makes cover feel solid.
+          if (obstacles.some((o) => insideObstacle(cand, o, u.radius * 0.6))) {
+            u.shoveTo = null
+          } else {
+            u.pos = cand
+          }
+          u.castMoveId = null
+          u.castTargetId = null
+          u.castingFor = 0
+          vis.set(u.id, 'hurt')
+          continue
+        }
+        u.shoveTo = null
+      }
+      if (u.shoveTo && t >= u.shoveUntil) u.shoveTo = null
 
       // HARD CONTROL. A stun does not merely stop the next action — it BREAKS
       // the cast in progress, which is the whole counterplay to a long wind-up
@@ -1694,7 +1730,8 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
         const step = Math.min(sp.haulAlly, dist(worst.pos, u.pos) - 1.6)
         const dest = clampToField({ x: worst.pos.x + dir.x * step, y: worst.pos.y + dir.y * step })
         if (!obstacles.some((o) => insideObstacle(dest, o, worst.radius * 0.6))) {
-          worst.pos = dest
+          worst.shoveTo = dest
+          worst.shoveUntil = t + Math.max(KNOCKBACK_MIN_TIME, step / KNOCKBACK_SPEED)
           events.push({ t, kind: 'shove', id: worst.id, by: u.id, kind2: 'pull' })
         }
       }
@@ -1708,7 +1745,10 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       const shift = (sp.push ?? 0) - (sp.pull ?? 0)
       const dest = clampToField({ x: target.pos.x + away.x * shift, y: target.pos.y + away.y * shift })
       if (!obstacles.some((o) => insideObstacle(dest, o, target.radius * 0.6))) {
-        target.pos = dest
+        // ⚠️ A DESTINATION AND A DEADLINE, never `target.pos = dest`. See
+        // KNOCKBACK_SPEED in types.ts for the measurement that forced this.
+        target.shoveTo = dest
+        target.shoveUntil = t + Math.max(KNOCKBACK_MIN_TIME, Math.abs(shift) / KNOCKBACK_SPEED)
         events.push({ t, kind: 'shove', id: target.id, by: u.id, kind2: sp.push ? 'push' : 'pull' })
       }
     }
