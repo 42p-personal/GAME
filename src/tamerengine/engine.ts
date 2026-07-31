@@ -70,6 +70,34 @@ const CHANNEL_DMG: Record<string, number> = { melee: 1.12, ranged: 0.88, magic: 
 // See the note in stepToward: this is what breaks the pursuit equilibrium.
 const BACKPEDAL_MULT = 0.6
 
+/**
+ * The nearest point outside every obstacle.
+ *
+ * ⚠️ THE FIX FOR THE WORST BUG IN THE ENGINE. `tryMove` rejects any position
+ * inside an inflated obstacle, so a unit that STARTS inside one has every
+ * candidate rejected — the full step, both axis slides, and the escape nudge.
+ * It never moves again. On Titan's Rest that was 80 of 240 unit-fights welded
+ * in place for the entire battle, and `resolved` could not see it: an inert
+ * unit is still present, alive and targetable.
+ *
+ * Deterministic by construction — fixed ring radii, fixed angles, no rng — so
+ * it cannot desync a replay. Rings grow outward so the unit ends up just
+ * outside the face it was inside rather than teleported across the arena.
+ */
+function pushOutOfObstacles(p: Vec2, obs: Obstacle[], radius: number): Vec2 {
+  const pad = radius * 0.6
+  const blocked = (q: Vec2) => obs.some((o) => insideObstacle(q, o, pad))
+  if (!blocked(p)) return p
+  for (let r = 0.4; r <= 14; r += 0.4) {
+    for (let k = 0; k < 16; k++) {
+      const a = (k / 16) * Math.PI * 2
+      const q = clampToField({ x: p.x + Math.cos(a) * r, y: p.y + Math.sin(a) * r })
+      if (!blocked(q)) return q
+    }
+  }
+  return p // nowhere free within 14 units: the arena is pathological, not the unit
+}
+
 // ── Setup ───────────────────────────────────────────────────────────────────
 /** Default cover: a symmetric pair of blocks so neither side is advantaged. */
 export const DEFAULT_OBSTACLES: Obstacle[] = [
@@ -639,6 +667,12 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     ...setup.teamA.map((m, i) => buildUnit(m, 'A', i, placeA[i] ?? autoPlace(setup.teamA, 'A')[i])),
     ...setup.teamB.map((m, i) => buildUnit(m, 'B', i, placeB[i] ?? autoPlace(setup.teamB, 'B')[i])),
   ]
+  // ⚠️ BEFORE TICK 1. Deployment is chosen by hex zones and formation rules that
+  // know nothing about cover, so a legal-looking placement can land on a rock.
+  // Nudging here — rather than banning cover near spawns — keeps arenas free to
+  // put a pillar by the start line, which is a real design tool.
+  for (const u of units) u.pos = pushOutOfObstacles(u.pos, setup.obstacles ?? [], u.radius)
+
   const byId = new Map(units.map((u) => [u.id, u]))
   const events: FieldEvent[] = []
   // Persistent patches of ground. The arena's own contribution to tactics: a
@@ -1565,6 +1599,17 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     const step = u.speed * backpedal * u.slowMult * statusSpeedMult(u) * DT
     const tryMove = (nx: number, ny: number) => {
       const p = { x: nx, y: ny }
+      // ⚠️ A CANDIDATE THAT DOES NOT MOVE IS NOT A MOVE. Walk straight at a
+      // horizontal wall and `dir.x` is ~0, so the x-slide's destination IS the
+      // current position — outside the obstacle, so this returned TRUE. The unit
+      // travelled zero distance AND the `&&` chain short-circuited on that
+      // success, so the escape fallback below never ran. 1180 of 1219 stuck
+      // ticks on The Ossuary were this: units pressed against cover (median 0.66
+      // from it, pad 0.54), "succeeding" at standing still, every tick, forever.
+      // The full step is unaffected — `dir` is normalised, so it always displaces
+      // by `step` unless the field edge clamps it, and being clamped at the edge
+      // is itself a reason to try another heading.
+      if (Math.hypot(nx - u.pos.x, ny - u.pos.y) < step * 0.25) return false
       if (obs.some((o) => insideObstacle(p, o, u.radius * 0.6))) return false
       u.pos = p
       return true
@@ -1574,8 +1619,29 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     // Try the full step, then slide along each axis so units round cover
     // instead of sticking to it.
     if (!tryMove(nx, ny) && !tryMove(nx, u.pos.y) && !tryMove(u.pos.x, ny)) {
-      // fully blocked — nudge perpendicular so it never deadlocks
-      tryMove(u.pos.x + dir.y * step, u.pos.y - dir.x * step)
+      // ⚠️ FULLY BLOCKED. The old fallback was ONE perpendicular nudge with a
+      // fixed handedness, so whether a unit escaped depended on which way it
+      // happened to approach — and when that one attempt failed there was no
+      // next one. Scan headings outward from the desired direction, alternating
+      // sides, and take the first that actually moves: the unit still prefers
+      // the way it wanted to go, but always has somewhere to put its feet.
+      for (let k = 1; k <= 8; k++) {
+        const a = (k * Math.PI) / 8
+        const c = Math.cos(a)
+        const sn = Math.sin(a)
+        // +a then -a: rotate the desired heading, nearest angles first.
+        const cands: Vec2[] = [
+          { x: dir.x * c - dir.y * sn, y: dir.x * sn + dir.y * c },
+          { x: dir.x * c + dir.y * sn, y: -dir.x * sn + dir.y * c },
+        ]
+        let moved = false
+        for (const d of cands) {
+          const cx = Math.min(FIELD_W - 0.5, Math.max(0.5, u.pos.x + d.x * step))
+          const cy = Math.min(FIELD_H - 0.5, Math.max(0.5, u.pos.y + d.y * step))
+          if (tryMove(cx, cy)) { moved = true; break }
+        }
+        if (moved) break
+      }
     }
     u.vel = { x: dir.x * step, y: dir.y * step }
   }

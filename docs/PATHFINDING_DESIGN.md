@@ -1,8 +1,8 @@
 # Pathfinding — design plan
 
-**Status:** planning. **Change freeze in effect** on `src/tamerengine/` while this is
-agreed. Stage 3 is **DECIDED** (§5: A + F on independent cooldowns); stages 0–2 and
-the instrument order are settled; nothing is built yet. **Branch:** `3doverhal`.
+**Status:** Stage 4a (instruments) and **Stage 0 SHIPPED**. Freeze lifted. Stage 3 is
+DECIDED (§5: A + F on independent cooldowns + a ~5s shared lockout). Stage 1
+(pathfinding) is next. **Branch:** `3doverhal`.
 
 The goal, in the user's words: *monsters that navigate around obstacles, use them to
 their advantage, and — ideally — a support running around a pillar to escape an
@@ -116,14 +116,62 @@ Cheapest work, largest single win, and it is all correctness.
 
 - **Push-out at spawn.** Any unit initialised inside an inflated obstacle is moved to
   the nearest free point before tick 1.
-- **Restore the strict deployment-band guard** in `maps.ts` as a hard error. Cover
-  inside a spawn band is not a style choice; it is a deadlock.
+- ~~**Restore the strict deployment-band guard** as a hard error.~~ ⚠️ **REVERSED ON
+  IMPLEMENTATION.** Push-out fixes the *cause*, and once a unit spawned in cover is
+  simply nudged clear, cover inside a spawn band stops being a deadlock and goes back
+  to being a legitimate design choice — WoW arenas have pillars near starting
+  positions. Both earlier positions were half-right: the original strict check was
+  reading a real hazard, the relaxation was right that fairness was not it, and
+  *neither* spotted that the engine was missing a push-out. Fix the cause, keep the
+  freedom. The crowding check (>15% of a band blocked) stays, since that one is about
+  whether a team can seat at all.
 - **No terminal blocked state.** "All four `tryMove` candidates rejected" must be
   impossible to remain in — escalate to a scan of headings rather than one fixed
   perpendicular.
 
-**Acceptance:** `stuck%` (frozen **and** hugging) → ~0 on all three arenas. Expect
-Titan's Rest to move sharply off 0/40 on this stage alone.
+**Acceptance:** `deadlocked` → 0 on all three arenas (`npx tsx tools/navdiag.ts`).
+
+### ✅ SHIPPED — and it was THREE bugs, not two
+
+| arena | resolved | deadlocked | stuck% | wander |
+|---|---|---|---|---|
+| Dustbowl | 37 → **38**/40 | 0 → 0 | 1.3% → **0.0%** | 2.16 → 2.06 |
+| The Ossuary | 30 → **35**/40 | 3 → **0** | 37.6% → **0.1%** | 2.48 → 2.61 |
+| Titan's Rest | 0 → **39**/40 | 80 → **0** | 56.6% → **0.1%** | 3.31 → 2.45 |
+
+⚠️ **BUG 3, WHICH THE PLAN DID NOT PREDICT — a "move" that succeeds at moving
+nothing.** Push-out and the escape scan fixed Titan's Rest (0 → 37/40) and left
+Dustbowl and Ossuary *byte-identical*. A change that moves one arena and leaves two
+unchanged to the decimal is not a partial success, it is a signal the code path is
+never reached.
+
+The cause: `tryMove(nx, u.pos.y)` — the x-slide. Walk straight at a horizontal wall and
+`dir.x` is ~0, so the slide's destination **is the current position**. It is not inside
+the obstacle, so `tryMove` returned **true**. The unit travelled zero distance, and
+because the `&&` chain short-circuits on that success, the escape fallback never ran.
+1180 of 1219 stuck ticks on The Ossuary were exactly this — units pressed against
+cover, "succeeding" at standing still, every tick, forever.
+
+Rejecting any candidate that displaces less than `step × 0.25` fixed all three arenas
+at once.
+
+**How it was found matters more than the fix.** Three hypotheses were tested and
+discarded before it: that the metric was over-reporting (killed by running the same
+fights with **no obstacles** — 24.5% stuck with cover, **0.2%** without, so the ticks
+really were geometry); that the collision-separation pass was shoving units into rocks
+(it already checks obstacles); and that units were wedged *inside* the pad (only 21 of
+1219 were — the rest sat a median 0.66 out from it, pad 0.54). Each probe eliminated a
+class of cause, and the last one pointed straight at "blocked while outside the pad",
+which is only possible if a move candidate was being accepted without moving.
+
+**Wander is unchanged (~2.1–2.6), exactly as the plan wanted.** Catastrophic fixed,
+chronic untouched — that is Bug 2, and it is Stage 1's job.
+
+⚠️ **The three field goldens were recaptured**, deliberately, in the same commit. Two
+flipped their winner, and the flips are the fix working: `duel-melee` went 57.7s → 14.6s
+(a golden literally titled *"a bruiser against a wall"* had been running to sudden death
+because the melee could not get past the rock), and in both flips the melee side now
+reaches the fight instead of hanging on geometry.
 
 ---
 
@@ -167,6 +215,50 @@ Only reachable once Stage 1 exists.
   rather than chasing the support's current position. ⚠️ **This is the single change
   that makes the behaviour read as intelligent rather than as a conga line** — and see
   §5, it is also what makes the retreat budget a real bound.
+
+### The two arena rules (from high-level WoW arena play)
+
+Arena LoS has two halves, and the plan originally only had the defensive one.
+
+**Offensive — the isolation targeting term.** *Capitalising on players who are out of
+line of their healers.* Non-melee target scoring gains a term for **"this enemy has no
+living support in line of it"**.
+
+⚠️ **This is a candidate fix for FOCUS FIRE (P6)**, the top unsolved item on the
+tamerengine list, where two numeric levers (the mitigation cap, the maxHp coefficient)
+both measured null. The reason they failed is visible in `decide.ts:147`: today's
+focus-fire signal is `focusCount` — *how many allies are already committed to each
+enemy*. That is **follow-the-herd**, and it is self-referential. It has no anchor
+outside itself, so it amplifies whatever arbitrary choice happened first and converges
+weakly.
+
+"Is this enemy cut off from its support?" is **exogenous**: every attacker reads it off
+the same geometry, independently, and agrees without watching each other. That is a
+real convergence mechanism rather than a social one — and it brings timing with it,
+because the window opens and shuts as the enemy healer repositions. It also puts the
+pressure on the enemy support's POSITIONING rather than its health bar, which is what
+makes the whole board matter.
+
+⚠️ **Melee must keep targeting NEAREST.** `decide.ts:130` is explicit: *"No
+value/priority chase here: that cross-map hunt is exactly what made melee race around
+the map."* The isolation term is for ranged and casters only, or a fixed bug returns.
+
+**Defensive — threat-type-aware cover.** Breaking LoS means different things depending
+on who is chasing, and one rule for both gives a support that hides pointlessly from a
+warrior while standing in the open against an archer:
+
+| chased by | what cover does | what to score |
+|---|---|---|
+| **ranged / caster** | genuinely hides you — they cannot cast | block their **sight line** |
+| **melee** | does *not* hide you (melee is LoS-exempt, correctly — it is adjacent) | block their **dash line** (a charge needs LoS to its destination, `engine.ts:1477`) and **lengthen their path** |
+
+⚠️ **The organic bound only covers the ranged case.** Because every non-melee channel
+including `support` requires LoS (`engine.ts:284`), a monster hiding behind a pillar
+**cannot heal** — hiding costs you your own output, which is exactly why pillar-hugging
+is not degenerate in WoW. But that self-limiting property does **not** apply against a
+melee assassin, which is the scenario §5's cooldown exists for. Measure the two
+separately: the ranged case may already be taxed enough by the LoS symmetry, and
+applying the same 15s to both could be double-charging.
 
 ---
 

@@ -18,6 +18,11 @@
 // fixed training, fixed placement, fixed obstacles. The only free variable left
 // is the simulation itself.
 //
+// RECAPTURED ONCE, DELIBERATELY, at Stage 0 of docs/PATHFINDING_DESIGN.md —
+// push-out at spawn, a real escape scan, and the rejection of zero-displacement
+// "moves". All three moved and two flipped their winner, which is the fix
+// working: units that could not get round cover now can.
+//
 // ⚠️ WHEN ONE OF THESE MOVES: an intentional engine change (targeting, spacing,
 // mitigation, the free attack, status rules) SHOULD move them — recapture
 // deliberately, in its own commit, and say which change did it. An UNEXPLAINED
@@ -72,8 +77,11 @@ const GOLDENS: Golden[] = [
     b: [mk('gb1', 'aegisox', ['Body Slam', 'Seize', 'Taunt'])],
     placeA: [{ x: 14, y: 11 }],
     placeB: [{ x: 26, y: 11 }],
-    winner: 'B', duration: 57.7, survivors: [0, 1],
-    casts: 30, hits: 12, deaths: 1, finalHp: [0, 724],
+    // ⚠️ 57.7s -> 14.6s at Stage 0. This golden is titled "a bruiser against a
+    // wall", and that turned out to be literal: the fight ran to sudden death
+    // because the melee could not get past the rock. It now resolves.
+    winner: 'B', duration: 14.6, survivors: [0, 1],
+    casts: 37, hits: 26, deaths: 1, finalHp: [0, 380],
   },
   {
     // Ranged vs melee across the full width — pins approach, stand-off and the
@@ -84,8 +92,12 @@ const GOLDENS: Golden[] = [
     b: [mk('gb2', 'ursath', ['Power Strike', 'Headbutt', 'Cleave'])],
     placeA: [{ x: 10, y: 11 }],
     placeB: [{ x: 30, y: 11 }],
-    winner: 'A', duration: 15.2, survivors: [1, 0],
-    casts: 17, hits: 13, deaths: 1, finalHp: [206, 0],
+    // ⚠️ WINNER FLIPPED A -> B at Stage 0, and the flip is the point: the
+    // brawler now reaches the caster instead of scraping along cover on the way
+    // in. Melee that can navigate beats a caster at this range — the matchup
+    // working rather than breaking.
+    winner: 'B', duration: 9.9, survivors: [0, 1],
+    casts: 16, hits: 12, deaths: 1, finalHp: [0, 222],
   },
   {
     // Front line + damage + support on both sides: targeting, taunt, healing and
@@ -104,8 +116,11 @@ const GOLDENS: Golden[] = [
     ],
     placeA: [{ x: 12, y: 8 }, { x: 12, y: 11 }, { x: 8, y: 14 }],
     placeB: [{ x: 28, y: 8 }, { x: 28, y: 11 }, { x: 32, y: 14 }],
-    winner: 'B', duration: 21.2, survivors: [0, 2],
-    casts: 110, hits: 66, deaths: 4, finalHp: [0, 0, 0, 0, 178, 282],
+    // ⚠️ WINNER FLIPPED B -> A at Stage 0. Same cause: A's front line reaches
+    // the fight instead of hanging on geometry, so its wall+bruiser pairing does
+    // the job it was built for.
+    winner: 'A', duration: 17, survivors: [2, 0],
+    casts: 98, hits: 64, deaths: 4, finalHp: [0, 188, 282, 0, 0, 0],
   },
 ]
 
