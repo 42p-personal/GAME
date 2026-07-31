@@ -129,6 +129,16 @@ export const DASH_MAX_TIME = 3.0 // seconds before a dash gives up and releases
 // it over half a second keeps the mechanic (you do outrun your pursuer) and
 // removes the jolt.
 export const FALL_BACK_RAMP = 0.5 // seconds to reach full retreat speed
+
+// ⚠️ NOTHING TURNED. `stepToward` recomputed its heading from scratch every tick
+// and applied it raw, so a unit could reverse 180 degrees between two frames —
+// it never turned, it just changed which way it translated. That is the real
+// source of "jolty": no escape constant could fix it, because the discontinuity
+// was in every movement in the game, not in the escapes.
+//
+// A creature turns at a rate. 7 rad/s puts a full about-face at ~0.45s, which
+// reads as an animal reacting rather than a sprite being repointed.
+export const TURN_RATE = 7 // radians per second
 // Move statuses author their duration in ROUNDS, a unit the field has no
 // concept of. A turn-based round — everyone acting once — is worth roughly
 // this many seconds here. One constant, so restating it is impossible.

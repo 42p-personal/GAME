@@ -92,8 +92,8 @@ const GOLDENS: Golden[] = [
     // close. The clearest single illustration of what escapes cost in tempo.
     // Dashes travel now instead of snapping: 24.2s -> 21.7s, because a
     // Backstep costs half a second of ground rather than teleporting free.
-    winner: 'B', duration: 13.1, survivors: [0, 1],
-    casts: 44, hits: 31, deaths: 1, finalHp: [0, 462],
+    winner: 'B', duration: 12.9, survivors: [0, 1],
+    casts: 44, hits: 31, deaths: 1, finalHp: [0, 463],
   },
   {
     // Ranged vs melee across the full width — pins approach, stand-off and the
@@ -118,8 +118,11 @@ const GOLDENS: Golden[] = [
     // turn engine and only partial here.
     // Cover-seeking retreat: the caster now runs to the rock rather than
     // straight backwards, and the fight lasts longer for it.
-    winner: 'B', duration: 8.5, survivors: [0, 1],
-    casts: 11, hits: 8, deaths: 1, finalHp: [0, 178],
+    // ⚠️ 8.5s -> 5.8s on the TURN RATE. A unit that cannot pivot instantly also
+    // cannot kite instantly — the brawler closes because the caster has to
+    // commit to a heading before it can run. Natural movement is not free.
+    winner: 'B', duration: 5.8, survivors: [0, 1],
+    casts: 10, hits: 7, deaths: 1, finalHp: [0, 385],
   },
   {
     // Front line + damage + support on both sides: targeting, taunt, healing and
@@ -157,8 +160,8 @@ const GOLDENS: Golden[] = [
     // is exactly the one it can tip. The paired sweep is the arbiter, not this.
     // ⚠️ Slower escapes cost the ESCAPER, not the fight. A retreat you can watch
     // is a retreat that can be caught.
-    winner: 'B', duration: 19.6, survivors: [0, 2],
-    casts: 103, hits: 63, deaths: 4, finalHp: [0, 0, 0, 0, 147, 282],
+    winner: 'B', duration: 21, survivors: [0, 3],
+    casts: 110, hits: 63, deaths: 3, finalHp: [0, 0, 0, 42, 418, 191],
   },
 ]
 

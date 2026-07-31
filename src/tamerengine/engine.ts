@@ -10,7 +10,7 @@ import { chooseLoadout, learnedMoves, manaCost, maxHp, maxMana } from '../monste
 import {
   DT, FIELD_H, FIELD_W, FieldEvent, FieldResult, FieldSetup, FieldSide, FieldUnit,
   PURSUIT_PATIENCE, PURSUIT_IGNORE, PURSUIT_PROGRESS, DASH_SPEED_MULT, DASH_MAX_TIME,
-  FALL_BACK_RAMP,
+  FALL_BACK_RAMP, TURN_RATE,
   FALL_BACK_CD, FALL_BACK_DUR, FALL_BACK_HP, FALL_BACK_NEAR, ESCAPE_LOCKOUT,
   MAX_TICKS, Obstacle, RETARGET_EVERY, UnitVisState, Vec2, CONTAGION_RADIUS, TEAM_AURA_RADIUS,
   CHANNEL_CAST_TIME, CHANNEL_RANGE, DEPLOY_DEPTH, SECONDS_PER_ROUND,
@@ -1149,7 +1149,14 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
         const fx = effectIcons(u)
         return {
           id: u.id, x: +u.pos.x.toFixed(2), y: +u.pos.y.toFixed(2),
-          facing: u.side === 'A' ? 1 : -1,
+          // ⚠️ Was a CONSTANT per side, so a monster always faced the same way
+          // however it moved — a retreating unit was drawn facing its attacker
+          // while sliding backwards, which is most of what "springing backwards"
+          // actually was. Still ±1 (the renderer flips the sprite), but now taken
+          // from travel; a unit that is not moving keeps its side's default.
+          facing: Math.abs(u.vel.x) > 1e-3
+            ? (u.vel.x > 0 ? 1 : -1)
+            : (u.side === 'A' ? 1 : -1),
           state: vis.get(u.id) ?? 'idle',
           targetId: u.targetId ?? null,
           hp: Math.round(u.hp), maxHp: Math.round(u.maxHp),
@@ -1739,6 +1746,27 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       }
     }
     dir = norm(dir)
+    // ⚠️ TURN, DO NOT SNAP. Clamp how far the heading may swing in one tick
+    // against the direction actually being travelled. Without this a unit that
+    // changes its mind — a retreat triggering, a target dying, a waypoint
+    // switching — pivots instantly, and instant pivots are what read as jolt.
+    // A stationary unit is unclamped so it can set off in any direction.
+    {
+      const pm = Math.hypot(u.vel.x, u.vel.y)
+      if (pm > 1e-6) {
+        const cur = Math.atan2(u.vel.y, u.vel.x)
+        const want = Math.atan2(dir.y, dir.x)
+        let d = want - cur
+        while (d > Math.PI) d -= Math.PI * 2
+        while (d < -Math.PI) d += Math.PI * 2
+        const max = TURN_RATE * DT
+        if (Math.abs(d) > max) {
+          const a = cur + Math.sign(d) * max
+          dir = { x: Math.cos(a), y: Math.sin(a) }
+        }
+      }
+    }
+
     // BACKPEDAL PENALTY. ⚠️ Giving ground costs speed. Without this, a fleeing
     // unit runs as fast as its pursuer, so a chase NEVER resolves — a pursuit
     // equilibrium that left units out of range 76% of the fight regardless of
