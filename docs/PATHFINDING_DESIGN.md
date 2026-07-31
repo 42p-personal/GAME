@@ -1,0 +1,249 @@
+# Pathfinding — design plan
+
+**Status:** planning. **Change freeze in effect** on `src/tamerengine/` while this is
+agreed. **Branch:** `3doverhal`.
+
+The goal, in the user's words: *monsters that navigate around obstacles, use them to
+their advantage, and — ideally — a support running around a pillar to escape an
+assassin.*
+
+---
+
+## 1. What is actually wrong
+
+`src/tamerengine/engine.ts:1533` — `stepToward()` — is the **entire** navigation
+system:
+
+```
+aim straight at the goal
+  → try the full step
+  → else slide along x
+  → else slide along y
+  → else a fixed perpendicular nudge
+```
+
+No A*, no navmesh, no waypoints, and **no memory between ticks**. Every tick
+re-decides from scratch, so a unit slides left, the goal vector shifts a degree, and
+it slides back right. Cover is not something a monster understands; it is something it
+bumps into.
+
+### The measurement
+
+Per-unit, from the three arena dumps. `frozen` = ticks where the unit moved < 0.02
+units; `hugging` = ticks spent within 1.2 units of an obstacle; `wander` = path length
+÷ net displacement.
+
+| arena | unit | alive | frozen | hugging | path | net | wander |
+|---|---|---:|---:|---:|---:|---:|---:|
+| Titan's Rest | **A2 Zarok** | 750 | **100%** | **100%** | **0.0** | **0.0** | — |
+| Titan's Rest | **B1 Sylix** | 750 | **100%** | **100%** | **0.0** | **0.0** | — |
+| Titan's Rest | A3 Bruus | 623 | 24% | 2% | 111 | 29.4 | 3.8× |
+| The Ossuary | A2 Zarok | 209 | 61% | **92%** | 11 | 8.2 | 1.3× |
+| Dustbowl | A2 Zarok | 148 | 40% | 53% | 22 | 4.6 | **4.7×** |
+
+⚠️ `frozen%` **alone is not the metric** — 40–86% is normal and healthy (casting,
+standing in range, blocked by an ally). The signal is `frozen` **and** `hugging`
+together.
+
+### Two distinct bugs, not one
+
+**Bug 1 — spawn-inside-obstacle is a permanent deadlock.** Zarok and Sylix never move
+once, across all 750 ticks. `tryMove` rejects any position inside an inflated
+obstacle; a unit that *starts* inside one has every candidate rejected, including the
+perpendicular escape nudge. There is no push-out. Two units — one per side — are
+inert dead weight for the whole fight, which is the real reason Titan's Rest resolves
+0/40.
+
+> ⚠️ **This was self-inflicted, and the lesson is worth more than the bug.** The first
+> `mapProblems` rejected any obstacle inside a deployment band. All three maps failed,
+> and that was read as a miscalibrated check ("cover near spawn is a design choice,
+> and `mirror()` already guarantees fairness") — so it was relaxed to a 15% crowding
+> threshold. The *conclusion* was wrong because the *hazard* was misidentified: the
+> danger was never fairness, it was spawn-deadlock. **"When many things fail a check,
+> suspect the check" is a heuristic, not a law** — it says look at the check, not
+> assume it is wrong. Restore the strict guard.
+
+**Bug 2 — no pathfinding.** Chronic rather than catastrophic: 4.7× wander on
+Dustbowl, 92% cover-hugging on Ossuary. Units reach their goal eventually, by
+scraping along geometry.
+
+### What this reverses
+
+An earlier commit (`a27f774`) attributed Titan's 0/40 to *small obstacles breaking
+line of sight, so a shooter re-acquires forever*. That was a plausible story fitted to
+an isolation table, and it is **wrong**. The isolation result itself still holds —
+rubble breaks the map, the massif does not — but the mechanism is spawn-deadlock plus
+wall-scraping, not a LoS dance. The small blocks are lethal because they are small
+enough to sit **inside a deployment band**; the massif is harmless because it is dead
+centre where nobody spawns.
+
+---
+
+## 2. Stage 0 — bugs, not features
+
+Cheapest work, largest single win, and it is all correctness.
+
+- **Push-out at spawn.** Any unit initialised inside an inflated obstacle is moved to
+  the nearest free point before tick 1.
+- **Restore the strict deployment-band guard** in `maps.ts` as a hard error. Cover
+  inside a spawn band is not a style choice; it is a deadlock.
+- **No terminal blocked state.** "All four `tryMove` candidates rejected" must be
+  impossible to remain in — escalate to a scan of headings rather than one fixed
+  perpendicular.
+
+**Acceptance:** `stuck%` (frozen **and** hugging) → ~0 on all three arenas. Expect
+Titan's Rest to move sharply off 0/40 on this stage alone.
+
+---
+
+## 3. Stage 1 — real pathfinding
+
+Obstacles are axis-aligned boxes and they never move: the easy case. **The shortest
+path in a box world only ever bends at box corners.**
+
+**Recommended: visibility graph + A*.**
+
+- Build once per battle from the arena's obstacles (they are static), so it is not
+  per-tick work.
+- Nodes = obstacle corners inflated by unit radius, plus start and goal.
+- 3–7 obstacles ≈ 28 nodes. Trivial to search.
+- Hand `stepToward` the **next waypoint** instead of the raw goal.
+
+The layering is the point: a **global path layer** picks the waypoint; the **existing
+local steering layer** keeps doing separation, backpedal and collision-slide. No
+rewrite of what already works.
+
+**Cheaper first cut, if wanted:** commit-to-a-side wall-following with hysteresis —
+when blocked, choose the tangent nearer the goal **once** and hold it for K ticks or
+until the goal is in line of sight. That kills the oscillation, which is the actual
+failure mode, without a graph. ⚠️ But it does **not** unlock Stage 2 — you cannot ask
+"where should I stand so the assassin cannot see me" without a path cost to candidate
+points.
+
+---
+
+## 4. Stage 2 — cover as a resource
+
+Only reachable once Stage 1 exists.
+
+- **Break LoS to flee.** A hurt support scores candidate points around nearby cover on
+  *does this block the threat's line to me*, not merely *is this away from them*. That
+  is running around a pillar.
+- **Peek.** Ranged units prefer standing where they hold LoS to the target while the
+  nearest melee threat has no *short path* to them. Path length, not straight-line
+  distance — this is why it needs Stage 1.
+- **Cut-off pursuit.** The assassin paths to the interception point around the pillar
+  rather than chasing the support's current position. ⚠️ **This is the single change
+  that makes the behaviour read as intelligent rather than as a conga line** — and see
+  §5, it is also what makes the retreat budget a real bound.
+
+---
+
+## 5. Stage 3 — bounding retreat (the open decision)
+
+⚠️ **"A support escapes the assassin" and "fights resolve" are in direct tension.** If
+breaking LoS is free, a support kites forever and the sim returns to 0/40 — the same
+symptom as today with a brand-new cause, which will read as a regression of the thing
+Stage 0 just fixed. **Decide the cost before building the behaviour.**
+
+### ⚠️ First: two behaviours, not one
+
+| | what it is | cadence | current mechanism |
+|---|---|---|---|
+| **Micro-kiting** | a ranged unit shuffling back to hold range | continuous | `KITE_MAX` 1.2s / `KITE_REFILL` 0.5 + 0.6× backpedal |
+| **Retreat** | a discrete break of contact and reposition | 2–3 per fight | **does not exist** |
+
+A cooldown belongs on **retreat**. Putting one on micro-kiting makes archers walk into
+melee. The existing 1.2s budget is not a small version of retreat — it is a different
+system, and it stays as it is.
+
+### The options
+
+| | mechanism | tune cost | legibility | risk |
+|---|---|---|---|---|
+| **A. Cooldown** | one Fall Back per N seconds | **1 number** | high — a visible event | binary; can be spent early |
+| **B. Stamina** | drain while retreating, refill when safe | 2 numbers | low — invisible continuous state | is what produced the pursuit equilibrium that needed the backpedal hack |
+| **C. Charges per fight** | N retreats, no refill | 1 number | highest | nothing left late in a long fight |
+| **D. Escalating cost** | each retreat costs more | 2 numbers | medium | elegant, opaque |
+| **E. Diminishing effect** | each retreat moves you less | 2 numbers | low | reads as the unit silently degrading |
+| **F. Make it an ability** | Disengage / Shadowstep: MP + slot + cooldown | **0 new systems** | high | only monsters that drafted it can do it |
+
+### Recommendation — **A as baseline, F as the premium tier**
+
+**A** because a cooldown is the only option on that list the **player can see and plan
+around**, and it reuses a concept the game already teaches on every ability. One
+number to sim-tune. Retreat becomes an event in the battle report rather than a
+continuous drift nobody can observe.
+
+**F** on top because it costs no new machinery: `spatial.ts` already carries `fade`,
+`dash` and `blink`, and *Shadowstep / Disengage / Stealth* is already on the roadmap.
+Those become the **good** retreat — further, cheaper, or off-cooldown — bought with MP
+and a loadout slot. Escape becomes a **build decision** rather than a universal
+entitlement, which is a far healthier place for it to live, and it gives the ability
+pool a real reason to carry movement.
+
+**Gate on a trigger, not only a timer** — HP under ~40%, or a melee threat within ~3
+units while in a back-line role. Without a trigger, units burn the cooldown wandering
+at full health.
+
+**Starting numbers**, to be moved one at a time against the sim:
+
+- retreat cooldown **15–20s** (≈2 uses in a 45s fight)
+- committed retreat duration **~2s**
+- keep the 0.6× backpedal penalty and `KITE_MAX` exactly as they are
+
+### ⚠️ The pursuer must be allowed to win
+
+A cooldown alone does **not** guarantee resolution. If the assassin follows the
+support's current position rather than cutting it off, the support wins every lap
+whatever its budget. Stage 2's cut-off pathing is what converts the cooldown into a
+real bound.
+
+**The acceptance test is therefore not "can the support escape".** It is: *does the
+support buy ~4 seconds and then die anyway?* A retreat that always works is the same
+bug as a retreat that never works.
+
+---
+
+## 6. Stage 4 — measurement
+
+⚠️ **None of the current instruments can see any of this.** `sweep40` reported a
+healthy 38/40 while two units were frozen solid for an entire fight. New metrics
+first, then changes.
+
+- **`stuck%`** — frozen **and** hugging cover. Target ~0. The Stage 0 gate.
+- **`wander`** — path ÷ net displacement. Target < ~1.5 on all three arenas.
+- **`escape success`** — seconds a fleeing support survives with cover available vs
+  without. Must be **positive but bounded**; unbounded is the §5 failure.
+- **per-arena resolved** — `tools/mapsweep.ts` already does this.
+
+The three arenas become the regression suite. **Titan's Rest is the gate:** it is kept
+deliberately broken and it is the sharpest reproduction of the problem — do not fix it
+by deleting the rubble.
+
+⚠️ The **field goldens will move**, deliberately, and should be recaptured in their own
+commit once Stage 1 lands.
+
+---
+
+## 7. Order of work
+
+| stage | content | gate |
+|---|---|---|
+| **0** | push-out, strict band guard, no terminal block | `stuck%` → ~0 |
+| **4a** | `stuck%` + `wander` instruments | must precede 0 to prove it |
+| **1** | visibility graph + A*, waypoints into `stepToward` | `wander` < 1.5; goldens recaptured |
+| **2** | LoS-break flight, peek, cut-off pursuit | escape success positive |
+| **3** | retreat cooldown + trigger; then Disengage/Shadowstep | resolved ≥ baseline; escape bounded |
+
+**Stage 4a genuinely comes first.** Building Stage 0 without the instrument means
+grading the fix on `resolved`, which is exactly the number that already hid the bug.
+
+## 8. Knock-ons
+
+- Map geometry becomes a real design surface — chokepoints and pillars start meaning
+  something, which makes the arena set content rather than scenery.
+- Stage 1 is the **prerequisite** for the deferred `spatial.ts` movement abilities;
+  Shadowstep and Disengage cannot be built sensibly on wall-sliding.
+- `FIELD_W`/`FIELD_H` are already `let` with `setFieldSize`, so per-arena work is
+  unblocked.
