@@ -100,9 +100,12 @@ for (const comp of COMPS) for (const sd of SEEDS) {
   }
 }
 
+// ⚠️ The even-split baseline is PER COMPOSITION, because the sweep spans 2v2 to
+// 6v6 — a single 1/TEAM_SIZE would quietly compare a 2v2's concentration against
+// a 6v6's yardstick. The overall figure uses the mean size and says so.
 const EVEN = 1 / TEAM_SIZE
 
-console.log(`FOCUS FIRE — damage concentration, ${TEAM_SIZE}v${TEAM_SIZE}`)
+console.log('FOCUS FIRE — damage concentration across the sweep (2v2-6v6)')
 console.log(`perfect focus = 1.00 · even spread across ${TEAM_SIZE} = ${EVEN.toFixed(2)}\n`)
 console.log('composition             top share   targets/5s   1st kill   healed/dealt   maxHp')
 const all: number[] = []

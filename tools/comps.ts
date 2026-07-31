@@ -22,43 +22,47 @@ import { speciesForTemplate, templateById } from '../src/teamTemplates'
  * collecting "typical" teams, because there is no typical team. The templates
  * supply that span natively: Coven is the glass cannon, Phalanx the wall.
  */
-const PAIRINGS: [string, string][] = [
-  ['hammer-anvil', 'hammer-anvil'], // the generalist baseline
-  ['phalanx', 'coven'],             // wall vs glass
-  ['coven', 'wolfpack'],            // glass vs divers
-  ['vanguard', 'choir'],            // burst vs attrition — the sustain question
-  ['phalanx', 'vanguard'],          // wall vs burst
-  ['wolfpack', 'choir'],            // divers vs support
-  ['coven', 'coven'],               // all-caster mirror
-  ['phalanx', 'phalanx'],           // ⚠️ the tank mirror that grinds — 40.9s and
-  //                                   a first kill at 16.1s, against 10.7s/5.6s
-  //                                   for Coven v Wolfpack. This shape is the
-  //                                   focus-fire problem, and dropping it from
-  //                                   the list would hide the thing worth fixing.
-  ['hammer-anvil', 'wolfpack'],
-  ['choir', 'coven'],
+const PAIRINGS: [string, string, number][] = [
+  // [template A, template B, TEAM SIZE]
+  //
+  // ⚠️ SIZE IS PART OF THE COMPOSITION. Every pairing used to be 3v3, so the
+  // instrument measured Bronze/Iron and nothing else while the game runs 1v1
+  // (Wood) to 6v6 (Tamer Elite). It was blind by construction to the only place
+  // the fight clock ever binds: at 6v6 one fight in forty ran 166.9s, against a
+  // 31.7s max at 3v3 — a tail that simply does not exist at small sizes. Balance
+  // decisions for Tamer Elite were being made on Tin-league evidence.
+  //
+  // 1v1 is deliberately absent: a team of one has no composition to vary, so it
+  // measures a species rather than a shape. Wood league wants its own harness if
+  // it ever needs one.
+  ['coven', 'coven', 2],              // all-caster mirror, Copper/Tin scale
+  ['coven', 'wolfpack', 2],           // glass vs divers
+  ['hammer-anvil', 'hammer-anvil', 3], // the generalist baseline
+  ['phalanx', 'vanguard', 3],         // wall vs burst
+  ['phalanx', 'coven', 4],            // wall vs glass
+  ['wolfpack', 'choir', 4],           // divers vs support
+  ['vanguard', 'choir', 5],           // burst vs attrition — the sustain question
+  ['hammer-anvil', 'wolfpack', 5],
+  ['phalanx', 'phalanx', 6],          // ⚠️ the tank mirror that grinds, at the size
+  //                                     where the tail actually lives. Dropping
+  //                                     either the shape or the size hides it.
+  ['choir', 'coven', 6],
 ]
 
-export const TEAM_SIZE = 3
+export const COMPS: { name: string; a: string[]; b: string[]; size: number }[] =
+  PAIRINGS.map(([ta, tb, size], i) => {
+    const A = templateById(ta)
+    const B = templateById(tb)
+    if (!A || !B) throw new Error(`comps: unknown template ${ta}/${tb}`)
+    const label = ta === tb ? `${A.name} mirror` : `${A.name} v ${B.name}`
+    return {
+      name: `${label} ${size}v${size}`,
+      size,
+      a: speciesForTemplate(A, size, 1000 + i * 7),
+      b: speciesForTemplate(B, size, 5000 + i * 13),
+    }
+  })
 
-/**
- * ⚠️ ROSTERS ARE FIXED, NOT ROLLED PER SEED. `speciesForTemplate` takes a
- * constant here, so a composition names the same species every run and only the
- * MONSTER seeds vary across batches. Rolling species per batch would fold
- * template variance into the error band and blunt the instrument that exists to
- * measure small effects. Composition is a variable ACROSS comps, a constant
- * WITHIN one.
- *
- * A and B draw different seeds, so a mirror is two different Phalanxes rather
- * than a symmetric no-op that can only ever report 50/50.
- */
-export const COMPS: { name: string; a: string[]; b: string[] }[] = PAIRINGS.map(([ta, tb], i) => {
-  const A = templateById(ta)
-  const B = templateById(tb)
-  if (!A || !B) throw new Error(`comps: unknown template ${ta}/${tb}`)
-  return {
-    name: ta === tb ? `${A.name} mirror` : `${A.name} v ${B.name}`,
-    a: speciesForTemplate(A, TEAM_SIZE, 1000 + i * 7),
-    b: speciesForTemplate(B, TEAM_SIZE, 5000 + i * 13),
-  }
-})
+/** Mean team size across the sweep — for anything that needs a single figure. */
+export const TEAM_SIZE = Math.round(
+  COMPS.reduce((n, c) => n + c.size, 0) / COMPS.length)

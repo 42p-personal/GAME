@@ -98,7 +98,7 @@ const line = (label: string, r: Run) =>
 const noise = process.argv.includes('--noise')
 if (!noise) {
   const r = runBatch(SEED_BATCHES[0])
-  console.log(`40-MATCHUP SWEEP — 10 compositions x 4 seeds, train 850\n`)
+  console.log(`40-MATCHUP SWEEP — 10 compositions (2v2..6v6) x 4 seeds, train 850\n`)
   console.log('               resolved       dur   kills  dmg/fight')
   console.log(line('total', r))
   console.log('')
