@@ -27,7 +27,7 @@ standard it does not compromise on.
 
 | team | owns | its standard |
 |---|---|---|
-| **Balancing** | `tools/sweep40.ts` (40 matchups, `--noise` reports its own error band), `tools/ab.ts` (paired A/B + sign test), `docs/BALANCING.md`, every economy/difficulty/progression number | One value at a time — and prove it. ⚠️ A 12-fight sweep has sd 0.7; several changes were once made on 1-fight differences that a paired A/B later showed did nothing. Judge on the SIGN TEST, not a mean CI: a few fights swing 20-30s when they tip from timeout to a kill, and those outliers hide real effects. |
+| **Balancing** | `tools/sweep40.ts` (40 matchups over `tools/comps.ts`, `--noise` reports its own error band), `tools/ab.ts` (paired A/B + sign test), `docs/BALANCING.md`, every economy/difficulty/progression number | One value at a time — and prove it. ⚠️ A 12-fight sweep has sd 0.7; several changes were once made on 1-fight differences that a paired A/B later showed did nothing. Judge on the SIGN TEST, not a mean CI: a few fights swing 20-30s when they tip from timeout to a kill, and those outliers hide real effects. |
 | **Game mechanics** | `battle.ts` + `src/tamerengine/`, `moves.ts`, `lines.ts`, `core.ts`, `docs/ABILITY_REWORK.md` | Mechanics must be REACHABLE. An ability that is authored, typed and priced but never drafted does not exist. |
 | **Art & design** | `public/sprites/`, `public/backgrounds/`, `docs/ART_PIPELINE.md`, `docs/BESTIARY.md`, the UI in `App.tsx` / `arena.tsx` | Read `ART_PIPELINE.md` BEFORE concluding art cannot be generated. Verify layering with a paint-order probe, never a computed-style audit. |
 | **Quality assurance** | `validate.ts`, `src/*.test.ts`, the goldens, the count tripwires | A guard that fails loudly beats a bug that ships silently. Fixtures must pin the variable under test. |
@@ -172,12 +172,13 @@ player is forced down, and affinity is a multiplier so off-line picks stay possi
 ⚠️ **Every move must appear in `LINE_OF`** — `validate.ts` enforces it, because a lineless move is
 invisible to affinity and silently unpickable.
 
-**The three authoring axes**, all per-ability, all optional:
+**The four authoring axes**, all per-ability:
 | axis | what it does | ⚠️ |
 |---|---|---|
 | `statScale` | damage is `power × (1 + stat × statScale)`; the progression axis | **FIELD-ONLY** — `battle.ts` never reads it, so changing it CANNOT move a golden. `STAT_SCALE_HIGH` only reaches capstones a mid-game monster cannot learn. |
 | `mana` | authored MP, overriding the derived `manaCost` | All 137 author one. Mana prices EFFECTIVENESS, not power — `Blood Price` is 30 power for 10 MP because it is paid for in blood. |
 | `variance` | half-width of the damage range; `power` is the MID-POINT | Default 0.15 is exactly the flat spread `battle.ts` always rolled, so an unauthored move behaves identically. `Deadeye` 0.05, `Gambler's Volley` 0.50. |
+| `range` | how far the ability reaches, in world units | **All 137 author one and `validate.ts` FAILS a move without it.** Seeded per LINE by `tools/authorranges.ts` — a line is a shared win condition and its reach is part of that identity (Assassin 2.4–2.8, Volley 8.4–11.0). ⚠️ The line owns the reach, NOT the channel: DEX's channel is `ranged` whether the move is a bow or a stiletto. |
 
 **Two standing balance rules the pool is held to** (both asserted by harnesses, not vibes):
 - **Nothing falls below the free attack.** Judged with conditionals credited — an opener, a
@@ -205,6 +206,18 @@ CHA 26.8 · WIS 22.8. The support tier is not underpowered — it is paid in uti
   combos, thorns, hpRegenBuff). ⚠️ `ward` is NO LONGER CON-exclusive — CHA carries it too
   (Bravura, Hymn of Shields), and `guard` spans STR/CON/CHA. See "The ability system" below.
 - Mitigation: physical vs CON + guard; magic/voice/support vs WIS.
+- **The free attack is AUTHORED PER CLASS** (`tamerengine/types.ts:CLASS_BASIC`) — channel, reach
+  and scaling stat, drawn from four bands: melee 3.0 · ranged 8.0 · magic 7.0 · support 6.0.
+  ⚠️ It used to be DERIVED from whichever damage move a monster happened to draft, and there is no
+  version of that guess that works: by POWER a ranged monster got a melee basic it could never
+  reach with; by REACH a Warrior that drafted one Piercing Shot became a ranged unit standing off
+  at 6.4. The same mistake had already been found and fixed once in `reachOf` — this was a second
+  copy. DEX is why no formula replaces the table: Rogue is a knife, Ranger is a bow, and the stat
+  pair cannot tell them apart. `reachOf` takes the SHORTER of best weapon and class basic — stand
+  where everything in your hands works.
+- **Nothing teleports.** Knockbacks travel at `KNOCKBACK_SPEED` and cost the target control for the
+  flight. ⚠️ `applyOnTarget` used to write `target.pos = dest`, landing Body Slam's `push: 3` in a
+  single 0.1s tick. `spatial.test.ts` has a tripwire: no unit may move >2.0 units in one tick.
 - Innate abilities grant passives via `INNATE_EFFECTS` (keyed by ability NAME — rename in
   `species.ts` requires renaming the key here too). Each species has TWO innates, only ONE active
   (`Monster.activeInnate`), the 2nd unlocking at `INNATE_SECONDARY_LEVEL` (300) in a stat.
@@ -279,17 +292,28 @@ and in memory:
 ### tamerengine — what the ability rework left open
 
 The pool rework is DONE (137 moves, 18 lines, all six stats). Still outstanding, in order:
-1. **FOCUS FIRE (P6)** — ⚠️ the highest-value item, and the one no number can reach. Damage spreads
-   evenly across a whole enemy side, so nobody crosses the death threshold until very late. It is
-   why CON-heavy compositions still grind (tank-mirror resolves 1/4 at 60s while dealing the MOST
-   damage of any composition). Two carefully aimed numeric levers — the mitigation cap and the maxHp
-   coefficient — both measured NULL against it. Flanking (+10 acc when outnumbered and unsupported)
-   is already in; target selection is not.
+1. ~~**FOCUS FIRE (P6)** — the highest-value item~~ ⚠️ **THIS ENTRY WAS WRONG AND THE
+   MEASUREMENT THAT REFUTED IT IS `tools/focus.ts` (2026-07-31).** It claimed damage "spreads
+   evenly across a whole enemy side". It does not: top share — a side's damage landing on its
+   single most-damaged enemy, up to the first death — measures **0.711**, where an even split
+   across three bodies would be 0.333. A side hits 1.78 distinct enemies per 5s, not 3.
+   Correlating across the ten compositions: **maxHp r=+0.79** against time-to-first-kill,
+   **top share r=−0.56**. Focus is real and signed correctly, but it is the SMALLER lever —
+   it spans 0.59–0.87 while maxHp spans 291–534 (1.84x). Healing was the other suspect and is
+   not it (0–9% of damage dealt).
+   ⚠️ **And "both measured NULL" was an instrument artifact.** Re-run as a paired A/B on the
+   fixed harness, the maxHp coefficient gives **p=0.0022** (30 better / 10 worse of 40),
+   concentrated exactly on the grinding shapes. The earlier null came from measuring against
+   compositions that existed nowhere in the game, with `resolved` as the metric (now at ceiling,
+   sd 0.00) and no time-to-first-kill at all.
+   Still worth building at its real size; do NOT build it expecting it to fix the grind.
+   Flanking (+10 acc when outnumbered and unsupported) is already in; target selection is not.
 2. **Six PASSIVES** — designed in `ABILITY_REWORK.md`, not built. Needs engine work FIRST: exclude
    them from `chooseMove`, from `reachOf` (or a passive's channel sets a unit's stand-off distance —
    the bug that once parked bruisers outside their own swing range) and from `basicAttackFor`.
-3. **+7 classes** — every stat has 3 primaries except WIS (1). 19 of 30 ordered stat pairs map to no
-   class, which is why ~15% of all monsters are Generalist.
+3. ~~**+7 classes**~~ — **DONE.** `core.ts:CLASSES` carries all 18 (the orphan-pair seven —
+   Evoker, Skirmisher, Stalker, Swashbuckler, Shaman, Mystic, Herald — plus the original eleven).
+   Generalist is ~3% of the population, down from 18.1%.
 4. **`spreadStatus`** (contagion) — the one effect from P2 deliberately left unbuilt; sim it alone.
 5. **Move ability geometry onto `Move.area`** and retire the `spatial.ts` side
    table — a move's AoE is currently attached by NAME, so renaming an ability
@@ -314,7 +338,10 @@ The pool rework is DONE (137 moves, 18 lines, all six stats). Still outstanding,
 | `src/species.ts` | **65 species** = 13 body types x 5 (30 base + 15 prestige + 20 fusion) + computed BODY_AVERAGES |
 | `src/moves.ts` | The **137**-move pool, 23/stat (WIS 22), grouped into 18 lines. `docs/ABILITIES.md` is GENERATED from it (`npx tsx tools/genabilities.ts`); `docs/ABILITY_REWORK.md` is the live design doc |
 | `src/lines.ts` | The 18 ability LINES, per-class affinity (`CLASS_LINES`), and `LINE_OF` for every move. ⚠️ The fix for three waves of authored-but-unreachable content |
-| `tools/sweep40.ts` | The balance instrument: 40 matchups over 10 compositions. `--noise` reports its own error band |
+| `tools/comps.ts` | ⚠️ **The compositions BOTH balance harnesses fight.** One definition, built from `src/teamTemplates.ts`. Each tool used to carry its own copy of ten hand-picked species triples that existed NOWHERE in the game |
+| `tools/sweep40.ts` | The balance instrument: 40 matchups over 10 compositions, per-composition + time-to-first-kill. `--noise` reports its own error band. ⚠️ `resolved` is now AT CEILING (sd 0.00) — judge on duration (beat ~2.2s) and first kill |
+| `tools/focus.ts` | Damage concentration — top share, targets/5s, healing share. The instrument that refuted P6 |
+| `tools/authorranges.ts` | Seeds a per-ability `range` for every move, per LINE. ⚠️ Refuses to overwrite without `--force` |
 | `tools/ab.ts` | Paired A/B for balance constants — runs the SAME fights under both settings and judges with a sign test |
 | `src/battle.ts` | Auto-battle sim: mana, innates, round-based mods, tactics, BattleEvent stream |
 | `src/battleReport.ts` | `analyzeBattle` — pure post-battle causal report |

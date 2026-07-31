@@ -10,6 +10,92 @@ evidence for every tuning number lives in `docs/BALANCING.md`.
 
 ---
 
+## v0.93 — reach is authored, nothing teleports, and the instrument was lying
+
+**v0.93 — the day three separate things turned out to be DERIVED when they should
+have been AUTHORED, and the harness that would have caught it was fighting teams
+that did not exist.**
+
+### The free attack is authored per class (`tamerengine/types.ts:CLASS_BASIC`)
+`basicAttackFor` reconstructed a monster's fighting identity from whichever damage
+move it happened to draft. There is no version of that guess that works: keyed by
+POWER, a ranged monster got a melee basic it could never reach with; keyed by
+REACH, a Warrior that drafted one `Piercing Shot` became a ranged unit and stood
+off at 6.4 — a STR-348 kongrath shooting, spotted by eye in a replay.
+
+⚠️ **The same mistake had already been found and fixed once in `reachOf`.** This was
+a second copy. A derived property has to be re-derived correctly at every site and
+there is no single place to be right — which is the whole argument for authoring.
+
+Four bands: melee 3.0 · ranged 8.0 · magic 7.0 · support 6.0, each carrying channel,
+reach AND scaling stat. ⚠️ The stat was a second inference in the same function — read
+off the channel, so a Rogue's knife scaled on STR and a Spellsword's blade ignored
+INT. ⚠️ DEX is why no formula replaces the table: Rogue is a knife, Ranger is a bow,
+and the stat pair cannot tell them apart.
+
+`reachOf` now takes the SHORTER of best weapon and class basic — stand where
+everything in your hands works. Before, **31.7%** of monsters parked outside their own
+free attack (Rogue 67%, Spellsword 100%); now 0%.
+
+### All 137 moves author a range (`tools/authorranges.ts`)
+Seeded per LINE — a line is a shared win condition and its reach is part of that
+identity. Assassin 2.4–2.8, Volley 8.4–11.0.
+
+⚠️ **92 moves already carried a `range` and it LOOKED authored. It was not:** 13 distinct
+values across 92 moves, partitioning cleanly by channel — two buckets per channel — so
+an Assassin stiletto reached 5.6 for no reason but DEX being typed `ranged`. ⚠️ The LINE
+owns the reach, never the channel. `validate.ts` now fails any move without one.
+
+Together these give the design the ranges were for: a Warrior keeps a melee basic at
+3.0, stands at 2.8, and still fires Piercing Shot at reach 9 from where it stands.
+
+### Nothing teleports (`engine.ts`, `KNOCKBACK_SPEED`)
+`applyOnTarget` wrote `target.pos = dest`, so Body Slam's `push: 3` landed all three
+units inside one 0.1s tick — 30 units/second, ~7x a walk. Measured on a 3v3: 1532
+ticks moved ≤0.5 units and nine moved 1.8–3.1, with NOTHING in between. All nine
+matched a `shove` event exactly.
+
+⚠️ **This is why tuning the dash did nothing.** Three commits moved `DASH_SPEED_MULT`
+chasing "the retreats look like teleports". Not one jump was a retreat. Measure which
+mechanic is FIRING before tuning the one you assume is.
+
+Knockback now travels and costs the target control for the flight, and collides.
+⚠️ **Placement is load-bearing:** the gate first went ABOVE the per-unit timers, freezing
+cooldowns, mana, regen and status durations — a stealth stun that also paused recovery.
+`duel-melee` went 15s → **91.5s**. It belongs after the timers, before the decision.
+
+### The balance harnesses were fighting teams that do not exist
+`sweep40.ts` and `ab.ts` each carried their own copy of ten hand-picked species triples
+that existed NOWHERE in the game. ⚠️ `src/teamTemplates.ts` was written to close exactly
+that gap and its header already claimed to be "THE SWEEP'S COMPOSITIONS" — it was
+imported by nothing but its own test. Both now draw from one shared `tools/comps.ts`.
+
+Added per-composition reporting (the sweep's founding claim could not be READ from its
+output) and **time to first kill**.
+
+⚠️ **`resolved` is now AT CEILING** — sd 0.00 across five seed batches. It can catch a
+regression but not an improvement. Judge on duration (beat ~2.2s) and first kill.
+
+### P6 (focus fire) was aimed at the wrong lever — `tools/focus.ts`
+The roadmap's highest-value item rested on "damage spreads evenly across a whole enemy
+side". It does not: top share measures **0.711** where an even split would be 0.333.
+maxHp **r=+0.79** against time-to-first-kill; top share **r=−0.56**. Healing was the
+other suspect and is not it (0–9% of damage dealt).
+
+⚠️ **And the lever recorded as "measured NULL" is not null** — re-run on the fixed harness
+the maxHp coefficient gives **p=0.0022**, concentrated on the grinding shapes. The earlier
+null was an instrument artifact. Fixing the harness FIRST is what made this visible.
+
+### Five-minute cap, sudden death at 4:15, 8x playback
+⚠️ **Raising the timer does not lengthen fights and is not meant to.** At the old 120s cap:
+median 15.3s, 0/40 sweep fights reached even sudden death, and 120 → 300 produced a
+byte-identical sweep. It bounds the TAIL: at 6v6 one fight in forty ran 166.9s and was
+being truncated at the wall. `maxHp` deliberately UNCHANGED at 2.0 — measured, it raises
+the median (+18%) but compresses the spread (9.8x → 4.0x), which is the wrong trade when
+the goal is variation between builds.
+
+---
+
 ## v0.92 — the weekly window + rival teams built to a plan
 
 **v0.92 — the weekly window + rival teams that are BUILT to a plan.**

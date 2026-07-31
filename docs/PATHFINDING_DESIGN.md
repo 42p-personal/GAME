@@ -653,3 +653,58 @@ grading the fix on `resolved`, which is exactly the number that already hid the 
   Shadowstep and Disengage cannot be built sensibly on wall-sliding.
 - `FIELD_W`/`FIELD_H` are already `let` with `setFieldSize`, so per-arena work is
   unblocked.
+
+---
+
+## 9. Postscript — what the movement work actually turned out to be (2026-07-31)
+
+⚠️ **The thing that looked like a bad retreat was never a retreat.** Three commits
+tuned `DASH_SPEED_MULT` (4 → 2.2 → 1.35) against the complaint "the retreats look
+like teleports". They could not have worked: **not one of the jumps was a dash or
+a Fall Back.**
+
+Measuring per-tick displacement in an actual 3v3 dump settled it in one pass:
+
+```
+1532 ticks moved <=0.5 units      (walking)
+   9 ticks moved  1.8-3.1 units   (the "teleports")
+   0 ticks in between
+```
+
+A bimodal distribution with a hole in it. Speed-limited movement produces a
+continuum; a gap like that means something skipped the movement step entirely. All
+nine matched a `shove` event exactly — knockbacks and one ally-pull, applied by
+`applyOnTarget` writing `target.pos = dest`. Body Slam's `push: 3` landed three
+units inside one 0.1s tick: 30 units/second, about 7x a walk.
+
+**Lessons that generalise past this bug:**
+
+1. **Measure which mechanic is FIRING before tuning the one you assume is.** The
+   dash constants were changed three times against a fight in which no dash ever
+   fired, and against a GIF that was playing at 4.5x real time. Both were checkable
+   in one command.
+2. **A bimodal displacement histogram is the tell.** It is now a permanent guard:
+   `spatial.test.ts` fails if any unit moves >2.0 units in one tick, across four
+   seeded 3v3s. Deliberately a TELEPORT detector rather than a speed limit — legal
+   travel stacks unit speed, `DASH_SPEED_MULT`, the Fall Back ramp and haste, and
+   the fastest legal step observed is 1.58. A first version asserted a *derived*
+   maximum and failed on correct dash movement; a tripwire that fires on legal
+   behaviour gets weakened until it fires on nothing.
+3. **Where a control-loss gate sits in the tick is load-bearing.** Knockback now
+   costs the target control for the flight. Placed ABOVE the per-unit timers it also
+   froze cooldowns, mana, regen and status durations — a stealth stun that paused
+   recovery — and `duel-melee` went 15s → **91.5s**. After the timers, before the
+   decision.
+
+### Still open from this plan
+
+- **Stage 3c (Dash)** — the escape that needs Stage 1 pathfinding. Not built.
+- **`DASH_SPEED_MULT` (1.35) and `TURN_RATE` (7) have never been honestly judged.**
+  Both were set against the 4.5x GIF and a dashless fight. The renderer now defaults
+  to real time and labels any fast-forward, so a fight where dashes actually fire
+  would settle them in one pass.
+- **Second cover lever** — pursuer patience draining faster while out of line of
+  sight. Designed, not built.
+- **Re-test the isolation term** (`d0dbd62`) now that healers are drafted. It fires
+  in ~1% of unit-ticks. ⚠️ If it is still null, DELETE it rather than leaving a term
+  that reads as a mechanic and is not one.
