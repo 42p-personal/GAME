@@ -43,7 +43,7 @@ export const DEPLOY_DEPTH = 11
 // never derive movement from wall-clock time.
 export const TICK_HZ = 10
 export const DT = 1 / TICK_HZ
-export const MAX_SECONDS = 90
+export const MAX_SECONDS = 120
 export const MAX_TICKS = MAX_SECONDS * TICK_HZ
 // Re-picking a target every tick makes units jitter between equal-scoring foes.
 // They commit for this long unless the target dies or they are forced off it.
@@ -111,7 +111,15 @@ export const SECONDS_PER_ROUND = 2.0
 // problem at round 35 with escalating %-of-maxHp chip, and for the same reason
 // it must be a FRACTION of max HP: flat chip lets raw CON win the clock, which
 // double-dips a stat that already buys health.
-export const SUDDEN_DEATH_AT = 55 // seconds
+// ⚠️ THE FIGHT TIMER IS TWO MINUTES; SUDDEN DEATH STARTS AT NINETY SECONDS.
+// Do not read the ~20s MEAN duration as the fight length — that is how long a
+// 3v3 takes to kill itself, and it is far inside the clock. The timer bounds the
+// tail: the fights that would otherwise never end.
+//
+// ⚠️ MAX_SECONDS AND SUDDEN_DEATH_AT MOVE TOGETHER. Sudden death needs runway to
+// finish the job — 30s of ramp here. Raising the onset past the cap means it
+// never fires at all and the fight simply stops at the wall.
+export const SUDDEN_DEATH_AT = 90 // seconds
 export const SUDDEN_DEATH_BASE = 0.010 // fraction of maxHp per second at onset
 export const SUDDEN_DEATH_RAMP = 0.004 // added per further second
 
