@@ -84,8 +84,8 @@ const GOLDENS: Golden[] = [
     // ⚠️ 57.7s -> 14.6s at Stage 0. This golden is titled "a bruiser against a
     // wall", and that turned out to be literal: the fight ran to sudden death
     // because the melee could not get past the rock. It now resolves.
-    winner: 'B', duration: 14.6, survivors: [0, 1],
-    casts: 37, hits: 26, deaths: 1, finalHp: [0, 380],
+    winner: 'B', duration: 15, survivors: [0, 1],
+    casts: 39, hits: 28, deaths: 1, finalHp: [0, 428],
   },
   {
     // Ranged vs melee across the full width — pins approach, stand-off and the
@@ -138,8 +138,8 @@ const GOLDENS: Golden[] = [
     // across 40 paired fights (p=0.69, 34 identical) still moved this one by
     // 5.6s — which is exactly why the sign test is the arbiter here and a
     // single golden is not. It is a fixture, not evidence.
-    winner: 'A', duration: 23, survivors: [3, 0],
-    casts: 99, hits: 57, deaths: 3, finalHp: [402, 4, 282, 0, 0, 0],
+    winner: 'B', duration: 17, survivors: [0, 2],
+    casts: 101, hits: 65, deaths: 4, finalHp: [0, 0, 0, 0, 223, 215],
   },
 ]
 

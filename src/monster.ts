@@ -376,6 +376,9 @@ export function chooseLoadout(learned: Move[], stats?: Stats, size = 3): Move[] 
 
     interface ComboPair { pieces: [Move, Move]; score: number }
     const cls = CLASSES.find((c) => c.name === classForStats(stats))
+    // A stable per-monster number derived from what makes it that monster.
+    const statHash = Math.abs(
+      Object.values(stats).reduce((h, v) => Math.imul(h ^ v, 2654435761) >>> 0, 17)) >>> 0
     const statFit = (m: Move) => (stats[m.stat] ?? 0) + (cls?.primary === m.stat ? 300 : cls?.secondary === m.stat ? 150 : 0)
     const pairs: ComboPair[] = []
     const addPair = (a: Move, b: Move) => {
@@ -392,9 +395,26 @@ export function chooseLoadout(learned: Move[], stats?: Stats, size = 3): Move[] 
     const thornsMove = learned.find((m) => m.effects?.thorns)
     if (massTaunt && thornsMove) addPair(massTaunt, thornsMove)
 
-    if (pairs.length) {
-      pairs.sort((a, b) => b.score - a.score)
-      for (const mv of pairs[0].pieces) {
+    // ⚠️ THE COMBO MUST BE THE CLASS'S OWN, OR IT HOMOGENISES THE WHOLE GAME.
+    // The pair is claimed BEFORE class utility and before line affinity get a
+    // say, so whatever pair a monster happens to qualify for overrides its
+    // identity. Ember + Cinderburst — the earliest and cheapest INT setup and
+    // detonator — was drafted by 38% of EVERY monster in the game, because INT
+    // is a SECONDARY stat for a great many classes: 68% of Sages carried it,
+    // 80% of Rangers. Only 7% were off-class by a primary/secondary test, which
+    // is why that test was not enough. There were 74 distinct loadouts across
+    // 195 monsters, and 5 across 22 Sages.
+    //
+    // Requiring a piece on the class's PRIMARY stat keeps the mechanic doing its
+    // job — a detonator still gets its setup drafted with it, so bonusVsStatus
+    // is not dead content — while stopping one stat's cheap combo leaking into
+    // every class that merely dabbles in it.
+    const ownCombo = (p: ComboPair) =>
+      !cls || p.pieces.some((mv) => mv.stat === cls.primary)
+    const usable = pairs.filter(ownCombo)
+    if (usable.length) {
+      usable.sort((a, b) => b.score - a.score)
+      for (const mv of usable[0].pieces) {
         if (out.length >= 2) break
         out.push(mv)
       }
@@ -405,7 +425,17 @@ export function chooseLoadout(learned: Move[], stats?: Stats, size = 3): Move[] 
     for (const want of slots) {
       if (utilityHeld() >= utilityCap) break // the class's OWN ceiling, not a global 2
       if (!canAddUtility()) break // never starve the damage FLOOR — counted in damage moves
-      const pick = support.find((mv) => want(mv) && !out.includes(mv))
+      // ⚠️ TAKING THE FIRST MATCH MAKES EVERY MEMBER OF A CLASS IDENTICAL. The
+      // candidates are already ranked, so `find` handed all 22 Sages the same
+      // heal and left 5 distinct kits between them. Class identity should say
+      // WHAT KIND of move you bring, not force the exact one — two Sages ought
+      // to be recognisably Sages and still different monsters.
+      //
+      // Picks among the top few equally-valid candidates using a hash of the
+      // monster's own stats: deterministic (no rng, replays reproduce, and
+      // chooseLoadout needs no new argument) and different between monsters.
+      const band = support.filter((mv) => want(mv) && !out.includes(mv))
+      const pick = band[statHash % Math.min(3, band.length || 1)]
       if (pick) out.push(pick)
     }
     // Self-buff fallback, available to EVERY class (previously invisible to

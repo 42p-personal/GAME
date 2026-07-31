@@ -69,10 +69,10 @@ const GOLDENS = [
     // ⚠️ Recaptured for the ELEMENT REMOVAL — body-type resist/weak no longer
     // multiplies damage, so every fight involving a resisted or super-effective
     // move resolves differently. Deliberate; elements are gone from the game.
-    winner: 'B', events: 169, logLines: 124,
+    winner: 'A', events: 126, logLines: 99,
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 523, wasKOd: true },
-      { side: 'B', slot: 0, hp: 471, mana: 679, wasKOd: false },
+      { side: 'A', slot: 0, hp: 325, mana: 421, wasKOd: false },
+      { side: 'B', slot: 0, hp: 0, mana: 699, wasKOd: true },
     ],
   },
   {
@@ -114,12 +114,12 @@ const GOLDENS = [
     // ⚠️ Recaptured for the ELEMENT REMOVAL — body-type resist/weak no longer
     // multiplies damage, so every fight involving a resisted or super-effective
     // move resolves differently. Deliberate; elements are gone from the game.
-    winner: 'A', events: 56, logLines: 52,
+    winner: 'A', events: 79, logLines: 67,
     finals: [
-      { side: 'A', slot: 0, hp: 179, mana: 258, wasKOd: false },
-      { side: 'A', slot: 1, hp: 152, mana: 238, wasKOd: false },
-      { side: 'B', slot: 0, hp: 0, mana: 241, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 333, wasKOd: true },
+      { side: 'A', slot: 0, hp: 28, mana: 285, wasKOd: false },
+      { side: 'A', slot: 1, hp: 152, mana: 211, wasKOd: false },
+      { side: 'B', slot: 0, hp: 0, mana: 224, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 339, wasKOd: true },
     ],
   },
   {
@@ -214,14 +214,14 @@ const GOLDENS = [
     // ⚠️ Recaptured for the ELEMENT REMOVAL — body-type resist/weak no longer
     // multiplies damage, so every fight involving a resisted or super-effective
     // move resolves differently. Deliberate; elements are gone from the game.
-    winner: 'B', events: 384, logLines: 300,
+    winner: 'A', events: 376, logLines: 298,
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 675, wasKOd: true },
-      { side: 'A', slot: 1, hp: 0, mana: 335, wasKOd: true },
-      { side: 'A', slot: 2, hp: 0, mana: 756, wasKOd: true },
-      { side: 'B', slot: 0, hp: 0, mana: 761, wasKOd: true },
-      { side: 'B', slot: 1, hp: 1316, mana: 750, wasKOd: false },
-      { side: 'B', slot: 2, hp: 136, mana: 175, wasKOd: false },
+      { side: 'A', slot: 0, hp: 583, mana: 716, wasKOd: false },
+      { side: 'A', slot: 1, hp: 1279, mana: 135, wasKOd: false },
+      { side: 'A', slot: 2, hp: 1348, mana: 763, wasKOd: false },
+      { side: 'B', slot: 0, hp: 0, mana: 767, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 754, wasKOd: true },
+      { side: 'B', slot: 2, hp: 0, mana: 145, wasKOd: true },
     ],
   },
 ] as const
