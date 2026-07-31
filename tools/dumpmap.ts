@@ -22,6 +22,7 @@ import { classForStats } from '../src/core'
 const mapId = process.argv[2] ?? 'dustbowl'
 const out = process.argv[3] ?? 'fight.json'
 const seed = process.argv[4] ?? 'gif5'
+const size = Number(process.argv[5] ?? 5)
 
 const arena = mapById(mapId)
 if (!arena) {
@@ -39,8 +40,11 @@ const mk = (id: string, sp: string, train = 850) =>
 // The same readable 5v5 as dump5v5: two front-liners, a skirmisher, two back
 // line per side. Held CONSTANT across the three arenas on purpose — the teams
 // are the control, the ground is the variable.
-const A = ['aegisox', 'kongrath', 'grivvel', 'maelurk', 'strixil']
-const B = ['ursath', 'crocmaw', 'mantevoke', 'archmage-aleph', 'larkessa']
+// ⚠️ Sliced, not re-picked, so a 3v3 is the FRONT of the same readable roster —
+// a wall, a bruiser and a skirmisher against their opposite numbers — rather
+// than a different fixture that cannot be compared with the 5v5.
+const A = ['aegisox', 'kongrath', 'strixil', 'maelurk', 'grivvel'].slice(0, size)
+const B = ['ursath', 'crocmaw', 'larkessa', 'archmage-aleph', 'mantevoke'].slice(0, size)
 
 const teamA = A.map((s, i) => mk(`${seed}a${i}`, s))
 const teamB = B.map((s, i) => mk(`${seed}b${i}`, s))

@@ -154,7 +154,12 @@ for fi in range(0, len(frames), STEP):
     aliveA = sum(1 for u in fr['units'] if u['id'][0] == 'A' and u['id'] not in dead and u['hp'] > 0)
     aliveB = sum(1 for u in fr['units'] if u['id'][0] == 'B' and u['id'] not in dead and u['hp'] > 0)
     g.text((14, 10), MAP.get('name', 'tamerengine'), font=F_TITLE, fill=INK)
-    g.text((14 + 128, 14), '5 v 5  ·  field battle', font=F_SM, fill=DIM)
+    # ⚠️ Derived, not hardcoded: this said "5 v 5" over a 3v3 the moment the
+    # dumper learned a team size. A caption that cannot be wrong beats one that
+    # happens to be right.
+    nA = sum(1 for k in meta if k.startswith('A'))
+    nB = sum(1 for k in meta if k.startswith('B'))
+    g.text((14 + 128, 14), f'{nA} v {nB}  ·  field battle', font=F_SM, fill=DIM)
     g.text((W - 14, 12), f"{fr['t']:.1f}s", font=F_HUD, fill=INK, anchor='ra')
     g.text((W / 2 - 30, 14), f'{aliveA}', font=F_HUD, fill=A_COL, anchor='ra')
     g.text((W / 2, 16), 'alive', font=F_SM, fill=DIM, anchor='ma')
