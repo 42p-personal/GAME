@@ -174,27 +174,24 @@ export const FALL_BACK_RAMP = 0.5 // seconds to reach full retreat speed
 /**
  * HEALING MULTIPLIER on a heal move's authored power.
  *
- * ⚠️ HELD AT 1.0 BECAUSE HEALING IS NOT A TUNABLE LEVER FROM THIS AXIS. Measured
- * as paired A/Bs on the 2v2-6v6 sweep:
- *   1.0 -> 1.3   20 better / 20 worse, p = 1.00   NO EFFECT
- *   1.0 -> 2.5    8 better / 13 worse, p = 0.38   NO EFFECT
- * A 2.5x heal buff — not a nudge — moved nothing, and only 21 of 40 fights moved
- * AT ALL, so 19 had no heal influence whatsoever.
+ * ⚠️ HELD AT 1.0 BECAUSE IT MULTIPLIES A BRANCH NOTHING REACHES. Measured as
+ * paired A/Bs on the 2v2-6v6 sweep — 1.0 -> 1.3 gave p = 1.00, and 1.0 -> 2.5
+ * (not a nudge) gave p = 0.38, with only 21 of 40 fights moving at all.
  *
- * The arithmetic says why: heals are 4.1% of casts (194 events over 40 fights)
- * and restore 0-9% of the damage dealt against them. Multiplying a thing that
- * rarely happens does not make it matter. This is the same shape as the control
- * moves before LINES existed and the isolation term — the bottleneck is
- * REACHABILITY, not magnitude, and no coefficient reaches it.
+ * The reason is not "healing is hard to tune". It is that **ZERO of the 137 moves
+ * have `type: 'heal'`**, so `strike`'s direct-heal path — the only place this
+ * constant is read — never executes. The 194 "heal" events per 40 fights are
+ * hpRegenBuff ticks and lifesteal, which do not pass through here.
  *
- * ⚠️ So do NOT raise this hoping for less bursty fights. The upstream questions
- * are how often a support DRAFTS a heal and how `bestUtility` scores casting one
- * against dealing damage. Mitigation is the lever with real leverage: it touches
- * every hit in the game rather than 4% of casts.
+ * ⚠️ ALL FOUR HEALING MOVES IN THE GAME ARE HEAL-OVER-TIME (`hpRegenBuff`), not
+ * direct heals: Steady Vigil (CON, ally), Renewal (WIS, ally), Providence (WIS,
+ * TEAM), Standing Ovation (CHA, TEAM). So the lever for "more healing" is
+ * `hpRegenBuff` and the count of moves carrying it — 4 of 137 — not this.
  *
- * The constant stays because the multiplier is the right shape for the lever once
- * the reachability problem is fixed, and because the null is worth keeping next to
- * the number it refutes.
+ * The same shape as the control moves before LINES and the isolation term: an
+ * authored mechanism with nothing reaching it. The constant stays because a
+ * multiplier is the right shape once a direct heal exists, and because the null
+ * belongs next to the number it refutes.
  */
 export const HEAL_MULT = 1.0
 
