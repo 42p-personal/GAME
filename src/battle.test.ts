@@ -69,10 +69,13 @@ const GOLDENS = [
     // ⚠️ Recaptured for the ELEMENT REMOVAL — body-type resist/weak no longer
     // multiplies damage, so every fight involving a resisted or super-effective
     // move resolves differently. Deliberate; elements are gone from the game.
-    winner: 'A', events: 126, logLines: 99,
+    // ⚠️ Recaptured for the DIRECT HEALS — Mending Surge (WIS) and Second Wind
+    // (CHA) grew the pool 137 -> 139, so chooseLoadout re-drafted. Only this
+    // golden moved: the other three field no WIS/CHA primary and never see them.
+    winner: 'A', events: 166, logLines: 126,
     finals: [
-      { side: 'A', slot: 0, hp: 325, mana: 421, wasKOd: false },
-      { side: 'B', slot: 0, hp: 0, mana: 699, wasKOd: true },
+      { side: 'A', slot: 0, hp: 367, mana: 415, wasKOd: false },
+      { side: 'B', slot: 0, hp: 0, mana: 694, wasKOd: true },
     ],
   },
   {

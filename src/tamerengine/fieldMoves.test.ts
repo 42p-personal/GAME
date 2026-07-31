@@ -20,7 +20,12 @@ describe('the field pool is separate from the main pool', () => {
     // 100 -> 102: Acrobatics (DEX) + Mage Armour (WIS), the cross-stat defensive
     // answers. ⚠️ No golden moved, because chooseLoadout does not draft them yet.
     // 102 -> 110: the STR pool reworked into its three lines (15 -> 23 moves).
-    expect(ALL_MOVES.length).toBe(137)
+    // 137 -> 139: Mending Surge (WIS, ally) + Second Wind (CHA, team) — the first
+    // real DIRECT heals. ⚠️ Every prior restore paired a token direct heal (8-20)
+    // with an hpRegenBuff, so nothing in the pool could answer burst, and two
+    // paired A/Bs on HEAL_MULT read null because there was too little restoration
+    // in the game for a coefficient to reach. Volume before coefficient.
+    expect(ALL_MOVES.length).toBe(139)
   })
 
   it('has unique ids and names', () => {

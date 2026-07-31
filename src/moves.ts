@@ -198,6 +198,15 @@ const POOLS: Record<Stat, Row[]> = {
     { name: 'Drain Spirit', learnLevel: 380, type: 'damage', channel: 'support', target: 'enemy', cooldown: 4, accuracy: 88, power: 29, mana: 20, variance: 0.15, effects: { manaBurn: 15, lifesteal: 0.35 }, range: 6.1, desc: 'Takes both at once — their mana, and a share of their blood.' },
     { name: 'Spirit Siphon', learnLevel: 600, type: 'damage', channel: 'support', target: 'enemy', cooldown: 5, accuracy: 88, power: 43, mana: 30, variance: 0.2, effects: { manaBurn: 20, lifesteal: 0.4 }, range: 5.7, desc: 'Holds on and drains, HP and MP together, for as long as it lasts.' },
     { name: 'Judgement', learnLevel: 820, type: 'damage', channel: 'support', target: 'enemy', cooldown: 6, accuracy: 88, power: 65, mana: 38, variance: 0.2, range: 5.7, desc: 'A real capstone HIT rather than one more aura. WIS can end things too.' },
+    // ⚠️ THE FIRST REAL DIRECT HEAL. `type: 'buff'` is not a hedge — there is no
+    // 'heal' MoveType; the engine heals on `friendly && power > 0`, so `power` IS
+    // the restored amount. Every existing restore pairs a token direct heal
+    // (Renewal 8, Providence 12, Steady Vigil 20) with an hpRegenBuff, which is a
+    // tide rather than a burst, and a tide cannot answer burst — it pays out
+    // after the blow that would have killed you. This is the save.
+    // Priced accordingly: the biggest single number WIS has, a 6s cooldown and
+    // 34 MP, so it is one answer per fight rather than a wall.
+    { name: 'Mending Surge', learnLevel: 400, type: 'buff', channel: 'support', target: 'ally', cooldown: 6, accuracy: 100, power: 105, mana: 34, range: 8.0, desc: 'A flood of restoration into one body — the burst answer to burst.' },
     { name: 'Providence', learnLevel: 850, type: 'buff', channel: 'support', target: 'team', cooldown: 7, accuracy: 100, power: 12, mana: 40, effects: { cleanse: true, hpRegenBuff: 6, duration: 3 }, range: 6.8, desc: 'Sees what is coming: clears the team and steadies it. Restoration — empowerment is CHA.' },
   ],
   // ══ INT ══ magic · elements · ground AoE + stun · frost root/slow · teleports ═
@@ -265,6 +274,16 @@ const POOLS: Record<Stat, Row[]> = {
     { name: 'Battle Hymn', learnLevel: 300, type: 'buff', channel: 'support', target: 'team', cooldown: 5, accuracy: 100, power: 0, mana: 26, effects: { dodgeBuff: 8, regenBuff: 2, duration: 3 }, status: { kind: 'haste', chance: 100, duration: 2 }, range: 7.5, desc: 'A steadying anthem — and the whole team moves first.' },
     { name: 'Fanfare', learnLevel: 420, type: 'buff', channel: 'support', target: 'team', cooldown: 5, accuracy: 100, power: 0, mana: 32, effects: { accBuff: 16, duration: 3 }, range: 7.5, desc: 'Team accuracy, sharply. Nothing else in the game hands out aim like this.' },
     { name: 'Hymn of Shields', learnLevel: 470, type: 'buff', channel: 'support', target: 'team', cooldown: 6, accuracy: 100, power: 0, mana: 38, effects: { ward: 26, guard: 5, duration: 3 }, range: 7.5, desc: 'A hymn that armours everyone who can hear it, the singer included.' },
+    // ⚠️ CHA HEALS THE WHOLE LINE, WEAKLY. Half of Mending Surge and spread over
+    // everyone: a rally, not a mend. It reads as CHA because it pays for breadth
+    // in per-head strength, which is the same trade the AoE damage rule makes —
+    // weak into one body, strong into three.
+    // ⚠️ THIS BENDS A STANDING RULE ("WIS is the ONLY stat that can heal another
+    // monster"). `Standing Ovation` already bent it with a team hpRegenBuff, so
+    // the rule was already describing an older pool than the one that shipped.
+    // Kept deliberately weaker per target than anything in Mender so WIS remains
+    // the stat you bring when you need someone SAVED.
+    { name: 'Second Wind', learnLevel: 480, type: 'buff', channel: 'support', target: 'team', cooldown: 9, accuracy: 100, power: 48, mana: 42, range: 7.5, desc: 'A cry that puts the whole line back on its feet — none of them fully.' },
     { name: 'Standing Ovation', learnLevel: 540, type: 'buff', channel: 'support', target: 'team', cooldown: 6, accuracy: 100, power: 0, mana: 42, effects: { atkBuff: 0.2, accBuff: 10, hpRegenBuff: 4, duration: 3 }, range: 7.5, desc: 'Feeds on applause and hands it straight back to the team.' },
     { name: 'Triumph', learnLevel: 880, type: 'buff', channel: 'support', target: 'team', cooldown: 8, accuracy: 100, power: 0, mana: 56, effects: { atkBuff: 0.32, accBuff: 14, dodgeBuff: 10, duration: 2 }, range: 7.5, desc: 'The empowerment capstone: everything at once, for two rounds only.' },
 

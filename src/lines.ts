@@ -117,7 +117,7 @@ export const LINE_OF: Record<string, string> = {
   // ── WIS ────────────────────────────────────────────────────────────────────
   'Silencing Spike': 'Disruptor', 'Null Field': 'Disruptor', 'Field of Doom': 'Disruptor', 'Dread Whisper': 'Disruptor', 'Mind Crush': 'Disruptor',
   Enfeeble: 'Disruptor', Wither: 'Disruptor', Hush: 'Disruptor',
-  Mend: 'Mender', Clarity: 'Mender', Renewal: 'Mender', Tranquility: 'Mender',
+  Mend: 'Mender', Clarity: 'Mender', Renewal: 'Mender', 'Mending Surge': 'Mender', Tranquility: 'Mender',
   'Ward Against Ruin': 'Mender', Rebuke: 'Mender',
   'Mana Sap': 'Siphon', Serenity: 'Siphon', Attunement: 'Siphon', 'Drain Spirit': 'Siphon',
   'Spirit Siphon': 'Siphon', Providence: 'Siphon', 'Mind Spike': 'Siphon', Judgement: 'Siphon',
@@ -132,7 +132,7 @@ export const LINE_OF: Record<string, string> = {
   'Arcane Overload': 'Arcanist', Unmake: 'Arcanist', // ── CHA ────────────────────────────────────────────────────────────────────
   Discord: 'Enchanter', Screech: 'Enchanter', 'Sonic Boom': 'Enchanter', Lullaby: 'Enchanter',
   Cacophony: 'Enchanter', 'Mass Hysteria': 'Enchanter',
-  'Rallying Song': 'Captain', Bravura: 'Captain', 'Battle Hymn': 'Captain', 'Hymn of Shields': 'Captain', 'Standing Ovation': 'Captain', 'Anthem of Iron': 'Captain',
+  'Rallying Song': 'Captain', Bravura: 'Captain', 'Battle Hymn': 'Captain', 'Hymn of Shields': 'Captain', 'Standing Ovation': 'Captain', 'Second Wind': 'Captain', 'Anthem of Iron': 'Captain',
   Inspire: 'Captain', Fanfare: 'Captain', Triumph: 'Captain',
   'Grand Mockery': 'Demagogue', Captivate: 'Demagogue', Demoralize: 'Demagogue',
   'Crowd Surge': 'Demagogue', Dirge: 'Demagogue', "Siren's Call": 'Demagogue',

@@ -172,26 +172,24 @@ export const FALL_BACK_RAMP = 0.5 // seconds to reach full retreat speed
  * impact rather than a blink, and still clearly faster than anyone can run.
  */
 /**
- * HEALING MULTIPLIER on a heal move's authored power.
+ * HEALING MULTIPLIER on restoration — `power` on any friendly-targeted move.
  *
- * ⚠️ HELD AT 1.0 BECAUSE IT MULTIPLIES A BRANCH NOTHING REACHES. Measured as
- * paired A/Bs on the 2v2-6v6 sweep — 1.0 -> 1.3 gave p = 1.00, and 1.0 -> 2.5
- * (not a nudge) gave p = 0.38, with only 21 of 40 fights moving at all.
+ * ⚠️ HELD AT 1.0 BECAUSE THE POOL IS TOO THIN FOR IT TO MATTER, NOT BECAUSE THE
+ * PATH IS DEAD. (An earlier revision of this comment claimed the latter, on the
+ * grounds that no move has `type: 'heal'`. True but irrelevant: there is no such
+ * MoveType. `strike` heals on `friendly && power > 0`, so Renewal, Providence and
+ * Steady Vigil all pass through here and this constant does scale them.)
  *
- * The reason is not "healing is hard to tune". It is that **ZERO of the 137 moves
- * have `type: 'heal'`**, so `strike`'s direct-heal path — the only place this
- * constant is read — never executes. The 194 "heal" events per 40 fights are
- * hpRegenBuff ticks and lifesteal, which do not pass through here.
+ * Measured as paired A/Bs on the 2v2-6v6 sweep:
+ *   1.0 -> 1.3   20 better / 20 worse, p = 1.00   NO EFFECT
+ *   1.0 -> 2.5    8 better / 13 worse, p = 0.38   NO EFFECT
+ * Only 21 of 40 fights moved at all under a 2.5x buff, so 19 had no restoration
+ * in them whatsoever. Healing is 4.1% of casts and 0-9% of the damage dealt
+ * against it: multiplying something that rarely happens does not make it matter.
  *
- * ⚠️ ALL FOUR HEALING MOVES IN THE GAME ARE HEAL-OVER-TIME (`hpRegenBuff`), not
- * direct heals: Steady Vigil (CON, ally), Renewal (WIS, ally), Providence (WIS,
- * TEAM), Standing Ovation (CHA, TEAM). So the lever for "more healing" is
- * `hpRegenBuff` and the count of moves carrying it — 4 of 137 — not this.
- *
- * The same shape as the control moves before LINES and the isolation term: an
- * authored mechanism with nothing reaching it. The constant stays because a
- * multiplier is the right shape once a direct heal exists, and because the null
- * belongs next to the number it refutes.
+ * ⚠️ VOLUME AND REACHABILITY FIRST, COEFFICIENT SECOND — the same shape as the
+ * control moves before LINES. Re-test this constant once the sustain content is
+ * thick enough to be drafted regularly; until then it will keep reading null.
  */
 export const HEAL_MULT = 1.0
 
