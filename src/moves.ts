@@ -206,7 +206,13 @@ const POOLS: Record<Stat, Row[]> = {
     // after the blow that would have killed you. This is the save.
     // Priced accordingly: the biggest single number WIS has, a 6s cooldown and
     // 34 MP, so it is one answer per fight rather than a wall.
-    { name: 'Mending Surge', learnLevel: 400, type: 'buff', channel: 'support', target: 'ally', cooldown: 6, accuracy: 100, power: 105, mana: 34, range: 8.0, desc: 'A flood of restoration into one body — the burst answer to burst.' },
+    // ⚠️ learnLevel 300, NOT 400. PRICE THE UNLOCK AT WHAT THE CLASS ACTUALLY
+    // TRAINS TO. WIS-primary monsters measure median 281 / p90 355, so 400 sat
+    // ABOVE the ceiling: 1 of 51 support-class monsters could learn it and the
+    // ability effectively did not exist. The drafting was never at fault — the
+    // one monster that could learn it did draft it. 300 clears the median and
+    // leaves it a real mid-game unlock. Renewal (260) is the peer that works.
+    { name: 'Mending Surge', learnLevel: 300, type: 'buff', channel: 'support', target: 'ally', cooldown: 6, accuracy: 100, power: 105, mana: 34, range: 8.0, desc: 'A flood of restoration into one body — the burst answer to burst.' },
     { name: 'Providence', learnLevel: 850, type: 'buff', channel: 'support', target: 'team', cooldown: 7, accuracy: 100, power: 12, mana: 40, effects: { cleanse: true, hpRegenBuff: 6, duration: 3 }, range: 6.8, desc: 'Sees what is coming: clears the team and steadies it. Restoration — empowerment is CHA.' },
   ],
   // ══ INT ══ magic · elements · ground AoE + stun · frost root/slow · teleports ═
@@ -283,7 +289,9 @@ const POOLS: Record<Stat, Row[]> = {
     // the rule was already describing an older pool than the one that shipped.
     // Kept deliberately weaker per target than anything in Mender so WIS remains
     // the stat you bring when you need someone SAVED.
-    { name: 'Second Wind', learnLevel: 480, type: 'buff', channel: 'support', target: 'team', cooldown: 9, accuracy: 100, power: 48, mana: 42, range: 7.5, desc: 'A cry that puts the whole line back on its feet — none of them fully.' },
+    // ⚠️ learnLevel 340, NOT 480 — CHA-primary measures median 330 / p90 396, so
+    // 480 was unlearnable by everyone. See Mending Surge above.
+    { name: 'Second Wind', learnLevel: 340, type: 'buff', channel: 'support', target: 'team', cooldown: 9, accuracy: 100, power: 48, mana: 42, range: 7.5, desc: 'A cry that puts the whole line back on its feet — none of them fully.' },
     { name: 'Standing Ovation', learnLevel: 540, type: 'buff', channel: 'support', target: 'team', cooldown: 6, accuracy: 100, power: 0, mana: 42, effects: { atkBuff: 0.2, accBuff: 10, hpRegenBuff: 4, duration: 3 }, range: 7.5, desc: 'Feeds on applause and hands it straight back to the team.' },
     { name: 'Triumph', learnLevel: 880, type: 'buff', channel: 'support', target: 'team', cooldown: 8, accuracy: 100, power: 0, mana: 56, effects: { atkBuff: 0.32, accBuff: 14, dodgeBuff: 10, duration: 2 }, range: 7.5, desc: 'The empowerment capstone: everything at once, for two rounds only.' },
 
