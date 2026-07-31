@@ -16,7 +16,7 @@
 import { generateMonster } from '../src/monster'
 import { simulateFieldBattle } from '../src/tamerengine/engine'
 import { autoDeployByRole } from '../src/tamerengine/hex'
-import { FIELD_H, FIELD_W } from '../src/tamerengine/types'
+import { FIELD_H, FIELD_W, SUDDEN_DEATH_AT } from '../src/tamerengine/types'
 import * as fs from 'fs'
 
 const mk = (id: string, sp: string, train = 850) => generateMonster(id, { speciesId: sp, train }) as never
@@ -82,7 +82,7 @@ function collect() {
         prev = new Map(e.units.map((u) => [u.id, { x: u.x, y: u.y }]))
       }
     }
-    rows.push({ key: comp.name + '/' + sd, dur: r.duration, resolved: r.duration < 55 ? 1 : 0, dmg,
+    rows.push({ key: comp.name + '/' + sd, dur: r.duration, resolved: r.duration < SUDDEN_DEATH_AT ? 1 : 0, dmg,
       travel: travel / Math.max(1, units) })
   }
   return rows

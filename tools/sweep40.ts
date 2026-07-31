@@ -21,7 +21,7 @@
 import { generateMonster } from '../src/monster'
 import { simulateFieldBattle } from '../src/tamerengine/engine'
 import { autoDeployByRole } from '../src/tamerengine/hex'
-import { FIELD_H, FIELD_W } from '../src/tamerengine/types'
+import { FIELD_H, FIELD_W, SUDDEN_DEATH_AT } from '../src/tamerengine/types'
 import { classForStats } from '../src/core'
 
 const mk = (id: string, sp: string, train = 850) =>
@@ -68,7 +68,7 @@ function runBatch(seeds: string[], train = 850): Run {
     const r = simulateFieldBattle({ seed: sd + comp.name, teamA: A, teamB: B,
       obstacles: OBSTACLES, placeA: autoDeployByRole('A', A.map(front)), placeB: autoDeployByRole('B', B.map(front)) })
     out.fights++; out.dur += r.duration
-    if (r.duration < 55) out.resolved++
+    if (r.duration < SUDDEN_DEATH_AT) out.resolved++
     const cls = new Map<string, string>()
     A.forEach((m, i) => cls.set('A' + i, classForStats((m as never as { stats: never }).stats)))
     B.forEach((m, i) => cls.set('B' + i, classForStats((m as never as { stats: never }).stats)))
