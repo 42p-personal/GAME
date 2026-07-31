@@ -143,3 +143,54 @@ export function nextWaypoint(from: Vec2, to: Vec2, g: NavGraph, los: LosFn): Vec
   while (cameFrom[node] >= 0) node = cameFrom[node]
   return g.nodes[node]
 }
+
+/**
+ * The best place to run to when breaking contact.
+ *
+ * ⚠️ THIS IS WHAT MAKES COVER A MECHANIC RATHER THAN SCENERY. Fall Back used to
+ * retreat to `position + away × 10` — a straight line directly away from the
+ * threat — so cover only ever helped when a rock happened to lie in that line.
+ * Measured: cover was worth +13%/+17% survival before Fall Back existed and
+ * roughly nothing after, because a universal escape that works anywhere makes
+ * the ground irrelevant.
+ *
+ * The graph's corner nodes ARE the "around the pillar" points, so the candidates
+ * come free. Speed still comes from suspending the backpedal penalty; this
+ * supplies the DESTINATION — and on a bare map no candidate beats running
+ * straight away, so Fall Back degrades to exactly its old behaviour. That is the
+ * design: an arena with pillars makes retreat strong, an empty one does not, and
+ * the map does the balancing instead of a constant.
+ *
+ * Deterministic: fixed node order, no rng.
+ */
+export function bestCoverPoint(
+  from: Vec2,
+  threat: Vec2,
+  reach: number,
+  g: NavGraph,
+  los: LosFn,
+  allies: Vec2[] = [],
+): Vec2 | null {
+  let best: Vec2 | null = null
+  let bestScore = 0.35 // ⚠️ a floor: a marginal corner must not beat running away
+  const nowD = dist(from, threat)
+  for (const n of g.nodes) {
+    const cost = dist(from, n)
+    if (cost > reach) continue // cannot get there inside the retreat window
+    // ⚠️ Never retreat INTO the threat. A corner can break line of sight while
+    // sitting closer to the attacker, which is a hiding place you die in.
+    const gained = dist(n, threat) - nowD
+    if (gained < 0) continue
+    const hidden = los(n, threat) ? 0 : 1
+    // Staying in sight of the team matters because LoS is symmetric: a support
+    // that cannot see its allies cannot heal them, so a corner that abandons the
+    // fight is worth less than one that merely breaks the chase.
+    const withTeam = allies.some((a) => los(n, a)) ? 1 : 0
+    const score = 2.0 * hidden
+      + 1.0 * Math.min(1, gained / 8)
+      - 1.2 * (cost / Math.max(1e-6, reach))
+      + 0.5 * withTeam
+    if (score > bestScore) { bestScore = score; best = n }
+  }
+  return best
+}

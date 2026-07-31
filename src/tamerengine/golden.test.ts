@@ -87,8 +87,8 @@ const GOLDENS: Golden[] = [
     // Stage 3a (Fall Back): 15s -> 13.1s and the winner finishes on 604 not
     // 428. A hurt unit that breaks contact for two seconds takes less on the
     // way, so the fight is shorter and the survivor healthier.
-    winner: 'B', duration: 13.1, survivors: [0, 1],
-    casts: 40, hits: 27, deaths: 1, finalHp: [0, 604],
+    winner: 'B', duration: 15.1, survivors: [0, 1],
+    casts: 48, hits: 33, deaths: 1, finalHp: [0, 390],
   },
   {
     // Ranged vs melee across the full width — pins approach, stand-off and the
@@ -111,8 +111,10 @@ const GOLDENS: Golden[] = [
     // tick — so the FIELD engine re-drafts its own 4-slot kit (FIELD_LOADOUT_SIZE)
     // rather than using the pinned 3. Worth knowing: the pinning is real for the
     // turn engine and only partial here.
-    winner: 'B', duration: 7.8, survivors: [0, 1],
-    casts: 9, hits: 7, deaths: 1, finalHp: [0, 272],
+    // Cover-seeking retreat: the caster now runs to the rock rather than
+    // straight backwards, and the fight lasts longer for it.
+    winner: 'B', duration: 8.6, survivors: [0, 1],
+    casts: 12, hits: 9, deaths: 1, finalHp: [0, 105],
   },
   {
     // Front line + damage + support on both sides: targeting, taunt, healing and
@@ -148,8 +150,8 @@ const GOLDENS: Golden[] = [
     // ⚠️ Stage 3a flipped this back to A, 2-0. Retreat helps whichever side is
     // losing the exchange at the moment it triggers, so a golden that was close
     // is exactly the one it can tip. The paired sweep is the arbiter, not this.
-    winner: 'A', duration: 23.3, survivors: [2, 0],
-    casts: 109, hits: 73, deaths: 4, finalHp: [153, 0, 109, 0, 0, 0],
+    winner: 'B', duration: 23, survivors: [0, 2],
+    casts: 97, hits: 59, deaths: 4, finalHp: [0, 0, 0, 0, 263, 282],
   },
 ]
 

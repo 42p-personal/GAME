@@ -351,6 +351,39 @@ arena play this whole line of work is for. Not a bug, a genuine design tension, 
 argument for keeping Fall Back weak and letting the ABILITY tier (3b) be the one that
 uses cover properly.
 
+### ✅ SHIPPED — cover-seeking retreat (Fall Back picks a DESTINATION)
+
+⚠️ **3a made cover worse, and this is the fix.** A universal escape that works
+anywhere makes the ground irrelevant: Fall Back retreated to `position + away × 10`,
+a straight line, so cover only helped when a rock happened to lie in it.
+
+Fall Back now keeps its speed (the suspended backpedal) but **chooses where to run** —
+scored over the nav graph's corner nodes, which already are the "around the pillar"
+points. Cover's contribution to survival:
+
+| arena | with cover | none | delta | *(at 3a)* |
+|---|---:|---:|---:|---:|
+| Dustbowl | 9.6s | 10.1s | −5% | −3% |
+| **The Ossuary** | **12.6s** | 11.1s | **+14%** | +4% |
+| **Titan's Rest** | **13.0s** | 12.0s | **+8%** | −2% |
+
+Survival 35–38%: still inside the 35–45% band, so **bounded**. `sweep40` 39/40 @ 19.4s.
+
+⚠️ **THE MAP DOES THE BALANCING, NOT A CONSTANT.** When no candidate beats running
+away, Fall Back degrades to exactly its old straight-line behaviour — which on a bare
+arena is every time. An arena with pillars makes retreat strong; an empty one does not.
+That is why Fall Back needed no weakening to stop competing with cover.
+
+Three details that each prevent a specific failure:
+
+- **Destination chosen ONCE, at trigger.** Re-scoring per tick as the threat moves
+  makes a "committed" retreat oscillate on the spot instead of going anywhere.
+- **Never retreat INTO the threat.** A corner can break line of sight while sitting
+  *closer* to the attacker — a hiding place you die in.
+- **Prefer corners still in sight of the team.** LoS is symmetric, so a support that
+  cannot see its allies cannot heal them; a corner that abandons the fight is worth
+  less than one that merely breaks the chase.
+
 ### DECIDED — **A and F, on independent cooldowns**
 
 Both tiers ship. A monster therefore has **two escapes**, and the ability does *not*

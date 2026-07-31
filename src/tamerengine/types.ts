@@ -222,6 +222,10 @@ export interface FieldUnit {
   fallBackAt: number
   /** While `t` is under this, the unit is in a committed retreat. */
   fallBackUntil: number
+  /** Where that retreat is heading. ⚠️ Chosen ONCE when it triggers, not
+   *  re-scored per tick — a committed retreat that re-picks its destination as
+   *  the threat moves oscillates on the spot instead of going anywhere. */
+  fallBackTo: Vec2 | null
   /** Shared escape lockout — set by ANY escape, checked by all of them. */
   escapeLockUntil: number
   /** TAUNT. While this holds, the unit must attack the taunter — the one thing

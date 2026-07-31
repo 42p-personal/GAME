@@ -100,7 +100,7 @@ function pushOutOfObstacles(p: Vec2, obs: Obstacle[], radius: number): Vec2 {
   return p // nowhere free within 14 units: the arena is pathological, not the unit
 }
 
-import { buildNavGraph, nextWaypoint, NavGraph } from './navgraph'
+import { buildNavGraph, nextWaypoint, bestCoverPoint, NavGraph } from './navgraph'
 
 // ── Setup ───────────────────────────────────────────────────────────────────
 /** Default cover: a symmetric pair of blocks so neither side is advantaged. */
@@ -185,6 +185,7 @@ function buildUnit(m0: Monster, side: FieldSide, slot: number, pos: Vec2): Field
     gaveUp: {},
     fallBackAt: 0,
     fallBackUntil: 0,
+    fallBackTo: null,
     escapeLockUntil: 0,
     dead: false,
   }
@@ -955,6 +956,15 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
         // ⚠️ The lockout is SHARED. An escape ABILITY will set the same field,
         // so the two tiers cannot be spent in the same breath — see §5.
         u.escapeLockUntil = t + ESCAPE_LOCKOUT
+        // ⚠️ THE DESTINATION IS CHOSEN HERE, ONCE. Re-scoring it every tick as
+        // the threat moves makes a "committed" retreat oscillate on the spot.
+        const near = foes.filter((f) => !f.dead)
+          .sort((a, b) => dist(u.pos, a.pos) - dist(u.pos, b.pos))[0]
+        u.fallBackTo = near
+          ? bestCoverPoint(
+            u.pos, near.pos, u.speed * FALL_BACK_DUR * 1.4, navGraph, navLos,
+            mates.filter((a) => !a.dead && a.id !== u.id).map((a) => a.pos))
+          : null
         events.push({ t: +t.toFixed(2), kind: 'fallback', id: u.id })
       }
 
@@ -962,11 +972,19 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       // A committed retreat overrides the ordinary goal: get away from whatever
       // is closest, for as long as it lasts.
       if (u.fallBackUntil > t) {
-        const near = foes.filter((f) => !f.dead)
-          .sort((a, b) => dist(u.pos, a.pos) - dist(u.pos, b.pos))[0]
-        if (near) {
-          const away = norm(sub(u.pos, near.pos))
-          goal = clampToField({ x: u.pos.x + away.x * 10, y: u.pos.y + away.y * 10 })
+        if (u.fallBackTo) {
+          // Round the pillar rather than away from the attacker.
+          goal = u.fallBackTo
+        } else {
+          // ⚠️ No cover worth taking — degrade to the old straight-line retreat.
+          // On a bare arena this is every time, which is the point: the ground
+          // decides how strong a retreat is, not a constant.
+          const near = foes.filter((f) => !f.dead)
+            .sort((a, b) => dist(u.pos, a.pos) - dist(u.pos, b.pos))[0]
+          if (near) {
+            const away = norm(sub(u.pos, near.pos))
+            goal = clampToField({ x: u.pos.x + away.x * 10, y: u.pos.y + away.y * 10 })
+          }
         }
       }
       // THE THREE SPATIAL STATUSES. On the field these words can mean something
