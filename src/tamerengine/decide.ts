@@ -2,8 +2,8 @@
 //
 // Everything here is a PURE function of the units' state — no randomness, no
 // mutation — so it is directly unit-testable and the tick loop stays readable.
-import { Monster, Stat, roleOfClass } from '../core'
-import { FieldTraits, FieldUnit, Vec2, FIELD_W, FIELD_H, CHANNEL_RANGE, LEASH_RADIUS } from './types'
+import { Monster, Stat, roleOfClass, classForStats} from '../core'
+import { FieldTraits, FieldUnit, Vec2, FIELD_W, FIELD_H, CHANNEL_RANGE, LEASH_RADIUS, CLASS_BASIC} from './types'
 import { coachedValue, panicThreshold, personalityOf, resolvePersonality, threatRadius } from './personality'
 
 export const v = (x: number, y: number): Vec2 => ({ x, y })
@@ -102,7 +102,22 @@ export function reachOf(u: FieldUnit): number {
       bestRange = mv.range ?? CHANNEL_RANGE[mv.channel]
     }
   }
-  return bestRange || CHANNEL_RANGE.melee
+  const best = bestRange || CHANNEL_RANGE.melee
+  // ⚠️ STAND WHERE EVERYTHING IN YOUR HANDS WORKS. A cast is gated on
+  // `d <= range`, so closing never forbids a longer move while holding back
+  // forbids every shorter one — the asymmetry argued above, applied once more.
+  // The class's free attack (CLASS_BASIC) is a weapon like any other, and it is
+  // the one that is ALWAYS up, so a standoff it cannot reach from leaves the
+  // unit with nothing to do between cooldowns. Measured on the authored table:
+  // 31.7% of monsters parked outside their own free attack, worst at Rogue
+  // (67%) and Spellsword (100%) — the DEX and INT classes whose lines span both
+  // a blade and a shot.
+  //
+  // ⚠️ This is NOT the MIN-over-the-kit rejected above. That would drag a Wizard
+  // in on one stray melee move; this takes the min of exactly two things, and a
+  // stray move is neither the best weapon nor the class basic.
+  const basic = CLASS_BASIC[classForStats(u.m.stats)] ?? CLASS_BASIC.Generalist
+  return Math.min(best, basic.range)
 }
 
 /**

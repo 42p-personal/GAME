@@ -5,7 +5,7 @@
 // depends on `simulateFieldBattle` being a pure function of
 // (monsters + placement + obstacles + seed). So: fixed dt, fixed unit order,
 // one seeded rng stream, and no wall-clock or Math.random anywhere.
-import { Channel, Monster, Move, MoveArea, MoveSpatial, Stat, aoeFalloff, statScaleOf, mulberry32, hashString, StatusKind, rollVariance, SPREADABLE_STATUSES } from '../core'
+import { Monster, Move, MoveArea, MoveSpatial, Stat, aoeFalloff, statScaleOf, mulberry32, hashString, StatusKind, rollVariance, SPREADABLE_STATUSES, classForStats} from '../core'
 import { chooseLoadout, learnedMoves, manaCost, maxHp, maxMana } from '../monster'
 import {
   DT, FIELD_H, FIELD_W, FieldEvent, FieldResult, FieldSetup, FieldSide, FieldUnit,
@@ -17,8 +17,7 @@ import {
   SUDDEN_DEATH_AT, SUDDEN_DEATH_BASE, SUDDEN_DEATH_RAMP, KITE_MAX, KITE_REFILL, BLOCK_DR,
   BASIC_STAT_TIER, BASIC_BASE_POWER, BASIC_STAT_SCALE,
   MANA_ON_HIT_TAKEN, MANA_ON_HIT_DEALT, MANA_SUPPORT_PER_SEC, WIS_REGEN_DIVISOR, FIELD_MANA_COST_MULT,
-  FIELD_LOADOUT_SIZE, CC_DR_STEP, CC_DR_RESET, CLEANSE_CC_IMMUNITY,
-} from './types'
+  FIELD_LOADOUT_SIZE, CC_DR_STEP, CC_DR_RESET, CLEANSE_CC_IMMUNITY, CLASS_BASIC} from './types'
 import { archetypeOf, desiredGoal, dist, isMelee, manaRoleOf, norm, pickTarget, reachOf, spacingRadius, sub, threatOf, traitsFor, wantsToKite } from './decide'
 import { personalityOf, spendAboveFor } from './personality'
 import { spatialOf } from './spatial'
@@ -586,23 +585,11 @@ function utilityScore(
  * unit's natural range keeps everyone contributing between cooldowns.
  */
 export function basicAttackFor(m: Monster): Move {
-  // Fight at the range this monster is built for.
-  // ⚠️ Pick the channel by REACH, not by power. Keying off the highest-POWER
-  // move gave a ranged monster a MELEE basic (range 1.28) while `reachOf` parked
-  // it at 6.8 — its free attack was unreachable, so between skill cooldowns it
-  // had nothing to do and simply walked. The basic attack must reach from where
-  // the unit actually chooses to stand, or it does not exist.
-  let channel: Channel = 'melee'
-  let bestRange = -1, bestPower = -1
-  for (const mv of m.loadout) {
-    if (mv.type !== 'damage') continue
-    const r = mv.range ?? CHANNEL_RANGE[mv.channel]
-    if (r > bestRange || (r === bestRange && mv.power > bestPower)) {
-      bestRange = r; bestPower = mv.power; channel = mv.channel
-    }
-  }
-  const stat: Stat = channel === 'melee' ? 'STR' : channel === 'ranged' ? 'DEX'
-    : channel === 'magic' ? 'INT' : channel === 'voice' ? 'CHA' : 'WIS'
+  // Fight at the range this monster is built for — AUTHORED, not inferred.
+  // See CLASS_BASIC in types.ts for why every attempt to derive this from the
+  // loadout produced a monster fighting at the wrong range.
+  const spec = CLASS_BASIC[classForStats(m.stats)] ?? CLASS_BASIC.Generalist
+  const { channel, stat } = spec
   return {
     id: 'basic', name: 'Attack', stat, learnLevel: 0, type: 'damage',
     channel, target: 'enemy',
@@ -627,7 +614,7 @@ export function basicAttackFor(m: Monster): Move {
     // Volley user (reach 10.4) stood at 7.8 holding a free attack that reached
     // 6.4 and could never swing. Which is precisely the failure this move's own
     // comment describes, arriving by a different door.
-    range: bestRange * 0.8,
+    range: spec.range,
     castTime: 0.15,
     desc: 'A basic strike.',
   }

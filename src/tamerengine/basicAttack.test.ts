@@ -5,8 +5,9 @@
 import { describe, it, expect } from 'vitest'
 import { generateMonster } from '../monster'
 import { basicAttackFor, fieldLoadout } from './engine'
-import { CHANNEL_CAST_TIME, CHANNEL_RANGE, BASIC_STAT_TIER } from './types'
-import { Monster, Move } from '../core'
+import { CHANNEL_CAST_TIME, BASIC_STAT_TIER, CLASS_BASIC } from './types'
+import { reachOf } from './decide'
+import { CLASSES, Monster, Move } from '../core'
 
 const effCd = (mv: Move) => mv.cooldown * 0.9 + (mv.castTime ?? CHANNEL_CAST_TIME[mv.channel])
 const dpsOf = (mv: Move) => mv.power / effCd(mv)
@@ -66,17 +67,43 @@ describe('tamerengine — the free attack is a filler', () => {
     expect(BASIC_STAT_TIER.CHA).toBeGreaterThan(BASIC_STAT_TIER.WIS)
   })
 
-  it('still reaches from where the unit stands (channel keyed to reach)', () => {
-    // ⚠️ The basic's range must cover the standoff the unit positions itself at,
-    // or it is unusable — the bug that left ranged monsters holding a 1.28-range
-    // swing while standing at 6.8, with nothing to do between cooldowns.
+  it('⚠️ reaches from where the unit actually stands, for every class', () => {
+    // ⚠️ THE CONTRACT INVERTED, AND THAT IS THE POINT. This used to assert the
+    // basic stretched to cover the LONGEST move in the kit — which is how a
+    // Warrior that drafted one Piercing Shot ended up with a ranged free attack
+    // and fought at 6.4. The free attack is now authored per class
+    // (CLASS_BASIC) and `reachOf` closes to meet it instead.
+    //
+    // Asserted against the real `reachOf`, not a copy of its arithmetic: the
+    // previous version recomputed the standoff as `max(kit) * 0.75` and so could
+    // only ever agree with itself.
     for (const sp of SPECIES) {
-      const m = generateMonster(`br-${sp}`, { speciesId: sp, train: 850 }) as Monster
-      const dmg = m.loadout.filter((mv) => mv.type === 'damage')
-      if (!dmg.length) continue
-      const reach = Math.max(...dmg.map((mv) => mv.range ?? CHANNEL_RANGE[mv.channel]))
-      const ba = basicAttackFor(m)
-      expect(ba.range ?? 0).toBeGreaterThanOrEqual(reach * 0.75 - 0.01) // standoff is reach × 0.75
+      for (const train of [200, 500, 850, 1000]) {
+        const m = generateMonster(`br-${sp}-${train}`, { speciesId: sp, train }) as Monster
+        const withField = { ...m, loadout: fieldLoadout(m) }
+        if (!withField.loadout.some((mv) => mv.type === 'damage')) continue
+        const stand = reachOf({ m: withField } as never)
+        const ba = basicAttackFor(m)
+        expect(ba.range ?? 0).toBeGreaterThanOrEqual(stand - 0.01)
+      }
     }
+  })
+
+  it('⚠️ scales off the class PRIMARY stat, not the channel default', () => {
+    // The second inference in the same function: the stat was read off the
+    // channel (melee⇒STR), so a Rogue's knife scaled on STR and a Spellsword's
+    // enchanted blade ignored INT entirely.
+    expect(CLASS_BASIC.Rogue.channel).toBe('melee')
+    expect(CLASS_BASIC.Rogue.stat).toBe('DEX')
+    expect(CLASS_BASIC.Spellsword.stat).toBe('INT')
+    // And DEX is why no formula can replace the table: the same stat is both
+    // the knife and the bow.
+    expect(CLASS_BASIC.Ranger.channel).toBe('ranged')
+    expect(CLASS_BASIC.Ranger.stat).toBe('DEX')
+  })
+
+  it('every class has an authored basic', () => {
+    for (const c of CLASSES) expect(CLASS_BASIC[c.name]).toBeDefined()
+    expect(CLASS_BASIC.Generalist).toBeDefined()
   })
 })

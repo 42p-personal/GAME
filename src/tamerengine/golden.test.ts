@@ -92,8 +92,13 @@ const GOLDENS: Golden[] = [
     // close. The clearest single illustration of what escapes cost in tempo.
     // Dashes travel now instead of snapping: 24.2s -> 21.7s, because a
     // Backstep costs half a second of ground rather than teleporting free.
-    winner: 'B', duration: 12.9, survivors: [0, 1],
-    casts: 44, hits: 31, deaths: 1, finalHp: [0, 463],
+    // ⚠️ PER-ABILITY RANGES + THE AUTHORED FREE ATTACK. All 137 moves now carry
+    // their own reach and every class an authored basic (CLASS_BASIC), so a unit
+    // stands at the shorter of its best weapon and its own free attack rather
+    // than at whatever the longest thing in its kit happened to reach. Melee
+    // classes close instead of standing off shooting.
+    winner: 'B', duration: 15, survivors: [0, 1],
+    casts: 59, hits: 40, deaths: 1, finalHp: [0, 98],
   },
   {
     // Ranged vs melee across the full width — pins approach, stand-off and the
@@ -121,8 +126,9 @@ const GOLDENS: Golden[] = [
     // ⚠️ 8.5s -> 5.8s on the TURN RATE. A unit that cannot pivot instantly also
     // cannot kite instantly — the brawler closes because the caster has to
     // commit to a heading before it can run. Natural movement is not free.
-    winner: 'B', duration: 5.8, survivors: [0, 1],
-    casts: 10, hits: 7, deaths: 1, finalHp: [0, 385],
+    // ⚠️ Moved by the per-ability range + authored free-attack pass — see duel-melee.
+    winner: 'B', duration: 7, survivors: [0, 1],
+    casts: 16, hits: 9, deaths: 1, finalHp: [0, 451],
   },
   {
     // Front line + damage + support on both sides: targeting, taunt, healing and
@@ -160,8 +166,9 @@ const GOLDENS: Golden[] = [
     // is exactly the one it can tip. The paired sweep is the arbiter, not this.
     // ⚠️ Slower escapes cost the ESCAPER, not the fight. A retreat you can watch
     // is a retreat that can be caught.
-    winner: 'B', duration: 21, survivors: [0, 3],
-    casts: 110, hits: 63, deaths: 3, finalHp: [0, 0, 0, 42, 418, 191],
+    // ⚠️ Moved by the per-ability range + authored free-attack pass — see duel-melee.
+    winner: 'A', duration: 11.9, survivors: [3, 0],
+    casts: 75, hits: 48, deaths: 3, finalHp: [103, 416, 282, 0, 0, 0],
   },
 ]
 

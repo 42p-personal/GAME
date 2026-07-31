@@ -9,7 +9,7 @@
 // imported by battle.ts, so the goldens cannot move. The two run side by side
 // until this one is tuned well enough to take over.
 // ─────────────────────────────────────────────────────────────────────────────
-import { Channel, Monster, StatusKind } from '../core'
+import { Channel, Monster, Stat, StatusKind } from '../core'
 
 export interface Vec2 { x: number; y: number }
 
@@ -539,6 +539,77 @@ export const CHANNEL_RANGE: Record<Channel, number> = {
   voice: 5.5,
   support: 6,
 }
+/**
+ * THE FREE ATTACK, AUTHORED PER CLASS — channel, reach and scaling stat.
+ *
+ * ⚠️ THIS REPLACES AN INFERENCE, AND THE INFERENCE IS THE BUG. `basicAttackFor`
+ * used to reconstruct a monster's fighting range from whichever damage move it
+ * happened to draft, and there is no version of that guess that works:
+ *   - by POWER, a ranged monster got a MELEE basic it could never reach with;
+ *   - by REACH, a Warrior that drafted one stray Piercing Shot became a RANGED
+ *     unit — STR 348 kongrath stood off at 6.4 and shot, which is what a player
+ *     watching a replay spotted, because it looks exactly as wrong as it is.
+ * Both are the same mistake: a unit's IDENTITY was being derived from its
+ * INVENTORY. The same mistake had already been found and fixed once in
+ * `reachOf`; this was the second copy. Authoring it ends the family.
+ *
+ * ⚠️ THE STAT IS AUTHORED TOO. It was derived from the channel (melee⇒STR,
+ * ranged⇒DEX, ...), so a Rogue — DEX primary, knife in hand — swung a basic that
+ * scaled off STR, and a Spellsword's enchanted blade ignored INT. The free
+ * attack now scales off the class's PRIMARY stat: what you are best at is what
+ * you hit with.
+ *
+ * ⚠️ DEX IS WHY THIS CANNOT BE DERIVED FROM THE STAT PAIR EITHER. DEX covers
+ * both the knife and the bow — Rogue (DEX/STR) is melee, Ranger (DEX/INT) is a
+ * shot, and no formula over the pair tells them apart. Only authoring does.
+ */
+/**
+ * The FOUR BANDS every class's free attack is drawn from. Channel and reach
+ * together — a band is a way of fighting, not a number.
+ *
+ * ⚠️ `support` uses the VOICE channel, not `support`. Both are mitigated by WIS
+ * so the defensive maths is identical, but `support` is the channel of heals and
+ * shields and a free attack is neither. Voice reads correctly for the whole
+ * band: an Orator's jibe and a Shaman's chant are the same kind of act.
+ */
+export const BASIC_BANDS = {
+  melee:   { channel: 'melee'  as Channel, range: 3.0 },
+  ranged:  { channel: 'ranged' as Channel, range: 8.0 },
+  magic:   { channel: 'magic'  as Channel, range: 7.0 },
+  support: { channel: 'voice'  as Channel, range: 6.0 },
+}
+export type BasicBand = keyof typeof BASIC_BANDS
+export interface BasicAttackSpec { channel: Channel; range: number; stat: Stat }
+
+/** class → which band it fights in, and the stat its free attack scales on. */
+const CLASS_BAND: Record<string, { band: BasicBand; stat: Stat }> = {
+  Tank:         { band: 'melee',   stat: 'CON' },
+  Warrior:      { band: 'melee',   stat: 'STR' },
+  Rogue:        { band: 'melee',   stat: 'DEX' },
+  Ranger:       { band: 'ranged',  stat: 'DEX' },
+  Sage:         { band: 'support', stat: 'WIS' },
+  Wizard:       { band: 'magic',   stat: 'INT' },
+  Spellsword:   { band: 'melee',   stat: 'INT' },
+  Spellshield:  { band: 'melee',   stat: 'CON' },
+  Captain:      { band: 'melee',   stat: 'STR' },
+  Orator:       { band: 'support', stat: 'CHA' },
+  Bard:         { band: 'support', stat: 'CHA' },
+  Evoker:       { band: 'magic',   stat: 'INT' },
+  Skirmisher:   { band: 'melee',   stat: 'STR' },
+  Stalker:      { band: 'ranged',  stat: 'DEX' },
+  Swashbuckler: { band: 'melee',   stat: 'DEX' },
+  Shaman:       { band: 'support', stat: 'WIS' },
+  Mystic:       { band: 'support', stat: 'WIS' },
+  Herald:       { band: 'support', stat: 'CHA' },
+  // The fallback is a fist. A Generalist has no kit identity by definition.
+  Generalist:   { band: 'melee',   stat: 'STR' },
+}
+
+export const CLASS_BASIC: Record<string, BasicAttackSpec> = Object.fromEntries(
+  Object.entries(CLASS_BAND).map(([cls, { band, stat }]) =>
+    [cls, { ...BASIC_BANDS[band], stat }]),
+)
+
 // Heavier casts root the caster briefly — that wind-up is what gives a dive a
 // window to punish a caster, and makes positioning matter.
 export const CHANNEL_CAST_TIME: Record<Channel, number> = {

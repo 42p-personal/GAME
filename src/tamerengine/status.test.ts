@@ -14,7 +14,7 @@ import { generateMonster } from '../monster'
 import { simulateFieldBattle } from './engine'
 import { FIELD_STATUS } from './status'
 import { ALL_MOVES } from '../moves'
-import { DEFAULT_TACTICS, STATUS_INFO, Move, Monster, StatusKind } from '../core'
+import { DEFAULT_TACTICS, STATUS_INFO, Move, Monster, StatusKind, classForStats } from '../core'
 import { FieldEvent } from './types'
 
 const mk = (seed: string, loadout?: Move[]): Monster => {
@@ -33,6 +33,29 @@ const certain = (name: string): Move => {
   const m = move(name)
   return { ...m, status: { ...m.status!, chance: 100 } }
 }
+/**
+ * A monster whose emergent CLASS matches a predicate, found by scanning seeds.
+ *
+ * ⚠️ A FIXTURE MUST HOLD A KIT ITS CLASS WOULD ACTUALLY DRAFT. `mk` rolls a
+ * random species, so forcing a loadout onto it can produce a Wizard holding a
+ * STR Cleave and a CHA Lullaby — and once the free attack became class-authored
+ * (CLASS_BASIC), that Wizard correctly preferred its own INT jab to two off-stat
+ * moves and cast neither. The status under test never fired, and the test read
+ * as an engine regression when the engine was right. Measured at the same time:
+ * ability share across real drafted kits went UP, 72.0% -> 77.3%.
+ *
+ * Scanning rather than hard-coding a seed: a magic seed silently stops meaning
+ * what it meant the next time species or stat data moves.
+ */
+const mkClass = (tag: string, want: (cls: string) => boolean, loadout?: Move[]): Monster => {
+  for (let i = 0; i < 400; i++) {
+    const m = mk(`${tag}${i}`, loadout)
+    if (want(classForStats(m.stats))) return m
+  }
+  throw new Error(`no monster matching ${tag} in 400 seeds`)
+}
+const VOICE_CLASSES = ['Orator', 'Bard', 'Herald']
+
 const run = (a: Monster[], b: Monster[], seed = 'st') =>
   simulateFieldBattle({ seed, teamA: a, teamB: b })
 const of = <K extends FieldEvent['kind']>(evs: FieldEvent[], k: K) =>
@@ -186,15 +209,30 @@ describe('field statuses — control and attrition', () => {
   })
 
   it('SLEEP breaks the moment the sleeper is hit', () => {
-    const A = [mk('la', [certain('Lullaby'), move('Cleave')])]
-    const B = [mk('lb')]
-    const r = run(A, B, 'sleep')
-    const naps = of(r.events, 'status').filter((e) => e.status === 'sleep')
-    expect(naps.length).toBeGreaterThan(0)
-    // It gets re-applied, which can only happen if it broke in between.
-    const victim = naps[0].id
-    const hits = of(r.events, 'hit').filter((e) => e.targetId === victim)
-    expect(hits.length).toBeGreaterThan(0)
+    // ⚠️ SCANS FOR A FIGHT WHERE SLEEP LANDS, rather than assuming one pairing
+    // will cast it. The mechanic under test is "being hit wakes the sleeper" —
+    // not "this particular Bard reaches its utility slot in this particular
+    // 8-second fight", which is what the old fixture was really asserting.
+    //
+    // It used to replace the caster's whole loadout with [Lullaby, Cleave]. That
+    // monster had no ordinary attack, and under the pre-CLASS_BASIC code a
+    // monster with no damage move got a free attack of NEGATIVE range — so it
+    // could do nothing BUT re-cast Lullaby, 16 times across a 105.8s timeout.
+    // The test passed on a bug. Measured when the free attack was authored:
+    // utility casts across real kits held at 23.5% -> 24.2%, so nothing was
+    // displaced; only this fixture's accident was.
+    for (let i = 0; i < 40; i++) {
+      const bard = mkClass(`la${i}-`, (c) => VOICE_CLASSES.includes(c))
+      const A = [{ ...bard, loadout: [certain('Lullaby'), ...bard.loadout.slice(0, 3)] }]
+      const r = run(A, [mk(`lb${i}`)], `sleep${i}`)
+      const naps = of(r.events, 'status').filter((e) => e.status === 'sleep')
+      if (!naps.length) continue
+      // It gets re-applied, which can only happen if it broke in between.
+      const hits = of(r.events, 'hit').filter((e) => e.targetId === naps[0].id)
+      expect(hits.length).toBeGreaterThan(0)
+      return
+    }
+    throw new Error('no sleep was ever applied in 40 pairings — check Lullaby')
   })
 
   it('BURN drains health over time, not on impact', () => {

@@ -37,6 +37,18 @@ export function designProblems(): string[] {
     if (!own.includes(mv.line as never)) {
       problems.push(`${mv.stat}/${mv.name}: line "${mv.line}" belongs to another stat`)
     }
+    // ⚠️ EVERY MOVE AUTHORS ITS OWN REACH. `CHANNEL_RANGE` is five numbers, and
+    // a move that falls back to it inherits its channel's distance whether or
+    // not that is what the ability is — an Assassin stiletto reached 5.6 for no
+    // reason but DEX being typed `ranged`, and the free attack's channel was
+    // reconstructed from the longest thing in a kit, which is how a STR-348
+    // Warrior ended up shooting from 6.4. Both were the same mistake: reach
+    // DERIVED instead of AUTHORED. Seed a new move with tools/authorranges.ts.
+    if (mv.range == null) {
+      problems.push(`${mv.stat}/${mv.name}: no range — author one (tools/authorranges.ts)`)
+    } else if (mv.range <= 0) {
+      problems.push(`${mv.stat}/${mv.name}: range ${mv.range} must be positive`)
+    }
   }
   // ⚠️ AND THE REVERSE DIRECTION, which was missing. The guard above catches a
   // move with no line; nothing caught a LINE_OF entry naming a move that no

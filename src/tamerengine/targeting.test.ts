@@ -29,11 +29,23 @@ function unit(m: Monster, side: FieldSide, pos: Vec2, hp = 500, maxHp = 500): Fi
 const moveNamed = (n: string) => ALL_MOVES.find((m) => m.name === n)!
 const melee = (seed: string) => ({
   ...generateMonster(seed, { speciesId: 'aegisox', train: 700 }),
-  loadout: [moveNamed('Power Strike')], // melee channel -> reach 1.6
+  loadout: [moveNamed('Power Strike')], // Duelist line -> reach ~3
 }) as Monster
+// ⚠️ AND NOW THE CLASS TOO, not just the loadout. `reachOf` takes the SHORTER of
+// the best weapon and the class's authored free attack (CLASS_BASIC), so reach
+// is no longer a property of the kit alone. grivvel derives ROGUE, whose band is
+// melee 3.0 — handing it a bow made a "ranged" fixture that classified as melee,
+// which is correct behaviour and a broken fixture. sylvaglide derives RANGER,
+// whose band is 8.0, so the reach split is pinned by class AND kit agreeing.
+//
+// ⚠️ A RANGER, NOT A STALKER. pinguox is also in the ranged band but derives
+// Stalker (DEX/WIS), whose traits lean support and which does not reliably pick
+// the wounded back-liner — the behaviour the second test is about. Ranger
+// (DEX/INT) is the archetypal ranged damage dealer, so it is the honest fixture
+// for "reach past the front line", not merely the one that goes green.
 const ranged = (seed: string) => ({
-  ...generateMonster(seed, { speciesId: 'grivvel', train: 850 }),
-  loadout: [moveNamed('Piercing Shot')], // ranged channel -> reach 8
+  ...generateMonster(seed, { speciesId: 'mantaris', train: 700 }),
+  loadout: [moveNamed('Piercing Shot')], // Volley-band reach 9, Ranger band 8
 }) as Monster
 
 describe('tamerengine — targeting split', () => {
