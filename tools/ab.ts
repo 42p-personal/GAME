@@ -14,6 +14,7 @@
 //   Requires the caller to have produced two JSON snapshots via --dump.
 //   npx tsx tools/ab.ts --dump out.json     (run once per setting)
 import { generateMonster } from '../src/monster'
+import { COMPS } from './comps'
 import { simulateFieldBattle } from '../src/tamerengine/engine'
 import { autoDeployByRole } from '../src/tamerengine/hex'
 import { FIELD_H, FIELD_W, SUDDEN_DEATH_AT } from '../src/tamerengine/types'
@@ -31,18 +32,6 @@ const OBSTACLES = [
   { x: FIELD_W * (21 / 40), y: FIELD_H * (15 / 22), w: 2.2, h: 2.2 },
   { x: FIELD_W * (13 / 40), y: FIELD_H * (11 / 22), w: 2, h: 2 },
   { x: FIELD_W * (27 / 40), y: FIELD_H * (11 / 22), w: 2, h: 2 },
-]
-const COMPS: { name: string; a: string[]; b: string[] }[] = [
-  { name: 'balanced',      a: ['kongrath', 'maelurk', 'larkessa'],          b: ['aegisox', 'strixil', 'pinguox'] },
-  { name: 'all-caster',    a: ['maelurk', 'strixil', 'archmage-aleph'],     b: ['abyssomancer', 'carcharun', 'frostwyren'] },
-  { name: 'double-front',  a: ['aegisox', 'kongrath', 'maelurk'],           b: ['ursath', 'maneleo', 'strixil'] },
-  { name: 'mixed-arcane',  a: ['lanterix', 'bruxaroo', 'carcharun'],        b: ['lurkerss', 'vespera', 'geckari'] },
-  { name: 'assassins',     a: ['grivvel', 'mantevoke', 'larkessa'],         b: ['aegisox', 'nautilux', 'frostwyren'] },
-  { name: 'support-heavy', a: ['strixil', 'koalio', 'tortavos'],            b: ['quokkade', 'carcharun', 'aegisox'] },
-  { name: 'marksmen',      a: ['pinguox', 'mantaris', 'maelurk'],           b: ['kongrath', 'aegisox', 'strixil'] },
-  { name: 'generalists',   a: ['corvaan', 'tazzik', 'abyssomancer'],        b: ['geckari', 'odonatra', 'sylvaglide'] },
-  { name: 'tank-mirror',   a: ['aegisox', 'tortavos', 'ursath'],            b: ['vipramane', 'nautilux', 'crocmaw'] },
-  { name: 'glass',         a: ['archmage-aleph', 'grivvel', 'stormlerath'], b: ['lurkerss', 'balaenix', 'stellarion'] },
 ]
 // ⚠️ POWER. Four seeds gives 40 pairs, of which a targeting change may move only
 // ~18 — and 13-vs-5 on 18 is p=0.10 however real the effect is. `--wide` runs all

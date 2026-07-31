@@ -23,6 +23,7 @@ import { simulateFieldBattle } from '../src/tamerengine/engine'
 import { autoDeployByRole } from '../src/tamerengine/hex'
 import { FIELD_H, FIELD_W, SUDDEN_DEATH_AT } from '../src/tamerengine/types'
 import { classForStats } from '../src/core'
+import { COMPS } from './comps'
 
 const mk = (id: string, sp: string, train = 850) =>
   generateMonster(id, { speciesId: sp, train }) as never
@@ -35,29 +36,22 @@ const OBSTACLES = [
   { x: FIELD_W * (27 / 40), y: FIELD_H * (11 / 22), w: 2, h: 2 },
 ]
 
-/** Ten compositions spanning the real range of teams a player can field. */
-const COMPS: { name: string; a: string[]; b: string[] }[] = [
-  { name: 'balanced',      a: ['kongrath', 'maelurk', 'larkessa'],        b: ['aegisox', 'strixil', 'pinguox'] },
-  { name: 'all-caster',    a: ['maelurk', 'strixil', 'archmage-aleph'],   b: ['abyssomancer', 'carcharun', 'frostwyren'] },
-  { name: 'double-front',  a: ['aegisox', 'kongrath', 'maelurk'],         b: ['ursath', 'maneleo', 'strixil'] },
-  { name: 'mixed-arcane',  a: ['lanterix', 'bruxaroo', 'carcharun'],      b: ['lurkerss', 'vespera', 'geckari'] },
-  { name: 'assassins',     a: ['grivvel', 'mantevoke', 'larkessa'],       b: ['aegisox', 'nautilux', 'frostwyren'] },
-  { name: 'support-heavy', a: ['strixil', 'koalio', 'tortavos'],          b: ['quokkade', 'carcharun', 'aegisox'] },
-  { name: 'marksmen',      a: ['pinguox', 'mantaris', 'maelurk'],         b: ['kongrath', 'aegisox', 'strixil'] },
-  { name: 'generalists',   a: ['corvaan', 'tazzik', 'abyssomancer'],      b: ['geckari', 'odonatra', 'sylvaglide'] },
-  { name: 'tank-mirror',   a: ['aegisox', 'tortavos', 'ursath'],          b: ['vipramane', 'nautilux', 'crocmaw'] },
-  { name: 'glass',         a: ['archmage-aleph', 'grivvel', 'stormlerath'], b: ['lurkerss', 'balaenix', 'stellarion'] },
-]
 const SEED_BATCHES = [
   ['s1', 's2', 's3', 's4'], ['q1', 'q2', 'q3', 'q4'], ['z1', 'z2', 'z3', 'z4'],
   ['m1', 'm2', 'm3', 'm4'], ['k1', 'k2', 'k3', 'k4'],
 ]
 
 interface Run { resolved: number; fights: number; dur: number; kills: number; dmg: number
-  byClass: Map<string, { dmg: number; casts: number; n: number }> }
+  byClass: Map<string, { dmg: number; casts: number; n: number }>
+  // ⚠️ PER-COMPOSITION, because "composition is a variable" is the instrument's
+  // founding claim and it could not be READ from the output — only the total was
+  // reported, so a shape that grinds while the rest resolve was invisible. That
+  // is exactly the signal focus fire has to be judged on.
+  byComp: Map<string, { resolved: number; fights: number; dur: number; kills: number
+    firstKill: number; firstKills: number }> }
 
 function runBatch(seeds: string[], train = 850): Run {
-  const out: Run = { resolved: 0, fights: 0, dur: 0, kills: 0, dmg: 0, byClass: new Map() }
+  const out: Run = { resolved: 0, fights: 0, dur: 0, kills: 0, dmg: 0, byClass: new Map(), byComp: new Map() }
   for (const comp of COMPS) for (const sd of seeds) {
     const A = comp.a.map((s, i) => mk(`${sd}${comp.name}a${i}`, s, train))
     const B = comp.b.map((s, i) => mk(`${sd}${comp.name}b${i}`, s, train))
@@ -69,6 +63,17 @@ function runBatch(seeds: string[], train = 850): Run {
       obstacles: OBSTACLES, placeA: autoDeployByRole('A', A.map(front)), placeB: autoDeployByRole('B', B.map(front)) })
     out.fights++; out.dur += r.duration
     if (r.duration < SUDDEN_DEATH_AT) out.resolved++
+    const cs = out.byComp.get(comp.name)
+      ?? { resolved: 0, fights: 0, dur: 0, kills: 0, firstKill: 0, firstKills: 0 }
+    cs.fights++; cs.dur += r.duration
+    if (r.duration < SUDDEN_DEATH_AT) cs.resolved++
+    // ⚠️ TIME TO FIRST KILL is the focus-fire metric. Damage spread evenly over a
+    // whole side means nobody crosses the death threshold until very late, and
+    // total damage cannot see that — a fight can deal the MOST damage in the
+    // sweep and still kill nobody until the clock runs down.
+    const fk = (r.events as never as { kind: string; t: number }[]).find((e) => e.kind === 'death')
+    if (fk) { cs.firstKill += fk.t; cs.firstKills++ }
+    out.byComp.set(comp.name, cs)
     const cls = new Map<string, string>()
     A.forEach((m, i) => cls.set('A' + i, classForStats((m as never as { stats: never }).stats)))
     B.forEach((m, i) => cls.set('B' + i, classForStats((m as never as { stats: never }).stats)))
@@ -76,7 +81,7 @@ function runBatch(seeds: string[], train = 850): Run {
       const s = out.byClass.get(c) ?? { dmg: 0, casts: 0, n: 0 }; s.n++; out.byClass.set(c, s)
     }
     for (const e of r.events as never as { kind: string; id: string; dmg: number }[]) {
-      if (e.kind === 'death') out.kills++
+      if (e.kind === 'death') { out.kills++; cs.kills++ }
       if (e.kind === 'hit') { out.dmg += e.dmg
         const c = cls.get(e.id); if (c) { const s = out.byClass.get(c)!; s.dmg += e.dmg } }
       if (e.kind === 'cast') { const c = cls.get(e.id); if (c) { const s = out.byClass.get(c)!; s.casts++ } }
@@ -96,6 +101,14 @@ if (!noise) {
   console.log(`40-MATCHUP SWEEP — 10 compositions x 4 seeds, train 850\n`)
   console.log('               resolved       dur   kills  dmg/fight')
   console.log(line('total', r))
+  console.log('')
+  console.log('by composition        resolved   dur   kills   1st kill')
+  for (const [n, c] of r.byComp) {
+    console.log(`  ${n.padEnd(22)}${(c.resolved + '/' + c.fights).padStart(5)}`
+      + `${(c.dur / c.fights).toFixed(1)}s`.padStart(8)
+      + String(c.kills).padStart(7)
+      + `${c.firstKills ? (c.firstKill / c.firstKills).toFixed(1) + 's' : 'none'}`.padStart(11))
+  }
   console.log('\ndamage by class (per fight):')
   for (const [c, s] of [...r.byClass].sort((a, b) => b[1].dmg - a[1].dmg))
     console.log('  ', c.padEnd(13), 'dmg', String(Math.round(s.dmg / r.fights)).padStart(5),
