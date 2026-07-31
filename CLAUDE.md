@@ -299,7 +299,6 @@ The pool rework is DONE (137 moves, 18 lines, all six stats). Still outstanding,
    **`docs/HANDOVER_area_consolidation.md`** — read it before starting.
 6. **Freeze the goldens.** They moved 22 times in one day during the rework. A golden that moves that
    often is a changelog, not a regression detector — capture once now the pool is stable.
-7. **`docs/ABILITIES.md` is stale** — still the pre-rework 90.
 
 ---
 
@@ -313,7 +312,7 @@ The pool rework is DONE (137 moves, 18 lines, all six stats). Still outstanding,
 | `src/App.tsx` | UI: TownView, RanchView, AbilitySelector, EventModal, saves, migration |
 | `src/core.ts` | Types, classes, MoveEffects, Tactics, GAMEPLANS, Rival, foods, RNG, the three ability axes (`statScale`/`mana`/`variance`), `HARD_CONTROL_STATUSES` |
 | `src/species.ts` | **65 species** = 13 body types x 5 (30 base + 15 prestige + 20 fusion) + computed BODY_AVERAGES |
-| `src/moves.ts` | The **137**-move pool, 23/stat (WIS 22), grouped into 18 lines. ⚠️ `docs/ABILITIES.md` still lists the PRE-REWORK 90 and is stale; `docs/ABILITY_REWORK.md` is the live design doc |
+| `src/moves.ts` | The **137**-move pool, 23/stat (WIS 22), grouped into 18 lines. `docs/ABILITIES.md` is GENERATED from it (`npx tsx tools/genabilities.ts`); `docs/ABILITY_REWORK.md` is the live design doc |
 | `src/lines.ts` | The 18 ability LINES, per-class affinity (`CLASS_LINES`), and `LINE_OF` for every move. ⚠️ The fix for three waves of authored-but-unreachable content |
 | `tools/sweep40.ts` | The balance instrument: 40 matchups over 10 compositions. `--noise` reports its own error band |
 | `tools/ab.ts` | Paired A/B for balance constants — runs the SAME fights under both settings and judges with a sign test |
@@ -329,7 +328,7 @@ The pool rework is DONE (137 moves, 18 lines, all six stats). Still outstanding,
 | `docs/LOOP_DESIGN.md` | The fun-loop design + phase plan (events/rivals/gameplans/report/meta) |
 | `docs/ART_PIPELINE.md` | **How every image in the game gets made** — both routes, their failure modes, post-processing. Read this BEFORE concluding art can't be generated. |
 | `docs/BATTLE_SPRITES.md` | The 128x128 side-profile battle sprite set (6 frames/species) + why it's separate from the portraits |
-| `docs/BESTIARY.md` / `docs/ABILITIES.md` | Full lore doc / full move reference (⚠️ ABILITIES.md still lists the pre-rework 90) |
+| `docs/BESTIARY.md` / `docs/ABILITIES.md` | Full lore doc / full move reference (ABILITIES.md is GENERATED — `npx tsx tools/genabilities.ts`, never hand-edit) |
 | `docs/GAME_DESIGN.md` | Original design doc — stale in places; CLAUDE.md + code are more current |
 | `version.md` | **Full version history / changelog** — per-version rationale + the load-bearing ⚠️ invariants (newest first) |
 

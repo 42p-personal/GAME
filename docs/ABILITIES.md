@@ -1,196 +1,473 @@
-# Abilities — The 90-Move Pool
+# The Ability Pool
 
-15 skills per stat (STR/DEX/CON/WIS/INT/CHA), learned automatically once that stat crosses the listed
-threshold (`LEARN_LADDER`, `src/moves.ts`). Every skill costs MP — Attack and Block are the only free
-actions. A monster equips 3 at a time via the Ability Selection UI (`AbilitySelector`, `src/App.tsx`);
-the rest sit in its learned pool, swappable any time outside an active tournament week.
+> **Generated — do not hand-edit.** `npx tsx tools/genabilities.ts` rewrites this
+> file from `src/moves.ts`. It went stale once by being written by hand; a
+> reference maintained alongside 137 authored moves will always lose that race.
 
-**Nothing lasts "for the fight" anymore.** Every buff and debuff is round-limited (see the Dur column)
-and expires on its own — re-casting the same move refreshes its remaining duration rather than stacking a
-second copy. Cooldowns are tuned so a buff/debuff can't stay up permanently; there's always real
-downtime between windows.
+**137 abilities** across six stats and **18 lines**. A line is a group to
+draw from, not a track you commit to — `CLASS_LINES` gives a class affinity for three
+of them, and `chooseLoadout` multiplies affine moves by 1.35 so off-line picks stay
+reachable.
 
-**Columns:** Lvl = stat threshold to learn · MP = mana cost (`monster.ts:manaCost`, derived from power/
-hits, not authored directly) · CD = cooldown in turns · Dur = rounds a buff/debuff stays active (blank =
-not a duration effect — guard/ward/heal/cleanse resolve instantly or as a resource pool) · Acc = accuracy
-% · Pwr = base power (per hit, for multi-hit moves) · Target = who it can hit.
+Reading the numbers:
+
+- **pwr** is the MID-POINT of a damage range, not a fixed number; **±** is the spread.
+- **scale** is `statScale` — damage is `pwr × (1 + stat × scale)`, so a high-scaling
+  move rewards training the stat rather than just having the move.
+- **mp** prices EFFECTIVENESS, not power. `Blood Price` is cheap because it is paid
+  for in blood.
+- **rng** is field reach in world units (the arena is 40 × 22).
+- AoE damage is judged at THREE targets, never one — `aoeFalloff` is
+  −5%/extra target, floored at 40%, so three bodies is ×2.70 of a single hit.
+- **Bold** keywords are HARD control (they take an action away).
+
+## Which lines a class draws from
+
+| class | lines |
+|---|---|
+| Tank | Guardian · Warden · Warcry |
+| Warrior | Duelist · Bloodrage · Bulwark |
+| Rogue | Assassin · Venomcraft · Duelist |
+| Ranger | Volley · Assassin · Elementalist |
+| Sage | Mender · Siphon · Hexer |
+| Wizard | Hexer · Elementalist · Disruptor |
+| Spellsword | Arcanist · Elementalist · Bulwark |
+| Spellshield | Guardian · Bulwark · Mender |
+| Captain | Captain · Warcry · Duelist |
+| Orator | Demagogue · Enchanter · Disruptor |
+| Bard | Captain · Enchanter · Volley |
+| Evoker | Elementalist · Arcanist · Volley |
+| Skirmisher | Bloodrage · Duelist · Assassin |
+| Stalker | Assassin · Venomcraft · Siphon |
+| Swashbuckler | Volley · Assassin · Demagogue |
+| Shaman | Mender · Disruptor · Guardian |
+| Mystic | Mender · Siphon · Venomcraft |
+| Herald | Captain · Demagogue · Warcry |
+
+## STR
+
+23 abilities · lines: Bloodrage · Duelist · Warcry
+
+### Bloodrage
+
+| lv | ability | type | pwr | ± | scale | mp | cd | acc | rng | keywords |
+|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| 40 | **Scrap** | damage/melee | 14 | ±15% | 1/320 | 4 | 1 | 95 | 2.5 | — |
+| 120 | **Enrage** | buff/support | — | — | — | 14 | 5 | 100 | 5.1 | atk + |
+| 240 | **Blood Price** | damage/melee | 39 | ±20% | 1/240 | 10 | 3 | 90 | 2.5 | recoil |
+| 380 | **Reckless Slam** | damage/melee | 63 | ±25% | 1/205 | 26 | 4 | 85 | 2.5 | recoil, move |
+| 540 | **Last Stand** | buff/support | — | — | — | 30 | 7 | 100 | 5.1 | atk +, def + |
+| 700 | **Blood Fury** | damage/melee | 46 | ±30% | 1/153 | 24 | 3 | 88 | 2.5 | hp scaling |
+| 920 | **Titanfall** | damage/melee | 127 | ±25% | 1/130 | 52 | 6 | 80 | 2.5 | pierce, recoil, move, push |
+
+- **Scrap** — A cheap, scrappy swing — what you throw while the rage builds.
+- **Enrage** — Works itself into a fury: +20% damage for 3 rounds.
+- **Blood Price** — Swung with everything, including what it costs you. Cheap in mana because it is paid for in blood.
+- **Reckless Slam** — A scorching, reckless haymaker; it burns the arm that throws it.
+- **Last Stand** — Digs in and stops retreating: +30% damage and +10 mitigation for 3 rounds.
+- **Blood Fury** — Feeble while it is still whole, and terrifying once it is not — this blow feeds on its own wounds.
+- **Titanfall** — Colossal blow that partly ignores defence; 15% recoil.
+
+### Duelist
+
+| lv | ability | type | pwr | ± | scale | mp | cd | acc | rng | keywords |
+|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| 90 | **Power Strike** | damage/melee | 26 | ±10% | 1/295 | 16 | 2 | 90 | 3 | recoil, move |
+| 200 | **Sunder** | debuff/melee | 16 | ±10% | 1/253 | 14 | 3 | 90 | 3 | def − |
+| 260 | **Riposte** | buff/support | — | — | — | 18 | 4 | 100 | 6 | thorns, def + |
+| 300 | **Headbutt** | damage/melee | 33 | ±15% | 1/223 | 16 | 3 | 90 | 3 | **stun** |
+| 330 | **Bonebreaker** | damage/melee | 38 | ±15% | 1/216 | 22 | 4 | 85 | 3 | vulnerable, def − |
+| 480 | **Rend** | damage/melee | 34 | ±15% | 1/185 | 18 | 3 | 85 | 3 | bleed |
+| 780 | **Bloodletter** | damage/melee | 18 | ±35% | 1/144 | 30 | 5 | 85 | 3 | multi-hit, detonate |
+| 850 | **Executioner** | damage/melee | 64 | ±10% | 1/136 | 28 | 4 | 90 | 3 | execute, detonate, move, backstab |
+
+- **Power Strike** — A heavy, committed blow, thrown exactly where it was aimed.
+- **Sunder** — Splits the guard rather than the body: −12 mitigation for 3 rounds. The setup STR never had.
+- **Riposte** — Takes the blow to answer it: returns 10 damage on every hit for 2 rounds.
+- **Headbutt** — Short, ugly, and it rings their bell.
+- **Bonebreaker** — Shatters defence and leaves them open — the opener Executioner is waiting on.
+- **Rend** — Opens a wound that keeps opening. Bleed here; Bonebreaker handles armour.
+- **Bloodletter** — A weak flurry, 3–5 strikes — unless the target is Bleeding, and then it drinks the wound.
+- **Executioner** — The closing blow: brutal against the weakened, and devastating against the Vulnerable.
+
+### Warcry
+
+| lv | ability | type | pwr | ± | scale | mp | cd | acc | rng | keywords |
+|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| 40 | **Guard** | buff/support | — | — | — | 6 | 3 | 100 | 6.9 | guard |
+| 160 | **Cleave** | damage/melee | 30 | ±20% | 1/267 | 22 | 3 | 85 | 3.4 | cone AoE |
+| 220 | **Intimidate** | debuff/voice | — | — | — | 20 | 5 | 95 | 6.3 | **fear**, atk −, circle AoE |
+| 400 | **Challenge** | debuff/voice | — | — | — | 16 | 4 | 100 | 6.3 | taunt, atk − |
+| 560 | **Bracer** | buff/support | — | — | — | 20 | 4 | 100 | 6.9 | guard |
+| 600 | **Whirlwind** | damage/melee | 51 | ±20% | 1/166 | 34 | 4 | 88 | 3.4 | circle AoE |
+| 650 | **Earthshaker** | damage/melee | 66 | ±25% | 1/159 | 40 | 5 | 80 | 3.4 | **stun**, circle AoE, push, slow |
+| 820 | **Warlord's Roar** | buff/support | — | — | — | 44 | 6 | 100 | 6 | atk +, acc + |
+
+- **Guard** — Brace against the next hits.
+- **Cleave** — A horizontal sweep through everything in front of it — weak into one body, brutal into three.
+- **Intimidate** — A roar with a body behind it: the nearest of them break and run.
+- **Challenge** — Singles one out and dares it. It comes for you, and it swings softer for the insult.
+- **Bracer** — A hard defensive set — Guard is the cheap answer, this is the committed one.
+- **Whirlwind** — Spins through everything within reach. Pure volume, no rider.
+- **Earthshaker** — A shockwave that fells whatever is standing near it.
+- **Warlord's Roar** — STR's one team buff, and of course it is a shout: the whole line hits harder and truer for 3 rounds.
+
+## DEX
+
+23 abilities · lines: Assassin · Venomcraft · Volley
+
+### Assassin
+
+| lv | ability | type | pwr | ± | scale | mp | cd | acc | rng | keywords |
+|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| 120 | **Shadowstep** | damage/ranged | 46 | ±15% | 1/282 | 16 | 4 | 92 | 5.6 | move, backstab |
+| 200 | **Ambush** | damage/ranged | 42 | ±20% | 1/253 | 18 | 3 | 92 | 5.6 | first strike |
+| 300 | **Vanish** | buff/support | — | — | — | 22 | 6 | 100 | 4.2 | dodge +, fade |
+| 340 | **Smoke Bomb** | debuff/ranged | — | — | — | 20 | 5 | 100 | 5.6 | blind, acc −, circle AoE, fade |
+| 420 | **Hamstring** | damage/ranged | 51 | ±15% | 1/196 | 16 | 3 | 90 | 5.6 | root |
+| 600 | **Throat Cut** | damage/ranged | 80 | ±10% | 1/166 | 30 | 5 | 90 | 5.6 | **silence** |
+| 850 | **Heartseeker** | damage/ranged | 39 | ±30% | 1/136 | 26 | 4 | 92 | 5.6 | multi-hit, execute |
+
+- **Shadowstep** — Steps through the shadow behind them. The only reliable way past a front line.
+- **Ambush** — Devastating on someone who has not swung yet — worthless once they have seen you.
+- **Vanish** — Gone. Attackers lose interest and swing at whoever is left.
+- **Smoke Bomb** — Blinds everything close and covers the exit — the setup Ambush wants.
+- **Hamstring** — Cuts the leg out from under them. They keep fighting; they stop leaving.
+- **Throat Cut** — Quiet, precise, and it ends the casting. What the Assassin line exists to do.
+- **Heartseeker** — Two or three finding strikes, lethal against anything already failing.
+
+### Venomcraft
+
+| lv | ability | type | pwr | ± | scale | mp | cd | acc | rng | keywords |
+|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| 90 | **Piercing Shot** | damage/ranged | 26 | ±20% | 1/295 | 14 | 2 | 90 | 8 | poison, multi-hit, contagion |
+| 180 | **Toxin Stack** | damage/ranged | 29 | ±15% | 1/260 | 10 | 2 | 92 | 8 | poison |
+| 280 | **Twin Fangs** | damage/ranged | 19 | ±25% | 1/229 | 14 | 2 | 90 | 8 | bleed, multi-hit |
+| 400 | **Paralytic Dart** | damage/ranged | 58 | ±15% | 1/200 | 22 | 4 | 90 | 8 | **stun** |
+| 560 | **Virulence** | damage/ranged | 56 | ±20% | 1/172 | 20 | 5 | 90 | 8 | detonate |
+| 740 | **Plague Shot** | damage/ranged | 49 | ±20% | 1/148 | 34 | 5 | 85 | 8 | poison, contagion, circle AoE |
+
+- **Piercing Shot** — One or two venom-tipped shots, and the venom may pass to a neighbour.
+- **Toxin Stack** — A cheap second dose. Poison is the point; the dart barely matters.
+- **Twin Fangs** — Two quick shots that open a wound — bleed here, poison everywhere else in the line.
+- **Paralytic Dart** — DEX's one hard control: a neurotoxin that drops them where they stand.
+- **Virulence** — Feeble on clean blood, ruinous on poisoned — the payoff the whole line builds toward.
+- **Plague Shot** — Poison that jumps between bodies. It rewards an enemy that stands together.
+
+### Volley
+
+| lv | ability | type | pwr | ± | scale | mp | cd | acc | rng | keywords |
+|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| 40 | **Sling** | damage/ranged | 14 | ±30% | 1/320 | 5 | 1 | 95 | 10.4 | multi-hit |
+| 40 | **Sidestep** | buff/support | — | — | — | 8 | 4 | 100 | 7.8 | dodge + |
+| 160 | **Acrobatics** | buff/support | — | — | — | 12 | 4 | 100 | 7.8 | dodge + |
+| 240 | **Focus Aim** | buff/support | — | — | — | 14 | 5 | 100 | 7.8 | acc + |
+| 330 | **Pin Down** | damage/ranged | 51 | ±15% | 1/216 | 18 | 3 | 88 | 10.4 | pull, root |
+| 470 | **Gambler's Volley** | damage/ranged | 11 | ±50% | 1/187 | 20 | 3 | 85 | 8 | multi-hit |
+| 500 | **Ricochet** | damage/ranged | 37 | ±30% | 1/181 | 26 | 4 | 88 | 10.4 | multi-hit, circle AoE |
+| 650 | **Rain of Arrows** | damage/ranged | 56 | ±25% | 1/159 | 34 | 5 | 85 | 10.4 | circle AoE, push |
+| 680 | **Pinning Volley** | damage/ranged | 52 | ±20% | 1/155 | 32 | 5 | 88 | 10.4 | circle AoE, root |
+| 920 | **Deadeye** | damage/ranged | 142 | ±5% | 1/130 | 44 | 6 | 95 | 10.4 | — |
+
+- **Sling** — One or two quick shots. Cheap enough to throw all day.
+- **Sidestep** — Footwork. Small, cheap, and always available.
+- **Acrobatics** — A tumbling, weaving burst — almost untouchable, but only for a moment.
+- **Focus Aim** — Steadies the breathing. The gambler choosing, briefly, not to gamble.
+- **Pin Down** — Suppressing fire that drags them out of position and holds them there.
+- **Gambler's Volley** — Everything in the quiver, all at once, aimed roughly. Anywhere from a scratch to a slaughter.
+- **Ricochet** — One shot, several bodies. It bounces, and it does not much care whose.
+- **Rain of Arrows** — A bombardment onto a chosen patch of ground — it punishes standing together.
+- **Pinning Volley** — Nails several of them to the spot at once.
+- **Deadeye** — One shot. It goes exactly where it was sent.
+
+## CON
+
+23 abilities · lines: Warden · Guardian · Bulwark
+
+### Warden
+
+| lv | ability | type | pwr | ± | scale | mp | cd | acc | rng | keywords |
+|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| 140 | **Body Slam** | damage/melee | 19 | ±20% | 1/274 | 14 | 2 | 90 | 3.4 | **knockback**, move, push |
+| 160 | **Seize** | damage/melee | 17 | ±15% | 1/267 | 14 | 3 | 90 | 3.4 | pull, root |
+| 240 | **Shield Wall** | control/support | — | — | — | 30 | 6 | 100 | 6.9 | guard, zone |
+| 300 | **Quagmire Stomp** | damage/melee | 23 | ±20% | 1/223 | 30 | 5 | 85 | 3.4 | **knockback**, circle AoE, slow |
+| 380 | **Barricade** | control/support | — | — | — | 26 | 6 | 100 | 6.9 | def +, zone |
+| 460 | **Tremor** | damage/melee | 23 | ±20% | 1/189 | 28 | 4 | 88 | 3.4 | circle AoE, slow |
+| 520 | **Zone of Control** | control/support | — | — | — | 28 | 5 | 100 | 6.9 | thorns, zone |
+| 620 | **Crushing Grip** | damage/melee | 34 | ±15% | 1/163 | 26 | 4 | 90 | 3.4 | root |
+| 700 | **Earthen Grasp** | damage/melee | 25 | ±15% | 1/153 | 36 | 6 | 85 | 3.4 | circle AoE, root |
+
+- **Body Slam** — Throws its bulk into them and sends them reeling.
+- **Seize** — Clamps on and hauls them in. They can still fight; they cannot leave.
+- **Shield Wall** — Plants a wall and holds it: +14 mitigation, and the ground around it becomes a slog.
+- **Quagmire Stomp** — Churns the footing out from under the whole line.
+- **Barricade** — Throws up cover and settles in behind it — the crossing in front becomes slow and costly.
+- **Tremor** — The ground shudders. Everything nearby is slowed and staggered.
+- **Zone of Control** — Nothing moves well beside it, and everything that tries gets clipped.
+- **Crushing Grip** — Takes hold and squeezes. It is not going anywhere while this lasts.
+- **Earthen Grasp** — Stone closes on every ankle in reach. The Warden capstone: nobody leaves.
+
+### Guardian
+
+| lv | ability | type | pwr | ± | scale | mp | cd | acc | rng | keywords |
+|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| 90 | **Taunt** | debuff/support | — | — | — | 10 | 4 | 100 | 6 | atk −, taunt |
+| 120 | **Barbed Carapace** | buff/support | — | — | — | 24 | 5 | 100 | 6 | def +, thorns |
+| 200 | **Steady Vigil** | buff/support | 20 | ±15% | 1/253 | 18 | 4 | 100 | 6 | hp regen |
+| 340 | **Interpose** | buff/support | — | — | — | 24 | 5 | 100 | 6 | ward, def + |
+| 650 | **Bulwark's Challenge** | debuff/support | — | — | — | 40 | 6 | 100 | 6 | guard, taunt, circle AoE |
+| 760 | **Aegis of the Fallen** | buff/support | — | — | — | 48 | 7 | 100 | 6 | ward, def + |
+
+- **Taunt** — Enrages one of them into coming for you, and swinging softer for it.
+- **Barbed Carapace** — The whole line bristles: +4 mitigation and 6 damage returned on every hit.
+- **Steady Vigil** — Stands over a wounded ally: heals, then keeps healing.
+- **Interpose** — Steps in front of an ally: a 34 HP shield and +8 mitigation, put where it is needed rather than kept.
+- **Bulwark's Challenge** — Plants its feet and roars: massive guard, and the WHOLE enemy team comes for it.
+- **Aegis of the Fallen** — A shield over every ally at once — 45 HP of absorb each, and armour under it.
+
+### Bulwark
+
+| lv | ability | type | pwr | ± | scale | mp | cd | acc | rng | keywords |
+|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| 40 | **Brace** | buff/support | — | — | — | 5 | 2 | 100 | 5.1 | guard |
+| 240 | **Bastion** | buff/support | — | — | — | 16 | 4 | 100 | 5.1 | ward |
+| 280 | **Overrun** | damage/melee | 24 | ±20% | 1/229 | 18 | 3 | 88 | 2.5 | **knockback**, move, push |
+| 380 | **Shell Slam** | damage/melee | 28 | ±20% | 1/205 | 22 | 3 | 85 | 2.5 | recoil, hp scaling |
+| 430 | **Fortify** | buff/support | — | — | — | 44 | 5 | 100 | 5.1 | ward |
+| 600 | **Retaliate** | buff/support | — | — | — | 22 | 4 | 100 | 5.1 | thorns, def + |
+| 780 | **Vital Surge** | buff/support | 50 | ±15% | 1/144 | 34 | 6 | 100 | 5.1 | cleanse |
+| 850 | **Colossus Crash** | damage/melee | 45 | ±20% | 1/136 | 32 | 5 | 85 | 2.5 | guard, %max HP, spend ward, move, push |
+
+- **Brace** — Small, cheap, always there.
+- **Bastion** — Raise a 25 HP absorb shield. Fortify is the version for everyone else.
+- **Overrun** — Charges straight through: damage and a shove, paid for with momentum.
+- **Shell Slam** — Hits hardest while the shell is whole, and fades as its own health fails.
+- **Fortify** — A 40 HP absorb shield on every ally. Uncapped reach, priced in mana.
+- **Retaliate** — Answers everything: 16 damage returned per hit for 2 rounds.
+- **Vital Surge** — Shrugs it all off and knits shut. CON heals ITSELF; healing others is WIS.
+- **Colossus Crash** — A crushing advance that braces after the blow; the bigger they are, the more it takes.
+
+## WIS
+
+22 abilities · lines: Disruptor · Mender · Siphon
+
+### Disruptor
+
+| lv | ability | type | pwr | ± | scale | mp | cd | acc | rng | keywords |
+|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| 200 | **Silencing Spike** | damage/support | 22 | ±15% | 1/253 | 18 | 2 | 90 | 6.9 | **silence**, mana burn |
+| 300 | **Wither** | damage/support | 23 | ±15% | 1/223 | 20 | 4 | 90 | 6.9 | lifesteal, mana burn |
+| 320 | **Null Field** | control/support | — | — | — | 34 | 6 | 100 | 6.9 | mp regen, zone |
+| 380 | **Enfeeble** | debuff/support | — | — | — | 22 | 4 | 95 | 6.9 | atk −, acc − |
+| 420 | **Hush** | control/support | — | — | — | 18 | 4 | 95 | 6.9 | **silence** |
+| 540 | **Field of Doom** | debuff/support | — | — | — | 26 | 5 | 95 | 6.9 | doom, atk − |
+| 700 | **Dread Whisper** | debuff/support | — | — | — | 28 | 5 | 95 | 6.9 | **fear** |
+| 780 | **Mind Crush** | damage/support | 50 | ±15% | 1/144 | 34 | 5 | 85 | 6.9 | mana burn, detonate |
+
+- **Silencing Spike** — A psychic jab that drinks 13 MP and can close the throat entirely.
+- **Wither** — Saps them round on round and feeds you what it takes.
+- **Null Field** — A patch of dead air. Nothing casts well inside it, including what walks in.
+- **Enfeeble** — They hit softer and they miss more. The Disruptor pressure debuff.
+- **Hush** — No damage, no flourish — just silence, reliably, for three rounds.
+- **Field of Doom** — A dampening field, and a clock. Mind Crush knows what to do with the clock.
+- **Dread Whisper** — WIS's one hard control: a word in the ear, and they run.
+- **Mind Crush** — A heavy psychic blow that detonates their Doom early. The payoff.
+
+### Mender
+
+| lv | ability | type | pwr | ± | scale | mp | cd | acc | rng | keywords |
+|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| 40 | **Mend** | buff/support | 16 | ±15% | 1/320 | 8 | 3 | 100 | 6 | — |
+| 120 | **Clarity** | buff/support | — | — | — | 12 | 3 | 100 | 6 | cleanse |
+| 260 | **Renewal** | buff/support | 8 | ±15% | 1/234 | 18 | 4 | 100 | 6 | hp regen |
+| 430 | **Tranquility** | buff/support | 34 | ±15% | 1/194 | 26 | 5 | 100 | 6 | — |
+| 560 | **Rebuke** | damage/support | 37 | ±20% | 1/172 | 24 | 4 | 90 | 6 | — |
+| 650 | **Ward Against Ruin** | buff/support | 20 | ±15% | 1/159 | 46 | 7 | 100 | 6 | cleanse, mp regen |
+
+- **Mend** — Soothing focus, given to somebody else. WIS is the only stat that can.
+- **Clarity** — Clears an ally's head — confusion, charm, fear, all of it.
+- **Renewal** — Not a burst but a tide: 8 HP a round for four rounds.
+- **Tranquility** — Deep restorative calm channelled into one ally.
+- **Rebuke** — The healer answers back. A mender is not the same thing as a bystander.
+- **Ward Against Ruin** — Clears the whole team's ailments and mends 20 HP each. The Mender capstone.
+
+### Siphon
+
+| lv | ability | type | pwr | ± | scale | mp | cd | acc | rng | keywords |
+|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| 90 | **Mana Sap** | damage/support | 16 | ±15% | 1/295 | 8 | 2 | 92 | 5.1 | mana burn |
+| 140 | **Mind Spike** | damage/support | 19 | ±15% | 1/274 | 8 | 2 | 92 | 5.1 | — |
+| 160 | **Serenity** | buff/support | — | — | — | 12 | 5 | 100 | 5.1 | mp regen, dodge + |
+| 240 | **Attunement** | buff/support | — | — | — | 30 | 4 | 100 | 5.1 | mp regen |
+| 380 | **Drain Spirit** | damage/support | 29 | ±15% | 1/205 | 20 | 4 | 88 | 5.1 | mana burn, lifesteal |
+| 600 | **Spirit Siphon** | damage/support | 43 | ±20% | 1/166 | 30 | 5 | 88 | 5.1 | mana burn, lifesteal |
+| 820 | **Judgement** | damage/support | 65 | ±20% | 1/139 | 38 | 6 | 88 | 5.1 | — |
+| 850 | **Providence** | buff/support | 12 | ±15% | 1/136 | 40 | 7 | 100 | 5.1 | cleanse, hp regen |
+
+- **Mana Sap** — Drinks 14 MP straight out of them. Once the worst move in the game; now a real theft.
+- **Mind Spike** — A cheap psychic jab — the filler WIS never had and could never afford.
+- **Serenity** — Calm flow. The one self-regen — the other three were the same move wearing hats.
+- **Attunement** — Links the team's focus: everyone regains mana faster. Distinct from Serenity by REACH.
+- **Drain Spirit** — Takes both at once — their mana, and a share of their blood.
+- **Spirit Siphon** — Holds on and drains, HP and MP together, for as long as it lasts.
+- **Judgement** — A real capstone HIT rather than one more aura. WIS can end things too.
+- **Providence** — Sees what is coming: clears the team and steadies it. Restoration — empowerment is CHA.
+
+## INT
+
+23 abilities · lines: Hexer · Elementalist · Arcanist
+
+### Hexer
+
+| lv | ability | type | pwr | ± | scale | mp | cd | acc | rng | keywords |
+|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| 40 | **Ember** | damage/magic | 15 | ±20% | 1/320 | 6 | 2 | 90 | 6.3 | burn |
+| 120 | **Fracturing Stones** | damage/magic | 26 | ±20% | 1/282 | 14 | 2 | 90 | 6.3 | vulnerable |
+| 200 | **Cinderburst** | damage/magic | 40 | ±15% | 1/253 | 20 | 3 | 88 | 6.3 | detonate |
+| 280 | **Sap Will** | debuff/magic | — | — | — | 18 | 4 | 95 | 6.3 | atk − |
+| 340 | **Arcane Bomb** | damage/magic | 54 | ±20% | 1/214 | 26 | 4 | 88 | 6.3 | detonate, circle AoE |
+| 480 | **Curse of Ruin** | debuff/magic | — | — | — | 24 | 5 | 95 | 6.3 | def − |
+| 700 | **Detonate** | damage/magic | 55 | ±25% | 1/153 | 38 | 5 | 85 | 6.3 | detonate, circle AoE |
+
+- **Ember** — Minor fire, and it catches. The cheapest way to start a stack.
+- **Fracturing Stones** — A stinging barrage that cracks the guard. The second stack type.
+- **Cinderburst** — Solid on its own, and it snuffs a Burn for far more. The first detonator.
+- **Sap Will** — Drains the will to strike: −22% damage for 3 rounds. INT could not do this at all before.
+- **Arcane Bomb** — A charge left ticking on them — devastating on anything already cracked open.
+- **Curse of Ruin** — Unpicks whatever is holding them together: −14 mitigation from EVERY source of damage.
+- **Detonate** — Sets off everything still burning, on everyone at once. The Hexer capstone.
+
+### Elementalist
+
+| lv | ability | type | pwr | ± | scale | mp | cd | acc | rng | keywords |
+|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| 90 | **Frost Shard** | damage/magic | 25 | ±20% | 1/295 | 12 | 2 | 90 | 7 | — |
+| 160 | **Rime Bind** | damage/magic | 37 | ±15% | 1/267 | 16 | 3 | 90 | 7 | root |
+| 280 | **Frost Nova** | damage/magic | 34 | ±20% | 1/229 | 26 | 4 | 85 | 7 | circle AoE, slow |
+| 400 | **Firewall** | control/magic | — | — | — | 30 | 5 | 100 | 7 | zone |
+| 430 | **Inferno** | damage/magic | 48 | ±25% | 1/194 | 32 | 4 | 82 | 7 | burn, circle AoE |
+| 560 | **Seismic Crush** | damage/magic | 58 | ±25% | 1/172 | 38 | 5 | 82 | 7 | **stun**, circle AoE |
+| 920 | **World Ender** | damage/magic | 119 | ±30% | 1/130 | 56 | 7 | 78 | 7 | %max HP, circle AoE |
+
+- **Frost Shard** — An icy dart. The frost line opens here.
+- **Rime Bind** — Ice climbs the legs and sets. It can still cast; it is going nowhere.
+- **Frost Nova** — A ring of hoarfrost bursts outward — the anti-melee tool casters never had.
+- **Firewall** — A burning line laid across the ground. Not a hit — a place they should not walk.
+- **Inferno** — Fire across the whole position, and much of it keeps burning.
+- **Seismic Crush** — The ground itself comes up. Damage AND a stun on everything standing on it.
+- **World Ender** — The largest thing in the game, and it hurts the biggest of them most.
+
+### Arcanist
+
+| lv | ability | type | pwr | ± | scale | mp | cd | acc | rng | keywords |
+|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| 40 | **Spark** | damage/magic | 17 | ±15% | 1/320 | 5 | 1 | 95 | 7.7 | — |
+| 180 | **Phase Step** | buff/support | — | — | — | 14 | 4 | 100 | 6.6 | dodge +, move |
+| 250 | **Mirror Image** | buff/support | — | — | — | 20 | 5 | 100 | 6.6 | dodge + |
+| 330 | **Static Chain** | damage/magic | 42 | ±20% | 1/216 | 28 | 4 | 85 | 7.7 | vulnerable, line AoE, slow |
+| 380 | **Mana Leech** | damage/magic | 48 | ±15% | 1/205 | 22 | 3 | 88 | 7.7 | mana burn, lifesteal, move |
+| 560 | **Unmake** | debuff/magic | — | — | — | 26 | 5 | 95 | 7.7 | spend ward, acc − |
+| 640 | **Displace** | damage/magic | 54 | ±15% | 1/160 | 26 | 4 | 90 | 7.7 | move, push, root |
+| 780 | **Void Lance** | damage/magic | 97 | ±10% | 1/144 | 38 | 5 | 85 | 7.7 | pierce, move, backstab |
+| 850 | **Arcane Overload** | damage/magic | 114 | ±30% | 1/136 | 44 | 6 | 85 | 7.7 | recoil |
+
+- **Spark** — A small air bolt, cheap enough to throw between everything else.
+- **Phase Step** — Steps out of the world and back a few paces away — through cover, if need be.
+- **Mirror Image** — Shimmering duplicates. Attacks keep finding the wrong one.
+- **Static Chain** — A bolt that leaps body to body along a line, weakening as it goes.
+- **Mana Leech** — Siphons and steps away in the same motion. WIS steals better; this one escapes.
+- **Unmake** — Strips the shield off them and leaves their aim shaking.
+- **Displace** — Teleports the TARGET — rips a diver out of your back line and pins it where it lands.
+- **Void Lance** — Pure void. Half of everything they are wearing simply does not apply.
+- **Arcane Overload** — Overchannelled past what the caster can hold. It burns them too.
+
+## CHA
+
+23 abilities · lines: Enchanter · Captain · Demagogue
+
+### Enchanter
+
+| lv | ability | type | pwr | ± | scale | mp | cd | acc | rng | keywords |
+|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| 40 | **Discord** | damage/voice | 13 | ±20% | 1/320 | 8 | 2 | 90 | 5 | blind |
+| 160 | **Screech** | damage/voice | 13 | ±20% | 1/267 | 22 | 3 | 85 | 5 | **fear**, circle AoE |
+| 380 | **Sonic Boom** | damage/voice | 30 | ±20% | 1/205 | 26 | 4 | 85 | 5 | **confusion**, contagion, push |
+| 430 | **Lullaby** | control/voice | — | — | — | 24 | 5 | 85 | 5 | **sleep**, contagion, slow |
+| 650 | **Cacophony** | damage/voice | 30 | ±25% | 1/159 | 36 | 5 | 82 | 5 | **charm**, circle AoE |
+| 820 | **Mass Hysteria** | control/voice | — | — | — | 52 | 7 | 88 | 5 | **fear**, contagion, circle AoE |
+
+- **Discord** — A jarring note that leaves them swinging at afterimages.
+- **Screech** — A sound that routs. Hard control across a whole line.
+- **Sonic Boom** — A heavy burst, and the disorientation carries to whoever stood too close.
+- **Lullaby** — Sings them to actual sleep — a free hit, but any damage wakes them. Drowsiness is catching.
+- **Cacophony** — A charmed foe turns on its own team. The best status in the game, and the rarest.
+- **Mass Hysteria** — The whole enemy line breaks at once. The Enchanter capstone: nobody gets a turn.
+
+### Captain
+
+| lv | ability | type | pwr | ± | scale | mp | cd | acc | rng | keywords |
+|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| 90 | **Rallying Song** | buff/support | — | — | — | 18 | 4 | 100 | 6 | atk + |
+| 140 | **Bravura** | buff/support | — | — | — | 16 | 4 | 100 | 6 | ward, dodge + |
+| 180 | **Anthem of Iron** | buff/support | — | — | — | 24 | 5 | 100 | 6 | atk +, def + |
+| 260 | **Inspire** | buff/support | — | — | — | 16 | 4 | 100 | 6 | atk +, acc + |
+| 300 | **Battle Hymn** | buff/support | — | — | — | 26 | 5 | 100 | 6 | haste, dodge +, mp regen |
+| 420 | **Fanfare** | buff/support | — | — | — | 32 | 5 | 100 | 6 | acc + |
+| 470 | **Hymn of Shields** | buff/support | — | — | — | 38 | 6 | 100 | 6 | ward, guard |
+| 540 | **Standing Ovation** | buff/support | — | — | — | 42 | 6 | 100 | 6 | atk +, acc +, hp regen |
+| 880 | **Triumph** | buff/support | — | — | — | 56 | 8 | 100 | 6 | atk +, acc +, dodge + |
+
+- **Rallying Song** — A stirring tune: the whole team hits harder for 3 rounds.
+- **Bravura** — Performs straight through the danger. The bard can look after itself.
+- **Anthem of Iron** — Hit harder and hold together — attack and armour in one song.
+- **Inspire** — Everything poured into ONE ally. Focused, and cheaper than lifting everyone.
+- **Battle Hymn** — A steadying anthem — and the whole team moves first.
+- **Fanfare** — Team accuracy, sharply. Nothing else in the game hands out aim like this.
+- **Hymn of Shields** — A hymn that armours everyone who can hear it, the singer included.
+- **Standing Ovation** — Feeds on applause and hands it straight back to the team.
+- **Triumph** — The empowerment capstone: everything at once, for two rounds only.
+
+### Demagogue
+
+| lv | ability | type | pwr | ± | scale | mp | cd | acc | rng | keywords |
+|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| 120 | **Grand Mockery** | debuff/voice | — | — | — | 22 | 4 | 95 | 6.1 | healblock, atk −, circle AoE |
+| 200 | **Captivate** | damage/voice | 18 | ±20% | 1/253 | 14 | 3 | 88 | 6.1 | lifesteal, slow |
+| 330 | **Demoralize** | debuff/voice | — | — | — | 30 | 5 | 90 | 6.1 | atk −, circle AoE |
+| 440 | **Crowd Surge** | debuff/voice | 14 | ±20% | 1/192 | 24 | 4 | 90 | 6.1 | acc −, circle AoE, push |
+| 520 | **Dirge** | debuff/voice | — | — | — | 34 | 6 | 95 | 6.1 | healblock, circle AoE |
+| 780 | **Siren's Call** | damage/voice | 28 | ±20% | 1/144 | 32 | 5 | 85 | 5.5 | mana burn, detonate |
+| 850 | **Showstopper** | damage/voice | 47 | ±15% | 1/136 | 36 | 5 | 88 | 6.1 | execute |
+| 920 | **Crescendo** | damage/voice | 57 | ±25% | 1/130 | 50 | 7 | 80 | 6.1 | circle AoE |
+
+- **Grand Mockery** — A cutting jeer: they hit softer, and some of them stop closing.
+- **Captivate** — Feeds on adoration and gives nothing back.
+- **Demoralize** — Breaks the spirit outright. Deeper than Mockery, and that is the whole difference.
+- **Crowd Surge** — Shoves the whole enemy line backwards. A DEFENSIVE use of a debuff stat.
+- **Dirge** — While it plays, nothing on that side closes a wound.
+- **Siren's Call** — An irresistible song that scatters focus — and shatters the courage of the Afraid.
+- **Showstopper** — The closing number, and it closes them.
+- **Crescendo** — A voice AoE finisher. CHA damage exists — it is just rare, and it is late.
+
+## Totals
+
+| | count |
+|---|---:|
+| abilities | 137 |
+| lines | 18 |
+| hard control | 17 |
+| area effects | 28 |
+| damage moves | 75 |
+| STR | 23 |
+| DEX | 23 |
+| CON | 23 |
+| WIS | 22 |
+| INT | 23 |
+| CHA | 23 |
 
 ---
 
-## Design philosophy — each stat is a distinct kit, not just a colour
-
-- **STR** — highest raw hits, a couple of recoil attacks (capped at 15%), **self buffs only**, one
-  Fire-elemental attack (Reckless Slam) and one Earth-elemental attack (Earthshaker).
-- **DEX** — poison + precision, heavy on multi-hit, **self buffs only**, one Air-elemental attack
-  (Rain of Arrows) and one Water-elemental attack (Needle Storm).
-- **CON** — the **only** stat that grants shields (ward) or armour (defBuff); it taunts (forces the
-  target to attack the taunter — inert until team battles exist, but the flag is live); some self-heal;
-  very few party buffs (currently none); self-cleanse.
-- **WIS** — heavy mana regen and mana burn; healing reaches an ally (Tranquility), not just the self; a
-  handful of self-buffs plus one team-wide regen buff (Attunement); one party-wide cleanse (Spirit Ward).
-- **INT** — all four elements represented across its 15 moves; a mix of AoE and single-target; **zero
-  buffs, zero healing** — pure elemental damage, full stop.
-- **CHA** — buffs land on the user's whole team; debuffs land on the enemy's whole team. No self-only or
-  single-target buff/debuff moves in the pool — CHA is built to swing group fights, not solo ones.
-
----
-
-## STR — bruising, armour-breaking, high-risk finishers
-
-| Move | Lvl | MP | CD | Dur | Acc | Pwr | Target | Effect |
-|---|--:|--:|--:|--:|--:|--:|---|---|
-| Jab | 40 | 10 | 1 | – | 95% | 12 | Enemy | Quick light melee hit. |
-| Guard | 40 | 12 | 3 | – | 100% | – | Self | Brace against the next hits. |
-| Power Strike | 90 | 28 | 2 | – | 90% | 30 | Enemy | Heavy single-target blow; 5% recoil. |
-| War Cry | 120 | 12 | 5 | 3 | 100% | – | Self | Battle fury: +15% damage for 3 rounds. |
-| Cleave | 160 | 18 | 3 | – | 85% | 20 | All enemies | Sweeping hit that splashes all foes. |
-| Rending Blow | 200 | 22 | 3 | 3 | 85% | 24 | Enemy | Dents armour for 3 rounds; 50% chance to cause Bleed. |
-| Flurry of Blows | 240 | 24 | 3 | – | 90% | 9 | Enemy | A rapid combination, 2–4 strikes. |
-| Bonebreaker | 330 | 26 | 4 | 3 | 85% | 28 | Enemy | Shatters defence for 3 rounds; 40% chance to leave the target Vulnerable. |
-| Bracer | 380 | 12 | 4 | – | 100% | – | Self | A hard defensive set. |
-| Reckless Slam 🔥 | 430 | 44 | 4 | – | 85% | 48 | Enemy | A scorching, reckless haymaker; 10% recoil. |
-| Berserk | 540 | 12 | 6 | 3 | 100% | – | Self | Sees red: +30% damage for 3 rounds. |
-| Earthshaker ⛰️ | 650 | 24 | 5 | 1 | 80% | 26 | All enemies | Ground-splitting AoE with a stun chance. |
-| Bloodletter | 780 | 36 | 5 | – | 85% | 10 | Enemy | A weak flurry, 3–5 strikes, unless the target is Bleeding — then 2.5× and drains the wound. |
-| Executioner | 850 | 30 | 4 | – | 90% | 34 | Enemy | Brutal finisher: 1.5× vs weakened foes. |
-| Titanfall | 920 | 62 | 6 | – | 80% | 68 | Enemy | Colossal blow that partly ignores defence; 15% recoil. |
-
-## DEX — precision, poison, multi-hit, execute finishers
-
-| Move | Lvl | MP | CD | Dur | Acc | Pwr | Target | Effect |
-|---|--:|--:|--:|--:|--:|--:|---|---|
-| Sling | 40 | 14 | 1 | – | 95% | 10 | Enemy | One or two quick shots. |
-| Sidestep | 40 | 12 | 4 | 2 | 100% | – | Self | Footwork: +8% dodge for 2 rounds. |
-| Piercing Shot | 90 | 24 | 2 | 3 | 90% | 18 | Enemy | One or two venom-tipped shots; 45% chance to Poison. |
-| Focus Aim | 120 | 12 | 5 | 3 | 100% | – | Self | Steady breathing: +10% accuracy for 3 rounds. |
-| Twin Fangs | 160 | 20 | 2 | 3 | 90% | 11 | Enemy | Two quick shots; 30% chance to cause Bleed. |
-| Pin Down | 200 | 14 | 3 | 3 | 88% | 16 | Enemy | Suppressing fire: target aims worse for 3 rounds. |
-| Blur | 240 | 12 | 5 | 3 | 100% | – | Self | A blur of motion: +14% dodge for 3 rounds. |
-| Snipe | 330 | 30 | 3 | – | 82% | 34 | Enemy | Slow, punishing shot through armour. |
-| Needle Storm 💧 | 380 | 16 | 3 | – | 85% | 18 | All enemies | A driving spray of needles across all foes. |
-| Fleetfoot Riposte | 430 | 12 | 4 | 2 | 100% | – | Self | Defensive stance with an answer ready (dodge +6% for 2 rounds); acts first next round. |
-| Marked for the Pack | 540 | 12 | 4 | 3 | 100% | – | Enemy | Marks the prey for the whole team: takes more damage and is left Vulnerable for 3 rounds. |
-| Rain of Arrows 💨 | 650 | 26 | 4 | 2 | 82% | 28 | All enemies | A sustained volley riding the wind; 20% chance to drive each foe back (acts last). |
-| Shadow Barrage | 780 | 52 | 5 | – | 88% | 13 | Enemy | A storm of strikes from cover, 3–6 hits. |
-| Heartseeker | 850 | 86 | 4 | – | 92% | 38 | Enemy | A homing volley, 2–3 shots, 1.5× vs weakened foes. |
-| Deadeye | 920 | 46 | 6 | – | 95% | 52 | Enemy | The perfect shot: half of defence ignored; 1.5× and drains the wound if the target is Bleeding. |
-
-## CON — the only shields/armour, taunt, sustain
-
-| Move | Lvl | MP | CD | Dur | Acc | Pwr | Target | Effect |
-|---|--:|--:|--:|--:|--:|--:|---|---|
-| Brace | 40 | 12 | 2 | – | 100% | – | Self | Small flat damage reduction until next action. |
-| Second Wind | 40 | 12 | 3 | – | 100% | 16 | Self | Catch a breath: heal a little HP. |
-| Taunt | 90 | 12 | 4 | 3 | 100% | – | Enemy | Enrages and forces the target to attack the taunter for 3 rounds (−10% damage while enraged). |
-| Barbed Carapace | 120 | 12 | 5 | 3 | 100% | – | Self | Hardened, spiked hide: +4 mitigation and reflects 6 damage per hit for 3 rounds. |
-| Body Slam | 160 | 18 | 2 | 2 | 90% | 20 | Enemy | Throws its bulk into the target; 40% chance to send it reeling — knocked back, it acts last. |
-| Steady Vigil | 200 | 16 | 4 | 3 | 100% | 20 | Self | Knit flesh: solid heal, then +5 HP regen/turn for 3 rounds. |
-| Bastion | 240 | 12 | 4 | – | 100% | – | Self | Raise a 25 HP absorb shield. |
-| Purge | 330 | 12 | 4 | – | 100% | 10 | Self | Shrug off ailments and mend a little. |
-| Shell Slam | 380 | 24 | 3 | – | 85% | 26 | Enemy | Full-body crash; slight recoil. |
-| Fortify | 430 | 12 | 5 | – | 100% | – | Self | Raise a 40 HP absorb shield. |
-| Stone Wall | 540 | 12 | 6 | 3 | 100% | – | Self | Living rampart: +8 mitigation for 3 rounds. |
-| Bulwark's Challenge | 650 | 12 | 6 | 2 | 100% | – | All enemies | Plants its feet and roars a challenge: massive guard, and forces the WHOLE enemy team to attack it for 2 rounds. |
-| Vital Surge | 780 | 36 | 6 | – | 100% | 46 | Self | Big heal + cleanse ailments. |
-| Colossus Crash | 850 | 32 | 5 | – | 85% | 36 | Enemy | Crushing advance that braces after the hit; extra damage scaled off the target's own max HP. |
-| Undying | 920 | 56 | 8 | – | 100% | 70 | Self | Refuses to fall: massive recovery. |
-
-🛡 = the only ward-granting moves in the whole pool; defBuff (Iron Skin, Stone Wall) is likewise
-CON-exclusive. 🎯 = the pool's taunt/aggro-forcing move.
-
-## WIS — mana warfare, ally healing, party cleanse
-
-| Move | Lvl | MP | CD | Dur | Acc | Pwr | Target | Effect |
-|---|--:|--:|--:|--:|--:|--:|---|---|
-| Focus | 40 | 12 | 4 | 3 | 100% | – | Self | Centre the mind: +2 mana regen for 3 rounds. |
-| Mend | 40 | 12 | 3 | – | 100% | 14 | Self | Soothing focus: heal a little HP. |
-| Mana Sap | 90 | 8 | 2 | – | 92% | 8 | Enemy | Light hit that drinks 10 MP from the target. |
-| Clarity | 120 | 12 | 3 | – | 100% | – | Self | A clear mind: remove ailments. |
-| Serenity | 160 | 12 | 5 | 3 | 100% | – | Self | Calm flow: +6% dodge, +2 regen for 3 rounds. |
-| Silencing Spike | 200 | 16 | 2 | 2 | 90% | 18 | Enemy | Psychic jab that burns 13 MP; 25% chance to Silence. |
-| Attunement | 240 | 12 | 4 | 3 | 100% | – | Team | Links the team's focus: everyone regains more mana for 3 rounds. |
-| Insight | 330 | 12 | 5 | 3 | 100% | – | Self | Read the fight: +12% accuracy for 3 rounds. |
-| Drain Spirit | 380 | 18 | 4 | – | 88% | 20 | Enemy | Drinks 15 MP and heals for part of the damage. |
-| Tranquility | 430 | 26 | 5 | – | 100% | 32 | Ally | Deep restorative calm channelled into an ally: strong heal. |
-| Field of Doom | 540 | 12 | 5 | 3 | 95% | – | Enemy | Dampening field: target deals −15% damage for 3 rounds; 28% chance to seal its Doom. |
-| Ward Against Ruin | 650 | 12 | 6 | 3 | 100% | – | Team | Clears the whole team's ailments — confusion, charm, doom, silence, sleep, healblock, all of it — and steadies their focus for 3 rounds. |
-| Mind Crush | 780 | 32 | 5 | – | 85% | 36 | Enemy | Heavy psychic blow; burns 25 MP. 1.6× and detonates the target's Doom early if it has one. |
-| Providence | 850 | 12 | 7 | 4 | 100% | – | Self | Sees what comes: +12% dodge and accuracy for 4 rounds. |
-| Ascendance | 920 | 12 | 8 | 4 | 100% | – | Self | Transcendent state: +25% damage, +4 regen for 4 rounds. |
-
-🤝 = WIS's two party-reaching moves — Tranquility heals a single ally, Spirit Ward is the pool's
-party-wide cleanse.
-
-## INT — all four elements, zero buffs, zero healing
-
-| Move | Lvl | MP | CD | Dur | Acc | Pwr | Target | Effect |
-|---|--:|--:|--:|--:|--:|--:|---|---|
-| Spark 💨 | 40 | 10 | 1 | – | 95% | 12 | Enemy | Small air bolt. |
-| Ember 🔥 | 40 | 10 | 2 | 3 | 90% | 12 | Enemy | Minor fire; 40% chance to Burn. |
-| Frost Shard 💧 | 90 | 16 | 2 | – | 90% | 18 | Enemy | Icy dart. |
-| Fracturing Stones ⛰️ | 120 | 14 | 2 | 3 | 90% | 16 | Enemy | A stinging barrage of stone shards; 30% chance to crack their guard, leaving them Vulnerable. |
-| Thunderclap 💨 | 160 | 18 | 3 | – | 88% | 20 | Enemy | Lightning hit; 1.35× damage if this monster acted before the target this round. |
-| Cinderburst 🔥 | 200 | 26 | 3 | – | 88% | 28 | Enemy | Solid single-target fire burst; 1.5× and snuffs the flame if the target is already Burning. |
-| Stone Spear ⛰️ | 240 | 28 | 3 | – | 85% | 30 | Enemy | Earth lance that punches through defence. |
-| Static Chain 💨 | 330 | 22 | 4 | 2 | 85% | 24 | All enemies | Bolt that arcs across all foes; 20% chance to leave each Vulnerable. |
-| Mana Leech | 380 | 16 | 3 | – | 88% | 18 | Enemy | Arcane siphon: burns MP, heals the caster. |
-| Inferno 🔥 | 430 | 24 | 4 | 3 | 82% | 26 | All enemies | Fire AoE; 25% chance to Burn. |
-| Glacial Prison 💧 | 540 | 28 | 5 | 1 | 85% | 30 | Enemy | Entombs in ice, 25% stun chance. |
-| Deep Freeze 💧 | 650 | 28 | 5 | – | 80% | 32 | All enemies | Freezing AoE storm that punches through frozen armour. |
-| Void Lance | 780 | 40 | 5 | – | 85% | 44 | Enemy | Pure void: half of defence ignored. |
-| Arcane Overload | 850 | 46 | 6 | – | 85% | 52 | Enemy | Overchannelled blast; the caster burns too. |
-| World Ender ⛰️ | 920 | 50 | 7 | – | 78% | 56 | All enemies | Massive earth AoE nuke; extra damage to each target scaled off its own max HP. |
-
-Element coverage: Air ×3 (Spark, Shock, Chain Lightning), Fire ×3 (Ember, Fireball, Inferno),
-Water ×3 (Frost Shard, Glacial Prison, Blizzard), Earth ×3 (Pebble Storm, Stone Spear, Meteor).
-
-## CHA — party buffs, enemy-party debuffs, control, lifesteal
-
-| Move | Lvl | MP | CD | Dur | Acc | Pwr | Target | Effect |
-|---|--:|--:|--:|--:|--:|--:|---|---|
-| Taunt Cry | 40 | 10 | 1 | – | 95% | 10 | Enemy | Light voice damage + minor aggro. |
-| Discord | 40 | 10 | 2 | 3 | 90% | 11 | Enemy | Jarring note; 45% chance to Blind. |
-| Rallying Song | 90 | 12 | 4 | 3 | 100% | – | Team | Stirring tune: team +10% damage for 3 rounds. |
-| Grand Mockery | 120 | 12 | 4 | 3 | 95% | – | All enemies | Cutting jeer: enemy team −12% damage for 3 rounds; 20% chance their wounds won't close. |
-| Screech | 160 | 12 | 3 | 2 | 85% | 14 | All enemies | Voice AoE; 20% chance to inflict Fear for 2 rounds. |
-| Captivate | 200 | 14 | 3 | – | 88% | 16 | Enemy | Feeds on adoration: heals 40% of damage. |
-| Battle Hymn | 240 | 12 | 5 | 3 | 100% | – | Team | Steadying anthem: team +5% dodge, +2 regen for 3 rounds — and the whole team acts first next round. |
-| Demoralize | 330 | 12 | 5 | 3 | 90% | – | All enemies | Breaks the spirit: enemy team −20% damage for 3 rounds. |
-| Sonic Boom | 380 | 28 | 3 | 2 | 85% | 30 | Enemy | Heavy single-target voice burst; 35% chance to Confuse — a confused foe may strike itself. |
-| Lullaby | 430 | 12 | 5 | 3 | 80% | – | Enemy | Sings the target to actual sleep — 35% chance; a stray hit will wake it. |
-| Standing Ovation | 540 | 12 | 6 | 3 | 100% | – | Team | Feeds on applause: team +18% damage, +8% accuracy, +3 HP regen/turn for 3 rounds. |
-| Cacophony | 650 | 24 | 5 | 2 | 82% | 26 | All enemies | Voice AoE; 15% chance to Charm — a charmed foe turns on its own team. |
-| Siren's Call | 780 | 30 | 5 | – | 85% | 34 | Enemy | Irresistible song that scatters focus (burns MP); 1.5× and shatters their courage if they're Afraid. |
-| Showstopper | 850 | 36 | 5 | – | 88% | 40 | Enemy | The closing number: 1.5× vs weakened foes. |
-| Crescendo | 920 | 46 | 7 | – | 80% | 52 | All enemies | Massive voice AoE finisher. |
-
-Every CHA buff targets **Team** and every CHA debuff targets **All enemies** — no self-only or
-single-enemy buff/debuff moves in the pool. CHA is the group-fight stat.
-
----
-
-## What changed in this pass (2026-07-20)
-
-- **Nothing lasts "for the fight" anymore.** Every buff/debuff carries an explicit `duration` (rounds)
-  and expires; cooldowns were retuned so effects can't stay up permanently. Re-casting refreshes the
-  timer instead of being blocked (previously a battle-long buff could only ever be cast once).
-- **Reckless Slam**: recoil 20% → **10%**, and picked up the Fire element.
-- **Taunt**: now carries `tauntForce` — forces the target to attack the taunter. Inert in today's 1v1
-  sim (there's only one possible target already) but wired through and ready for team battles.
-- **Mana Sap vs. Mind Spike rebalanced**: Mind Spike (level 200) was burning less MP (8) than the much
-  earlier Mana Sap (level 90, 10 MP burn) — backwards for a higher-level move. Mind Spike now burns 13.
-- **STR/DEX gained elemental attacks** (Reckless Slam/Earthshaker → Fire/Earth; Needle Storm/Rain of
-  Arrows → Water/Air) — previously all 30 of their moves were non-elemental.
-- **CON is now the sole granter of ward and defBuff** ("shields and armour"). Anthem (CHA) lost its
-  defBuff and gained a dodge buff instead; Barrier/Spirit Ward (WIS) lost their ward — Barrier became
-  Attunement (team regen buff), Spirit Ward became a party-wide cleanse.
-- **INT lost its one buff** (Arcane Focus, atkBuff) — replaced by Pebble Storm, an Earth-elemental
-  attack, so INT is purely damage with zero buffs and zero healing.
-- **CHA's single-target debuffs became party-wide**: Mockery and Demoralize now hit All enemies, not
-  one. Standing Ovation moved from a self-buff to a team-buff, so no CHA buff is self-only anymore.
-- **WIS gained party reach**: Tranquility now targets an ally instead of self; Spirit Ward became the
-  pool's party-wide cleanse.
-
-A full numeric rebalance beyond these structural fixes (power curves, accuracy tuning, MP costs) is
-still open — this pass fixed the identified inconsistency (Mana Sap/Mind Spike) and the structural
-violations of the stat-identity rules above, not a wholesale pass on every number.
+⚠️ **Elements are removed from the game.** Body types no longer carry a resist/weak
+pair and no move carries an element. The INT line named *Elementalist* is unrelated
+and stays. See `CLAUDE.md`.
