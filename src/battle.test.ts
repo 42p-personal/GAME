@@ -69,10 +69,10 @@ const GOLDENS = [
     // ⚠️ Recaptured for the ELEMENT REMOVAL — body-type resist/weak no longer
     // multiplies damage, so every fight involving a resisted or super-effective
     // move resolves differently. Deliberate; elements are gone from the game.
-    winner: 'B', events: 43, logLines: 36,
+    winner: 'B', events: 169, logLines: 124,
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 501, wasKOd: true },
-      { side: 'B', slot: 0, hp: 530, mana: 675, wasKOd: false },
+      { side: 'A', slot: 0, hp: 0, mana: 523, wasKOd: true },
+      { side: 'B', slot: 0, hp: 471, mana: 679, wasKOd: false },
     ],
   },
   {
@@ -114,12 +114,12 @@ const GOLDENS = [
     // ⚠️ Recaptured for the ELEMENT REMOVAL — body-type resist/weak no longer
     // multiplies damage, so every fight involving a resisted or super-effective
     // move resolves differently. Deliberate; elements are gone from the game.
-    winner: 'A', events: 117, logLines: 95,
+    winner: 'A', events: 56, logLines: 52,
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 289, wasKOd: true },
-      { side: 'A', slot: 1, hp: 29, mana: 162, wasKOd: false },
-      { side: 'B', slot: 0, hp: 0, mana: 211, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 309, wasKOd: true },
+      { side: 'A', slot: 0, hp: 179, mana: 258, wasKOd: false },
+      { side: 'A', slot: 1, hp: 152, mana: 238, wasKOd: false },
+      { side: 'B', slot: 0, hp: 0, mana: 241, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 333, wasKOd: true },
     ],
   },
   {
@@ -214,18 +214,22 @@ const GOLDENS = [
     // ⚠️ Recaptured for the ELEMENT REMOVAL — body-type resist/weak no longer
     // multiplies damage, so every fight involving a resisted or super-effective
     // move resolves differently. Deliberate; elements are gone from the game.
-    winner: 'A', events: 352, logLines: 250,
+    winner: 'B', events: 384, logLines: 300,
     finals: [
-      { side: 'A', slot: 0, hp: 0, mana: 716, wasKOd: true },
-      { side: 'A', slot: 1, hp: 304, mana: 171, wasKOd: false },
-      { side: 'A', slot: 2, hp: 0, mana: 763, wasKOd: true },
-      { side: 'B', slot: 0, hp: 0, mana: 757, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 748, wasKOd: true },
-      { side: 'B', slot: 2, hp: 0, mana: 69, wasKOd: true },
+      { side: 'A', slot: 0, hp: 0, mana: 675, wasKOd: true },
+      { side: 'A', slot: 1, hp: 0, mana: 335, wasKOd: true },
+      { side: 'A', slot: 2, hp: 0, mana: 756, wasKOd: true },
+      { side: 'B', slot: 0, hp: 0, mana: 761, wasKOd: true },
+      { side: 'B', slot: 1, hp: 1316, mana: 750, wasKOd: false },
+      { side: 'B', slot: 2, hp: 136, mana: 175, wasKOd: false },
     ],
   },
 ] as const
 
+// ⚠️ ALL FOUR RECAPTURED for the HEAL-DRAFT fix: chooseLoadout's damage-floor
+// guard counted SLOTS rather than damage moves, so a combo pair locked the
+// utility loop out and Sages drafted zero heals. Every kit with a support
+// profile changed, so every golden moved at once — expected, not a regression.
 describe('golden battles', () => {
   for (const g of GOLDENS) {
     it(g.name, () => {

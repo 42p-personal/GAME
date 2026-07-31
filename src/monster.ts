@@ -355,6 +355,24 @@ export function chooseLoadout(learned: Move[], stats?: Stats, size = 3): Move[] 
     // pieces are usually damage-typed, so a total-slot cap was already "full"
     // before the utility loop ran and a Sage ended up with 0.19 heals per kit.
     const utilityHeld = () => out.filter((mv) => mv.type !== 'damage').length
+    const damageHeld = () => out.filter((mv) => mv.type === 'damage').length
+    /**
+     * ⚠️ THE SAME BUG AS `utilityHeld`, HALF-FIXED. That one stopped the CAP
+     * counting slots instead of utility. The FLOOR guard beside it — written
+     * `out.length >= size - plan.minDamage` — was still a raw total-slot check,
+     * and it fails for exactly the same reason: a combo pair claims its slots
+     * first and its pieces are damage-typed, so a Sage holding Ember +
+     * Cinderburst reads as "2 of 3 slots gone, stop" and breaks out of the
+     * utility loop before ever reaching `isHeal`. The damage floor was already
+     * satisfied TWICE OVER at that point.
+     *
+     * The floor is about how many DAMAGE moves survive, not how many slots are
+     * spent. There is room for one more utility move as long as the slots left
+     * after it can still carry whatever damage the floor is missing.
+     */
+    const canAddUtility = () =>
+      out.length < size
+      && (size - out.length - 1) >= Math.max(0, plan.minDamage - damageHeld())
 
     interface ComboPair { pieces: [Move, Move]; score: number }
     const cls = CLASSES.find((c) => c.name === classForStats(stats))
@@ -386,14 +404,14 @@ export function chooseLoadout(learned: Move[], stats?: Stats, size = 3): Move[] 
     const slots = CLASS_UTILITY_SLOTS[classForStats(stats)] ?? []
     for (const want of slots) {
       if (utilityHeld() >= utilityCap) break // the class's OWN ceiling, not a global 2
-      if (out.length >= size - plan.minDamage) break // never starve the damage floor
+      if (!canAddUtility()) break // never starve the damage FLOOR — counted in damage moves
       const pick = support.find((mv) => want(mv) && !out.includes(mv))
       if (pick) out.push(pick)
     }
     // Self-buff fallback, available to EVERY class (previously invisible to
     // all of them — War Cry, Berserk, Blur, Insight, Providence... had zero
     // uses across 80 battles), if a utility slot is still unclaimed.
-    if (utilityHeld() < utilityCap && out.length < size - plan.minDamage) {
+    if (utilityHeld() < utilityCap && canAddUtility()) {
       // Team-wide first (it covers the caster too and is priced for the reach),
       // then a self-only buff. See the isPersonalBuff note above.
       const pick = support.find((mv) => mv.target === 'team' && isPersonalBuff(mv) && !out.includes(mv))

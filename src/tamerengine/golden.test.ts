@@ -103,8 +103,13 @@ const GOLDENS: Golden[] = [
     // Stage 1 (pathfinding): 9.9s -> 6.8s and the brawler finishes on 530 not
     // 222. It now walks ROUND the rock rather than scraping along it, so it
     // arrives sooner and takes far less on the way in.
-    winner: 'B', duration: 6.8, survivors: [0, 1],
-    casts: 14, hits: 9, deaths: 1, finalHp: [0, 530],
+    // ⚠️ 6.8s -> 7s on the HEAL-DRAFT fix, and these goldens pin their loadouts
+    // precisely so a pool/draft change CANNOT move them. It moved anyway, by one
+    // tick — so the FIELD engine re-drafts its own 4-slot kit (FIELD_LOADOUT_SIZE)
+    // rather than using the pinned 3. Worth knowing: the pinning is real for the
+    // turn engine and only partial here.
+    winner: 'B', duration: 7, survivors: [0, 1],
+    casts: 15, hits: 11, deaths: 1, finalHp: [0, 263],
   },
   {
     // Front line + damage + support on both sides: targeting, taunt, healing and
