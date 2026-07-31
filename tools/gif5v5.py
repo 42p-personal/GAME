@@ -16,8 +16,16 @@ import json, sys, math
 from PIL import Image, ImageDraw, ImageFont
 
 src, dst = sys.argv[1], sys.argv[2]
-STEP = int(sys.argv[3]) if len(sys.argv) > 3 else 2   # take every Nth tick
-FPS = int(sys.argv[4]) if len(sys.argv) > 4 else 20
+# ⚠️ REAL TIME IS FPS == TICK_HZ / STEP. Snapshots are 10 Hz, so STEP 1 / FPS 10
+# plays at 1x. The old defaults (STEP 2, FPS 20) ran at FOUR TIMES real time, and
+# every render in this session until now was 3x-4.5x — which is why the movement
+# looked like sprinting and every direction change looked like a jolt. Three
+# engine changes were made chasing a renderer setting. If you speed it up to keep
+# a file small, say so on the image; do not judge feel from a fast-forward.
+TICK_HZ = 10
+STEP = int(sys.argv[3]) if len(sys.argv) > 3 else 1
+FPS = int(sys.argv[4]) if len(sys.argv) > 4 else TICK_HZ // STEP
+RATE = FPS * STEP / TICK_HZ
 
 d = json.load(open(src, encoding='utf-8'))
 # ⚠️ Read the field from the DUMP. These were hardcoded 40x22, which silently
@@ -190,6 +198,9 @@ for fi in range(0, len(frames), STEP):
                 g.line([cx + 2, ry + 34, cx + 10, ry + 34], fill=(92, 89, 104), width=2)
         g.text((x0, ry - 14), 'TEAM ' + side, font=F_SM, fill=col)
 
+    if abs(RATE - 1.0) > 0.01:
+        g.text((W / 2, H - 16), f'PLAYBACK {RATE:g}x REAL TIME', font=F_LBL,
+               fill=(196, 148, 255), anchor='ma')
     foot = (f"seed {d['seed']}  ·  winner {d['winner']}  ·  "
             f"{d['duration']}s  ·  {d['survivorsA']}v{d['survivorsB']} standing")
     if MAP:
