@@ -92,8 +92,8 @@ const GOLDENS: Golden[] = [
     // close. The clearest single illustration of what escapes cost in tempo.
     // Dashes travel now instead of snapping: 24.2s -> 21.7s, because a
     // Backstep costs half a second of ground rather than teleporting free.
-    winner: 'B', duration: 21.7, survivors: [0, 1],
-    casts: 47, hits: 31, deaths: 1, finalHp: [0, 405],
+    winner: 'B', duration: 14.9, survivors: [0, 1],
+    casts: 52, hits: 35, deaths: 1, finalHp: [0, 396],
   },
   {
     // Ranged vs melee across the full width — pins approach, stand-off and the
@@ -118,8 +118,8 @@ const GOLDENS: Golden[] = [
     // turn engine and only partial here.
     // Cover-seeking retreat: the caster now runs to the rock rather than
     // straight backwards, and the fight lasts longer for it.
-    winner: 'B', duration: 8.6, survivors: [0, 1],
-    casts: 12, hits: 8, deaths: 1, finalHp: [0, 178],
+    winner: 'B', duration: 8.5, survivors: [0, 1],
+    casts: 11, hits: 8, deaths: 1, finalHp: [0, 178],
   },
   {
     // Front line + damage + support on both sides: targeting, taunt, healing and
@@ -155,8 +155,10 @@ const GOLDENS: Golden[] = [
     // ⚠️ Stage 3a flipped this back to A, 2-0. Retreat helps whichever side is
     // losing the exchange at the moment it triggers, so a golden that was close
     // is exactly the one it can tip. The paired sweep is the arbiter, not this.
-    winner: 'B', duration: 21.5, survivors: [0, 2],
-    casts: 108, hits: 67, deaths: 4, finalHp: [0, 0, 0, 0, 213, 282],
+    // ⚠️ Slower escapes cost the ESCAPER, not the fight: 4 deaths -> 3, and B
+    // now finishes 3-0. A retreat you can watch is a retreat that can be caught.
+    winner: 'B', duration: 17.7, survivors: [0, 3],
+    casts: 94, hits: 56, deaths: 3, finalHp: [0, 0, 0, 47, 245, 282],
   },
 ]
 

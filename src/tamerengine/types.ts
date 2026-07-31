@@ -109,8 +109,19 @@ export const ESCAPE_LOCKOUT = 5 // seconds either escape locks the other
 //
 // A BLINK still snaps, because that is what a teleport is, and it emits its own
 // event so a renderer can draw the discontinuity deliberately.
-export const DASH_SPEED_MULT = 4 // times normal speed while dashing
-export const DASH_MAX_TIME = 0.9 // seconds before a dash gives up and releases
+// ⚠️ 4 -> 2.2. At 4x a 7-unit Backstep crossed in half a second, which still
+// read as a jump rather than a leap — travelling is not enough on its own, it
+// has to travel at a speed the eye can follow. 2.2x puts the same dash at ~1s.
+export const DASH_SPEED_MULT = 2.2 // times normal speed while dashing
+// Raised with it: a slower dash needs longer to arrive, or it releases short of
+// its destination and the escape silently does half its job.
+export const DASH_MAX_TIME = 1.8 // seconds before a dash gives up and releases
+// ⚠️ FALL BACK'S SPEED CHANGE IS RAMPED, NOT SWITCHED. Lifting the 0.6x
+// backpedal penalty in a single tick is a 67% instantaneous speed jump — the
+// same class of discontinuity as the snapping dash, just smaller. Easing into
+// it over half a second keeps the mechanic (you do outrun your pursuer) and
+// removes the jolt.
+export const FALL_BACK_RAMP = 0.5 // seconds to reach full retreat speed
 // Move statuses author their duration in ROUNDS, a unit the field has no
 // concept of. A turn-based round — everyone acting once — is worth roughly
 // this many seconds here. One constant, so restating it is impossible.

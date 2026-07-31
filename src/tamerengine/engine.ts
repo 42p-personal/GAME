@@ -10,6 +10,7 @@ import { chooseLoadout, learnedMoves, manaCost, maxHp, maxMana } from '../monste
 import {
   DT, FIELD_H, FIELD_W, FieldEvent, FieldResult, FieldSetup, FieldSide, FieldUnit,
   PURSUIT_PATIENCE, PURSUIT_IGNORE, PURSUIT_PROGRESS, DASH_SPEED_MULT, DASH_MAX_TIME,
+  FALL_BACK_RAMP,
   FALL_BACK_CD, FALL_BACK_DUR, FALL_BACK_HP, FALL_BACK_NEAR, ESCAPE_LOCKOUT,
   MAX_TICKS, Obstacle, RETARGET_EVERY, UnitVisState, Vec2, CONTAGION_RADIUS, TEAM_AURA_RADIUS,
   CHANNEL_CAST_TIME, CHANNEL_RANGE, DEPLOY_DEPTH, SECONDS_PER_ROUND,
@@ -1758,8 +1759,15 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
         // close — without it a chase never resolves. Lifting it for two seconds
         // is what makes a retreat a retreat rather than a shuffle, and it adds
         // no new speed constant to tune.
-        if (dir.x * toFoe.x + dir.y * toFoe.y < -0.25 && u.fallBackUntil <= now) {
-          backpedal = BACKPEDAL_MULT
+        if (dir.x * toFoe.x + dir.y * toFoe.y < -0.25) {
+          if (u.fallBackUntil <= now) backpedal = BACKPEDAL_MULT
+          else {
+            // Ease from the penalty up to full speed over FALL_BACK_RAMP, so a
+            // retreat accelerates away rather than snapping to a sprint.
+            const since = FALL_BACK_DUR - (u.fallBackUntil - now)
+            const k = Math.min(1, Math.max(0, since / FALL_BACK_RAMP))
+            backpedal = BACKPEDAL_MULT + (1 - BACKPEDAL_MULT) * k
+          }
         }
       }
     }
