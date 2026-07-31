@@ -43,7 +43,22 @@ export const DEPLOY_DEPTH = 11
 // never derive movement from wall-clock time.
 export const TICK_HZ = 10
 export const DT = 1 / TICK_HZ
-export const MAX_SECONDS = 120
+/**
+ * FIVE MINUTES — a safety net, not a design lever.
+ *
+ * ⚠️ RAISING THIS DOES NOT LENGTHEN FIGHTS. Measured at the 120s cap: median
+ * 15.3s, p90 36.2s, max 84.3s, and 0 of 40 sweep fights reached even sudden
+ * death. Going 120 -> 300 produced a byte-identical sweep. What makes a fight
+ * long is DURABILITY (`maxHp`, mitigation), and the clock only ever bounds the
+ * tail. Anyone reaching for this constant to change how fights feel is holding
+ * the wrong one.
+ *
+ * The headroom is deliberate: the target is a SPREAD, not a length. A glass
+ * cannon pair should still resolve in a minute while two walls grind for four,
+ * and that variation is what makes a build choice mean something. A playback
+ * speed control in the arena is what makes the long tail watchable.
+ */
+export const MAX_SECONDS = 300
 export const MAX_TICKS = MAX_SECONDS * TICK_HZ
 // Re-picking a target every tick makes units jitter between equal-scoring foes.
 // They commit for this long unless the target dies or they are forced off it.
@@ -178,9 +193,10 @@ export const SECONDS_PER_ROUND = 2.0
 // tail: the fights that would otherwise never end.
 //
 // ⚠️ MAX_SECONDS AND SUDDEN_DEATH_AT MOVE TOGETHER. Sudden death needs runway to
-// finish the job — 30s of ramp here. Raising the onset past the cap means it
-// never fires at all and the fight simply stops at the wall.
-export const SUDDEN_DEATH_AT = 90 // seconds
+// finish the job — 45s of ramp here (4:15 into a 5:00 cap). Raising the onset
+// past the cap means it never fires at all and the fight simply stops at the
+// wall.
+export const SUDDEN_DEATH_AT = 255 // seconds
 export const SUDDEN_DEATH_BASE = 0.010 // fraction of maxHp per second at onset
 export const SUDDEN_DEATH_RAMP = 0.004 // added per further second
 

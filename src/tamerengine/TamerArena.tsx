@@ -23,7 +23,13 @@ import './tamerArena.css'
 
 type Snap = Extract<FieldEvent, { kind: 'snapshot' }>
 const WALK = ['walk1', 'walk2', 'walk3', 'walk4']
-const SPEEDS = [0.25, 0.5, 1, 2, 4]
+// ⚠️ 8x IS THE CEILING, AND IT IS A RENDERING LIMIT, NOT A PREFERENCE. The clock
+// is time-scaled (`clock += dt * speed`) so any multiplier is legal, but the sim
+// snapshots at 10 Hz: at 8x a 60fps frame advances 1.33 sim ticks, which the
+// interpolation still smooths. Past ~10x it skips whole ticks and motion goes
+// back to looking like the teleports we just spent a day removing.
+// Added when MAX_SECONDS went to 300 — a four-minute grind is 30s at 8x.
+const SPEEDS = [0.25, 0.5, 1, 2, 4, 8]
 
 export interface TamerArenaProps {
   result: FieldResult
