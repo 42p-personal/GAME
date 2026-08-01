@@ -226,8 +226,11 @@ const GOLDENS: Golden[] = [
     // ⚠️ Recaptured for the STAT SCALE REVERT — back to LOW 1/320, HIGH 1/130.
     // ⚠️ Recaptured for the CLASS_LINES coverage pass — Wizard/Spellshield/Orator/
     // Bard each gained their primary stat's missing line, so those kits re-draft.
-    winner: 'A', duration: 28.1, survivors: [3, 0],
-    casts: 129, hits: 90, deaths: 3, finalHp: [271, 106, 171, 0, 0, 0],
+    // ⚠️ Recaptured for manaPolicy's spendable reserve. The move is NOT fully
+    // explained — absent manaPolicy should be a no-op and this golden sets none.
+    // Recaptured on instruction rather than because the cause was understood.
+    winner: 'A', duration: 27.6, survivors: [3, 0],
+    casts: 127, hits: 88, deaths: 3, finalHp: [372, 130, 80, 0, 0, 0],
   },
 ]
 

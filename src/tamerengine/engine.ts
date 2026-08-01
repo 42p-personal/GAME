@@ -359,9 +359,17 @@ function chooseMove(u: FieldUnit, target: FieldUnit, obstacles: Obstacle[]): Mov
     // 'burst' spends to the floor. Four rival GAMEPLANS set this field and the
     // field engine read it NOWHERE — a configured no-op on every rival team.
     // Absent behaves exactly as before, so no existing caller changes.
+    // ⚠️ THE RESERVE IS SPENDABLE — ON BIG SPELLS ONLY. The first version blocked
+    // ANY cast that dipped below it, so a 'conserve' unit never spent that 30% at
+    // all and ended fights holding mana. The order is "save it for something
+    // worth it", not "never touch it": below the reserve, only the kit's dearest
+    // move may still be cast.
     const pol = u.m.tactics?.manaPolicy
-    const reserve = pol === 'conserve' ? u.maxMp * MANA_RESERVE : 0
-    if (u.mp - mpCost(mv) < reserve && !(pol === 'burst' && u.mp >= mpCost(mv))) continue
+    if (pol === 'conserve') {
+      const cost = mpCost(mv)
+      const dear = Math.max(...dmgMoves.map((x) => mpCost(x)))
+      if (u.mp - cost < u.maxMp * MANA_RESERVE && cost < dear) continue
+    }
     if (d > rangeOf(mv)) continue
     // Ranged and magic need to actually SEE the target — cover is real.
     if (mv.channel !== 'melee' && !hasLineOfSight(u.pos, target.pos, obstacles)) continue
