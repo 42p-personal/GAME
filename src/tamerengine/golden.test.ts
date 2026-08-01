@@ -184,7 +184,8 @@ const GOLDENS: Golden[] = [
     // 14.4s -> 16.9s and the worst-off survivor ends on 303 rather than 18 —
     // the same mana buying a save instead of overheal.
     winner: 'A', duration: 16.9, survivors: [3, 0],
-    casts: 78, hits: 50, deaths: 3, finalHp: [303, 196, 282, 0, 0, 0],
+    // Heals now scale with WIS/CHA, so the same cast restores more: 196 -> 207.
+    casts: 78, hits: 50, deaths: 3, finalHp: [303, 207, 282, 0, 0, 0],
   },
 ]
 

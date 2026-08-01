@@ -237,7 +237,7 @@ function estimateDamage(u: FieldUnit, mv: Move, target: FieldUnit): number {
   const mit = mv.channel === 'melee' || mv.channel === 'ranged' ? target.m.stats.CON : target.m.stats.WIS
   // ⚠️ Must mirror strike()'s formula, or kill-checks (and therefore `worthSpending`
   // and the finish-it override) misjudge whether a cast would land a kill.
-  return Math.max(1, Math.round(mv.power * (1 + atk * statScaleOf(mv)) * (1 - Math.min(0.55, mit / 1400))))
+  return Math.max(1, Math.round(mv.power * (1 + atk * statScaleOf(mv)) * (1 - Math.min(0.55, mit / MIT_DIVISOR))))
 }
 
 /**
@@ -1349,18 +1349,20 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       }
     }
     if (friendly && mv.power > 0 && !statusFlag(aim, 'blockHeal')) {
-      // ⚠️ NO MULTIPLIER HERE, AND DO NOT ADD ONE BACK. A `HEAL_MULT` constant
-      // existed and was A/B'd FOUR times — 1.3, 2.5, 1.3 on a pool with two new
-      // direct heals, and 1.3 again under triage — for four nulls
-      // (p = 1.00, 0.38, 0.18, 1.00). The count of fights it could even touch
-      // fell 40 -> 21 -> 14 -> 12 as the tests went on.
+      // ⚠️ A HEAL SCALES WITH ITS STAT, exactly as damage does — same helper,
+      // same shape: `power * (1 + stat * statScaleOf(mv))`. It did NOT before,
+      // and that was a progression hole rather than a balance choice: a WIS 400
+      // healer restored precisely as much as a WIS 100 one, so training WIS
+      // bought mana and regen but never a bigger heal. Every damage move in the
+      // game had this axis and every heal was flat.
       //
-      // Restoration is not tunable by coefficient in this engine: it reaches too
-      // few fights for a magnitude to matter, and every test showed support-heavy
-      // sides getting FASTER with more healing, not slower. What DID move the
-      // needle was `healPolicy: 'triage'` — spending the same heal on someone who
-      // needs it (trio golden: worst survivor 18 HP -> 303). Timing, not size.
-      const healed = Math.min(mv.power, aim.maxHp - aim.hp)
+      // ⚠️ NOT A FLAT MULTIPLIER. `HEAL_MULT` was one and was A/B'd FOUR times —
+      // 1.3, 2.5, 1.3 on a richer pool, 1.3 under triage — for four nulls
+      // (p = 1.00, 0.38, 0.18, 1.00), with the count of fights it could touch
+      // falling 40 -> 21 -> 14 -> 12. Flat inflation could not reach; this is
+      // conditional on investment, which is the difference.
+      const heal = mv.power * (1 + (u.m.stats[mv.stat] ?? 0) * statScaleOf(mv))
+      const healed = Math.min(heal, aim.maxHp - aim.hp)
       if (healed > 0) {
         aim.hp += healed
         events.push({ t: t2, kind: 'heal', id: u.id, targetId: aim.id, move: mv.name, amount: Math.round(healed) })
