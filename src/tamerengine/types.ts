@@ -680,6 +680,24 @@ export const TEAM_AURA_RADIUS = 9
  */
 export const FORMATION_KEEP_PULL = 0.55
 
+/**
+ * How far a MELEE monster will look past the nearest body to obey its
+ * `targetPriority`, expressed as world units of discount at full bias.
+ *
+ * ⚠️ THIS IS A LEASH, NOT A WEIGHT. Melee picks its target by pure distance
+ * precisely because value-chasing across open ground is what once had bruisers
+ * racing around the map instead of fighting. So the order is spent as a bounded
+ * discount — a prioritised enemy counts as up to this many units nearer than it
+ * really is — and never as a term in a free-for-all score.
+ *
+ * `priorityBias` peaks at 0.50 (`focus`) and 0.30-0.35 for the rest, so the real
+ * discount runs 3.0-5.0 units. Deploy hexes are 2.6 apart: that is one to two
+ * ranks, enough to step around a front-liner onto the marked healer behind it and
+ * not nearly enough to cross a 40-unit field. Raising it past ~8 starts to
+ * re-create the original bug.
+ */
+export const MELEE_PRIORITY_SLACK = 10
+
 export interface FieldSetup {
   seed: string
   teamA: Monster[]

@@ -3,7 +3,7 @@
 // Everything here is a PURE function of the units' state — no randomness, no
 // mutation — so it is directly unit-testable and the tick loop stays readable.
 import { Monster, Stat, roleOfClass, classForStats} from '../core'
-import { FieldTraits, FieldUnit, Vec2, FIELD_W, FIELD_H, CHANNEL_RANGE, LEASH_RADIUS, CLASS_BASIC, FORMATION_KEEP_PULL} from './types'
+import { FieldTraits, FieldUnit, Vec2, FIELD_W, FIELD_H, CHANNEL_RANGE, LEASH_RADIUS, CLASS_BASIC, FORMATION_KEEP_PULL, MELEE_PRIORITY_SLACK} from './types'
 import { coachedValue, panicThreshold, personalityOf, resolvePersonality, threatRadius } from './personality'
 
 export const v = (x: number, y: number): Vec2 => ({ x, y })
@@ -201,13 +201,29 @@ export function pickTarget(
   // MELEE targets the NEAREST enemy — it cannot reach past the front line, so it
   // engages whatever is in front of it and the enemy's wall shields its back row.
   // FADE still nudges attackers off a fading unit (treated as further away) so a
-  // Fade reads the same for both target modes. No value/priority chase here: that
-  // cross-map hunt is exactly what made melee race around the map.
+  // Fade reads the same for both target modes. No value chase here: that cross-map
+  // hunt is exactly what made melee race around the map.
+  //
+  // ⚠️ BUT THE TARGET ORDER USED TO DIE HERE TOO, and that was a bug, not the
+  // design. This branch returned before the scoring loop where `priorityBias`
+  // lives, so `targetPriority` did NOTHING on a melee monster — the player set
+  // "hunt their casters" on a Warrior and got nearest-target regardless. Every
+  // melee class in the game, which is most of them.
+  //
+  // ⚠️ AND THE FIX IS NOT TO SCORE MELEE LIKE RANGED. Value-chasing across open
+  // ground is the failure this branch exists to prevent, and re-opening it would
+  // undo it wholesale. The order is applied as a BOUNDED DISTANCE DISCOUNT
+  // instead: a prioritised enemy counts as up to MELEE_PRIORITY_SLACK units
+  // nearer than it is. That reaches about two ranks back — far enough to step
+  // around a body onto the marked healer behind it, nowhere near far enough to
+  // cross the field — and it pays for the reach honestly, because standing next
+  // to someone you are not hitting is free damage for them.
   if (isMelee(self)) {
     let best: FieldUnit | null = null
     let bestD = Infinity
     for (const e of live) {
       const d = dist(self.pos, e.pos) + (e.fadedUntil > now ? 6 : 0)
+        - priorityBias(self, e) * MELEE_PRIORITY_SLACK
       if (d < bestD) { bestD = d; best = e }
     }
     return best

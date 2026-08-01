@@ -706,3 +706,45 @@ opening guard, MIT_SOFT and COOLDOWN_MULT in place it was carrying nothing).
 - ⚠️ **Where a control-loss gate sits in the tick is load-bearing.** Knockback's
   gate placed above the per-unit timers froze cooldowns, mana and status
   durations — `duel-melee` went 15s → 91.5s.
+
+
+## ⚠️ THE 40-MATCHUP SWEEP FIGHTS MONSTERS WITH NO TACTICS (2026-08-01)
+
+`generateMonster` does not set `tactics`, and `tools/comps.ts` does not add any. So
+every unit in the sweep — and in `tools/ab.ts`, `tools/effects.ts`, `tools/focus.ts`
+and `tools/leagues.ts`, which all build teams the same way — has
+`m.tactics === undefined`.
+
+**Every tactic that reads `m.tactics` is therefore invisible to the balance
+harness.** `targetPriority`, `temperament`, `preserve`, `formation`, `commit`,
+`useCover`, `healPolicy`, `manaPolicy`, `ccPriority`: all of them fall through to
+their no-order branch in a sweep, in an A/B, and in every league run.
+
+How it surfaced: melee target priority was fixed (`MELEE_PRIORITY_SLACK`), the
+`trio` golden moved 27.6s → 23.6s, and the sweep reported **byte-identical** totals
+at slack 0, 4, 6, 10 and 14 — 23.9s, 188 kills, 2781 damage every time. Not a small
+effect. No effect, because there was no order to obey.
+
+⚠️ **So "the sweep says nothing changed" is not evidence about anything tactical.**
+Re-read past sessions with that in mind: several tactics were called inert on sweep
+evidence that could not have detected them either way.
+
+Measured with orders applied (`DEFAULT_TACTICS` on both sides, 40 fights):
+
+| `MELEE_PRIORITY_SLACK` | mean | median | kills | range |
+|---|---|---|---|---|
+| 0 (order dead on melee) | 23.2s | 22.0s | 185 | 9.6–40.9s |
+| 4 | 24.1s | 22.6s | 189 | 9.6–52.9s |
+| 6 | 23.7s | 23.9s | 194 | 9.6–52.5s |
+| 10 (shipped) | 23.1s | 19.9s | 193 | 9.6–68.9s |
+| 14 | 23.1s | 23.2s | 193 | 9.6–51.5s |
+| *no tactics at all* | 23.9s | 22.8s | 188 | 9.6–48.0s |
+
+Means are flat inside the documented sd 0.7 band — the fix is not a burst
+accelerator at the default `weakest` priority, which is the reassuring half. The
+signed effect is on the ordered metric instead (`tools/priority.ts`).
+
+**⚠️ NOT FIXED, DELIBERATELY.** Giving `comps.ts` monsters `DEFAULT_TACTICS` would
+move every balance baseline in this document at once, which is the opposite of one
+value at a time. It is the right change and it wants its own pass: flip it, recapture
+the numbers above as the new reference, and note the discontinuity here.

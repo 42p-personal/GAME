@@ -3,7 +3,7 @@
 import { describe, it, expect } from 'vitest'
 import { generateMonster } from '../monster'
 import { ALL_MOVES } from '../moves'
-import { commitLimit, desiredGoal, engageMult, spacingRadius } from './decide'
+import { commitLimit, desiredGoal, engageMult, isMelee, pickTarget, spacingRadius } from './decide'
 import { simulateFieldBattle, hasLineOfSight, DEFAULT_OBSTACLES } from './engine'
 import { DEFAULT_TACTICS, Monster, Tactics } from '../core'
 import { FIELD_W, FieldUnit } from './types'
@@ -83,6 +83,50 @@ describe('formation', () => {
     // with it, so the straggler is pulled FORWARD, not back to the spawn.
     const late = unit('me', { pos: { x: 6, y: 11 }, m: mk('me', obedient({ formation: 'keep' })) })
     expect(desiredGoal(late, foe, mates, [foe]).x).toBeGreaterThan(late.pos.x)
+  })
+})
+
+describe('target priority reaches MELEE', () => {
+  // ⚠️ THE BUG THIS PINS. `pickTarget` returns nearest-first for melee and used to
+  // return BEFORE the scoring loop `priorityBias` lives in — so `targetPriority`
+  // did nothing at all on a melee monster, which is most classes in the game. It
+  // was set in the UI, set by three GAMEPLANS, and silently discarded.
+  //
+  // ⚠️ AND THE FIX IS BOUNDED ON PURPose. Melee picks by distance precisely
+  // because value-chasing across open ground once had bruisers racing around the
+  // map. The order buys a fixed number of world units of discount, never a seat in
+  // a free-for-all score — so the last test here matters as much as the first.
+  const brawler = (over: Partial<Tactics>) => unit('me', {
+    pos: { x: 8, y: 11 },
+    // Loadout PINNED melee: reach derives from the drafted kit, so a pool change
+    // could otherwise turn this fixture ranged and skip the branch under test.
+    m: {
+      ...generateMonster('pri-melee', { speciesId: 'aegisox', train: 850 }),
+      loadout: [ALL_MOVES.find((x) => x.name === 'Power Strike')!],
+      personality: { temperament: 100 },
+      tactics: { ...DEFAULT_TACTICS, ...over },
+    } as Monster,
+  })
+  const foe = (id: string, x: number, marked = false) =>
+    unit(id, { side: 'B', pos: { x, y: 11 }, m: mk(id, { marked }) })
+
+  it('is MELEE — precondition, or the rest of this block tests nothing', () => {
+    expect(isMelee(brawler({}))).toBe(true)
+  })
+
+  it('a melee monster steps past the nearer body to reach its marked target', () => {
+    const near = foe('near', 12)
+    const mark = foe('mark', 15, true)
+    // No order: nearest wins, both at full HP so `weakest` discriminates nothing.
+    expect(pickTarget(brawler({}), [near, mark], [])?.id).toBe('near')
+    // Ordered to focus the mark: 3 units further away, but worth 5 units of slack.
+    expect(pickTarget(brawler({ targetPriority: 'focus' }), [near, mark], [])?.id).toBe('mark')
+  })
+
+  it('⚠️ but it does NOT cross the field for it — the discount is a LEASH', () => {
+    const near = foe('near', 12)
+    const far = foe('far', 30, true)
+    expect(pickTarget(brawler({ targetPriority: 'focus' }), [near, far], [])?.id).toBe('near')
   })
 })
 

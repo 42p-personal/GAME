@@ -26,7 +26,7 @@ build two teams differing only in that field and count the casts it should chang
 | tactic | what it does | state |
 |---|---|---|
 | `temperament` | aggressive / balanced / cautious — the master dial on how far a monster commits | ✅ live, 19 refs |
-| `targetPriority` | who to attack: weakest / nearest / biggest threat | ✅ live |
+| `targetPriority` | who to attack: weakest / casters / tanks / marked | ✅ live — **now reaches melee too** |
 | `preserve` | below a HP threshold, play to survive — block, drop self-harm moves | ✅ live |
 | `formation` | `keep` the deployed slot, or `tight`/`spread` and drift with the team | ✅ **live, built** (replaced `spacing`) |
 | `commit` | `dive` past the enemy front line, or `hold` and refuse to over-extend | ✅ live |
@@ -206,8 +206,7 @@ down so it is not re-proposed:
    is correct as a default; its own comment records that value-chasing "is exactly
    what made melee race around the map".
 
-⚠️ Note (2) is still TRUE and unfixed: **`targetPriority` does nothing on a melee
-monster.** It is a live bug for the picker work below, independent of `break`.
+✅ Note (2) is now FIXED — see below. Note (1) still stands on its own.
 
 ---
 
@@ -226,6 +225,49 @@ order coaches rather than mind-controls.
 `marked` on exactly ONE enemy at scout time and the whole side prioritises it. So the
 per-monster picker is a *generalisation of shipped plumbing*, not new machinery:
 `marked: boolean` on the enemy becomes a `targetId` on the chooser.
+
+### ✅ FIXED: the order now reaches melee
+
+`pickTarget` returned the nearest enemy for melee and returned **before** the
+scoring loop `priorityBias` lives in, so `targetPriority` did nothing at all on a
+melee monster — most of the roster. Set in the UI, set by three `GAMEPLANS`,
+silently discarded.
+
+⚠️ **The fix is NOT to score melee like ranged.** Value-chasing across open ground
+is the failure that branch exists to prevent. The order is spent as a **bounded
+distance discount** instead: a prioritised enemy counts as up to
+`MELEE_PRIORITY_SLACK` (10) × `priorityBias` world units nearer than it is — 3.0–5.0
+units, against deploy hexes 2.6 apart. That is one to two ranks: far enough to step
+around a front-liner onto the marked healer behind it, nowhere near far enough to
+cross a 40-unit field. `tactics.test.ts` pins BOTH halves — it takes the mark at 15,
+and refuses it at 30.
+
+It also pays for the reach honestly: standing next to someone you are not hitting is
+free damage for them.
+
+**Measured — `tools/priority.ts`**, mirrored pairs, 119 fights where the defender
+actually fields a support (⚠️ fights without one would dilute a real effect toward
+zero with fights the order cannot express):
+
+| slack | support died | median time to that kill |
+|---|---|---|
+| 0 (melee deaf) | 73/119 | 14.4s |
+| 4 | 72/119 | 13.9s |
+| 6 | 70/119 | 13.9s |
+| 8 | 77/119 | 13.7s |
+| **10 (shipped)** | 73/119 | **12.9s** |
+
+*(plain, no order: 68/119 at 15.7s.)*
+
+Monotone on time, noise on the count: ordering `casters` does not change **whether**
+their support dies, it changes **when** — and the melee half of the order is worth
+about half of that. Fights where the order was already obeyed by the ranged units
+were carrying it alone.
+
+⚠️ **The `trio` golden moved 27.6s → 23.6s and this time the cause IS understood** —
+goldens set `DEFAULT_TACTICS`, whose `targetPriority` is `weakest`, so melee now
+finishes wounded bodies. The 40-matchup sweep saw NOTHING because `tools/comps.ts`
+monsters carry no tactics at all; see `docs/BALANCING.md`.
 
 ### Proposed shape
 

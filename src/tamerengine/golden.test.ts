@@ -229,8 +229,17 @@ const GOLDENS: Golden[] = [
     // ⚠️ Recaptured for manaPolicy's spendable reserve. The move is NOT fully
     // explained — absent manaPolicy should be a no-op and this golden sets none.
     // Recaptured on instruction rather than because the cause was understood.
-    winner: 'A', duration: 27.6, survivors: [3, 0],
-    casts: 127, hits: 88, deaths: 3, finalHp: [372, 130, 80, 0, 0, 0],
+    // ⚠️ Recaptured for TARGET PRIORITY REACHING MELEE (27.6s -> 23.6s). This one
+    // IS explained: the goldens set DEFAULT_TACTICS, whose targetPriority is
+    // 'weakest', and melee used to discard that order entirely. Melee now finishes
+    // a wounded body within MELEE_PRIORITY_SLACK instead of hitting the closest —
+    // fewer casts (127 -> 122), fewer hits, a faster kill, and the survivors end on
+    // a different HP split because a different monster took the beating.
+    // ⚠️ IT IS ALSO WHY THE SWEEP SAW NOTHING: tools/comps.ts monsters carry NO
+    // tactics at all, so the 40-matchup harness is blind to every order. Only the
+    // goldens and tools/priority.ts fight monsters that have any.
+    winner: 'A', duration: 23.6, survivors: [3, 0],
+    casts: 122, hits: 85, deaths: 3, finalHp: [292, 105, 157, 0, 0, 0],
   },
 ]
 
