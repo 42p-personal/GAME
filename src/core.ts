@@ -617,13 +617,25 @@ export const LEAGUES: League[] = [
   { name: 'Silver', cap: 600 },
   // v0.88: the top of the curve steepens — the last four rungs pull away from
   // the flat +100/league of the lower circuit, so each late promotion is a real
-  // jump, and TAMERS APEX caps the ladder at 1400. A gen-1 monster (walled at
-  // 700–1100) cannot compete at Apex: only a bred dynasty reaches that ceiling.
+  // jump. A gen-1 monster (walled at 700–1100) cannot compete at the top: only a
+  // bred dynasty reaches those ceilings.
+  //
+  // ⚠️ THE TOP TWO RUNGS ARE A CLIFF, NOT A STEP (v0.93). Tamer Elite 1200 ->
+  // 2800 and Apex 1400 -> 3500. The old +200/+200 made the last two promotions
+  // the SMALLEST proportional gains on the whole ladder (+20% then +17%, against
+  // +100% at Copper), so the leagues meant to be aspirational were the flattest.
+  // Now Masters -> Elite is +180% and Elite -> Apex +25% on a far bigger base.
+  //
+  // ⚠️ CANNOT BE SIMULATED, AND THAT IS A KNOWN GAP. `generateMonster` clamps
+  // every stat at 1000 whatever the training budget, so `tools/leagues.ts` tops
+  // out at Masters — these two rungs are reachable ONLY through in-game training
+  // via `applyWeek`/`statCapFor`. Authored on design grounds; re-check them once
+  // the generator honours a cap argument rather than a bigger budget.
   { name: 'Gold', cap: 750 },
   { name: 'Platinum', cap: 900 },
   { name: 'Masters', cap: 1000 },
-  { name: 'Tamer Elite', cap: 1200 },
-  { name: 'Tamers Apex', cap: 1400 },
+  { name: 'Tamer Elite', cap: 2800 },
+  { name: 'Tamers Apex', cap: 3500 },
 ]
 
 export function leagueForStat(maxStat: number): string {
