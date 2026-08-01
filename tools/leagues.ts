@@ -6,12 +6,12 @@
 // rows are comparable to each other at all.
 // ⚠️ TWO FINDINGS FROM ITS FIRST RUN, BOTH RECORDED HERE SO THEY ARE NOT REDISCOVERED:
 //
-// 1. `generateMonster` CAPS EVERY STAT AT 1000 regardless of budget. train 6000
-//    still tops out at 1000, so the Tamer Elite (1200) and Tamers Apex (1400)
-//    CEILINGS CANNOT BE SIMULATED AT ALL — only reached by in-game training via
-//    `applyWeek`/`statCapFor`. TRAIN_ELITE in comps.ts is therefore really a
-//    MASTERS-tier harness, not an Apex one, and the top two leagues remain
-//    unmeasurable. The Apex row below is "every stat near 1000", not "cap 1400".
+// 1. FIXED — `generateMonster` used to clamp every stat at 1000 regardless of
+//    budget, so the top two leagues could not be simulated and this tool reported
+//    a 1000-stat Masters monster as an Apex one WITHOUT SAYING SO. `GenOptions
+//    .statCap` now carries the ceiling; it still defaults to 1000, so every other
+//    caller and every golden is byte-identical. topStat now lands on the cap for
+//    all eleven rows, which is what makes them comparable.
 //
 // 2. WOOD IS THE OUTLIER OF THE WHOLE PROGRESSION — 54.7s and a first kill at
 //    15.9s, against 17-20s and 5.7-7.4s everywhere above it. At cap 100 the flat
@@ -31,10 +31,10 @@ const OB = [
   { x: FIELD_W * (13 / 40), y: FIELD_H * (11 / 22), w: 2, h: 2 },
   { x: FIELD_W * (27 / 40), y: FIELD_H * (11 / 22), w: 2, h: 2 },
 ]
-const topStat = (train: number) => {
+const topStat = (train: number, cap = 1000) => {
   let mx = 0
   for (const sp of SPECIES) {
-    const m = generateMonster(`cal-${sp.id}`, { speciesId: sp.id, train }) as never as
+    const m = generateMonster(`cal-${sp.id}`, { speciesId: sp.id, train, statCap: cap }) as never as
       { stats: Record<string, number> }
     for (const s of STATS) mx = Math.max(mx, m.stats[s])
   }
@@ -45,7 +45,7 @@ function trainForCap(cap: number): number {
   let lo = 20, hi = 6000
   for (let i = 0; i < 18; i++) {
     const mid = Math.round((lo + hi) / 2)
-    if (topStat(mid) < cap) lo = mid; else hi = mid
+    if (topStat(mid, cap) < cap) lo = mid; else hi = mid
   }
   return hi
 }
@@ -64,7 +64,7 @@ for (const name of WANT) {
   const train = TRAIN_OVERRIDE[name] ?? trainForCap(L.cap)
   let fights = 0, res = 0, dur = 0, kills = 0, dmg = 0, fk = 0, fkn = 0
   for (const c of COMPS) for (const sd of ['s1', 's2', 's3', 's4']) {
-    const mk = (id: string, sp: string) => generateMonster(id, { speciesId: sp, train }) as never
+    const mk = (id: string, sp: string) => generateMonster(id, { speciesId: sp, train, statCap: L.cap }) as never
     const A = c.a.map((s, i) => mk(`${sd}${c.name}a${i}`, s))
     const B = c.b.map((s, i) => mk(`${sd}${c.name}b${i}`, s))
     const fr = (m: never) => {
@@ -81,7 +81,7 @@ for (const name of WANT) {
     for (const e of ev) { if (e.kind === 'death') kills++; if (e.kind === 'hit') dmg += e.dmg }
   }
   console.log(`${name.padEnd(12)}${String(L.cap).padStart(5)}${String(train).padStart(7)}`
-    + `${String(topStat(train)).padStart(9)}${(res + '/' + fights).padStart(10)}`
+    + `${String(topStat(train, L.cap)).padStart(9)}${(res + '/' + fights).padStart(10)}`
     + `${(dur / fights).toFixed(1) + 's'}`.padStart(8) + String(kills).padStart(8)
     + (dmg / fights).toFixed(0).padStart(11)
     + `${fkn ? (fk / fkn).toFixed(1) + 's' : '-'}`.padStart(10))

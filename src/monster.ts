@@ -14,16 +14,28 @@ function randomName(rng: RNG): string {
   return pick(rng, NAME_PARTS) + pick(rng, NAME_TAILS)
 }
 
-// Spend `train` points across stats, weighted by the species' base spread so a
-// monster grows along its natural lean. Each stat is clamped to 1000.
-function applyTraining(base: Stats, train: number, rng: RNG): Stats {
+/**
+ * Spend `train` points across stats, weighted by the species' base spread so a
+ * monster grows along its natural lean.
+ *
+ * ⚠️ `cap` DEFAULTS TO 1000 AND THAT DEFAULT WAS A HARD-CODED CEILING. League
+ * caps run past it (Tamer Elite 1050, Apex 1100), so no budget could ever produce
+ * a monster at the top two leagues — `tools/leagues.ts` binary-searching for cap
+ * 1100 ran to a 6000-point budget and silently reported a 1000-stat Masters
+ * monster as an Apex one. Every Elite/Apex balance question was unanswerable and
+ * the harness did not say so; it just returned a plausible wrong number.
+ *
+ * Kept as a DEFAULT rather than removed: 1000 is what every existing caller and
+ * every golden was generated against, so leaving it unset is byte-identical.
+ */
+function applyTraining(base: Stats, train: number, rng: RNG, cap = 1000): Stats {
   const stats: Stats = { ...base }
   const total = STATS.reduce((sum, k) => sum + base[k], 0)
   for (const k of STATS) {
     const weight = base[k] / total
     // jitter each stat's share ±30% so no two monsters train identically
     const jitter = 0.7 + rng() * 0.6
-    stats[k] = Math.min(1000, Math.round(stats[k] + train * weight * jitter))
+    stats[k] = Math.min(cap, Math.round(stats[k] + train * weight * jitter))
   }
   return stats
 }
@@ -40,14 +52,17 @@ function applyTraining(base: Stats, train: number, rng: RNG): Stats {
 // Still only ever pulls upward — naturally tanky species keep whatever CON
 // they earned.
 const CON_LEAGUE_TARGET_FRACTION = 0.15
-function boostConstitution(stats: Stats, rng: RNG): Stats {
+// ⚠️ `hardCap` is the per-stat CEILING; the local `cap` below is a league-derived
+// CON *target*. Different quantities, and the first version of this parameter
+// shadowed the second.
+function boostConstitution(stats: Stats, rng: RNG, hardCap = 1000): Stats {
   const preBoostMax = Math.max(...STATS.map((k) => stats[k]))
   const cap = LEAGUES.find((l) => l.name === leagueForStat(preBoostMax))?.cap ?? LEAGUES[0].cap
   const target = cap * CON_LEAGUE_TARGET_FRACTION
   if (stats.CON >= target) return stats
   const pull = 0.1 + rng() * 0.2 // 10%-30% of the gap to the floor closes
   const boosted = stats.CON + (target - stats.CON) * pull
-  return { ...stats, CON: Math.min(1000, Math.round(boosted)) }
+  return { ...stats, CON: Math.min(hardCap, Math.round(boosted)) }
 }
 
 // Hidden wild-instinct roll for GENERATED monsters — rivals, market offers,
@@ -510,6 +525,12 @@ export interface GenOptions {
   speciesId?: string // force an exact species — the Market Scout's pick
   noPrestige?: boolean // exclude Draconic/Abyssal/Mythical — the stray event
   targetTop?: number // normalise so the HIGHEST stat lands here — the Market Coach
+  /**
+   * Per-stat ceiling. Defaults to 1000 — the value that was hard-coded, so every
+   * existing caller and golden is unchanged. Pass a league cap to model a monster
+   * trained at that licence (see LEAGUES in core.ts, tools/leagues.ts).
+   */
+  statCap?: number
 }
 
 // Fusion species are NEVER wild/market — they only exist as a fusion RESULT.
@@ -553,7 +574,8 @@ export function generateMonster(seed: string, opts: GenOptions = {}): Monster {
   const ranked = [...STATS].sort((a, b) => species.base[b] - species.base[a])
   ranked.forEach((k, i) => { base[k] = jittered[i] })
 
-  const trained = boostConstitution(applyTraining(base, opts.train ?? 0, rng), rng)
+  const cap = opts.statCap ?? 1000
+  const trained = boostConstitution(applyTraining(base, opts.train ?? 0, rng, cap), rng, cap)
   const effTop = opts.targetTop ? Math.round(opts.targetTop * (COACH_PRESTIGE_MULT[species.body] ?? 1)) : undefined
   const stats = effTop ? normaliseTop(trained, effTop) : trained
   const learned = learnedMoves(stats)
