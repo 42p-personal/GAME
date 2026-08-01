@@ -275,6 +275,18 @@ export function mitigationFor(defStat: number, pierce = 0): number {
  */
 export const TRIAGE_AT = 0.55
 
+/**
+ * Fraction of max MP a `manaPolicy: 'conserve'` unit refuses to spend below, so
+ * a big move stays affordable instead of being chipped away on fillers.
+ */
+export const MANA_RESERVE = 0.30
+/**
+ * Score multiplier on a hard-control move under `ccPriority`. ⚠️ A multiplier,
+ * not an override: control still has to be worth casting, so a 10-power stun
+ * does not beat a finisher on a target that is nearly dead.
+ */
+export const CC_PRIORITY_BONUS = 1.8
+
 export const KNOCKBACK_SPEED = 12
 /** Floor on the stagger, so even a 1-unit nudge is legible rather than a snap. */
 export const KNOCKBACK_MIN_TIME = 0.15

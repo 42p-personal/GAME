@@ -5,7 +5,7 @@
 // depends on `simulateFieldBattle` being a pure function of
 // (monsters + placement + obstacles + seed). So: fixed dt, fixed unit order,
 // one seeded rng stream, and no wall-clock or Math.random anywhere.
-import { Monster, Move, MoveArea, MoveSpatial, Stat, aoeFalloff, statScaleOf, mulberry32, hashString, StatusKind, rollVariance, SPREADABLE_STATUSES, classForStats, DEFAULT_TACTICS} from '../core'
+import { Monster, Move, MoveArea, MoveSpatial, Stat, aoeFalloff, statScaleOf, mulberry32, hashString, StatusKind, rollVariance, SPREADABLE_STATUSES, classForStats, DEFAULT_TACTICS, HARD_CONTROL_STATUSES} from '../core'
 import { chooseLoadout, learnedMoves, manaCost, maxHp, maxMana } from '../monster'
 import {
   DT, FIELD_H, FIELD_W, FieldEvent, FieldResult, FieldSetup, FieldSide, FieldUnit,
@@ -17,7 +17,7 @@ import {
   SUDDEN_DEATH_AT, SUDDEN_DEATH_BASE, SUDDEN_DEATH_RAMP, KITE_MAX, KITE_REFILL, BLOCK_DR,
   BASIC_STAT_TIER, BASIC_BASE_POWER, BASIC_STAT_SCALE,
   MANA_ON_HIT_TAKEN, MANA_ON_HIT_DEALT, MANA_SUPPORT_PER_SEC, WIS_REGEN_DIVISOR, FIELD_MANA_COST_MULT,
-  FIELD_LOADOUT_SIZE, CC_DR_STEP, CC_DR_RESET, CLEANSE_CC_IMMUNITY, CLASS_BASIC, KNOCKBACK_SPEED, KNOCKBACK_MIN_TIME, mitigationFor, openingMitigation, MIT_CEIL, COOLDOWN_MULT, TRIAGE_AT} from './types'
+  FIELD_LOADOUT_SIZE, CC_DR_STEP, CC_DR_RESET, CLEANSE_CC_IMMUNITY, CLASS_BASIC, KNOCKBACK_SPEED, KNOCKBACK_MIN_TIME, mitigationFor, openingMitigation, MIT_CEIL, COOLDOWN_MULT, TRIAGE_AT, MANA_RESERVE, CC_PRIORITY_BONUS} from './types'
 import { archetypeOf, desiredGoal, dist, isMelee, manaRoleOf, norm, pickTarget, reachOf, spacingRadius, sub, threatOf, traitsFor, wantsToKite } from './decide'
 import { personalityOf, spendAboveFor } from './personality'
 import { spatialOf } from './spatial'
@@ -355,11 +355,25 @@ function chooseMove(u: FieldUnit, target: FieldUnit, obstacles: Obstacle[]): Mov
   let bestScore = -Infinity
   for (const mv of dmgMoves) {
     if ((u.cooldowns[mv.id] ?? 0) > 0) continue
-    if (u.mp < mpCost(mv)) continue
+    // ⚠️ MANA POLICY. 'conserve' keeps a reserve so a big move stays affordable;
+    // 'burst' spends to the floor. Four rival GAMEPLANS set this field and the
+    // field engine read it NOWHERE — a configured no-op on every rival team.
+    // Absent behaves exactly as before, so no existing caller changes.
+    const pol = u.m.tactics?.manaPolicy
+    const reserve = pol === 'conserve' ? u.maxMp * MANA_RESERVE : 0
+    if (u.mp - mpCost(mv) < reserve && !(pol === 'burst' && u.mp >= mpCost(mv))) continue
     if (d > rangeOf(mv)) continue
     // Ranged and magic need to actually SEE the target — cover is real.
     if (mv.channel !== 'melee' && !hasLineOfSight(u.pos, target.pos, obstacles)) continue
-    const score = effPowerField(u, mv, target) * spendWeight(u, mv, target, avgPower)
+    // ⚠️ CC PRIORITY. Lead with hard control before committing to damage — but
+    // only while the target is NOT already under it, or the order would spend
+    // every stun re-stunning someone helpless. Ten UI references set this and
+    // the field engine read none of them.
+    const cc = u.m.tactics?.ccPriority
+      && mv.status && HARD_CONTROL_STATUSES.has(mv.status.kind)
+      && !target.statuses.some((s) => HARD_CONTROL_STATUSES.has(s.kind))
+      ? CC_PRIORITY_BONUS : 1
+    const score = effPowerField(u, mv, target) * spendWeight(u, mv, target, avgPower) * cc
     if (score > bestScore) { bestScore = score; best = mv }
   }
   return best
