@@ -185,20 +185,47 @@ export const FALL_BACK_RAMP = 0.5 // seconds to reach full retreat speed
 export const MIT_DIVISOR = 1250
 
 /**
- * CEILING ON DAMAGE REDUCTION — `min(MIT_CAP, defStat / MIT_DIVISOR)`.
+ * DAMAGE REDUCTION, WITH DIMINISHING RETURNS INSTEAD OF A WALL.
  *
- * ⚠️ THE CAP IS WHERE MITIGATION STOPS BEING A SCALING DEFENCE. At 0.55 it
- * saturated at defStat 688, so every point of CON or WIS past that bought
- * nothing. Measured share of monsters already at the cap: 0% up to Silver, 5% at
- * Gold, 22% at Masters, 37% at Tamer Elite, 65% at Tamers Apex. Damage compounds
- * all the way up while defence flatlined two-thirds of the way — which is why
- * elite fights ran SHORTER than mid-tier ones despite 3x the health pools.
+ * ⚠️ A HARD CAP MADE MITIGATION STOP BEING A DEFENCE. `min(cap, stat/divisor)`
+ * saturated at 688 when the cap was 0.55 and at 812 at 0.65 — past that, every
+ * point of CON or WIS bought exactly nothing. Measured share already at the cap:
+ * 0% up to Silver, 22% at Masters, 37% at Tamer Elite, 65% at Tamers Apex. The
+ * whole top of the ladder was investing in a stat that had stopped paying, which
+ * is why elite fights ran SHORTER than mid-tier ones despite triple the health.
  *
- * 0.65 moves saturation to 812. Deliberately not higher: past ~0.7 a wall stops
- * taking meaningful damage from anything but pierce, and "unkillable tank" is a
- * worse failure than "short fight".
+ * Now: linear to the KNEE, then a reduced rate that never quite reaches CEIL. So
+ * a wall always gains from more CON, but never becomes unkillable.
+ *
+ *   stat  688 -> 0.550   (the old cap — unchanged below here, by construction)
+ *   stat 1000 -> 0.638
+ *   stat 1100 -> 0.666
+ *   stat 1400 -> 0.750
+ *
+ * ⚠️ CEIL 0.80 is a real ceiling and is meant to be approached, not hit. Past it
+ * a wall stops taking meaningful damage from anything but pierce, and
+ * "unkillable tank" is a worse failure than "short fight".
  */
-export const MIT_CAP = 0.65
+export const MIT_KNEE = 0.55  // where returns start diminishing
+export const MIT_SOFT = 0.35  // rate retained above the knee
+export const MIT_CEIL = 0.80  // asymptote, never reached in practice
+
+/**
+ * THE ONE MITIGATION FORMULA. ⚠️ There were THREE copies of it in engine.ts —
+ * `strike`, the damage estimator, and pierce valuation — and by the end of one
+ * session all three had drifted apart: the estimator kept `1400` after the
+ * divisor moved to 1250, and pierce kept BOTH `0.55` and `1400`. Pierce was being
+ * priced against a curve the game no longer used. One function, called
+ * everywhere, is the only thing that ends that.
+ *
+ * `pierce` is a FRACTION of the defence ignored outright (never points).
+ */
+export function mitigationFor(defStat: number, pierce = 0): number {
+  const eff = defStat * (1 - Math.min(1, Math.max(0, pierce)))
+  const raw = Math.max(0, eff) / MIT_DIVISOR
+  if (raw <= MIT_KNEE) return raw
+  return Math.min(MIT_CEIL, MIT_KNEE + (raw - MIT_KNEE) * MIT_SOFT)
+}
 
 /**
  * TRIAGE THRESHOLD — under `healPolicy: 'triage'` a restore is held until its best
