@@ -656,13 +656,27 @@ power dominate, so a new player's first fights are the slowest in the game.
 Long fights come from a slow cascade, not a slow opening. Drivers: numbers
 advantage compounds directly and focus fire is already high (0.65–0.71).
 
-⚠️ **AND FLANKING IS NOT THE AMPLIFIER — I ASSUMED THAT AND WAS WRONG.** An
-earlier revision of this section named `+10 acc when outnumbered and unsupported`
-as the mechanic rewarding the snowball. Measured: it fires on **2.2% of attacks**
-(86 of 3865), and setting the bonus to 0 moved nothing at either tier — mid 26.1s
-→ 26.7s, elite 19.5s → 18.6s, both inside the 1.8s band, kills unchanged. It is
-inert, the same shape as the isolation term. The claim was reasoned rather than
-measured, in a document whose own method notes say not to do that.
+⚠️ **FLANKING: A CORRECT THEORY MEASURED AGAINST A BROKEN IMPLEMENTATION.** This
+section first named `+10 acc when outnumbered and unsupported` as the snowball
+amplifier — reasoned, not measured. Measurement then showed it firing on **2.2%
+of attacks** with zeroing it moving nothing, so the claim was retracted as
+inert.
+
+Both readings were partly wrong. The RADII were broken: `FLANK_ENGAGE_RADIUS`
+2.6 sat **below melee reach 3.0**, so a melee attacker at its own proper distance
+did not register as "on" the target — the mechanic was blind to the exact
+situation it exists for — while `FLANK_SUPPORT_RADIUS` 3.2 was **wider than
+engage**, so a defender counted as protected by an ally standing further off than
+the enemies hitting it. Fixed to 4.0 / 2.5: fire rate **2.2% → 17.5%**.
+
+And with working radii the original theory held exactly. At +10 it cut mid 26.1s
+→ **20.0s** and elite 19.5s → **17.2s** — a real amplifier, pointed at the side
+already losing, and directly against the goal of longer fights. Halved to **+5**:
+live at 17.5% for a cost inside the noise band (mid 25.4s, elite 17.7s).
+
+⚠️ **The lesson is the difference between the two readings.** A null result
+refutes the CODE, not the idea — check whether the mechanism can fire before
+concluding the design is wrong.
 
 **Next lever, and it widens rather than compresses** because it only touches
 fights that reach a numbers gap: a defensive bonus when outnumbered (the genre's

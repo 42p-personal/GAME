@@ -207,8 +207,10 @@ const GOLDENS: Golden[] = [
     // which had drifted to 0.55/1400). Field-only; no battle.ts golden moved.
     // ⚠️ Recaptured for the mitigation KNEE curve replacing the hard cap, and
     // for pierce now using the same shared helper. Field-only.
-    winner: 'A', duration: 16.7, survivors: [3, 0],
-    casts: 87, hits: 58, deaths: 3, finalHp: [420, 230, 291, 0, 0, 0],
+    // ⚠️ Recaptured for the FLANKING radii fix — engage 2.6 -> 4.0 (it sat below
+    // melee reach), support 3.2 -> 2.5, bonus 10 -> 5. Fire rate 2.2% -> 17.5%.
+    winner: 'A', duration: 16.5, survivors: [3, 0],
+    casts: 85, hits: 58, deaths: 3, finalHp: [420, 233, 291, 0, 0, 0],
   },
 ]
 

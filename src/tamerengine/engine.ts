@@ -736,17 +736,35 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
   // Accuracy POINTS, not a fraction (the standing units rule), and it favours
   // melee for free: melee is what actually stacks two bodies onto one target,
   // which is the STR/Warrior identity the class-damage table showed was weakest.
-  // ⚠️ MEASURED INERT (2026-08-01): the condition fires on 2.2% of attacks — 86
-  // of 3865 across the sweep — and switching the bonus to 0 moved nothing at
-  // either tier (mid 26.1s -> 26.7s, elite 19.5s -> 18.6s, both inside the 1.8s
-  // noise band, kills unchanged). It is NOT the cascade amplifier it was assumed
-  // to be; that assumption was reasoned, not measured, and the measurement
-  // refuted it. Same shape as the isolation term. Either widen the radii until it
-  // reaches, or delete it — do not leave it as a mechanic that reads real and is
-  // not.
-  const FLANK_ACC_BONUS = 10
-  const FLANK_ENGAGE_RADIUS = 2.6   // "on" the defender
-  const FLANK_SUPPORT_RADIUS = 3.2  // "at its shoulder"
+  // ⚠️ THE RADII WERE WHY THIS DID NOTHING, NOT THE BONUS. It fired on 2.2% of
+  // attacks (86 of 3865) and zeroing the bonus moved nothing at either tier.
+  // ENGAGE 2.6 sat BELOW melee reach 3.0, so a melee attacker at its own proper
+  // distance did not register as "on" the target — the mechanic was blind to the
+  // exact situation it exists for — while SUPPORT 3.2 was WIDER than ENGAGE, so
+  // a defender counted as protected by an ally standing further off than the
+  // enemies hitting it. Fixed: 4.0 / 2.5, and the fire rate went 2.2% -> 17.5%.
+  //
+  // ⚠️ AND THEN IT AMPLIFIED THE CASCADE EXACTLY AS ORIGINALLY THEORISED. At the
+  // old +10 with working radii, mid ran 26.1s -> 20.0s and elite 19.5s -> 17.2s:
+  // a real mechanic, pointed at the side already losing, and directly against the
+  // goal of longer fights with a wider spread. Halved to 5, which keeps it live
+  // at 17.5% for a cost inside the noise band (mid 25.4s, elite 17.7s).
+  //
+  // ⚠️ So the earlier retraction was half right. "Flanking amplifies the cascade"
+  // was a correct THEORY measured against a broken implementation; the 2.2%
+  // reading refuted the code, not the idea. Both readings are kept here because
+  // the difference between them is the lesson.
+  const FLANK_ACC_BONUS = 5
+  // ⚠️ ENGAGE MUST COVER MELEE REACH OR IT CANNOT SEE A MELEE FIGHT. At 2.6 it
+  // sat BELOW CLASS_BASIC's melee band (3.0), so a melee attacker standing at
+  // its own proper distance did not count as "on" the target — the mechanic was
+  // blind to precisely the situation it exists for. 4.0 is melee reach plus the
+  // separation an ally is pushed out to.
+  const FLANK_ENGAGE_RADIUS = 4.0   // "on" the defender
+  // ⚠️ AND SUPPORT WAS WIDER THAN ENGAGE, so a defender counted as protected by
+  // an ally standing further away than the enemies attacking it. Tightened to
+  // 2.5: to cover someone you have to be genuinely beside them.
+  const FLANK_SUPPORT_RADIUS = 2.5  // "at its shoulder"
   const flankBonus = (target: FieldUnit): number => {
     let onIt = 0
     for (const e of units) {
