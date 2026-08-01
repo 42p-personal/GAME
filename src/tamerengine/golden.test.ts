@@ -106,6 +106,8 @@ const GOLDENS: Golden[] = [
     // Shared by both engines, so all seven goldens moved together — intended.
     // ⚠️ Recaptured for the STAT SCALE trim (LOW 1/320->1/360, HIGH 1/130->1/145).
     // Field-only by design, which is why no battle.ts golden moved.
+    // ⚠️ Recaptured for MIT_CAP 0.55 -> 0.65 (and the third mitigation mirror,
+    // which had drifted to 0.55/1400). Field-only; no battle.ts golden moved.
     winner: 'B', duration: 16.4, survivors: [0, 1],
     casts: 64, hits: 41, deaths: 1, finalHp: [0, 324],
   },
@@ -142,6 +144,8 @@ const GOLDENS: Golden[] = [
     // Shared by both engines, so all seven goldens moved together — intended.
     // ⚠️ Recaptured for the STAT SCALE trim (LOW 1/320->1/360, HIGH 1/130->1/145).
     // Field-only by design, which is why no battle.ts golden moved.
+    // ⚠️ Recaptured for MIT_CAP 0.55 -> 0.65 (and the third mitigation mirror,
+    // which had drifted to 0.55/1400). Field-only; no battle.ts golden moved.
     winner: 'B', duration: 7, survivors: [0, 1],
     casts: 16, hits: 9, deaths: 1, finalHp: [0, 530],
   },
@@ -195,6 +199,8 @@ const GOLDENS: Golden[] = [
     // Shared by both engines, so all seven goldens moved together — intended.
     // ⚠️ Recaptured for the STAT SCALE trim (LOW 1/320->1/360, HIGH 1/130->1/145).
     // Field-only by design, which is why no battle.ts golden moved.
+    // ⚠️ Recaptured for MIT_CAP 0.55 -> 0.65 (and the third mitigation mirror,
+    // which had drifted to 0.55/1400). Field-only; no battle.ts golden moved.
     winner: 'A', duration: 16.7, survivors: [3, 0],
     casts: 87, hits: 58, deaths: 3, finalHp: [420, 230, 291, 0, 0, 0],
   },

@@ -17,7 +17,7 @@ import {
   SUDDEN_DEATH_AT, SUDDEN_DEATH_BASE, SUDDEN_DEATH_RAMP, KITE_MAX, KITE_REFILL, BLOCK_DR,
   BASIC_STAT_TIER, BASIC_BASE_POWER, BASIC_STAT_SCALE,
   MANA_ON_HIT_TAKEN, MANA_ON_HIT_DEALT, MANA_SUPPORT_PER_SEC, WIS_REGEN_DIVISOR, FIELD_MANA_COST_MULT,
-  FIELD_LOADOUT_SIZE, CC_DR_STEP, CC_DR_RESET, CLEANSE_CC_IMMUNITY, CLASS_BASIC, KNOCKBACK_SPEED, KNOCKBACK_MIN_TIME, MIT_DIVISOR, TRIAGE_AT} from './types'
+  FIELD_LOADOUT_SIZE, CC_DR_STEP, CC_DR_RESET, CLEANSE_CC_IMMUNITY, CLASS_BASIC, KNOCKBACK_SPEED, KNOCKBACK_MIN_TIME, MIT_DIVISOR, MIT_CAP, TRIAGE_AT} from './types'
 import { archetypeOf, desiredGoal, dist, isMelee, manaRoleOf, norm, pickTarget, reachOf, spacingRadius, sub, threatOf, traitsFor, wantsToKite } from './decide'
 import { personalityOf, spendAboveFor } from './personality'
 import { spatialOf } from './spatial'
@@ -237,7 +237,7 @@ function estimateDamage(u: FieldUnit, mv: Move, target: FieldUnit): number {
   const mit = mv.channel === 'melee' || mv.channel === 'ranged' ? target.m.stats.CON : target.m.stats.WIS
   // ⚠️ Must mirror strike()'s formula, or kill-checks (and therefore `worthSpending`
   // and the finish-it override) misjudge whether a cast would land a kill.
-  return Math.max(1, Math.round(mv.power * (1 + atk * statScaleOf(mv)) * (1 - Math.min(0.55, mit / MIT_DIVISOR))))
+  return Math.max(1, Math.round(mv.power * (1 + atk * statScaleOf(mv)) * (1 - Math.min(MIT_CAP, mit / MIT_DIVISOR))))
 }
 
 /**
@@ -327,8 +327,12 @@ function effPowerField(u: FieldUnit, mv: Move, target: FieldUnit): number {
   // aims itself without a bespoke rule.
   if (e?.pierce) {
     const mit = mv.channel === 'melee' || mv.channel === 'ranged' ? target.m.stats.CON : target.m.stats.WIS
-    const full = Math.min(0.55, mit / 1400)
-    const kept = Math.min(0.55, (mit * (1 - Math.min(1, e.pierce))) / 1400)
+    // ⚠️ THE SAME CONSTANTS `strike()` USES. This is the THIRD mirror of the
+    // mitigation curve in this file and it had drifted on BOTH values — still
+    // 0.55/1400 after MIT_DIVISOR went to 1250 and MIT_CAP to 0.65 — so pierce
+    // was being priced against a curve the game no longer used.
+    const full = Math.min(MIT_CAP, mit / MIT_DIVISOR)
+    const kept = Math.min(MIT_CAP, (mit * (1 - Math.min(1, e.pierce))) / MIT_DIVISOR)
     p *= (1 - kept) / Math.max(0.01, 1 - full)
   }
   // Resource strikes are worth what the caster is HOLDING — nothing with the
@@ -1601,7 +1605,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     // 12-point shred takes a tank from 25% mitigation to 13%, which is what
     // makes it a real answer to trained CON rather than a rounding error.
     // Floored at 0: a shred can strip armour, never invert it into a bonus.
-    const mitFrac = Math.max(0, Math.min(0.55, mitigation / MIT_DIVISOR) - modMitDebuff(target) / 100)
+    const mitFrac = Math.max(0, Math.min(MIT_CAP, mitigation / MIT_DIVISOR) - modMitDebuff(target) / 100)
     const afterMult = raw * (1 - mitFrac) * statusDamageTaken(target) * modDmgTaken(target) * blocked
     const dmg = Math.max(1, Math.round(afterMult - modGuard(target)))
     // WARD soaks BEFORE health — an absorb pool that depletes, not a multiplier.

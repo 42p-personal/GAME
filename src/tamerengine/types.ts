@@ -185,6 +185,22 @@ export const FALL_BACK_RAMP = 0.5 // seconds to reach full retreat speed
 export const MIT_DIVISOR = 1250
 
 /**
+ * CEILING ON DAMAGE REDUCTION — `min(MIT_CAP, defStat / MIT_DIVISOR)`.
+ *
+ * ⚠️ THE CAP IS WHERE MITIGATION STOPS BEING A SCALING DEFENCE. At 0.55 it
+ * saturated at defStat 688, so every point of CON or WIS past that bought
+ * nothing. Measured share of monsters already at the cap: 0% up to Silver, 5% at
+ * Gold, 22% at Masters, 37% at Tamer Elite, 65% at Tamers Apex. Damage compounds
+ * all the way up while defence flatlined two-thirds of the way — which is why
+ * elite fights ran SHORTER than mid-tier ones despite 3x the health pools.
+ *
+ * 0.65 moves saturation to 812. Deliberately not higher: past ~0.7 a wall stops
+ * taking meaningful damage from anything but pierce, and "unkillable tank" is a
+ * worse failure than "short fight".
+ */
+export const MIT_CAP = 0.65
+
+/**
  * TRIAGE THRESHOLD — under `healPolicy: 'triage'` a restore is held until its best
  * recipient is at or below this fraction of max HP.
  *
