@@ -429,7 +429,30 @@ export interface Tactics {
   // them cannot move a golden. Like every other order they are COACHING: how
   // much of each actually lands is gated by the monster's temperament.
   engageRange?: 'skirmish' | 'brawl' | 'hold' // fight at max reach / close in / stay put
-  spacing?: 'spread' | 'tight' // fan out against AoE, or clump to focus-fire
+  /**
+   * FORMATION — how much of the deployed shape this monster holds onto.
+   *
+   *   'keep'    hold the SLOT it deployed in, relative to the team as it advances
+   *   'tight'   no slot; drift with the team and clump up (focus-fire, AoE bait)
+   *   'spread'  no slot; drift with the team but fan out (AoE insurance)
+   *
+   * ⚠️ REPLACED `spacing`, which was never formation. `spacingRadius` is a
+   * personal-space radius — how close allies stand — and nothing else. The thing
+   * that actually held a team together was the cohesion pull toward the LIVE ALLY
+   * CENTROID: a blob that drifts, not a shape. So the deploy screen let a player
+   * place a wall in front and a healer behind, and the first second of the fight
+   * dissolved it. 'keep' is the option that makes deployment mean something for
+   * longer than tick 1.
+   *
+   * ⚠️ NO 'break' OPTION, DELIBERATELY. A monster ordered to ignore the team and
+   * hunt the enemy back line was designed and rejected: it re-creates by order the
+   * single shape this engine balances worst (melee measured 100% deaths alone
+   * against 81% beside a second front-liner), and it would have needed the melee
+   * nearest-target early return in `decide.ts:pickTarget` opened up — the guard
+   * whose own comment records that value-chasing "is exactly what made melee race
+   * around the map". Do not re-add it without solving that first.
+   */
+  formation?: 'keep' | 'tight' | 'spread'
   useCover?: boolean // prefer ground where an obstacle breaks enemy line of sight
   commit?: 'dive' | 'hold' // chase past the enemy front line, or refuse to over-extend
   /**

@@ -180,6 +180,7 @@ function buildUnit(m0: Monster, side: FieldSide, slot: number, pos: Vec2): Field
     id: side + slot,
     side, slot, m,
     pos: { ...pos },
+    deployPos: { ...pos },
     vel: { x: 0, y: 0 },
     radius: 0.9,
     // DEX drives how fast it crosses the field — the stat finally has a
@@ -730,7 +731,13 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
   // know nothing about cover, so a legal-looking placement can land on a rock.
   // Nudging here — rather than banning cover near spawns — keeps arenas free to
   // put a pillar by the start line, which is a real design tool.
-  for (const u of units) u.pos = pushOutOfObstacles(u.pos, setup.obstacles ?? [], u.radius)
+  // ⚠️ `deployPos` is re-stamped AFTER the nudge, not before. It is the anchor
+  // `formation: 'keep'` holds a slot against, and a slot inside a rock is one the
+  // unit spends the whole fight failing to stand on.
+  for (const u of units) {
+    u.pos = pushOutOfObstacles(u.pos, setup.obstacles ?? [], u.radius)
+    u.deployPos = { ...u.pos }
+  }
 
   // ⚠️ BUILT ONCE. Obstacles never move, so the visibility graph is a constant
   // of the arena — the per-tick cost is the two attach passes in nextWaypoint,

@@ -3,7 +3,7 @@
 // Everything here is a PURE function of the units' state — no randomness, no
 // mutation — so it is directly unit-testable and the tick loop stays readable.
 import { Monster, Stat, roleOfClass, classForStats} from '../core'
-import { FieldTraits, FieldUnit, Vec2, FIELD_W, FIELD_H, CHANNEL_RANGE, LEASH_RADIUS, CLASS_BASIC} from './types'
+import { FieldTraits, FieldUnit, Vec2, FIELD_W, FIELD_H, CHANNEL_RANGE, LEASH_RADIUS, CLASS_BASIC, FORMATION_KEEP_PULL} from './types'
 import { coachedValue, panicThreshold, personalityOf, resolvePersonality, threatRadius } from './personality'
 
 export const v = (x: number, y: number): Vec2 => ({ x, y })
@@ -315,11 +315,19 @@ export function engageMult(u: FieldUnit): number {
   return coachedValue(1, want, personalityOf(u.m).temperament)
 }
 
-/** Personal-space radius. Spread fans out against AoE; tight clumps to focus. */
+/**
+ * Personal-space radius. Spread fans out against AoE; tight clumps to focus.
+ *
+ * ⚠️ `keep` DELIBERATELY TAKES THE BASE RADIUS. Under `keep` the density is
+ * already drawn on the deploy screen — the player chose which hexes to stand on —
+ * so a personal-space multiplier on top would be a second, invisible order
+ * fighting the slot the unit is being pulled toward. Density is a choice only
+ * when there is no slot to hold.
+ */
 export function spacingRadius(u: FieldUnit): number {
-  const order = u.m.tactics?.spacing
+  const order = u.m.tactics?.formation
   const base = u.radius * 2
-  if (!order) return base
+  if (!order || order === 'keep') return base
   const want = order === 'spread' ? base * 2.6 : base * 0.75
   return coachedValue(base, want, personalityOf(u.m).temperament)
 }
@@ -428,10 +436,35 @@ export function desiredGoal(
   // stray far from its allies even to reach a juicy target; a low-cohesion one
   // goes wherever it likes. This single blend is what makes a team look like a
   // team rather than five monsters running separate errands.
+  //
+  // FORMATION 'keep' aims that pull at this unit's SLOT instead of at the bare
+  // centroid: the live centroid PLUS the offset it deployed at. The shape then
+  // travels with the team — the wall stays in front and the healer behind for the
+  // whole fight, instead of the deployment dissolving into a blob on tick 1.
   if (liveAllies.length) {
+    const live = [self, ...liveAllies]
     const c = centroid(liveAllies)
-    const pull = self.traits.cohesion * 0.35
-    goal = { x: goal.x * (1 - pull) + c.x * pull, y: goal.y * (1 - pull) + c.y * pull }
+    let anchor = c
+    let pull = self.traits.cohesion * 0.35
+    if (self.m.tactics?.formation === 'keep') {
+      // ⚠️ BOTH CENTROIDS OVER THE SAME LIVE SET, and both including self — a
+      // deploy centroid taken over the original team leaves survivors standing in
+      // their dead's gaps, and one taken over a different set than the live
+      // centroid offsets the whole formation by the difference.
+      const now = centroid(live)
+      const then = {
+        x: live.reduce((n, u) => n + u.deployPos.x, 0) / live.length,
+        y: live.reduce((n, u) => n + u.deployPos.y, 0) / live.length,
+      }
+      anchor = {
+        x: now.x + (self.deployPos.x - then.x),
+        y: now.y + (self.deployPos.y - then.y),
+      }
+      // An order, so it lands in proportion to TEMPERAMENT like every other
+      // spatial order — a wilful monster holds a looser slot than a drilled one.
+      pull = coachedValue(pull, FORMATION_KEEP_PULL, personalityOf(self.m).temperament)
+    }
+    goal = { x: goal.x * (1 - pull) + anchor.x * pull, y: goal.y * (1 - pull) + anchor.y * pull }
   }
   // RUN LoS / USE COVER. A ranged unit under pressure USES THE TERRAIN: when a
   // melee threat is closing, it prefers a stance that breaks that threat's line

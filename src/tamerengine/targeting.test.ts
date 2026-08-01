@@ -12,7 +12,7 @@ import { ALL_MOVES } from '../moves'
 // be real; the rest are inert defaults.
 function unit(m: Monster, side: FieldSide, pos: Vec2, hp = 500, maxHp = 500): FieldUnit {
   return {
-    id: `${side}${pos.x}_${pos.y}`, side, slot: 0, m, pos, vel: { x: 0, y: 0 },
+    id: `${side}${pos.x}_${pos.y}`, side, slot: 0, m, pos, deployPos: { ...pos }, vel: { x: 0, y: 0 },
     radius: 0.9, speed: 4, hp, maxHp, mp: 100, maxMp: 100, traits: traitsFor(m),
     targetId: null, retargetIn: 0, cooldowns: {}, castingFor: 0, castMoveId: null,
     castTargetId: null, statuses: [], mods: [], forcedTargetId: null, forcedUntil: 0,

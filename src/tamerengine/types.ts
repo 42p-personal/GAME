@@ -341,6 +341,11 @@ export interface FieldUnit {
   slot: number // index within its own team — identity, for events and results
   m: Monster
   pos: Vec2
+  /**
+   * Where this unit was DEPLOYED, after the obstacle nudge — the anchor the
+   * `formation: 'keep'` order holds its slot against. Never written again.
+   */
+  deployPos: Vec2
   vel: Vec2
   radius: number
   /** world units per second */
@@ -655,6 +660,25 @@ export const CONTAGION_RADIUS = 5.5
  * measurable price, not a tuning nicety, so it is left generous until asked for.
  */
 export const TEAM_AURA_RADIUS = 9
+
+/**
+ * How hard `formation: 'keep'` pulls a unit back onto its deployed SLOT, as a
+ * blend weight against the goal it would otherwise pick (its stand-off on its
+ * target). The ordinary cohesion blend maxes out at 0.35 toward the bare ally
+ * centroid; keeping a slot is a stronger order than merely staying near friends,
+ * so it sits above that.
+ *
+ * ⚠️ THE ANCHOR IS RELATIVE, NOT ABSOLUTE. The slot is `live ally centroid +
+ * this unit's deploy offset`, so the whole shape TRANSLATES as the team advances.
+ * Pinning to the literal deploy point would be a formation that never leaves the
+ * start line, and at a blend of 0.55 nothing would ever reach the enemy.
+ *
+ * ⚠️ AND BOTH CENTROIDS ARE TAKEN OVER THE SAME LIVE SET. Recomputing the deploy
+ * centroid over survivors is what lets a shrinking team CLOSE UP: hold it over
+ * the original six and a team down to two keeps standing in the gaps where its
+ * dead used to be, politely spread out for an enemy that is now concentrated.
+ */
+export const FORMATION_KEEP_PULL = 0.55
 
 export interface FieldSetup {
   seed: string

@@ -155,7 +155,7 @@ describe('the two new stats', () => {
 describe('target selection', () => {
   // Two enemies: one near and tanky, one far and squishy-but-dangerous.
   const unit = (id: string, over: Partial<FieldUnit>): FieldUnit => ({
-    id, side: 'B', slot: 0, m: mk(id), pos: { x: 20, y: 11 }, vel: { x: 0, y: 0 },
+    id, side: 'B', slot: 0, m: mk(id), pos: { x: 20, y: 11 }, deployPos: over.pos ?? { x: 20, y: 11 }, vel: { x: 0, y: 0 },
     radius: 0.9, speed: 3, hp: 500, maxHp: 500, mp: 50, maxMp: 50,
     traits: { cohesion: 0.5, predation: 0.5 }, targetId: null, retargetIn: 0,
     cooldowns: {}, castingFor: 0, castMoveId: null, castTargetId: null, statuses: [], mods: [], forcedTargetId: null, forcedUntil: 0,
@@ -205,7 +205,7 @@ describe('target selection', () => {
 
 describe('positioning', () => {
   const base = (over: Partial<FieldUnit>): FieldUnit => ({
-    id: 'u', side: 'A', slot: 0, m: mk('p'), pos: { x: 6, y: 11 }, vel: { x: 0, y: 0 },
+    id: 'u', side: 'A', slot: 0, m: mk('p'), pos: { x: 6, y: 11 }, deployPos: over.pos ?? { x: 6, y: 11 }, vel: { x: 0, y: 0 },
     radius: 0.9, speed: 3, hp: 500, maxHp: 500, mp: 50, maxMp: 50,
     traits: { cohesion: 0.5, predation: 0.5 }, targetId: null, retargetIn: 0,
     cooldowns: {}, castingFor: 0, castMoveId: null, castTargetId: null, statuses: [], mods: [], forcedTargetId: null, forcedUntil: 0,
@@ -240,7 +240,7 @@ describe('positioning', () => {
 
 describe('awareness — the counter to a dive', () => {
   const u = (id: string, over: Partial<FieldUnit>): FieldUnit => ({
-    id, side: 'A', slot: 0, m: mk(id), pos: { x: 10, y: 11 }, vel: { x: 0, y: 0 },
+    id, side: 'A', slot: 0, m: mk(id), pos: { x: 10, y: 11 }, deployPos: over.pos ?? { x: 10, y: 11 }, vel: { x: 0, y: 0 },
     radius: 0.9, speed: 3, hp: 500, maxHp: 500, mp: 50, maxMp: 50,
     traits: { cohesion: 0.5, predation: 0.5 }, targetId: null, retargetIn: 0,
     cooldowns: {}, castingFor: 0, castMoveId: null, castTargetId: null, statuses: [], mods: [], forcedTargetId: null, forcedUntil: 0,

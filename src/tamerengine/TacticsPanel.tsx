@@ -24,8 +24,13 @@ const ENGAGE: Opt<Tactics['engageRange']>[] = [
   { id: 'brawl', icon: '🥊', name: 'Brawl' },
   { id: 'hold', icon: '⛳', name: 'Hold' },
 ]
-const SPACING: Opt<Tactics['spacing']>[] = [
+// ⚠️ ONE control, three choices — not a formation toggle plus a nested spacing
+// row. `keep` holds the slot the player DREW on the deploy screen, so its density
+// is already chosen there; only the two no-slot options have a density left to
+// pick. A nested control would have offered a second answer to a settled question.
+const FORMATION: Opt<Tactics['formation']>[] = [
   { id: undefined, icon: '◦', name: 'Auto' },
+  { id: 'keep', icon: '▦', name: 'Keep' },
   { id: 'spread', icon: '↔', name: 'Spread' },
   { id: 'tight', icon: '⊚', name: 'Tight' },
 ]
@@ -77,7 +82,7 @@ export function TacticsPanel({ name, value, onChange }: {
         opts={TARGET_PRIORITY_INFO.map((o) => ({ id: o.id, icon: o.icon, name: o.name }))}
         onPick={(v) => set({ targetPriority: v })} />
       <Row label="Engage" cur={value.engageRange} opts={ENGAGE} onPick={(v) => set({ engageRange: v })} />
-      <Row label="Spacing" cur={value.spacing} opts={SPACING} onPick={(v) => set({ spacing: v })} />
+      <Row label="Formation" cur={value.formation} opts={FORMATION} onPick={(v) => set({ formation: v })} />
       <Row label="Commit" cur={value.commit} opts={COMMIT} onPick={(v) => set({ commit: v })} />
       <Row label="Cover" cur={value.useCover} opts={COVER} onPick={(v) => set({ useCover: v || undefined })} />
       <Row label="Healing" cur={value.healPolicy ?? 'triage'} opts={HEALS}

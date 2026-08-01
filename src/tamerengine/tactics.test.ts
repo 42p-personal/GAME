@@ -18,7 +18,7 @@ const mk = (seed: string, over: Partial<Monster> = {}): Monster =>
   ({ ...generateMonster(seed, { train: 900 }), tactics: { ...DEFAULT_TACTICS }, ...over }) as Monster
 
 const unit = (id: string, over: Partial<FieldUnit>): FieldUnit => ({
-  id, side: 'A', slot: 0, m: mk(id), pos: { x: 8, y: 11 }, vel: { x: 0, y: 0 },
+  id, side: 'A', slot: 0, m: mk(id), pos: { x: 8, y: 11 }, deployPos: over.pos ?? { x: 8, y: 11 }, vel: { x: 0, y: 0 },
   radius: 0.9, speed: 3, hp: 500, maxHp: 500, mp: 60, maxMp: 60,
   traits: { cohesion: .5, predation: .5 }, targetId: null, retargetIn: 0,
   cooldowns: {}, castingFor: 0, castMoveId: null, castTargetId: null, statuses: [], mods: [], forcedTargetId: null, forcedUntil: 0,
@@ -45,12 +45,44 @@ describe('engage range', () => {
   })
 })
 
-describe('spacing', () => {
-  it('spread fans out; tight clumps up', () => {
-    const spread = unit('sp', { m: mk('sp', obedient({ spacing: 'spread' })) })
-    const tight = unit('ti', { m: mk('sp', obedient({ spacing: 'tight' })) })
+describe('formation', () => {
+  it('spread fans out; tight clumps up; keep takes the deployed density', () => {
+    const spread = unit('sp', { m: mk('sp', obedient({ formation: 'spread' })) })
+    const tight = unit('ti', { m: mk('ti', obedient({ formation: 'tight' })) })
+    const keep = unit('ke', { m: mk('ke', obedient({ formation: 'keep' })) })
     expect(spacingRadius(spread)).toBeGreaterThan(spacingRadius(tight))
     expect(spacingRadius(tight)).toBeLessThan(unit('d', {}).radius * 2 + 0.01)
+    // ⚠️ `keep` gets the BASE radius, not a third setting. Its density is drawn
+    // on the deploy screen, so a multiplier here would be a second order fighting
+    // the slot the unit is simultaneously being pulled toward.
+    expect(spacingRadius(keep)).toBeCloseTo(keep.radius * 2)
+  })
+
+  it('KEEP holds the slot it deployed in; the default collapses toward the blob', () => {
+    // Deployed as a wedge: this unit at the BACK, two mates ahead of it, and the
+    // enemy far east — so every unit's raw goal is "advance".
+    const mates = [unit('m1', { pos: { x: 12, y: 8 } }), unit('m2', { pos: { x: 12, y: 14 } })]
+    const foe = unit('f', { side: 'B', pos: { x: 34, y: 11 } })
+    const back = { x: 6, y: 11 }
+    const slotted = unit('me', { pos: { ...back }, m: mk('me', obedient({ formation: 'keep' })) })
+    const blob = unit('me', { pos: { ...back }, m: mk('me', obedient()) })
+    // Its slot is behind the team's centre, so keeping it means staying back;
+    // the bare cohesion pull aims at the mates themselves and drags it forward.
+    expect(desiredGoal(slotted, foe, mates, [foe]).x)
+      .toBeLessThan(desiredGoal(blob, foe, mates, [foe]).x)
+  })
+
+  it('KEEP still ADVANCES — the slot travels with the team, it is not a pin', () => {
+    // ⚠️ THE FAILURE MODE THIS PINS. Anchoring to the literal deploy point rather
+    // than to `live centroid + offset` gives a formation that never leaves the
+    // start line: at a 0.55 blend nothing would ever reach the enemy and every
+    // fight would run to sudden death.
+    const mates = [unit('m1', { pos: { x: 20, y: 8 } }), unit('m2', { pos: { x: 20, y: 14 } })]
+    const foe = unit('f', { side: 'B', pos: { x: 34, y: 11 } })
+    // Deployed at x=6, but the team has since advanced to x=20 — the slot moved
+    // with it, so the straggler is pulled FORWARD, not back to the spawn.
+    const late = unit('me', { pos: { x: 6, y: 11 }, m: mk('me', obedient({ formation: 'keep' })) })
+    expect(desiredGoal(late, foe, mates, [foe]).x).toBeGreaterThan(late.pos.x)
   })
 })
 
@@ -150,8 +182,8 @@ describe('orders do not break the simulation', () => {
       [0, 1, 2].map((i) => mk(p + i, obedient(t)))
     const setup = () => ({
       seed: 'orders',
-      teamA: team('oa', { engageRange: 'skirmish', spacing: 'spread', useCover: true, commit: 'hold' }),
-      teamB: team('ob', { engageRange: 'brawl', spacing: 'tight', commit: 'dive' }),
+      teamA: team('oa', { engageRange: 'skirmish', formation: 'keep', useCover: true, commit: 'hold' }),
+      teamB: team('ob', { engageRange: 'brawl', formation: 'tight', commit: 'dive' }),
     })
     const r1 = simulateFieldBattle(setup())
     const r2 = simulateFieldBattle(setup())

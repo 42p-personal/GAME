@@ -28,9 +28,8 @@ build two teams differing only in that field and count the casts it should chang
 | `temperament` | aggressive / balanced / cautious — the master dial on how far a monster commits | ✅ live, 19 refs |
 | `targetPriority` | who to attack: weakest / nearest / biggest threat | ✅ live |
 | `preserve` | below a HP threshold, play to survive — block, drop self-harm moves | ✅ live |
-| `spacing` | `spread` against AoE, `tight` to focus-fire | ✅ live — **folds into `formation`** |
+| `formation` | `keep` the deployed slot, or `tight`/`spread` and drift with the team | ✅ **live, built** (replaced `spacing`) |
 | `commit` | `dive` past the enemy front line, or `hold` and refuse to over-extend | ✅ live |
-| `formation` | `keep` (hold the deployed shape) or `break` (ignore it and hunt) | 🔵 **new — designed below** |
 | `healPolicy` | `triage` holds a restore until an ally is ≤55% HP; `steady` fires when up | ✅ live, **verified** |
 | `useCover` | prefer ground where an obstacle breaks enemy line of sight | ✅ live |
 | `manaPolicy` | see below — **needs rework** | ⚠️ wired, unverified, wrong semantics |
@@ -110,7 +109,7 @@ is the interesting decision and it is per monster. See `formation` below.
 | `manaPolicy` | a nuker holds its reserve, a filler-caster should not — the opposite orders on one team is correct play |
 | `useCover` | a back-liner hugs the pillar, the wall in front of it must not |
 | `preserve` | when THIS monster gives up on the fight and plays to live; a per-monster risk appetite |
-| `formation` | keep the deployed shape, or break it and hunt — see below |
+| `formation` | one monster can hold its slot while another fans out — see below |
 | `targetPriority` | see below — the one that gains the most from being per-monster |
 
 ⚠️ **`targetPriority` becomes an enemy PICKER, not a rule.** Today it is an abstract
@@ -131,74 +130,84 @@ player orders write the same fields.
 
 ---
 
-## `formation` — the order that unlocks the assassin
+## `formation` — SHIPPED
 
-Replaces `spacing`. Two settings, the second nesting the old spacing choice:
+Replaced `spacing`. One control, three choices:
 
-- **`keep`** — loosely hold the shape it was deployed in.
-  - **`tight`** / **`loose`** — the former `spacing`, live only under `keep`.
-- **`break`** — ignore the shape entirely and hunt `targetPriority`.
+| option | behaviour |
+|---|---|
+| `keep` | hold the SLOT it deployed in, relative to the team as the team advances |
+| `tight` | no slot — drift with the team and clump up (focus-fire, AoE bait) |
+| `spread` | no slot — drift with the team but fan out (AoE insurance) |
 
-The intent is a monster that leaves the wall and goes for the enemy back line, and
-the trade that buys it: it arrives alone, out of heal range, with nothing between it
-and the enemy front.
+### What `keep` actually does
 
-### ⚠️ THREE THINGS THE ENGINE DOES NOT CURRENTLY DO
+The anchor is **`live ally centroid + this unit's deploy offset`**, blended into the
+goal at `FORMATION_KEEP_PULL` (0.55), coached by temperament like every other
+spatial order.
 
-**1. `targetPriority` IS DEAD ON EVERY MELEE UNIT.** `decide.ts:206` returns the
-NEAREST enemy and returns *before* the scoring loop that `priorityBias` lives in, so
-a melee monster never reads its target order at all. The knife assassin the whole
-idea is built around (Assassin line reach 2.4–2.8) is melee. **The blocker on
-"assassins charge the back line" is not formation — it is this early return.**
+⚠️ **THE ANCHOR IS RELATIVE, NOT ABSOLUTE.** Pinning to the literal deploy point is
+a formation that never leaves the start line — at a 0.55 blend nothing would ever
+reach the enemy and every fight would run to sudden death. `tactics.test.ts` pins
+this directly: a straggler whose team has advanced is pulled FORWARD, not back to
+spawn.
 
-⚠️ And the early return is CORRECT as a default. Its own comment says why: letting
-melee chase value across the map "is exactly what made melee race around the map",
-one of the worst behaviours this engine has had. So do not simply delete it.
+⚠️ **BOTH CENTROIDS OVER THE SAME LIVE SET, both including self.** Hold the deploy
+centroid over the original six and a team down to two keeps standing in the gaps
+where its dead used to be, politely spread out for an enemy that is now
+concentrated. Taking them over *different* sets offsets the whole formation by the
+difference.
 
-✅ **That makes `formation` the right gate.** `break` is the player OPTING IN to
-cross-map melee hunting, monster by monster, having accepted the cost. The default
-stays nearest-target. The tactic is not just a positioning toggle — it is the
-permission slip that makes melee target orders legal.
+⚠️ **`deployPos` is stamped AFTER the obstacle nudge**, not before — a slot inside a
+rock is one the unit spends the whole fight failing to stand on.
 
-**2. There is no formation to keep.** `autoDeployByRole` / `placeA` / `placeB` set
-positions at t=0 and are never read again. What holds a team together afterwards is
-the cohesion pull in `desiredGoal` (`decide.ts:431`), which drags the goal toward the
-**live ally centroid** — a blob that drifts, not a shape. `keep` needs each unit's
-deploy offset stored *relative to its team's deploy centroid* and the pull aimed at
-`centroid + offset` instead. That is a genuine upgrade in its own right: the tank
-stays front-left and the healer back-right, instead of everyone collapsing inward.
+⚠️ **`keep` takes the BASE spacing radius**, not a third density setting. Under
+`keep` the density was already drawn on the deploy screen, so a multiplier on top
+would be a second, invisible order fighting the slot the unit is being pulled
+toward. Density is a choice only when there is no slot to hold.
 
-**3. `spacing` was never formation.** `spacingRadius` is a personal-space radius —
-how close allies stand — and nothing else. Folding it under `keep` as `tight`/`loose`
-is honest about that: it is the *density* of a shape that `keep` is now maintaining.
+### Measured — `tools/formation.ts`
 
-### Engine sites
+⚠️ **MIRRORED PAIRS, NOT A WIN RATE AGAINST A FIXED FOE.** The compositions are not
+symmetric, so "the keeping team won 60%" would mostly measure whether template A
+beats template B. Every fight runs both ways round and the score is how often the
+ORDERED side won, which cancels the matchup out. Sign test, 160 fights each:
 
-| behaviour | site | change |
-|---|---|---|
-| melee ignores target orders | `decide.ts:206` `pickTarget` | early return gated on `formation !== 'break'` |
-| shape-keeping | `decide.ts:431` cohesion pull | aim at `centroid + deployOffset`, not bare centroid |
-| break = loner | same | `break` zeroes the pull (and should lower `cohesion` in `traitsFor`) |
-| density | `decide.ts:319` `spacingRadius` | read `formation === 'keep' ? tight/loose : base` |
-| deploy offsets | `FieldUnit` | new field, captured once from `placeA`/`placeB` |
+| order | ordered side W–L | p | median duration | range |
+|---|---|---|---|---|
+| `keep` | 74–86 | 0.34 | 22.7s (plain 22.3s) | 7.6–66.9s |
+| `tight` | 82–78 | 0.75 | 21.4s | 7.4–58.9s |
+| `spread` | 73–87 | 0.27 | 23.4s | **9.7–256.8s** |
 
-### ⚠️ Open: does `break` beat the team's `commit: hold`?
+✅ **All three are win-rate neutral, which is the RIGHT result for a tactic** — a
+style choice, not a power choice. They visibly change the fights (durations and
+outcomes both move) without any one being correct.
 
-They collide. `commit` is a TEAM order capping how far past halfway a unit will go
-(`commitLimit`); `break` is a MONSTER order to dive the back line. **Recommendation:
-`commit` stays authoritative.** A team told to hold the line should not have one
-monster silently overrule it — that is the counterplay to over-extension, and if a
-per-monster order can void it the team screen stops meaning anything. `break` then
-reads as "freelance *within* the leash", and a player who wants the true dive sets
-`commit: dive` as well. Two orders agreeing is a legitimate combo; one order
-cancelling another is a bug the player cannot see.
+⚠️ **But `spread` has a 256.8s tail**, against a 48.0s worst case unordered — one
+fight nearly ran the 300s cap out. That is PRE-EXISTING (`spacing: 'spread'` used
+the same ×2.6 radius) and had simply never been measured. A team ordered to fan out
+can fail to concentrate enough damage to close a fight at all. Left as-is because
+it is a real cost of a real choice, but it is the first thing to look at if the
+grind complaint comes back.
 
-### ⚠️ The team screen is now three items
+### ⚠️ No `break` option — designed and rejected
 
-`temperament`, `commit`, `healPolicy`. Thin, and `commit` is the closest neighbour to
-`formation` — watch that the two do not read as the same control to a player. If it
-does not survive contact, the answer is probably to merge `commit` INTO `formation`
-rather than to pad the team screen out.
+A third setting, "ignore the formation and hunt `targetPriority`", was designed for
+diving an enemy back line and then cut. Two reasons, both worth keeping written
+down so it is not re-proposed:
+
+1. **It re-creates by order the one shape this engine balances worst.** Melee
+   measured 100% deaths alone against 81% beside a second front-liner — same
+   monsters, different team. A monster crossing the field solo IS that case.
+2. **It needed the melee nearest-target early return opened up.**
+   `decide.ts:pickTarget` returns the nearest enemy for melee and returns BEFORE
+   the scoring loop `priorityBias` lives in — so `targetPriority` is currently dead
+   on every melee unit, including the knife assassin the idea rested on. That guard
+   is correct as a default; its own comment records that value-chasing "is exactly
+   what made melee race around the map".
+
+⚠️ Note (2) is still TRUE and unfixed: **`targetPriority` does nothing on a melee
+monster.** It is a live bug for the picker work below, independent of `break`.
 
 ---
 
@@ -269,14 +278,9 @@ spends every stun re-stunning someone helpless.
 - Split `TacticsPanel` into TEAM and MONSTER screens per the section above —
   two views over one `Tactics` type, not two types.
 - `targetPriority` reworked from an abstract rule into a scouted-enemy picker.
-- `formation` built: deploy offsets on `FieldUnit`, the melee gate, the cohesion
-  rework, `spacing` folded in as `tight`/`loose` under `keep`.
-- ⚠️ **Sim `break` before shipping it.** A monster that crosses the field alone is
-  the shape this engine has historically balanced WORST — melee measured 100% deaths
-  alone and 81% beside a second front-liner. `break` deliberately re-creates the
-  losing case, so it needs to cost the enemy something real or it is a trap option.
-  Measure it as a paired A/B on one composition with one monster switched, not as a
-  sweep — a sweep will drown a single unit's behaviour in team noise.
+- ⚠️ **`targetPriority` is dead on melee** — `decide.ts:pickTarget` returns before
+  `priorityBias` is ever read. Fix this BEFORE building the picker, or the picker
+  ships dead on half the roster.
 - ⚠️ **An unexplained golden.** The `trio` field golden moved when `manaPolicy`'s
   reserve rule changed, and absent `manaPolicy` should be a no-op — that golden sets
   none. Recaptured on instruction, not because the cause was understood. Chase it

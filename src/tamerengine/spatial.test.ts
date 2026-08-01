@@ -12,7 +12,7 @@ const mk = (seed: string, over: Partial<Monster> = {}): Monster =>
   ({ ...generateMonster(seed, { train: 900 }), tactics: { ...DEFAULT_TACTICS }, ...over }) as Monster
 
 const unit = (id: string, over: Partial<FieldUnit>): FieldUnit => ({
-  id, side: 'A', slot: 0, m: mk(id), pos: { x: 10, y: 11 }, vel: { x: 0, y: 0 },
+  id, side: 'A', slot: 0, m: mk(id), pos: { x: 10, y: 11 }, deployPos: over.pos ?? { x: 10, y: 11 }, vel: { x: 0, y: 0 },
   radius: 0.9, speed: 3, hp: 500, maxHp: 500, mp: 60, maxMp: 60,
   traits: { cohesion: .5, predation: .5 }, targetId: null, retargetIn: 0,
   cooldowns: {}, castingFor: 0, castMoveId: null, castTargetId: null, statuses: [], mods: [], forcedTargetId: null, forcedUntil: 0,
