@@ -24,12 +24,11 @@
 // "reachable", not "working".
 //
 // Usage: npx tsx tools/effects.ts [--elite]
-import { generateMonster } from '../src/monster'
 import { simulateFieldBattle } from '../src/tamerengine/engine'
 import { autoDeployByRole } from '../src/tamerengine/hex'
 import { FIELD_H, FIELD_W } from '../src/tamerengine/types'
 import { ALL_MOVES } from '../src/moves'
-import { COMPS, trainTier } from './comps'
+import { COMPS, teamFor, trainTier } from './comps'
 import type { Move } from '../src/core'
 
 const OB = [
@@ -65,8 +64,8 @@ let casts = 0
 for (const c of COMPS) for (const sd of SEEDS) {
   const mk = (id: string, sp: string) =>
     generateMonster(id, { speciesId: sp, train: trainTier() }) as never
-  const A = c.a.map((s, i) => mk(`${sd}${c.name}a${i}`, s))
-  const B = c.b.map((s, i) => mk(`${sd}${c.name}b${i}`, s))
+  const A = teamFor(c, 'a', sd) as never[]
+  const B = teamFor(c, 'b', sd) as never[]
   for (const m of [...A, ...B]) {
     monsters++
     const seen = new Set<string>()

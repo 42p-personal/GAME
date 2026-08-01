@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   BASE_POOL, TEAM_TEMPLATES, slotAffinity, slotsFor, speciesForTemplate, templateById,
 } from './teamTemplates'
-import { PRESTIGE_BODIES, isFusionBody } from './core'
+import { GAMEPLANS, PRESTIGE_BODIES, isFusionBody } from './core'
 import { SPECIES_BY_ID } from './species'
 
 describe('team templates', () => {
@@ -63,5 +63,27 @@ describe('team templates', () => {
         for (const id of ids) expect(SPECIES_BY_ID[id]).toBeDefined()
       }
     }
+  })
+
+  it('every declared gameplan is a real one', () => {
+    for (const t of TEAM_TEMPLATES) {
+      if (!t.gameplan) continue
+      expect(GAMEPLANS[t.gameplan], `${t.id} -> ${t.gameplan}`).toBeDefined()
+    }
+  })
+
+  it('two templates never share a gameplan — a plan per shape, not a plan per two', () => {
+    // ⚠️ Duplicates would quietly shrink what the balance harness spans: two
+    // compositions fighting identical orders measure one plan twice and leave one
+    // of the five the game actually fields untested.
+    const plans = TEAM_TEMPLATES.map((t) => t.gameplan).filter(Boolean)
+    expect(new Set(plans).size).toBe(plans.length)
+  })
+
+  it('⚠️ exactly one template is UNPLANNED — the control', () => {
+    // Without an unordered composition the sweep cannot separate "this plan helped"
+    // from "having any plan at all helped". Hammer & Anvil is that baseline.
+    const bare = TEAM_TEMPLATES.filter((t) => !t.gameplan)
+    expect(bare.map((t) => t.id)).toEqual(['hammer-anvil'])
   })
 })

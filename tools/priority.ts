@@ -16,12 +16,11 @@
 // otherwise this measures which template happens to own more supports.
 //
 // Usage: npx tsx tools/priority.ts [casters|weakest|tanks] [--elite]
-import { generateMonster } from '../src/monster'
 import { simulateFieldBattle } from '../src/tamerengine/engine'
 import { autoDeployByRole } from '../src/tamerengine/hex'
 import { FIELD_H, FIELD_W } from '../src/tamerengine/types'
 import { DEFAULT_TACTICS, roleOfClass } from '../src/core'
-import { COMPS, trainTier } from './comps'
+import { COMPS, teamFor, trainTier } from './comps'
 import type { Monster, Tactics } from '../src/core'
 
 const OB = [
@@ -54,8 +53,8 @@ const without: number[] = []
 let killedOrdered = 0, killedPlain = 0, pairs = 0
 
 for (const c of COMPS) for (const sd of SEEDS) {
-  const A = c.a.map((s, i) => generateMonster(`${sd}${c.name}a${i}`, { speciesId: s, train: trainTier() }))
-  const B = c.b.map((s, i) => generateMonster(`${sd}${c.name}b${i}`, { speciesId: s, train: trainTier() }))
+  const A = teamFor(c, 'a', sd)
+  const B = teamFor(c, 'b', sd)
   const placeA = autoDeployByRole('A', A.map(front))
   const placeB = autoDeployByRole('B', B.map(front))
   const run = (ta: Monster[], tb: Monster[]) =>

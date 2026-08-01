@@ -13,14 +13,12 @@
 // Usage: npx tsx tools/ab.ts <label-A> <label-B>
 //   Requires the caller to have produced two JSON snapshots via --dump.
 //   npx tsx tools/ab.ts --dump out.json     (run once per setting)
-import { generateMonster } from '../src/monster'
-import { COMPS, trainTier } from './comps'
+import { COMPS, teamFor, trainTier } from './comps'
 import { simulateFieldBattle } from '../src/tamerengine/engine'
 import { autoDeployByRole } from '../src/tamerengine/hex'
 import { FIELD_H, FIELD_W, SUDDEN_DEATH_AT } from '../src/tamerengine/types'
 import * as fs from 'fs'
 
-const mk = (id: string, sp: string, train = trainTier()) => generateMonster(id, { speciesId: sp, train }) as never
 // ⚠️ POSITIONS RELATIVE, SIZES FIXED. These were absolute (19/21/13/27), which
 // is centred only on a 40-wide field — so any test that resizes the field would
 // have been measuring "bigger map PLUS cover shoved off to one side", two
@@ -45,8 +43,8 @@ const SEEDS = process.argv.includes('--wide')
 function collect() {
   const rows: { key: string; dur: number; resolved: number; dmg: number; travel: number }[] = []
   for (const comp of COMPS) for (const sd of SEEDS) {
-    const A = comp.a.map((s, i) => mk(`${sd}${comp.name}a${i}`, s))
-    const B = comp.b.map((s, i) => mk(`${sd}${comp.name}b${i}`, s))
+    const A = teamFor(comp, 'a', sd) as never[]
+    const B = teamFor(comp, 'b', sd) as never[]
     const front = (m: never) => { const st = (m as never as { stats: Record<string, number> }).stats
       return { front: st.CON + st.STR - st.INT - st.WIS } }
     const r = simulateFieldBattle({ seed: sd + comp.name, teamA: A, teamB: B, obstacles: OBSTACLES,

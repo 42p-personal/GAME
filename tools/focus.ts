@@ -17,14 +17,11 @@
 // to die early; two numbers disagreeing is a signal, not noise.
 //
 // Usage: npx tsx tools/focus.ts
-import { generateMonster } from '../src/monster'
 import { simulateFieldBattle } from '../src/tamerengine/engine'
 import { autoDeployByRole } from '../src/tamerengine/hex'
 import { FIELD_H, FIELD_W } from '../src/tamerengine/types'
-import { COMPS, TEAM_SIZE } from './comps'
+import { COMPS, TEAM_SIZE, teamFor } from './comps'
 
-const mk = (id: string, sp: string, train = 850) =>
-  generateMonster(id, { speciesId: sp, train }) as never
 const OBSTACLES = [
   { x: FIELD_W * (19 / 40), y: FIELD_H * (6 / 22), w: 2.2, h: 2.2 },
   { x: FIELD_W * (21 / 40), y: FIELD_H * (15 / 22), w: 2.2, h: 2.2 },
@@ -46,8 +43,8 @@ interface Acc { topShare: number[]; spread: number[]; firstKill: number[]
 const rows = new Map<string, Acc>()
 
 for (const comp of COMPS) for (const sd of SEEDS) {
-  const A = comp.a.map((s, i) => mk(`${sd}${comp.name}a${i}`, s))
-  const B = comp.b.map((s, i) => mk(`${sd}${comp.name}b${i}`, s))
+  const A = teamFor(comp, 'a', sd) as never[]
+  const B = teamFor(comp, 'b', sd) as never[]
   const front = (m: never) => {
     const st = (m as never as { stats: Record<string, number> }).stats
     return { front: st.CON + st.STR - st.INT - st.WIS }

@@ -3,12 +3,11 @@
 // size, not a named arena — otherwise it is not the fight the sweep measured.
 // Usage: npx tsx tools/dumpcomp.ts "<comp name>" <seed> <out.json> [--elite]
 import * as fs from 'fs'
-import { generateMonster } from '../src/monster'
 import { simulateFieldBattle } from '../src/tamerengine/engine'
 import { autoDeployByRole } from '../src/tamerengine/hex'
 import { FIELD_H, FIELD_W } from '../src/tamerengine/types'
 import { classForStats } from '../src/core'
-import { COMPS, trainTier } from './comps'
+import { COMPS, teamFor, trainTier } from './comps'
 
 const want = process.argv[2], sd = process.argv[3] ?? 's1', out = process.argv[4] ?? 'comp.json'
 const c = COMPS.find((x) => x.name === want)
@@ -19,10 +18,8 @@ const OB = [
   { x: FIELD_W * (13 / 40), y: FIELD_H * (11 / 22), w: 2, h: 2 },
   { x: FIELD_W * (27 / 40), y: FIELD_H * (11 / 22), w: 2, h: 2 },
 ]
-const mk = (id: string, sp: string) =>
-  generateMonster(id, { speciesId: sp, train: trainTier() }) as never
-const A = c.a.map((s, i) => mk(`${sd}${c.name}a${i}`, s))
-const B = c.b.map((s, i) => mk(`${sd}${c.name}b${i}`, s))
+const A = teamFor(c, 'a', sd) as never[]
+const B = teamFor(c, 'b', sd) as never[]
 const fr = (m: never) => {
   const st = (m as never as { stats: Record<string, number> }).stats
   return { front: st.CON + st.STR - st.INT - st.WIS }

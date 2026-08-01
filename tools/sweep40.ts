@@ -18,15 +18,12 @@
 //   --noise re-runs every composition across five seed batches and reports the
 //   spread, so a claimed improvement can be checked against the instrument's own
 //   error before it is believed.
-import { generateMonster } from '../src/monster'
 import { simulateFieldBattle } from '../src/tamerengine/engine'
 import { autoDeployByRole } from '../src/tamerengine/hex'
 import { FIELD_H, FIELD_W, SUDDEN_DEATH_AT } from '../src/tamerengine/types'
 import { classForStats } from '../src/core'
-import { COMPS, trainTier, TRAIN_ELITE } from './comps'
+import { COMPS, teamFor, trainTier, TRAIN_ELITE } from './comps'
 
-const mk = (id: string, sp: string, train = trainTier()) =>
-  generateMonster(id, { speciesId: sp, train }) as never
 // Positions relative, sizes fixed — identical at 40x22, symmetric at any size.
 // See the same note in tools/ab.ts.
 const OBSTACLES = [
@@ -53,8 +50,8 @@ interface Run { resolved: number; fights: number; dur: number; kills: number; dm
 function runBatch(seeds: string[], train = trainTier()): Run {
   const out: Run = { resolved: 0, fights: 0, dur: 0, kills: 0, dmg: 0, byClass: new Map(), byComp: new Map() }
   for (const comp of COMPS) for (const sd of seeds) {
-    const A = comp.a.map((s, i) => mk(`${sd}${comp.name}a${i}`, s, train))
-    const B = comp.b.map((s, i) => mk(`${sd}${comp.name}b${i}`, s, train))
+    const A = teamFor(comp, 'a', sd, { train }) as never[]
+    const B = teamFor(comp, 'b', sd, { train }) as never[]
     const front = (m: never) => ({ front: (m as never as { stats: Record<string, number> }).stats.CON
       + (m as never as { stats: Record<string, number> }).stats.STR
       - (m as never as { stats: Record<string, number> }).stats.INT

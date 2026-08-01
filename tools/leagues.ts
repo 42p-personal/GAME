@@ -23,7 +23,7 @@ import { autoDeployByRole } from '../src/tamerengine/hex'
 import { FIELD_H, FIELD_W, SUDDEN_DEATH_AT } from '../src/tamerengine/types'
 import { LEAGUES, STATS } from '../src/core'
 import { SPECIES } from '../src/species'
-import { COMPS } from './comps'
+import { COMPS, teamFor } from './comps'
 
 const OB = [
   { x: FIELD_W * (19 / 40), y: FIELD_H * (6 / 22), w: 2.2, h: 2.2 },
@@ -65,8 +65,8 @@ function runBatch(train: number, cap: number, seeds: string[]): Batch {
   for (const c of COMPS) for (const sd of seeds) {
     const mk = (id: string, sp: string) =>
       generateMonster(id, { speciesId: sp, train, statCap: cap }) as never
-    const A = c.a.map((x, i) => mk(`${sd}${c.name}a${i}`, x))
-    const B = c.b.map((x, i) => mk(`${sd}${c.name}b${i}`, x))
+    const A = teamFor(c, 'a', sd, { train, statCap: cap }) as never[]
+    const B = teamFor(c, 'b', sd, { train, statCap: cap }) as never[]
     const fr = (m: never) => {
       const st = (m as never as { stats: Record<string, number> }).stats
       return { front: st.CON + st.STR - st.INT - st.WIS }

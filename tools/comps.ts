@@ -14,6 +14,9 @@
 // this project's signature failure mode, committed in the same file as the
 // warning about it.
 import { speciesForTemplate, templateById } from '../src/teamTemplates'
+import { generateMonster } from '../src/monster'
+import { DEFAULT_TACTICS, GAMEPLANS } from '../src/core'
+import type { Monster, Tactics, TeamGameplan } from '../src/core'
 
 /**
  * ⚠️ SPANNING, NOT SAMPLING. Melee measured as hopeless (100% deaths) alone and
@@ -49,7 +52,17 @@ const PAIRINGS: [string, string, number][] = [
   ['choir', 'coven', 6],
 ]
 
-export const COMPS: { name: string; a: string[]; b: string[]; size: number }[] =
+export interface Comp {
+  name: string
+  a: string[]
+  b: string[]
+  size: number
+  /** The plan each side fights to — see `TeamTemplate.gameplan`. */
+  planA?: TeamGameplan
+  planB?: TeamGameplan
+}
+
+export const COMPS: Comp[] =
   PAIRINGS.map(([ta, tb, size], i) => {
     const A = templateById(ta)
     const B = templateById(tb)
@@ -60,8 +73,41 @@ export const COMPS: { name: string; a: string[]; b: string[]; size: number }[] =
       size,
       a: speciesForTemplate(A, size, 1000 + i * 7),
       b: speciesForTemplate(B, size, 5000 + i * 13),
+      planA: A.gameplan,
+      planB: B.gameplan,
     }
   })
+
+/** The orders one side of a composition fights under. */
+export const tacticsFor = (plan?: TeamGameplan): Tactics =>
+  plan ? { ...DEFAULT_TACTICS, ...GAMEPLANS[plan].tactics } : { ...DEFAULT_TACTICS }
+
+/**
+ * BUILD ONE SIDE OF A COMPOSITION — species, training AND orders.
+ *
+ * ⚠️ EVERY TOOL MUST COME THROUGH HERE. Each harness used to build its teams with
+ * its own `generateMonster` map, which is how they all ended up measuring monsters
+ * with no tactics at all: `generateMonster` set none, and nine separate call sites
+ * each independently failed to add any. The sweep returned byte-identical totals
+ * across five values of a live constant and nobody noticed for months.
+ *
+ * ⚠️ A SHAPE AND ITS PLAN TRAVEL TOGETHER. Reading `COMPS[i].a` and generating from
+ * it by hand still compiles and still runs — and silently drops the gameplan,
+ * putting that tool back to measuring one plan across ten shapes. If a tool needs
+ * something this does not do, widen `opts`; do not fork the builder.
+ */
+export function teamFor(
+  c: Comp, side: 'a' | 'b', seed: string,
+  opts: { train?: number; statCap?: number } = {},
+): Monster[] {
+  const species = side === 'a' ? c.a : c.b
+  const tactics = tacticsFor(side === 'a' ? c.planA : c.planB)
+  return species.map((sp, i) => ({
+    ...(generateMonster(`${seed}${c.name}${side}${i}`,
+      { speciesId: sp, train: opts.train ?? trainTier(), statCap: opts.statCap }) as Monster),
+    tactics: { ...tactics },
+  }))
+}
 
 /** Mean team size across the sweep — for anything that needs a single figure. */
 /**

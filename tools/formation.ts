@@ -8,12 +8,11 @@
 //
 // Judged on the SIGN TEST over fights, per the standing rule: a mean duration CI
 // is worthless here because a fight that tips from timeout to a kill swings 20-30s.
-import { generateMonster } from '../src/monster'
 import { simulateFieldBattle } from '../src/tamerengine/engine'
 import { autoDeployByRole } from '../src/tamerengine/hex'
 import { FIELD_H, FIELD_W } from '../src/tamerengine/types'
 import { DEFAULT_TACTICS } from '../src/core'
-import { COMPS, trainTier } from './comps'
+import { COMPS, teamFor, trainTier } from './comps'
 import type { Monster, Tactics } from '../src/core'
 //
 // Usage: npx tsx tools/formation.ts [keep|tight|spread] [--elite]
@@ -36,8 +35,8 @@ const durOrder: number[] = []
 const durPlain: number[] = []
 
 for (const c of COMPS) for (const sd of SEEDS) {
-  const A = c.a.map((s, i) => generateMonster(`${sd}${c.name}a${i}`, { speciesId: s, train: trainTier() }))
-  const B = c.b.map((s, i) => generateMonster(`${sd}${c.name}b${i}`, { speciesId: s, train: trainTier() }))
+  const A = teamFor(c, 'a', sd)
+  const B = teamFor(c, 'b', sd)
   const placeA = autoDeployByRole('A', A.map(front))
   const placeB = autoDeployByRole('B', B.map(front))
   // Same seed, same bodies, same deployment — ONE field differs.

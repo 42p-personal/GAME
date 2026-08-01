@@ -17,7 +17,7 @@
 // `CLASS_ROLES` is not the vocabulary here — it is only damage/support, far too
 // coarse to build a team from — and classes are emergent from trained stats
 // anyway, so a team cannot be assembled out of them.
-import { PRESTIGE_BODIES, Stats, isFusionBody } from './core'
+import { PRESTIGE_BODIES, Stats, TeamGameplan, isFusionBody } from './core'
 import { SPECIES } from './species'
 
 /**
@@ -42,6 +42,25 @@ export interface TeamTemplate {
   brief: string
   /** The repeating role pattern. Cycled to fill whatever size the league wants. */
   pattern: TeamSlot[]
+  /**
+   * The PLAN this shape fights to — the `Tactics` its members carry.
+   *
+   * ⚠️ A SHAPE WITHOUT A PLAN IS HALF A TEAM. A template says who is on the field;
+   * a gameplan says what they are trying to do with each other. Two walls and a
+   * mender told to play `aggressive/dive` is not a Phalanx, it is a Phalanx losing.
+   * Until this existed, every composition in the balance harness fought on
+   * identical neutral orders, so the sweep spanned ten SHAPES and exactly one PLAN.
+   *
+   * ⚠️ REUSES `GAMEPLANS`, DOES NOT INVENT A TWELFTH VOCABULARY. These are the five
+   * plans rival teams actually field and players actually scout. Authoring separate
+   * harness-only tactics would put the sweep back to measuring fights that happen
+   * nowhere in the game — the precise mistake `tools/comps.ts` was written to undo.
+   *
+   * ⚠️ `hammer-anvil` DELIBERATELY HAS NONE. It is the generalist baseline, and a
+   * harness with no unordered control cannot tell "this plan helped" from "having
+   * any plan at all helped".
+   */
+  gameplan?: TeamGameplan
 }
 
 /**
@@ -56,6 +75,7 @@ export const TEAM_TEMPLATES: TeamTemplate[] = [
     name: 'Phalanx',
     brief: 'Two walls and a mender. Wins long, loses to burst that ignores the front.',
     pattern: ['front', 'front', 'support'],
+    gameplan: 'bulwark', // turtle behind the wall and protect the carry — the same thing the shape is built to do
   },
   {
     id: 'hammer-anvil',
@@ -68,24 +88,28 @@ export const TEAM_TEMPLATES: TeamTemplate[] = [
     name: 'Coven',
     brief: 'All casters, no front. Enormous output, dies to anything that reaches it.',
     pattern: ['caster', 'caster', 'flex'],
+    gameplan: 'zone', // back-row casters, AoE, hunting the fragile — an all-caster side has no other plan
   },
   {
     id: 'wolfpack',
     name: 'Wolfpack',
     brief: 'Skirmishers only. Fast, flanking, and deliberately without sustain.',
     pattern: ['skirmish', 'skirmish', 'flex'],
+    gameplan: 'rushdown', // fast, aggressive, no support; the plan and the pattern say the same sentence
   },
   {
     id: 'choir',
     name: 'Choir',
     brief: 'One wall, two supports. Attrition — wants the clock and hates burst.',
     pattern: ['front', 'support', 'support'],
+    gameplan: 'attrition', // wants the clock and out-sustains you — one wall and two supports is the roster for it
   },
   {
     id: 'vanguard',
     name: 'Vanguard',
     brief: 'Front-loaded pressure with no healer. Ends fights before sustain matters.',
     pattern: ['front', 'front', 'skirmish'],
+    gameplan: 'focusfire', // front-loaded burst that ends the fight before sustain matters
   },
 ]
 

@@ -771,16 +771,65 @@ five different answers where there had been one:
 | 14 | 40/40 | 23.1s | 193 | 2763 |
 | *(before the fix, ALL values)* | 40/40 | 23.9s | 188 | 2781 |
 
+### Then: every composition got its own PLAN
+
+Setting `DEFAULT_TACTICS` everywhere fixed "no orders" but left a second, quieter
+gap: **the harness spanned ten SHAPES and exactly one PLAN.** Every composition
+fought on identical neutral orders, which is not a thing that happens in the game —
+rival teams carry a `TeamGameplan` and players pick orders before every match.
+
+Each `TeamTemplate` now declares a `gameplan`, and `tools/comps.ts:teamFor()` builds
+species, training **and** orders together:
+
+| template | gameplan | why |
+|---|---|---|
+| Phalanx | `bulwark` | turtle behind the wall and protect the carry |
+| Coven | `zone` | back-row casters hunting the fragile — an all-caster side has no other plan |
+| Wolfpack | `rushdown` | fast, aggressive, no support |
+| Choir | `attrition` | wants the clock and out-sustains you |
+| Vanguard | `focusfire` | front-loaded burst, ends it before sustain matters |
+| **Hammer & Anvil** | **none** | ⚠️ the CONTROL — see below |
+
+⚠️ **REUSES `GAMEPLANS`, DOES NOT INVENT A HARNESS-ONLY VOCABULARY.** These are the
+five plans rivals field and players scout. Authoring separate tactics for the sweep
+would put it back to measuring fights that happen nowhere in the game — the exact
+mistake `tools/comps.ts` was written to undo.
+
+⚠️ **ONE TEMPLATE IS DELIBERATELY UNPLANNED.** Without an unordered composition the
+sweep cannot separate "this plan helped" from "having any plan at all helped".
+Hammer & Anvil mirror came out at **17.1s / 14 kills before and after** — byte
+identical, which is the self-check that the control is genuinely a control.
+
+⚠️ **AND `teamFor()` IS NOW THE ONLY WAY IN.** The per-tool `mk = generateMonster(...)`
+helpers are deleted, not merely unused. Nine independent call sites each failing to
+add tactics is how the original hole stayed open; leaving a local builder next to a
+COMPS loop is an invitation for the next edit to reopen it.
+
+What the plans did to the fights — the matchups now behave like their briefs:
+
+| composition | uniform orders | own plans |
+|---|---|---|
+| Phalanx mirror 6v6 (bulwark mirror) | 27.0s | **30.1s** — turtles grind |
+| Vanguard v Choir 5v5 (focusfire v attrition) | 43.5s | **49.3s** — the sustain question, now the longest fight |
+| Coven mirror 2v2 (zone mirror) | 16.8s | **14.1s** — glass trades faster |
+| Hammer & Anvil mirror 3v3 (control) | 17.1s | 17.1s |
+
 ### ⚠️ NEW REFERENCE NUMBERS — everything above this section was measured tactics-off
 
 | sweep | resolved | dur | kills | dmg/fight |
 |---|---|---|---|---|
-| mid (train 850) | 40/40 | **23.1s** | 193 | 2709 |
-| elite (train 3200) | 39/40 | **33.6s** | 201 | 10050 |
+| mid (train 850) | 40/40 | **24.5s** | 199 | 2762 |
+| elite (train 3200) | **40/40** | **26.5s** | 200 | 9928 |
 
-Noise band re-measured on the fixed harness (`--noise`, 3 runs): duration mean
-24.03s, **sd 0.60s**, resolved sd 0.00 — so **a change must beat ~1.2s to be
-believable**, and `resolved` remains at ceiling and useless as a metric.
+⚠️ **Elite now resolves 40/40 and got FASTER (33.6s → 26.5s).** The one fight that
+used to run out the clock was two teams with no plan grinding each other; give both
+sides a win condition and somebody executes it.
+
+⚠️ **The noise band WIDENED — sd 0.60s → 0.93s, so a change must now beat ~1.9s.**
+That is the honest price of the change: distinct plans interact with distinct shapes
+differently per seed, so the instrument is more realistic and less precise at once.
+Do not read the wider band as the harness getting worse — it was previously narrow
+because every fight was the same fight. `resolved` remains at ceiling and useless.
 
 ⚠️ **Treat every figure recorded in this document before 2026-08-01 as measured with
 all tactics disabled.** They are not wrong about the things they measured — pool
