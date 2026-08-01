@@ -1336,7 +1336,16 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
         if (fx?.thorns) v.mods.push({ thorns: fx.thorns, until })
         if (fx?.dodgeBuff) v.mods.push({ dodge: fx.dodgeBuff, until })   // POINTS
         if (fx?.accBuff) v.mods.push({ acc: fx.accBuff, until })         // POINTS
-        if (fx?.hpRegenBuff) v.mods.push({ hpRegen: fx.hpRegenBuff, until })
+        // ⚠️ SCALED BY THE CASTER'S STAT, exactly as the direct heal above is.
+        // The two halves of a restore must move together: when only `power`
+        // scaled, Renewal (power 8, regen 10) barely improved with WIS while
+        // Tranquility (power 34, no regen) tripled — the regen-led moves in a
+        // line quietly fell behind their own siblings. That split was where a
+        // change happened to stop, not a design choice.
+        if (fx?.hpRegenBuff) {
+          const scaled = fx.hpRegenBuff * (1 + (u.m.stats[mv.stat] ?? 0) * statScaleOf(mv))
+          v.mods.push({ hpRegen: scaled, until })
+        }
         if (fx?.regenBuff) v.mods.push({ regen: fx.regenBuff, until })
         // CLEANSE strips every non-beneficial status AND grants a short control
         // immunity. ⚠️ It must NOT reset `ccResist` — doing so would make
