@@ -113,8 +113,9 @@ const GOLDENS: Golden[] = [
     // ⚠️ Recaptured for the OPENING GUARD — a global 20pp mitigation bonus that
     // holds 30s then fades over 15s. Every fight in a golden is inside the hold
     // window, so they take it at full strength throughout.
-    winner: 'B', duration: 20.9, survivors: [0, 1],
-    casts: 83, hits: 53, deaths: 1, finalHp: [0, 495],
+    // ⚠️ Recaptured for COOLDOWN_MULT 0.9 -> 1.3 — the global ability tempo.
+    winner: 'B', duration: 23, survivors: [0, 1],
+    casts: 80, hits: 55, deaths: 1, finalHp: [0, 555],
   },
   {
     // Ranged vs melee across the full width — pins approach, stand-off and the
@@ -156,8 +157,9 @@ const GOLDENS: Golden[] = [
     // ⚠️ Recaptured for the OPENING GUARD — a global 20pp mitigation bonus that
     // holds 30s then fades over 15s. Every fight in a golden is inside the hold
     // window, so they take it at full strength throughout.
-    winner: 'B', duration: 7.6, survivors: [0, 1],
-    casts: 20, hits: 12, deaths: 1, finalHp: [0, 562],
+    // ⚠️ Recaptured for COOLDOWN_MULT 0.9 -> 1.3 — the global ability tempo.
+    winner: 'B', duration: 10.1, survivors: [0, 1],
+    casts: 25, hits: 16, deaths: 1, finalHp: [0, 467],
   },
   {
     // Front line + damage + support on both sides: targeting, taunt, healing and
@@ -218,8 +220,9 @@ const GOLDENS: Golden[] = [
     // ⚠️ Recaptured for the OPENING GUARD — a global 20pp mitigation bonus that
     // holds 30s then fades over 15s. Every fight in a golden is inside the hold
     // window, so they take it at full strength throughout.
-    winner: 'A', duration: 26.2, survivors: [3, 0],
-    casts: 119, hits: 81, deaths: 3, finalHp: [40, 353, 291, 0, 0, 0],
+    // ⚠️ Recaptured for COOLDOWN_MULT 0.9 -> 1.3 — the global ability tempo.
+    winner: 'A', duration: 22.4, survivors: [2, 0],
+    casts: 121, hits: 85, deaths: 4, finalHp: [430, 145, 0, 0, 0, 0],
   },
 ]
 

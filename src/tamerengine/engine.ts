@@ -17,7 +17,7 @@ import {
   SUDDEN_DEATH_AT, SUDDEN_DEATH_BASE, SUDDEN_DEATH_RAMP, KITE_MAX, KITE_REFILL, BLOCK_DR,
   BASIC_STAT_TIER, BASIC_BASE_POWER, BASIC_STAT_SCALE,
   MANA_ON_HIT_TAKEN, MANA_ON_HIT_DEALT, MANA_SUPPORT_PER_SEC, WIS_REGEN_DIVISOR, FIELD_MANA_COST_MULT,
-  FIELD_LOADOUT_SIZE, CC_DR_STEP, CC_DR_RESET, CLEANSE_CC_IMMUNITY, CLASS_BASIC, KNOCKBACK_SPEED, KNOCKBACK_MIN_TIME, mitigationFor, openingMitigation, MIT_CEIL, TRIAGE_AT} from './types'
+  FIELD_LOADOUT_SIZE, CC_DR_STEP, CC_DR_RESET, CLEANSE_CC_IMMUNITY, CLASS_BASIC, KNOCKBACK_SPEED, KNOCKBACK_MIN_TIME, mitigationFor, openingMitigation, MIT_CEIL, COOLDOWN_MULT, TRIAGE_AT} from './types'
 import { archetypeOf, desiredGoal, dist, isMelee, manaRoleOf, norm, pickTarget, reachOf, spacingRadius, sub, threatOf, traitsFor, wantsToKite } from './decide'
 import { personalityOf, spendAboveFor } from './personality'
 import { spatialOf } from './spatial'
@@ -1011,7 +1011,7 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
         u.castingFor = castOf(mv)
         u.castMoveId = mv.id
         u.castTargetId = aim.id
-        u.cooldowns[mv.id] = mv.cooldown * 0.9 + castOf(mv)
+        u.cooldowns[mv.id] = mv.cooldown * COOLDOWN_MULT + castOf(mv)
         u.mp = Math.max(0, u.mp - mpCost(mv))
         events.push({ t, kind: 'cast', id: u.id, targetId: aim.id, move: mv.name, channel: mv.channel })
         applyCasterMovement(u, aim, mv, t, obstacles)

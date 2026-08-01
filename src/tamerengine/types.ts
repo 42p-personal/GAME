@@ -758,6 +758,22 @@ export const CLASS_BASIC: Record<string, BasicAttackSpec> = Object.fromEntries(
 
 // Heavier casts root the caster briefly — that wind-up is what gives a dive a
 // window to punish a caster, and makes positioning matter.
+/**
+ * GLOBAL COOLDOWN MULTIPLIER on every ability's authored cooldown.
+ *
+ * ⚠️ THE ONLY LEVER THAT SLOWS THE MOP-UP. 60% of a fight elapses AFTER first
+ * blood, at ~0.41 deaths/s, and that phase is set by the numbers advantage
+ * rather than by per-hit damage — which is why a second 10% statScale trim moved
+ * the mid median by 0.1s while shifting both tails. Cooldowns are the one axis
+ * that slows the whole fight including the cascade, without making anyone
+ * tankier or any hit weaker.
+ *
+ * ⚠️ Watch the CAST MIX when moving this, not just duration. Longer cooldowns
+ * mean more time on the free attack, and a fight that is longer because monsters
+ * are idling is worse than a short one.
+ */
+export const COOLDOWN_MULT = 1.3
+
 export const CHANNEL_CAST_TIME: Record<Channel, number> = {
   melee: 0.15,
   ranged: 0.3,
