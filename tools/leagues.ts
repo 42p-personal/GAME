@@ -50,11 +50,18 @@ function trainForCap(cap: number): number {
   return hi
 }
 
-const WANT = ['Wood', 'Tin', 'Iron', 'Gold', 'Masters', 'Tamers Apex']
+/**
+ * ⚠️ AUTHORED BUDGETS FOR THE TOP TWO. Their caps (1050/1100) sit above the
+ * 1000 clamp in `generateMonster`, so the binary search cannot solve for them —
+ * it would run to its ceiling and silently report a Masters monster. These are
+ * the budgets the design says a monster at that league has been trained with.
+ */
+const TRAIN_OVERRIDE: Record<string, number> = { 'Tamer Elite': 2800, 'Tamers Apex': 3500 }
+const WANT = LEAGUES.map((l) => l.name)
 console.log('league        cap  train  topStat  resolved    dur   kills  dmg/fight  1st kill')
 for (const name of WANT) {
   const L = LEAGUES.find((l) => l.name === name)!
-  const train = trainForCap(L.cap)
+  const train = TRAIN_OVERRIDE[name] ?? trainForCap(L.cap)
   let fights = 0, res = 0, dur = 0, kills = 0, dmg = 0, fk = 0, fkn = 0
   for (const c of COMPS) for (const sd of ['s1', 's2', 's3', 's4']) {
     const mk = (id: string, sp: string) => generateMonster(id, { speciesId: sp, train }) as never
