@@ -63,10 +63,13 @@ export const CLASS_LINES: Record<string, readonly string[]> = {
   // version of that with no identity cost.
   Wizard: ['Hexer', 'Elementalist', 'Arcanist', 'Disruptor'],
   Spellsword: ['Arcanist', 'Elementalist', 'Bulwark'],
-  Spellshield: ['Guardian', 'Bulwark', 'Mender'],
+  // CON-primary, and Warden was drawn by Tank ALONE (8.6%). See Wizard above.
+  Spellshield: ['Guardian', 'Bulwark', 'Warden', 'Mender'],
   Captain: ['Captain', 'Warcry', 'Duelist'],
-  Orator: ['Demagogue', 'Enchanter', 'Disruptor'],
-  Bard: ['Captain', 'Enchanter', 'Volley'],
+  // CHA-primary; Captain is CHA's third line and sat at 10.3%.
+  Orator: ['Demagogue', 'Enchanter', 'Captain', 'Disruptor'],
+  // CHA-primary; Demagogue was the thinnest line left at 5.3%.
+  Bard: ['Captain', 'Enchanter', 'Demagogue', 'Volley'],
   // The orphan-pair seven. Each draws from its OWN two stats, so the affinity
   // multiplier pulls a kit that actually expresses the pair it emerged from.
   Evoker: ['Elementalist', 'Arcanist', 'Volley'],        // INT/DEX — quick, precise casting

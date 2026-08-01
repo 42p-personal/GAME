@@ -224,8 +224,10 @@ const GOLDENS: Golden[] = [
     // window, so they take it at full strength throughout.
     // ⚠️ Recaptured for COOLDOWN_MULT 0.9 -> 1.3 — the global ability tempo.
     // ⚠️ Recaptured for the STAT SCALE REVERT — back to LOW 1/320, HIGH 1/130.
-    winner: 'A', duration: 21.2, survivors: [3, 0],
-    casts: 120, hits: 80, deaths: 3, finalHp: [174, 281, 291, 0, 0, 0],
+    // ⚠️ Recaptured for the CLASS_LINES coverage pass — Wizard/Spellshield/Orator/
+    // Bard each gained their primary stat's missing line, so those kits re-draft.
+    winner: 'A', duration: 28.1, survivors: [3, 0],
+    casts: 129, hits: 90, deaths: 3, finalHp: [271, 106, 171, 0, 0, 0],
   },
 ]
 

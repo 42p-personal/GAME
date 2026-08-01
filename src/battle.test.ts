@@ -228,14 +228,16 @@ const GOLDENS = [
     // move resolves differently. Deliberate; elements are gone from the game.
     // ⚠️ Recaptured for the SUPERLINEAR CON term in maxHp (40 + CON*2 + CON^2/1600).
     // Shared by both engines, so all seven goldens moved together — intended.
-    winner: 'A', events: 439, logLines: 345,
+    // ⚠️ Recaptured for the CLASS_LINES coverage pass — Wizard/Spellshield/Orator/
+    // Bard each gained their primary stat's missing line, so those kits re-draft.
+    winner: 'A', events: 480, logLines: 385,
     finals: [
-      { side: 'A', slot: 0, hp: 572, mana: 684, wasKOd: false },
-      { side: 'A', slot: 1, hp: 1427, mana: 129, wasKOd: false },
-      { side: 'A', slot: 2, hp: 1439, mana: 730, wasKOd: false },
+      { side: 'A', slot: 0, hp: 0, mana: 707, wasKOd: true },
+      { side: 'A', slot: 1, hp: 671, mana: 137, wasKOd: false },
+      { side: 'A', slot: 2, hp: 518, mana: 737, wasKOd: false },
       { side: 'B', slot: 0, hp: 0, mana: 767, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 748, wasKOd: true },
-      { side: 'B', slot: 2, hp: 0, mana: 203, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 750, wasKOd: true },
+      { side: 'B', slot: 2, hp: 0, mana: 183, wasKOd: true },
     ],
   },
 ] as const
