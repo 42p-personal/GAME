@@ -104,8 +104,10 @@ const GOLDENS: Golden[] = [
     // 'less bursty' pass. Survivors end healthier and fights run slightly longer.
     // ⚠️ Recaptured for the SUPERLINEAR CON term in maxHp (40 + CON*2 + CON^2/1600).
     // Shared by both engines, so all seven goldens moved together — intended.
+    // ⚠️ Recaptured for the STAT SCALE trim (LOW 1/320->1/360, HIGH 1/130->1/145).
+    // Field-only by design, which is why no battle.ts golden moved.
     winner: 'B', duration: 16.4, survivors: [0, 1],
-    casts: 64, hits: 41, deaths: 1, finalHp: [0, 274],
+    casts: 64, hits: 41, deaths: 1, finalHp: [0, 324],
   },
   {
     // Ranged vs melee across the full width — pins approach, stand-off and the
@@ -138,8 +140,10 @@ const GOLDENS: Golden[] = [
     // 'less bursty' pass. Survivors end healthier and fights run slightly longer.
     // ⚠️ Recaptured for the SUPERLINEAR CON term in maxHp (40 + CON*2 + CON^2/1600).
     // Shared by both engines, so all seven goldens moved together — intended.
+    // ⚠️ Recaptured for the STAT SCALE trim (LOW 1/320->1/360, HIGH 1/130->1/145).
+    // Field-only by design, which is why no battle.ts golden moved.
     winner: 'B', duration: 7, survivors: [0, 1],
-    casts: 16, hits: 9, deaths: 1, finalHp: [0, 515],
+    casts: 16, hits: 9, deaths: 1, finalHp: [0, 530],
   },
   {
     // Front line + damage + support on both sides: targeting, taunt, healing and
@@ -189,8 +193,10 @@ const GOLDENS: Golden[] = [
     // the same mana buying a save instead of overheal.
     // ⚠️ Recaptured for the SUPERLINEAR CON term in maxHp (40 + CON*2 + CON^2/1600).
     // Shared by both engines, so all seven goldens moved together — intended.
-    winner: 'A', duration: 16.1, survivors: [3, 0],
-    casts: 82, hits: 56, deaths: 3, finalHp: [382, 223, 291, 0, 0, 0],
+    // ⚠️ Recaptured for the STAT SCALE trim (LOW 1/320->1/360, HIGH 1/130->1/145).
+    // Field-only by design, which is why no battle.ts golden moved.
+    winner: 'A', duration: 16.7, survivors: [3, 0],
+    casts: 87, hits: 58, deaths: 3, finalHp: [420, 230, 291, 0, 0, 0],
   },
 ]
 
