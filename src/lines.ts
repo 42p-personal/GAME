@@ -50,7 +50,18 @@ export const CLASS_LINES: Record<string, readonly string[]> = {
   Rogue: ['Assassin', 'Venomcraft', 'Duelist'],
   Ranger: ['Volley', 'Assassin', 'Elementalist'],
   Sage: ['Mender', 'Siphon', 'Hexer'],
-  Wizard: ['Hexer', 'Elementalist', 'Disruptor'],
+  // ⚠️ FOUR LINES, AND THE FOURTH IS THE FIX FOR A STARVED LINE. Wizard is
+  // INT-primary but drew only two of INT's three lines, so Arcanist was left to
+  // Spellsword (1.5% of monsters) and Evoker (3.6%) — 5.1% of the population
+  // could draw it at all, against 28.2% for Duelist. A 5.5x spread in who can
+  // even SEE a line's content.
+  //
+  // ⚠️ ADDED, NOT SWAPPED. Trading Disruptor out would have moved the starvation
+  // rather than fixed it — Disruptor sits at 17.7% and would have dropped to
+  // ~5.5%. Coverage can only be created by giving a thin line to a POPULOUS
+  // class, and a class taking all three lines of its own primary stat is the
+  // version of that with no identity cost.
+  Wizard: ['Hexer', 'Elementalist', 'Arcanist', 'Disruptor'],
   Spellsword: ['Arcanist', 'Elementalist', 'Bulwark'],
   Spellshield: ['Guardian', 'Bulwark', 'Mender'],
   Captain: ['Captain', 'Warcry', 'Duelist'],
