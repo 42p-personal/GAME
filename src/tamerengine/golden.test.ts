@@ -102,8 +102,10 @@ const GOLDENS: Golden[] = [
     // no-teleport tripwire.
     // ⚠️ Mitigation 1400 -> 1250 and +2 hpRegenBuff on every regen move — the
     // 'less bursty' pass. Survivors end healthier and fights run slightly longer.
-    winner: 'B', duration: 15.3, survivors: [0, 1],
-    casts: 61, hits: 39, deaths: 1, finalHp: [0, 169],
+    // ⚠️ Recaptured for the SUPERLINEAR CON term in maxHp (40 + CON*2 + CON^2/1600).
+    // Shared by both engines, so all seven goldens moved together — intended.
+    winner: 'B', duration: 16.4, survivors: [0, 1],
+    casts: 64, hits: 41, deaths: 1, finalHp: [0, 274],
   },
   {
     // Ranged vs melee across the full width — pins approach, stand-off and the
@@ -134,8 +136,10 @@ const GOLDENS: Golden[] = [
     // ⚠️ Moved by the per-ability range + authored free-attack pass — see duel-melee.
     // ⚠️ Mitigation 1400 -> 1250 and +2 hpRegenBuff on every regen move — the
     // 'less bursty' pass. Survivors end healthier and fights run slightly longer.
+    // ⚠️ Recaptured for the SUPERLINEAR CON term in maxHp (40 + CON*2 + CON^2/1600).
+    // Shared by both engines, so all seven goldens moved together — intended.
     winner: 'B', duration: 7, survivors: [0, 1],
-    casts: 16, hits: 9, deaths: 1, finalHp: [0, 453],
+    casts: 16, hits: 9, deaths: 1, finalHp: [0, 515],
   },
   {
     // Front line + damage + support on both sides: targeting, taunt, healing and
@@ -183,9 +187,10 @@ const GOLDENS: Golden[] = [
     // monster stops topping up a full-health team and spends the time elsewhere.
     // 14.4s -> 16.9s and the worst-off survivor ends on 303 rather than 18 —
     // the same mana buying a save instead of overheal.
-    winner: 'A', duration: 16.9, survivors: [3, 0],
-    // Heals now scale with WIS/CHA, so the same cast restores more: 196 -> 207.
-    casts: 78, hits: 50, deaths: 3, finalHp: [303, 207, 282, 0, 0, 0],
+    // ⚠️ Recaptured for the SUPERLINEAR CON term in maxHp (40 + CON*2 + CON^2/1600).
+    // Shared by both engines, so all seven goldens moved together — intended.
+    winner: 'A', duration: 16.1, survivors: [3, 0],
+    casts: 82, hits: 56, deaths: 3, finalHp: [382, 223, 291, 0, 0, 0],
   },
 ]
 

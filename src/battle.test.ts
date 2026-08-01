@@ -34,9 +34,11 @@ const GOLDENS = [
     // ⚠️ These pin the TURN engine, which tamerengine will replace at M7; they
     // are kept green so a real regression in the SHIPPED game still shows up,
     // but their movement is no longer treated as signal about the new engine.
+    // ⚠️ Recaptured for the SUPERLINEAR CON term in maxHp (40 + CON*2 + CON^2/1600).
+    // Shared by both engines, so all seven goldens moved together — intended.
     winner: 'A', events: 221, logLines: 163,
     finals: [
-      { side: 'A', slot: 0, hp: 158, mana: 1, wasKOd: false },
+      { side: 'A', slot: 0, hp: 162, mana: 1, wasKOd: false },
       { side: 'B', slot: 0, hp: 0, mana: 4, wasKOd: true },
     ],
   },
@@ -72,10 +74,12 @@ const GOLDENS = [
     // ⚠️ Recaptured for the DIRECT HEALS — Mending Surge (WIS) and Second Wind
     // (CHA) grew the pool 137 -> 139, so chooseLoadout re-drafted. Only this
     // golden moved: the other three field no WIS/CHA primary and never see them.
-    winner: 'A', events: 166, logLines: 126,
+    // ⚠️ Recaptured for the SUPERLINEAR CON term in maxHp (40 + CON*2 + CON^2/1600).
+    // Shared by both engines, so all seven goldens moved together — intended.
+    winner: 'A', events: 229, logLines: 174,
     finals: [
-      { side: 'A', slot: 0, hp: 367, mana: 415, wasKOd: false },
-      { side: 'B', slot: 0, hp: 0, mana: 694, wasKOd: true },
+      { side: 'A', slot: 0, hp: 281, mana: 383, wasKOd: false },
+      { side: 'B', slot: 0, hp: 0, mana: 699, wasKOd: true },
     ],
   },
   {
@@ -120,11 +124,13 @@ const GOLDENS = [
     // ⚠️ Recaptured for the REACHABILITY repricing — Tranquility lv430 -> 320. It
     // was a mid-line Mender heal above WIS's p90 (355), so nobody could learn it;
     // now a WIS monster drafts it and the fight runs longer (79 -> 107 events).
-    winner: 'A', events: 107, logLines: 84,
+    // ⚠️ Recaptured for the SUPERLINEAR CON term in maxHp (40 + CON*2 + CON^2/1600).
+    // Shared by both engines, so all seven goldens moved together — intended.
+    winner: 'A', events: 40, logLines: 40,
     finals: [
-      { side: 'A', slot: 0, hp: 42, mana: 281, wasKOd: false },
-      { side: 'A', slot: 1, hp: 152, mana: 214, wasKOd: false },
-      { side: 'B', slot: 0, hp: 0, mana: 224, wasKOd: true },
+      { side: 'A', slot: 0, hp: 225, mana: 243, wasKOd: false },
+      { side: 'A', slot: 1, hp: 154, mana: 219, wasKOd: false },
+      { side: 'B', slot: 0, hp: 0, mana: 247, wasKOd: true },
       { side: 'B', slot: 1, hp: 0, mana: 323, wasKOd: true },
     ],
   },
@@ -220,14 +226,16 @@ const GOLDENS = [
     // ⚠️ Recaptured for the ELEMENT REMOVAL — body-type resist/weak no longer
     // multiplies damage, so every fight involving a resisted or super-effective
     // move resolves differently. Deliberate; elements are gone from the game.
-    winner: 'A', events: 376, logLines: 298,
+    // ⚠️ Recaptured for the SUPERLINEAR CON term in maxHp (40 + CON*2 + CON^2/1600).
+    // Shared by both engines, so all seven goldens moved together — intended.
+    winner: 'A', events: 439, logLines: 345,
     finals: [
-      { side: 'A', slot: 0, hp: 583, mana: 716, wasKOd: false },
-      { side: 'A', slot: 1, hp: 1279, mana: 135, wasKOd: false },
-      { side: 'A', slot: 2, hp: 1348, mana: 763, wasKOd: false },
+      { side: 'A', slot: 0, hp: 572, mana: 684, wasKOd: false },
+      { side: 'A', slot: 1, hp: 1427, mana: 129, wasKOd: false },
+      { side: 'A', slot: 2, hp: 1439, mana: 730, wasKOd: false },
       { side: 'B', slot: 0, hp: 0, mana: 767, wasKOd: true },
-      { side: 'B', slot: 1, hp: 0, mana: 754, wasKOd: true },
-      { side: 'B', slot: 2, hp: 0, mana: 145, wasKOd: true },
+      { side: 'B', slot: 1, hp: 0, mana: 748, wasKOd: true },
+      { side: 'B', slot: 2, hp: 0, mana: 203, wasKOd: true },
     ],
   },
 ] as const

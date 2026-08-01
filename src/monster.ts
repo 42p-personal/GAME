@@ -595,7 +595,27 @@ export function staminaDamageMult(stamina: number): number {
   return 0.5
 }
 
-export const maxHp = (s: Stats) => Math.round(40 + s.CON * 2.0)
+/**
+ * ⚠️ SUPERLINEAR IN CON, deliberately. The linear `40 + CON*2` meant durability
+ * grew at a fixed rate while damage compounds — every damage move carries
+ * `power * (1 + stat * statScale)` AND is cast by a monster whose stat also grew.
+ * Measured on the ELITE tier (train 3200, top stat ~1000): damage per fight went
+ * 2771 -> 9186, a 3.3x jump, while fights got FASTER (18.8s -> 14.1s) on the same
+ * kill count. Offence was outrunning defence at exactly the leagues where CON is
+ * supposed to be a real investment.
+ *
+ * The quadratic term is negligible early and material late, so a Wood-league
+ * monster is unaffected and a Masters wall is genuinely a wall:
+ *   CON  100 ->  246 (was  240, +2%)
+ *   CON  300 ->  696 (was  640, +9%)
+ *   CON  600 -> 1465 (was 1240, +18%)
+ *   CON 1000 -> 2665 (was 2040, +31%)
+ *
+ * ⚠️ SHARED BY BOTH ENGINES — battle.ts and tamerengine both call this, so it
+ * moves every golden in the project. That is the intended blast radius, not a
+ * regression.
+ */
+export const maxHp = (s: Stats) => Math.round(40 + s.CON * 2.0 + (s.CON * s.CON) / 1600)
 // WIS is the mana FOUNDATION (and stays the sole regen stat); INT contributes
 // half its value to the pool (2026-07-25 review fix: maxMana = WIS alone
 // starved INT-primary classes — a Spellsword's whole chain-caster identity
