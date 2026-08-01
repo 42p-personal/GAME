@@ -528,3 +528,155 @@ money still fully invested (236–1620g).
 that a player *can* casually overspend into a wrecked economy — the failure is
 invisible (you feel well-fed while your capital never compounds). That is either a
 genuinely interesting trap or an unfair one; worth a UI nudge if playtesters fall in.
+
+---
+
+## v0.93 — the combat-balance session (2026-08-01)
+
+The largest single balancing session in the project. ⚠️ **Read the instrument
+section first** — most of the day's findings were only possible because the
+harness was wrong, and several previously-recorded conclusions are overturned
+below.
+
+### THE INSTRUMENT WAS MEASURING THE WRONG GAME
+
+Five defects, each of which silently produced plausible wrong numbers rather than
+errors. Every balance figure recorded before this session should be read with
+these in mind.
+
+| defect | what it meant |
+|---|---|
+| `sweep40` and `ab.ts` each carried their **own copy** of ten hand-picked species triples | every balance number ever produced was measured against teams that existed **nowhere in the game**. `src/teamTemplates.ts` was written to fix exactly this and was imported by nothing but its own test |
+| every composition was **3v3** | the harness measured Bronze/Iron and nothing else, while the game runs 1v1 to 6v6 |
+| **no per-composition reporting** | "composition is a variable" is the sweep's founding claim and could not be read from its output |
+| **one training tier** (850 → top stat ~455) | every capstone (lv650–920) was invisible to every measurement; late content was authored blind |
+| `generateMonster` **hard-clamped stats at 1000** | Tamer Elite (1050) and Apex (1100) could not be simulated at all — `leagues.ts` reported a Masters monster as an Apex one **without saying so** |
+
+All five fixed. `tools/comps.ts` is the single definition both harnesses fight,
+spanning 2v2–6v6; `--elite` selects the endgame tier; `--noise` and `--league`
+exist on `tools/leagues.ts`; `GenOptions.statCap` carries the ceiling.
+
+⚠️ **Coverage went up AND the error band went down** — duration sd 1.11s → 0.91s,
+so a change must now beat ~1.8s. `resolved` is **at ceiling** (sd 0.00) and can
+only detect regressions; judge on duration and time-to-first-kill.
+
+### Overturned by measurement
+
+- ⚠️ **FOCUS FIRE (P6) was aimed at the wrong lever.** The roadmap's top item
+  rested on "damage spreads evenly across a whole enemy side". It does not: top
+  share is **0.711** where an even split is 0.333. maxHp correlates **r=+0.79**
+  with time-to-first-kill; top share **r=−0.56**. Focus is real but smaller.
+  Healing was the other suspect and is not it (0–9% of damage).
+- ⚠️ **"The maxHp coefficient measured NULL" was an instrument artifact.** Re-run
+  on the fixed harness: **p = 0.0022**, concentrated on the grinding shapes.
+- ⚠️ **Raising `maxHp` COMPRESSES the spread** — median +18% but max/min fell
+  9.8× → 4.0×. More HP makes trades decisive: it raises the floor and eats the
+  ceiling. **Do not use it to create range.**
+
+### Healing: four A/Bs, four nulls, then the real fix
+
+| test | condition | p |
+|---|---|---|
+| HEAL_MULT 1.3 | thin pool | 1.00 |
+| HEAL_MULT 2.5 | thin pool | 0.38 |
+| HEAL_MULT 1.3 | +2 direct heals | 0.18 |
+| HEAL_MULT 1.3 | under triage | 1.00 |
+
+⚠️ The count of fights the constant could even touch fell **40 → 21 → 14 → 12**.
+Restoration reaches too few fights for a magnitude to matter, and every test
+showed support-heavy sides getting **FASTER** with more healing — it was acting
+as a tempo multiplier, not an attrition brake. `HEAL_MULT` **deleted** per the
+isolation-term standard ("if it is still null then, delete it").
+
+**Timing beat size.** `healPolicy: 'triage'` (hold a restore until an ally is at
+or below `TRIAGE_AT` 0.55) did in one commit what no coefficient could: the trio
+golden's worst survivor went 18 HP → 303, duration 14.4s → 16.9s.
+
+Heals also now scale with their stat like damage always has, and so does
+`hpRegenBuff` — both halves of a restore move together, or regen-led moves
+(Renewal) silently fall behind their own line-mates.
+
+### Reachability — the session's recurring failure mode
+
+Content that is authored, priced, lined, range-checked and `validate.ts`-clean
+can still **not exist**, because one number put it above what anyone reaches.
+Four instances:
+
+- `basicAttackFor` derived a monster's channel from its inventory — a Warrior
+  that drafted one Piercing Shot became a ranged unit at 6.4. ⚠️ **Second copy of
+  a bug already fixed once in `reachOf`.**
+- 92 moves carried a `range` that *looked* authored: 13 distinct values
+  partitioning cleanly by channel, so an Assassin stiletto reached 5.6 because
+  DEX is typed `ranged`.
+- `Mending Surge` (lv400) and `Second Wind` (lv480) drafted by **1 monster in
+  320** — above WIS/CHA p90 (355/396). Repriced to 300/340 → 10/320, 21 casts.
+- `Tranquility` (lv430) — caught by the new guard on its first run.
+
+`src/reachability.test.ts` pins both tiers. ⚠️ **The pair is the point:** 67
+unreachable at mid-game is *progression*; unreachable at ELITE would be a defect
+(currently 0).
+
+### Changes shipped, with their measurements
+
+| change | effect |
+|---|---|
+| free attack authored per class (`CLASS_BASIC`, four bands) | 31.7% → **0%** of monsters standing outside their own basic |
+| all 137 moves author a `range`, seeded per LINE | 13 → 46 distinct values |
+| knockbacks travel + cost control (`KNOCKBACK_SPEED`) | max single-tick move 3.09 → **1.28** units |
+| timer 120→300s, sudden death 90→255s | **inert by design** — 0/40 reached even the old SD |
+| `maxHp` superlinear: `40 + CON*2 + CON²/1600` | CON 1000: 2040 → **2665** |
+| `statScale` −10% (LOW 1/360, HIGH 1/145) | mid 18.8s → **26.1s**, spread ~5× → **7.5×**, kills UP |
+| `MIT_DIVISOR` 1400 → 1250 | +2.6pp DR at CON 300 |
+| mitigation KNEE curve replaces the hard cap | never flatlines; 0.550 at 688 → 0.750 at 1400 |
+| Tamer Elite cap 1050 / Apex 1100, trained at 2800 / 3500 | the top separates by INVESTMENT, not ceiling |
+
+### ⚠️ THREE COPIES OF THE MITIGATION FORMULA HAD DRIFTED APART
+
+`strike`, the damage estimator, and pierce valuation each had their own copy.
+Within one session the estimator kept `1400` after the divisor moved to 1250, and
+pierce kept **both** `0.55` and `1400` — so pierce was priced against a curve the
+game no longer used. All three now call `mitigationFor(defStat, pierce)`. **One
+formula, called everywhere, is the only thing that ends this.**
+
+### Where fights stand, and the open diagnosis
+
+The full ladder resolves 40/40 at every league. ⚠️ **Wood is the outlier of the
+whole progression** — 54.7s with a first kill at 15.9s, against a 17–20s band and
+5.7–7.4s everywhere above. At cap 100 the flat +40 in `maxHp` and a move's base
+power dominate, so a new player's first fights are the slowest in the game.
+
+⚠️ **THE BURST IS THE CASCADE, NOT THE OPENING.** Measured:
+
+- **40%** of a fight elapses before the first death (30% at elite)
+- then bodies drop at **0.41/s** — one every ~2.4s, near-constant regardless of
+  team size
+- the longest shape, Phalanx v Vanguard 3v3 at 81.4s, has only 14%
+  pre-first-blood and the **lowest cascade rate** (0.27/s)
+
+Long fights come from a slow cascade, not a slow opening. Drivers: numbers
+advantage compounds directly, focus fire is already high (0.65–0.71), and
+**flanking (+10 acc when outnumbered and unsupported) actively amplifies it** —
+the one mechanic explicitly rewarding the snowball, pointed at the side already
+losing.
+
+**Next lever, and it widens rather than compresses** because it only touches
+fights that reach a numbers gap: a defensive bonus when outnumbered (the genre's
+"last stand"), and/or gating flanking on positioning rather than headcount.
+Leave `maxHp` and mitigation alone — both are in good shape and neither addresses
+this.
+
+### Standing method notes earned this session
+
+- ⚠️ **Measure which mechanic is FIRING before tuning the one you assume is.**
+  Three commits tuned `DASH_SPEED_MULT` against a fight where no dash ever fired,
+  and against a GIF playing at 4.5× real time.
+- ⚠️ **A bimodal displacement histogram is the tell** for something bypassing a
+  system: 1532 ticks ≤0.5 units, nine at 1.8–3.1, nothing between.
+- ⚠️ **Read the per-composition rows, not the total.** A 22.5s mean at Tamer
+  Elite was one 256s fight in 200; the other four batches sat at 17.2–18.0s.
+- ⚠️ **Reversing a measured decision is correct when what it optimised for is no
+  longer what is wrong.** `STAT_SCALE_HIGH` was raised on p=0.0066 when fights
+  were not resolving; that is solved, and the problem inverted.
+- ⚠️ **Where a control-loss gate sits in the tick is load-bearing.** Knockback's
+  gate placed above the per-unit timers froze cooldowns, mana and status
+  durations — `duel-melee` went 15s → 91.5s.
