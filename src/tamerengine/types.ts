@@ -231,6 +231,33 @@ export const MIT_CEIL = 0.80  // asymptote, never reached in practice
  *
  * `pierce` is a FRACTION of the defence ignored outright (never points).
  */
+/**
+ * THE OPENING GUARD — a global damage reduction every monster starts with, which
+ * holds and then fades. Nothing to do with stats: it is a property of the CLOCK.
+ *
+ * ⚠️ AIMED AT FIRST BLOOD, NOT AT DURATION DIRECTLY. Measured: 40% of a fight
+ * elapses before the first death, then bodies drop at 0.41/s — one every ~2.4s,
+ * near-constant regardless of team size. The cascade is what makes a fight feel
+ * bursty, and it starts the moment someone dies. Delaying that first death buys
+ * more than slowing the whole fight does.
+ *
+ * ⚠️ AND IT IS EXPECTED TO COMPRESS THE SPREAD, which is the cost. A fight that
+ * ends inside the hold window gets the full benefit; one that runs past the fade
+ * gets it only at the start. Short fights therefore lengthen MORE than long ones.
+ * Watch max/min across compositions, not just the mean.
+ */
+export const OPENING_MIT_BONUS = 0.20 // percentage POINTS of extra reduction
+export const OPENING_MIT_HOLD = 30    // seconds at full strength
+export const OPENING_MIT_FADE = 15    // seconds to decay to nothing
+
+/** The opening guard's value at time `t`. Full, then a linear fade, then gone. */
+export function openingMitigation(t: number): number {
+  if (t <= OPENING_MIT_HOLD) return OPENING_MIT_BONUS
+  const over = t - OPENING_MIT_HOLD
+  if (over >= OPENING_MIT_FADE) return 0
+  return OPENING_MIT_BONUS * (1 - over / OPENING_MIT_FADE)
+}
+
 export function mitigationFor(defStat: number, pierce = 0): number {
   const eff = defStat * (1 - Math.min(1, Math.max(0, pierce)))
   const raw = Math.max(0, eff) / MIT_DIVISOR

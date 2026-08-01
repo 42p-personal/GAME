@@ -110,8 +110,11 @@ const GOLDENS: Golden[] = [
     // which had drifted to 0.55/1400). Field-only; no battle.ts golden moved.
     // ⚠️ Recaptured for the mitigation KNEE curve replacing the hard cap, and
     // for pierce now using the same shared helper. Field-only.
-    winner: 'B', duration: 16.4, survivors: [0, 1],
-    casts: 64, hits: 41, deaths: 1, finalHp: [0, 324],
+    // ⚠️ Recaptured for the OPENING GUARD — a global 20pp mitigation bonus that
+    // holds 30s then fades over 15s. Every fight in a golden is inside the hold
+    // window, so they take it at full strength throughout.
+    winner: 'B', duration: 20.9, survivors: [0, 1],
+    casts: 83, hits: 53, deaths: 1, finalHp: [0, 495],
   },
   {
     // Ranged vs melee across the full width — pins approach, stand-off and the
@@ -150,8 +153,11 @@ const GOLDENS: Golden[] = [
     // which had drifted to 0.55/1400). Field-only; no battle.ts golden moved.
     // ⚠️ Recaptured for the mitigation KNEE curve replacing the hard cap, and
     // for pierce now using the same shared helper. Field-only.
-    winner: 'B', duration: 7, survivors: [0, 1],
-    casts: 16, hits: 9, deaths: 1, finalHp: [0, 530],
+    // ⚠️ Recaptured for the OPENING GUARD — a global 20pp mitigation bonus that
+    // holds 30s then fades over 15s. Every fight in a golden is inside the hold
+    // window, so they take it at full strength throughout.
+    winner: 'B', duration: 7.6, survivors: [0, 1],
+    casts: 20, hits: 12, deaths: 1, finalHp: [0, 562],
   },
   {
     // Front line + damage + support on both sides: targeting, taunt, healing and
@@ -209,8 +215,11 @@ const GOLDENS: Golden[] = [
     // for pierce now using the same shared helper. Field-only.
     // ⚠️ Recaptured for the FLANKING radii fix — engage 2.6 -> 4.0 (it sat below
     // melee reach), support 3.2 -> 2.5, bonus 10 -> 5. Fire rate 2.2% -> 17.5%.
-    winner: 'A', duration: 16.5, survivors: [3, 0],
-    casts: 85, hits: 58, deaths: 3, finalHp: [420, 233, 291, 0, 0, 0],
+    // ⚠️ Recaptured for the OPENING GUARD — a global 20pp mitigation bonus that
+    // holds 30s then fades over 15s. Every fight in a golden is inside the hold
+    // window, so they take it at full strength throughout.
+    winner: 'A', duration: 26.2, survivors: [3, 0],
+    casts: 119, hits: 81, deaths: 3, finalHp: [40, 353, 291, 0, 0, 0],
   },
 ]
 

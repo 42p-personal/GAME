@@ -17,7 +17,7 @@ import {
   SUDDEN_DEATH_AT, SUDDEN_DEATH_BASE, SUDDEN_DEATH_RAMP, KITE_MAX, KITE_REFILL, BLOCK_DR,
   BASIC_STAT_TIER, BASIC_BASE_POWER, BASIC_STAT_SCALE,
   MANA_ON_HIT_TAKEN, MANA_ON_HIT_DEALT, MANA_SUPPORT_PER_SEC, WIS_REGEN_DIVISOR, FIELD_MANA_COST_MULT,
-  FIELD_LOADOUT_SIZE, CC_DR_STEP, CC_DR_RESET, CLEANSE_CC_IMMUNITY, CLASS_BASIC, KNOCKBACK_SPEED, KNOCKBACK_MIN_TIME, mitigationFor, TRIAGE_AT} from './types'
+  FIELD_LOADOUT_SIZE, CC_DR_STEP, CC_DR_RESET, CLEANSE_CC_IMMUNITY, CLASS_BASIC, KNOCKBACK_SPEED, KNOCKBACK_MIN_TIME, mitigationFor, openingMitigation, MIT_CEIL, TRIAGE_AT} from './types'
 import { archetypeOf, desiredGoal, dist, isMelee, manaRoleOf, norm, pickTarget, reachOf, spacingRadius, sub, threatOf, traitsFor, wantsToKite } from './decide'
 import { personalityOf, spendAboveFor } from './personality'
 import { spatialOf } from './spatial'
@@ -1633,7 +1633,11 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
     // Floored at 0: a shred can strip armour, never invert it into a bonus.
     // ⚠️ `mitigation` above already has pierce applied as a fraction, so it is
     // passed as a raw stat here — do NOT pass pierce twice.
-    const mitFrac = Math.max(0, mitigationFor(mitigation) - modMitDebuff(target) / 100)
+    // ⚠️ The opening guard is added BEFORE the ceiling clamp, so it cannot push a
+    // high-CON wall past MIT_CEIL and make it unkillable early — it mostly helps
+    // the squishy, which is the point: burst is what kills them first.
+    const mitFrac = Math.max(0, Math.min(MIT_CEIL,
+      mitigationFor(mitigation) + openingMitigation(t2)) - modMitDebuff(target) / 100)
     const afterMult = raw * (1 - mitFrac) * statusDamageTaken(target) * modDmgTaken(target) * blocked
     const dmg = Math.max(1, Math.round(afterMult - modGuard(target)))
     // WARD soaks BEFORE health — an absorb pool that depletes, not a multiplier.
