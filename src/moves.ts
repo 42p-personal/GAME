@@ -213,7 +213,7 @@ const POOLS: Record<Stat, Row[]> = {
     // one monster that could learn it did draft it. 300 clears the median and
     // leaves it a real mid-game unlock. Renewal (260) is the peer that works.
     { name: 'Mending Surge', learnLevel: 300, type: 'buff', channel: 'support', target: 'ally', cooldown: 6, accuracy: 100, power: 105, mana: 34, range: 8.0, desc: 'A flood of restoration into one body — the burst answer to burst.' },
-    { name: 'Providence', learnLevel: 850, type: 'buff', channel: 'support', target: 'team', cooldown: 7, accuracy: 100, power: 16, mana: 40, effects: { cleanse: true, hpRegenBuff: 8, duration: 3 }, range: 6.8, desc: 'Sees what is coming: clears the team and steadies it. Restoration — empowerment is CHA.' },
+    { name: 'Providence', learnLevel: 850, type: 'buff', channel: 'support', target: 'team', cooldown: 7, accuracy: 100, power: 20, mana: 40, effects: { cleanse: true, hpRegenBuff: 10, duration: 3 }, range: 6.8, desc: 'Sees what is coming: clears the team and steadies it. Restoration — empowerment is CHA.' },
   ],
   // ══ INT ══ magic · elements · ground AoE + stun · frost root/slow · teleports ═
   // HEXER stacks statuses and then detonates them. ELEMENTALIST makes ground you
