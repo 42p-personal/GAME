@@ -57,32 +57,82 @@ function trainForCap(cap: number): number {
  * the budgets the design says a monster at that league has been trained with.
  */
 const TRAIN_OVERRIDE: Record<string, number> = { 'Tamer Elite': 2800, 'Tamers Apex': 3500 }
-const WANT = LEAGUES.map((l) => l.name)
-console.log('league        cap  train  topStat  resolved    dur   kills  dmg/fight  1st kill')
-for (const name of WANT) {
-  const L = LEAGUES.find((l) => l.name === name)!
-  const train = TRAIN_OVERRIDE[name] ?? trainForCap(L.cap)
-  let fights = 0, res = 0, dur = 0, kills = 0, dmg = 0, fk = 0, fkn = 0
-  for (const c of COMPS) for (const sd of ['s1', 's2', 's3', 's4']) {
-    const mk = (id: string, sp: string) => generateMonster(id, { speciesId: sp, train, statCap: L.cap }) as never
-    const A = c.a.map((s, i) => mk(`${sd}${c.name}a${i}`, s))
-    const B = c.b.map((s, i) => mk(`${sd}${c.name}b${i}`, s))
+interface Batch { fights: number; pre: number; dur: number; kills: number
+  dmg: number; fk: number; fkn: number; worst: number; worstName: string }
+
+function runBatch(train: number, cap: number, seeds: string[]): Batch {
+  const b: Batch = { fights: 0, pre: 0, dur: 0, kills: 0, dmg: 0, fk: 0, fkn: 0, worst: 0, worstName: '' }
+  for (const c of COMPS) for (const sd of seeds) {
+    const mk = (id: string, sp: string) =>
+      generateMonster(id, { speciesId: sp, train, statCap: cap }) as never
+    const A = c.a.map((x, i) => mk(`${sd}${c.name}a${i}`, x))
+    const B = c.b.map((x, i) => mk(`${sd}${c.name}b${i}`, x))
     const fr = (m: never) => {
       const st = (m as never as { stats: Record<string, number> }).stats
       return { front: st.CON + st.STR - st.INT - st.WIS }
     }
     const r = simulateFieldBattle({ seed: sd + c.name, teamA: A, teamB: B, obstacles: OB,
       placeA: autoDeployByRole('A', A.map(fr)), placeB: autoDeployByRole('B', B.map(fr)) })
-    fights++; dur += r.duration
-    if (r.duration < SUDDEN_DEATH_AT) res++
+    b.fights++; b.dur += r.duration
+    if (r.duration < SUDDEN_DEATH_AT) b.pre++
+    if (r.duration > b.worst) { b.worst = r.duration; b.worstName = `${c.name} (${sd})` }
     const ev = r.events as never as { kind: string; t: number; dmg: number }[]
     const first = ev.find((e) => e.kind === 'death')
-    if (first) { fk += first.t; fkn++ }
-    for (const e of ev) { if (e.kind === 'death') kills++; if (e.kind === 'hit') dmg += e.dmg }
+    if (first) { b.fk += first.t; b.fkn++ }
+    for (const e of ev) { if (e.kind === 'death') b.kills++; if (e.kind === 'hit') b.dmg += e.dmg }
   }
+  return b
+}
+
+/** The same five seed batches sweep40 uses, so the two studies are comparable. */
+const SEED_BATCHES = [
+  ['s1', 's2', 's3', 's4'], ['q1', 'q2', 'q3', 'q4'], ['z1', 'z2', 'z3', 'z4'],
+  ['m1', 'm2', 'm3', 'm4'], ['k1', 'k2', 'k3', 'k4'],
+]
+
+const noise = process.argv.includes('--noise')
+const only = process.argv.find((a, i) => process.argv[i - 1] === '--league')
+const WANT = LEAGUES.map((l) => l.name).filter((n) => !only || n === only)
+if (only && !WANT.length) { console.error(`no league named "${only}"`); process.exit(1) }
+
+if (noise) {
+  // ⚠️ WHY THIS EXISTS. A single batch showed Tamer Elite at 39/40 and 22.5s
+  // against a 17-20s band elsewhere, which read as a lategame problem. Five
+  // batches showed it was ONE fight in 200 — a 256s generalist mirror that
+  // sudden death closed correctly — and the other four batches sat at 17.2-18.0s.
+  // The apparent effect was entirely one seed. A per-league claim needs the
+  // spread, not a run.
+  // ⚠️ 200 fights per league. Use `--league "<name>"` unless you want all eleven.
+  console.log(`NOISE STUDY — ${SEED_BATCHES.length} seed batches x 40 matchups per league
+`)
+  for (const name of WANT) {
+    const L = LEAGUES.find((l) => l.name === name)!
+    const train = TRAIN_OVERRIDE[name] ?? trainForCap(L.cap)
+    const runs = SEED_BATCHES.map((seeds) => runBatch(train, L.cap, seeds))
+    const durs = runs.map((b) => b.dur / b.fights)
+    const mean = durs.reduce((a, x) => a + x, 0) / durs.length
+    const sd = Math.sqrt(durs.reduce((a, d) => a + (d - mean) ** 2, 0) / (durs.length - 1))
+    const reachedSD = runs.reduce((a, b) => a + (b.fights - b.pre), 0)
+    console.log(`${name} (cap ${L.cap}, train ${train})`)
+    runs.forEach((b, i) => console.log(`  ${SEED_BATCHES[i][0].padEnd(4)}`
+      + `${(b.pre + '/' + b.fights).padStart(8)}${(b.dur / b.fights).toFixed(1).padStart(8)}s`
+      + `   longest ${b.worst.toFixed(0)}s ${b.worstName}`))
+    console.log(`  => mean ${mean.toFixed(1)}s  sd ${sd.toFixed(2)}s  ·  `
+      + `${reachedSD} of ${runs.length * 40} fights reached sudden death`)
+    console.log(`  => a change must beat ~${(2 * sd).toFixed(1)}s to be believable
+`)
+  }
+  process.exit(0)
+}
+
+console.log('league        cap  train  topStat  resolved    dur   kills  dmg/fight  1st kill')
+for (const name of WANT) {
+  const L = LEAGUES.find((l) => l.name === name)!
+  const train = TRAIN_OVERRIDE[name] ?? trainForCap(L.cap)
+  const b = runBatch(train, L.cap, ['s1', 's2', 's3', 's4'])
   console.log(`${name.padEnd(12)}${String(L.cap).padStart(5)}${String(train).padStart(7)}`
-    + `${String(topStat(train, L.cap)).padStart(9)}${(res + '/' + fights).padStart(10)}`
-    + `${(dur / fights).toFixed(1) + 's'}`.padStart(8) + String(kills).padStart(8)
-    + (dmg / fights).toFixed(0).padStart(11)
-    + `${fkn ? (fk / fkn).toFixed(1) + 's' : '-'}`.padStart(10))
+    + `${String(topStat(train, L.cap)).padStart(9)}${(b.pre + '/' + b.fights).padStart(10)}`
+    + `${(b.dur / b.fights).toFixed(1) + 's'}`.padStart(8) + String(b.kills).padStart(8)
+    + (b.dmg / b.fights).toFixed(0).padStart(11)
+    + `${b.fkn ? (b.fk / b.fkn).toFixed(1) + 's' : '-'}`.padStart(10))
 }
