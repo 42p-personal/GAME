@@ -17,7 +17,7 @@ import {
   SUDDEN_DEATH_AT, SUDDEN_DEATH_BASE, SUDDEN_DEATH_RAMP, KITE_MAX, KITE_REFILL, BLOCK_DR,
   BASIC_STAT_TIER, BASIC_BASE_POWER, BASIC_STAT_SCALE,
   MANA_ON_HIT_TAKEN, MANA_ON_HIT_DEALT, MANA_SUPPORT_PER_SEC, WIS_REGEN_DIVISOR, FIELD_MANA_COST_MULT,
-  FIELD_LOADOUT_SIZE, CC_DR_STEP, CC_DR_RESET, CLEANSE_CC_IMMUNITY, CLASS_BASIC, KNOCKBACK_SPEED, KNOCKBACK_MIN_TIME, HEAL_MULT, MIT_DIVISOR, TRIAGE_AT} from './types'
+  FIELD_LOADOUT_SIZE, CC_DR_STEP, CC_DR_RESET, CLEANSE_CC_IMMUNITY, CLASS_BASIC, KNOCKBACK_SPEED, KNOCKBACK_MIN_TIME, MIT_DIVISOR, TRIAGE_AT} from './types'
 import { archetypeOf, desiredGoal, dist, isMelee, manaRoleOf, norm, pickTarget, reachOf, spacingRadius, sub, threatOf, traitsFor, wantsToKite } from './decide'
 import { personalityOf, spendAboveFor } from './personality'
 import { spatialOf } from './spatial'
@@ -1349,7 +1349,18 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
       }
     }
     if (friendly && mv.power > 0 && !statusFlag(aim, 'blockHeal')) {
-      const healed = Math.min(mv.power * HEAL_MULT, aim.maxHp - aim.hp)
+      // ⚠️ NO MULTIPLIER HERE, AND DO NOT ADD ONE BACK. A `HEAL_MULT` constant
+      // existed and was A/B'd FOUR times — 1.3, 2.5, 1.3 on a pool with two new
+      // direct heals, and 1.3 again under triage — for four nulls
+      // (p = 1.00, 0.38, 0.18, 1.00). The count of fights it could even touch
+      // fell 40 -> 21 -> 14 -> 12 as the tests went on.
+      //
+      // Restoration is not tunable by coefficient in this engine: it reaches too
+      // few fights for a magnitude to matter, and every test showed support-heavy
+      // sides getting FASTER with more healing, not slower. What DID move the
+      // needle was `healPolicy: 'triage'` — spending the same heal on someone who
+      // needs it (trio golden: worst survivor 18 HP -> 303). Timing, not size.
+      const healed = Math.min(mv.power, aim.maxHp - aim.hp)
       if (healed > 0) {
         aim.hp += healed
         events.push({ t: t2, kind: 'heal', id: u.id, targetId: aim.id, move: mv.name, amount: Math.round(healed) })

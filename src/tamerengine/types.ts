@@ -171,43 +171,6 @@ export const FALL_BACK_RAMP = 0.5 // seconds to reach full retreat speed
  * 12 covers a 3-unit shove in 0.25s: two or three ticks, which reads as an
  * impact rather than a blink, and still clearly faster than anyone can run.
  */
-/**
- * HEALING MULTIPLIER on restoration — `power` on any friendly-targeted move.
- *
- * ⚠️ HELD AT 1.0 BECAUSE THE POOL IS TOO THIN FOR IT TO MATTER, NOT BECAUSE THE
- * PATH IS DEAD. (An earlier revision of this comment claimed the latter, on the
- * grounds that no move has `type: 'heal'`. True but irrelevant: there is no such
- * MoveType. `strike` heals on `friendly && power > 0`, so Renewal, Providence and
- * Steady Vigil all pass through here and this constant does scale them.)
- *
- * Measured as paired A/Bs on the 2v2-6v6 sweep:
- *   1.0 -> 1.3   20 better / 20 worse, p = 1.00   NO EFFECT
- *   1.0 -> 2.5    8 better / 13 worse, p = 0.38   NO EFFECT
- * Only 21 of 40 fights moved at all under a 2.5x buff, so 19 had no restoration
- * in them whatsoever. Healing is 4.1% of casts and 0-9% of the damage dealt
- * against it: multiplying something that rarely happens does not make it matter.
- *
- * ⚠️ RE-TESTED AFTER THE SUSTAIN PASS AND STILL NULL. Two direct heals added and
- * made draftable (10/320 monsters, 21 casts), Tranquility and Standing Ovation
- * repriced into reach, +2 regen on every restore — then 1.0 -> 1.3 again:
- *   4 better / 13 worse of 14 that moved, p = 0.18   NO EFFECT
- * Only 14 of 40 fights moved even now, so most fights still contain no healing.
- *
- * ⚠️ AND THE SIGN IS THE INTERESTING PART. Across three A/Bs at three magnitudes
- * (1.3, 2.5, and 1.3 again on a richer pool) the support-heavy compositions get
- * FASTER with stronger healing, never slower:
- *   Vanguard v Choir  -18.3s (at 2.5x)   -4.7s (at 1.3x)
- *   Wolfpack v Choir   -2.0s             Choir v Coven -1.4s
- * Healing is behaving as a TEMPO multiplier, not an attrition brake: it keeps the
- * side that is already winning alive, so more of their output survives to land.
- * If the goal is "less bursty", healing is not the mechanism — it shortens the
- * fights it touches. Mitigation (MIT_DIVISOR) is the one that lengthens them.
- *
- * Do not raise this expecting longer fights. The open question is whether heals
- * should be reactive (cast when an ALLY is low) rather than folded into the same
- * utility scoring as a buff — that is a `bestUtility` question, not a coefficient.
- */
-export const HEAL_MULT = 1.0
 
 /**
  * MITIGATION DIVISOR — damage reduction is `min(MIT_CAP, defStat / MIT_DIVISOR)`,
