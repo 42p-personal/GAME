@@ -54,8 +54,13 @@ describe('pool reachability at the training level we balance at', () => {
     // accident nobody noticed. Update it deliberately, and say which way.
     // 68 -> 67: Standing Ovation lv540 -> 380, so the CHA team regen is now
     // reachable and its buff can actually land. Down is the good direction.
+    // 67 -> 64: Enfeeble 380->330, Lullaby 430->385, Crowd Surge 440->320,
+    // Mana Leech 380->335. ⚠️ Found by `tools/effects.ts`, not by this test — the
+    // count was already falling and said nothing about WHICH moves, let alone
+    // that eight EFFECTS were never cast at all. A count is a tripwire; the
+    // effect audit is the diagnosis.
     expect(unreachable.length, `unreachable at train ${SWEEP_TRAIN}:\n  ${unreachable.join('\n  ')}`)
-      .toBe(67)
+      .toBe(64)
   })
 
   it('⚠️ and ELITE training unlocks essentially all of it', () => {
