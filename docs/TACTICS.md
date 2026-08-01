@@ -82,6 +82,49 @@ cannot be done as a multiplier in `chooseMove` the way `ccPriority` was.
 
 ---
 
+## Two screens: TEAM tactics and MONSTER tactics
+
+The orders split by **what they are a decision about**. A team order is a plan for
+the side — it should read the same for every monster on it. A monster order is that
+individual's own behaviour, and two monsters on one team should routinely differ.
+
+### Team tactics — one setting for the side
+
+| tactic | why it belongs to the team |
+|---|---|
+| `temperament` | how hard the SIDE commits; mixing it per monster produces a team fighting two plans at once |
+| `spacing` | spread or tight is a formation, and a formation is meaningless if half the team disagrees |
+| `commit` | dive or hold — whether the side over-extends together |
+| `healPolicy` | triage or steady is a plan for the team's whole mana pool, not one healer's habit |
+
+### Monster tactics — per individual
+
+| tactic | why it belongs to the monster |
+|---|---|
+| `ccPriority` | only meaningful on a monster that HAS hard control; nonsense as a team-wide toggle |
+| `manaPolicy` | a nuker holds its reserve, a filler-caster should not — the opposite orders on one team is correct play |
+| `useCover` | a back-liner hugs the pillar, the wall in front of it must not |
+| `preserve` | when THIS monster gives up on the fight and plays to live; a per-monster risk appetite |
+| `targetPriority` | see below — the one that gains the most from being per-monster |
+
+⚠️ **`targetPriority` becomes an enemy PICKER, not a rule.** Today it is an abstract
+preference (weakest / nearest / biggest threat). Per monster, against a scouted
+field, it should let the player name *which enemy* this monster goes for — which is
+what makes scouting worth paying for. A scouted cup already reveals the rival's
+`TeamGameplan`; naming the enemy healer and pointing two monsters at it is the
+payoff that turns scouting from information into a decision.
+
+⚠️ **`openerIds` is unassigned.** A scripted opening is per-monster by nature (it
+names that monster's own equipped moves), so it belongs on the MONSTER screen — but
+it is still unbuilt, so place it when it is built rather than reserving space now.
+
+⚠️ **Splitting the screens is a UI change over a SHARED data model.** `Tactics` stays
+one interface; the two screens are two views onto it. Do NOT fork the type — the
+whole reason a scouted plan is the one actually fought is that rival `GAMEPLANS` and
+player orders write the same fields.
+
+---
+
 ## Constants
 
 | constant | value | file |
@@ -104,6 +147,9 @@ spends every stun re-stunning someone helpless.
 - `openerIds` implemented with per-unit sequence state.
 - `engageRange` and `comboDiscipline` deleted from `Tactics`, `GAMEPLANS`,
   `TacticsPanel`, and any saves migration.
+- Split `TacticsPanel` into TEAM and MONSTER screens per the section above —
+  two views over one `Tactics` type, not two types.
+- `targetPriority` reworked from an abstract rule into a scouted-enemy picker.
 - ⚠️ **An unexplained golden.** The `trio` field golden moved when `manaPolicy`'s
   reserve rule changed, and absent `manaPolicy` should be a no-op — that golden sets
   none. Recaptured on instruction, not because the cause was understood. Chase it
