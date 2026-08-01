@@ -114,8 +114,9 @@ const GOLDENS: Golden[] = [
     // holds 30s then fades over 15s. Every fight in a golden is inside the hold
     // window, so they take it at full strength throughout.
     // ⚠️ Recaptured for COOLDOWN_MULT 0.9 -> 1.3 — the global ability tempo.
-    winner: 'B', duration: 23, survivors: [0, 1],
-    casts: 80, hits: 55, deaths: 1, finalHp: [0, 555],
+    // ⚠️ Recaptured for the STAT SCALE REVERT — back to LOW 1/320, HIGH 1/130.
+    winner: 'B', duration: 21, survivors: [0, 1],
+    casts: 71, hits: 49, deaths: 1, finalHp: [0, 526],
   },
   {
     // Ranged vs melee across the full width — pins approach, stand-off and the
@@ -158,8 +159,9 @@ const GOLDENS: Golden[] = [
     // holds 30s then fades over 15s. Every fight in a golden is inside the hold
     // window, so they take it at full strength throughout.
     // ⚠️ Recaptured for COOLDOWN_MULT 0.9 -> 1.3 — the global ability tempo.
-    winner: 'B', duration: 10.1, survivors: [0, 1],
-    casts: 25, hits: 16, deaths: 1, finalHp: [0, 467],
+    // ⚠️ Recaptured for the STAT SCALE REVERT — back to LOW 1/320, HIGH 1/130.
+    winner: 'B', duration: 9.2, survivors: [0, 1],
+    casts: 23, hits: 14, deaths: 1, finalHp: [0, 482],
   },
   {
     // Front line + damage + support on both sides: targeting, taunt, healing and
@@ -221,8 +223,9 @@ const GOLDENS: Golden[] = [
     // holds 30s then fades over 15s. Every fight in a golden is inside the hold
     // window, so they take it at full strength throughout.
     // ⚠️ Recaptured for COOLDOWN_MULT 0.9 -> 1.3 — the global ability tempo.
-    winner: 'A', duration: 22.4, survivors: [2, 0],
-    casts: 121, hits: 85, deaths: 4, finalHp: [430, 145, 0, 0, 0, 0],
+    // ⚠️ Recaptured for the STAT SCALE REVERT — back to LOW 1/320, HIGH 1/130.
+    winner: 'A', duration: 21.2, survivors: [3, 0],
+    casts: 120, hits: 80, deaths: 3, finalHp: [174, 281, 291, 0, 0, 0],
   },
 ]
 

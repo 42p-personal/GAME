@@ -114,7 +114,7 @@ export const aoeFalloff = (targetCount: number): number =>
 // since `learnedMoves` gates by stat, a mid-game monster can only equip low/mid
 // moves, so the whole mid-game got weaker (sim: damage/fight 28.9k → 27.3k).
 // Progression should pay by lifting the top, not by lowering the bottom.
-export const STAT_SCALE_LOW = 1 / 360  // ~lvl 40 — unchanged from the old flat value
+export const STAT_SCALE_LOW = 1 / 320  // ~lvl 40 — unchanged from the old flat value
 // ⚠️ 1/270 WAS TRIED AND REVERTED. It was committed on a 12-fight sweep reading
 // 10/12 vs 9/12 — inside that sweep's own noise band (sd 0.7). A paired A/B over
 // 40 identical matchups then measured it properly: 23 fights faster, 16 slower,
@@ -123,13 +123,20 @@ export const STAT_SCALE_LOW = 1 / 360  // ~lvl 40 — unchanged from the old fla
 // 19 faster / 5 slower, p = 0.0066. Both looked 'not significant' on a mean CI;
 // only the sign test separated them, because a few fights swing 20-30s when they
 // tip from timeout to a kill and those outliers swamp the mean.
-export const STAT_SCALE_HIGH = 1 / 145 // ~lvl 920
+export const STAT_SCALE_HIGH = 1 / 130 // ~lvl 920
 // ⚠️ 1/150 -> 1/130 was raised on a sign test (p = 0.0066) when the problem was
-// fights not RESOLVING. That is long solved — 40/40 at every league — and the
-// problem inverted: fights were too SHORT and too uniform. Trimmed ~10% across
-// the band (LOW 1/320 -> 1/360 with it), which took the mid sweep 18.8s -> 26.1s
-// and the composition spread from ~5x to 7.5x. Undoing a measured decision is
-// fine when the thing it optimised for is no longer the thing that is wrong.
+// fights not RESOLVING.
+//
+// ⚠️ TRIMMED ~10% AND THEN PUT BACK. The trim (LOW 1/360, HIGH 1/145) did lift
+// the mid sweep 18.8s -> 26.1s, but it was doing the job the wrong way round: it
+// bought duration by making every monster hit softer, which is felt on every
+// swing, to fix a problem that lives in the mop-up phase. A SECOND trim then
+// moved the mid MEDIAN by 0.1s, which is what exposed it — damage scaling moves
+// the TAILS, not the middle. The duration it bought is now held by levers aimed
+// at the actual cause: OPENING_MIT_BONUS (delays first blood), MIT_SOFT (elite
+// durability) and COOLDOWN_MULT (slows the mop-up itself).
+//
+// Do not reach for this to lengthen fights. It is the progression axis.
 // (+3 fights resolved, +44 damage/fight over 40 paired matchups). ⚠️ This end of
 // the band only reaches CAPSTONES: a train-850 monster has stats near 300 and
 // cannot LEARN a lv920 move, which is why raising HIGH alone once moved measured
