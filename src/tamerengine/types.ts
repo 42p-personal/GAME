@@ -207,7 +207,18 @@ export const MIT_DIVISOR = 1250
  * "unkillable tank" is a worse failure than "short fight".
  */
 export const MIT_KNEE = 0.55  // where returns start diminishing
-export const MIT_SOFT = 0.35  // rate retained above the knee
+// ⚠️ 0.5, RAISED FROM 0.35 TO FIX A TIER INVERSION. Elite fights were running
+// SHORTER than mid-tier ones (17.7s vs 25.4s) — the leagues with the biggest
+// health pools resolved fastest, because mitigation's returns above the knee
+// were too thin to keep up with compounding damage. 0.5 took elite to 20.8s with
+// kills unchanged at 200 and mid BYTE-IDENTICAL, since nothing below Gold
+// reaches the knee at all. No golden moved.
+//
+// ⚠️ MIT_CEIL is now reached exactly at stat 1400 — the Apex cap, the ladder's
+// maximum. That is the asymptote calibrated to the game rather than a plateau
+// inside it, but it means any future cap raise re-introduces a flatline. Pierce
+// still cuts it hard: 0.4 pierce against a 1400 wall gives 0.611, not 0.800.
+export const MIT_SOFT = 0.5  // rate retained above the knee
 export const MIT_CEIL = 0.80  // asymptote, never reached in practice
 
 /**
