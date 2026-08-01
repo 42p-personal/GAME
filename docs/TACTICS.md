@@ -266,8 +266,15 @@ were carrying it alone.
 
 ⚠️ **The `trio` golden moved 27.6s → 23.6s and this time the cause IS understood** —
 goldens set `DEFAULT_TACTICS`, whose `targetPriority` is `weakest`, so melee now
-finishes wounded bodies. The 40-matchup sweep saw NOTHING because `tools/comps.ts`
-monsters carry no tactics at all; see `docs/BALANCING.md`.
+finishes wounded bodies.
+
+⚠️ **The 40-matchup sweep saw NOTHING, and that was the instrument's fault.**
+`generateMonster` did not set `tactics`, so every unit in every balance tool had
+EVERY ORDER DISABLED and the sweep returned byte-identical totals across five values
+of `MELEE_PRIORITY_SLACK`. Now fixed at the source — `generateMonster` sets
+`DEFAULT_TACTICS`, no goldens moved, and the sweep gives five different answers to
+those five values. New reference numbers and the discontinuity warning are in
+`docs/BALANCING.md`.
 
 ### Proposed shape
 

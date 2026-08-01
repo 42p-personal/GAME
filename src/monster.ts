@@ -2,7 +2,7 @@
 import {
   CLASSES, NORMAL_FOODS, INNATE_SECONDARY_LEVEL, LEAGUES, Monster, Move, RNG, STATS, Stat, Stats, classForStats, hashString,
   isFusionBody, isPrestigeBody, leagueForStat, mulberry32, pick, randInt, HARD_CONTROL_STATUSES,
-  statScaleOf } from './core'
+  statScaleOf, DEFAULT_TACTICS } from './core'
 import { ALL_MOVES } from './moves'
 import { CLASS_LINES } from './lines'
 import { SPECIES } from './species'
@@ -601,6 +601,26 @@ export function generateMonster(seed: string, opts: GenOptions = {}): Monster {
     favouriteFood,
     hatedFood,
     tameness: rollTameness(maxStat, rng),
+    /**
+     * ⚠️ NEUTRAL STANDING ORDERS, NOT "no orders". Absent `tactics` and
+     * DEFAULT_TACTICS are NOT the same thing to either engine — absent means
+     * `targetPriority` is undefined and `priorityBias` returns 0, so a monster
+     * without this field fights with a piece of the AI switched off.
+     *
+     * ⚠️ THAT IS WHY THIS IS SET HERE AND NOT IN THE HARNESS. Every balance tool
+     * in the project — sweep40, ab, effects, focus, leagues — builds its teams
+     * from `generateMonster`, and every one of them was therefore measuring
+     * monsters with EVERY TACTIC DISABLED. The 40-matchup sweep returned
+     * byte-identical totals (23.9s / 188 kills / 2781 dmg) across five different
+     * values of MELEE_PRIORITY_SLACK, which is what exposed it. Patching
+     * `tools/comps.ts` would have fixed the four tools that exist and left the
+     * trap set for the fifth.
+     *
+     * The real game overwrites this anyway — the pre-fight orders screen and
+     * `GAMEPLANS` both assign tactics before a fight — so this is the FLOOR, and
+     * its job is to make "no one set orders" mean the same thing everywhere.
+     */
+    tactics: { ...DEFAULT_TACTICS },
   }
 }
 

@@ -744,7 +744,46 @@ Means are flat inside the documented sd 0.7 band — the fix is not a burst
 accelerator at the default `weakest` priority, which is the reassuring half. The
 signed effect is on the ordered metric instead (`tools/priority.ts`).
 
-**⚠️ NOT FIXED, DELIBERATELY.** Giving `comps.ts` monsters `DEFAULT_TACTICS` would
-move every balance baseline in this document at once, which is the opposite of one
-value at a time. It is the right change and it wants its own pass: flip it, recapture
-the numbers above as the new reference, and note the discontinuity here.
+### ✅ FIXED — `generateMonster` now sets `DEFAULT_TACTICS`
+
+⚠️ **Fixed at the SOURCE, not in the harness.** Patching `tools/comps.ts` would have
+repaired the four tools that exist today and left the trap armed for the fifth. Every
+tool builds its teams from `generateMonster`, so that is where the floor belongs.
+
+⚠️ **Absent `tactics` and `DEFAULT_TACTICS` were never the same thing.** Absent means
+`targetPriority` is undefined and `priorityBias` returns 0 — a monster fighting with
+part of the AI switched off. The real game overwrites this anyway (the pre-fight
+orders screen and `GAMEPLANS` both assign tactics), so this is a floor whose job is
+to make "nobody set orders" mean the same thing everywhere.
+
+**No goldens moved.** Neither engine's fixtures changed: the field goldens already
+set `DEFAULT_TACTICS` explicitly, and the turn engine's no-tactics path already
+behaved as `weakest`. 203 tests green.
+
+**The smoke test that proves the instrument works now** — one constant, five values,
+five different answers where there had been one:
+
+| `MELEE_PRIORITY_SLACK` | resolved | dur | kills | dmg/fight |
+|---|---|---|---|---|
+| 0 | 40/40 | 23.2s | 185 | 2739 |
+| 4 | 40/40 | 24.1s | 189 | 2773 |
+| 10 | 40/40 | 23.1s | 193 | 2709 |
+| 14 | 40/40 | 23.1s | 193 | 2763 |
+| *(before the fix, ALL values)* | 40/40 | 23.9s | 188 | 2781 |
+
+### ⚠️ NEW REFERENCE NUMBERS — everything above this section was measured tactics-off
+
+| sweep | resolved | dur | kills | dmg/fight |
+|---|---|---|---|---|
+| mid (train 850) | 40/40 | **23.1s** | 193 | 2709 |
+| elite (train 3200) | 39/40 | **33.6s** | 201 | 10050 |
+
+Noise band re-measured on the fixed harness (`--noise`, 3 runs): duration mean
+24.03s, **sd 0.60s**, resolved sd 0.00 — so **a change must beat ~1.2s to be
+believable**, and `resolved` remains at ceiling and useless as a metric.
+
+⚠️ **Treat every figure recorded in this document before 2026-08-01 as measured with
+all tactics disabled.** They are not wrong about the things they measured — pool
+damage, mana, mitigation, HP scaling — but any conclusion that touched targeting,
+positioning, healing discipline or mana policy was drawn from fights where those
+orders did nothing.
