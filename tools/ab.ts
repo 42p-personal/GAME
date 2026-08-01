@@ -14,13 +14,13 @@
 //   Requires the caller to have produced two JSON snapshots via --dump.
 //   npx tsx tools/ab.ts --dump out.json     (run once per setting)
 import { generateMonster } from '../src/monster'
-import { COMPS } from './comps'
+import { COMPS, trainTier } from './comps'
 import { simulateFieldBattle } from '../src/tamerengine/engine'
 import { autoDeployByRole } from '../src/tamerengine/hex'
 import { FIELD_H, FIELD_W, SUDDEN_DEATH_AT } from '../src/tamerengine/types'
 import * as fs from 'fs'
 
-const mk = (id: string, sp: string, train = 850) => generateMonster(id, { speciesId: sp, train }) as never
+const mk = (id: string, sp: string, train = trainTier()) => generateMonster(id, { speciesId: sp, train }) as never
 // ⚠️ POSITIONS RELATIVE, SIZES FIXED. These were absolute (19/21/13/27), which
 // is centred only on a 40-wide field — so any test that resizes the field would
 // have been measuring "bigger map PLUS cover shoved off to one side", two

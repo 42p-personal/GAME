@@ -23,9 +23,9 @@ import { simulateFieldBattle } from '../src/tamerengine/engine'
 import { autoDeployByRole } from '../src/tamerengine/hex'
 import { FIELD_H, FIELD_W, SUDDEN_DEATH_AT } from '../src/tamerengine/types'
 import { classForStats } from '../src/core'
-import { COMPS } from './comps'
+import { COMPS, trainTier, TRAIN_ELITE } from './comps'
 
-const mk = (id: string, sp: string, train = 850) =>
+const mk = (id: string, sp: string, train = trainTier()) =>
   generateMonster(id, { speciesId: sp, train }) as never
 // Positions relative, sizes fixed — identical at 40x22, symmetric at any size.
 // See the same note in tools/ab.ts.
@@ -50,7 +50,7 @@ interface Run { resolved: number; fights: number; dur: number; kills: number; dm
   byComp: Map<string, { resolved: number; fights: number; dur: number; kills: number
     firstKill: number; firstKills: number }> }
 
-function runBatch(seeds: string[], train = 850): Run {
+function runBatch(seeds: string[], train = trainTier()): Run {
   const out: Run = { resolved: 0, fights: 0, dur: 0, kills: 0, dmg: 0, byClass: new Map(), byComp: new Map() }
   for (const comp of COMPS) for (const sd of seeds) {
     const A = comp.a.map((s, i) => mk(`${sd}${comp.name}a${i}`, s, train))
@@ -98,7 +98,7 @@ const line = (label: string, r: Run) =>
 const noise = process.argv.includes('--noise')
 if (!noise) {
   const r = runBatch(SEED_BATCHES[0])
-  console.log(`40-MATCHUP SWEEP — 10 compositions (2v2..6v6) x 4 seeds, train 850\n`)
+  console.log(`40-MATCHUP SWEEP — 10 compositions (2v2..6v6) x 4 seeds, train ${trainTier()}${trainTier() === TRAIN_ELITE ? ' — ELITE, capstones unlocked' : ' — mid-game'}\n`)
   console.log('               resolved       dur   kills  dmg/fight')
   console.log(line('total', r))
   console.log('')

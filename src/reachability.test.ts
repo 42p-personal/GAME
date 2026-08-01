@@ -22,12 +22,13 @@ import { ALL_MOVES } from './moves'
 import { CLASS_LINES, LINE_OF } from './lines'
 import { classForStats, Stat } from './core'
 
-/** The training level the balance harnesses use — see tools/sweep40.ts. */
+/** The two tiers the balance harnesses run at — see tools/comps.ts. */
 const SWEEP_TRAIN = 850
+const ELITE_TRAIN = 3200
 
-function unreachableAtSweepTraining(): string[] {
+function unreachableAt(train = SWEEP_TRAIN): string[] {
   const sample = SPECIES.map((sp) => {
-    const m = generateMonster(`reach-${sp.id}`, { speciesId: sp.id, train: SWEEP_TRAIN }) as never as
+    const m = generateMonster(`reach-${sp.id}-${train}`, { speciesId: sp.id, train }) as never as
       { stats: Record<string, number> }
     return { cls: classForStats(m.stats as never), stats: m.stats }
   })
@@ -46,7 +47,7 @@ function unreachableAtSweepTraining(): string[] {
 
 describe('pool reachability at the training level we balance at', () => {
   it('⚠️ records how much of the pool the sweep cannot see', () => {
-    const unreachable = unreachableAtSweepTraining()
+    const unreachable = unreachableAt()
     // ⚠️ A TRIPWIRE, NOT A TARGET. This is not "59 bugs" — most are capstones
     // doing their job. It fails if the number MOVES, so that adding an ability
     // nobody can draft is a decision someone made on purpose rather than an
@@ -55,6 +56,21 @@ describe('pool reachability at the training level we balance at', () => {
     // reachable and its buff can actually land. Down is the good direction.
     expect(unreachable.length, `unreachable at train ${SWEEP_TRAIN}:\n  ${unreachable.join('\n  ')}`)
       .toBe(67)
+  })
+
+  it('⚠️ and ELITE training unlocks essentially all of it', () => {
+    // ⚠️ THE PAIR IS THE POINT. 67 unreachable at mid-game is PROGRESSION, not a
+    // bug list — league caps run to 1200 (Tamer Elite) and 1400 (Apex), so a
+    // lv920 capstone is MEANT to be a late unlock. The real defect would be a
+    // move nobody can reach even at the top. This test says which is which.
+    //
+    // It is also why `--elite` exists on sweep40/ab: with one tier the harness
+    // simulated a top stat of ~455, an Iron/Silver monster, so every capstone was
+    // invisible to every balance number this project produced. Late content was
+    // authored blind, and the 67 read as a bug list when most of it was working.
+    const stranded = unreachableAt(ELITE_TRAIN)
+    expect(stranded.length, `unreachable even at train ${ELITE_TRAIN}: ${stranded.join(', ')}`)
+      .toBeLessThanOrEqual(4)
   })
 
   it('⚠️ every support STAT can reach a restore before its capstone', () => {
@@ -72,7 +88,7 @@ describe('pool reachability at the training level we balance at', () => {
     // we balance at cannot do its job. It caught `Tranquility` (lv430) on its
     // first run — a mid-line Mender heal, no capstone, that nobody could learn —
     // the same defect as the two new heals, already in the pool.
-    const unreachable = new Set(unreachableAtSweepTraining())
+    const unreachable = new Set(unreachableAt())
     const restores = ALL_MOVES.filter((m) =>
       (m.target === 'ally' || m.target === 'team') && (m.power > 0 || m.effects?.hpRegenBuff))
     const byStat = new Map<string, typeof restores>()

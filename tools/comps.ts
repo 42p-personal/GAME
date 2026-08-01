@@ -64,5 +64,28 @@ export const COMPS: { name: string; a: string[]; b: string[]; size: number }[] =
   })
 
 /** Mean team size across the sweep — for anything that needs a single figure. */
+/**
+ * THE TWO TRAINING TIERS THE HARNESSES MEASURE AT.
+ *
+ * ⚠️ `train` IS A BUDGET, NOT A STAT. Across all 65 species the highest single
+ * stat comes out 455 at train 850, 706 at 1500, 904 at 2000, ~1000 at 2400.
+ * League caps run 100 (Wood) to 1200 (Tamer Elite) and 1400 (Apex), multiplied
+ * further by bloodline potential.
+ *
+ * ⚠️ SO ONE TIER MEASURED ONE LEAGUE. At MID the top stat is ~455, an Iron/Silver
+ * monster — which means every capstone in the pool (lv650-920) was invisible to
+ * every balance number this project has ever produced. Not because those moves
+ * are unreachable, but because the harness never simulated a monster far enough
+ * along to have unlocked them. Late content was being authored blind and a
+ * reachability count of 68 read as a bug list when most of it was progression.
+ *
+ * ELITE puts the top stat around the Masters cap, so lv850 and lv920 capstones
+ * are drafted and cast. `--elite` on sweep40/ab selects it.
+ */
+export const TRAIN_MID = 850
+export const TRAIN_ELITE = 3200
+/** Whichever tier the CLI asked for. Both harnesses read this. */
+export const trainTier = () => (process.argv.includes('--elite') ? TRAIN_ELITE : TRAIN_MID)
+
 export const TEAM_SIZE = Math.round(
   COMPS.reduce((n, c) => n + c.size, 0) / COMPS.length)
