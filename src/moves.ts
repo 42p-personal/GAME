@@ -188,7 +188,7 @@ const POOLS: Record<Stat, Row[]> = {
     { name: 'Renewal', learnLevel: 260, type: 'buff', channel: 'support', target: 'ally', cooldown: 4, accuracy: 100, power: 8, mana: 18, effects: { hpRegenBuff: 10, duration: 4 }, range: 8.5, desc: 'Not a burst but a tide: 8 HP a round for four rounds.' },
     { name: 'Tranquility', learnLevel: 320, type: 'buff', channel: 'support', target: 'ally', cooldown: 5, accuracy: 100, power: 34, mana: 26, range: 7.3, desc: 'Deep restorative calm channelled into one ally.' },
     { name: 'Rebuke', learnLevel: 560, type: 'damage', channel: 'support', target: 'enemy', cooldown: 4, accuracy: 90, power: 37, mana: 24, variance: 0.2, range: 7.2, desc: 'The healer answers back. A mender is not the same thing as a bystander.' },
-    { name: 'Ward Against Ruin', learnLevel: 650, type: 'buff', channel: 'support', target: 'team', cooldown: 7, accuracy: 100, power: 20, mana: 46, effects: { cleanse: true, regenBuff: 3, duration: 3 }, range: 8, desc: "Clears the whole team's ailments and mends 20 HP each. The Mender capstone." },
+    { name: 'Ward Against Ruin', learnLevel: 650, type: 'buff', channel: 'support', target: 'team', cooldown: 7, accuracy: 100, power: 12, mana: 46, effects: { defBuff: 8, regenBuff: 3, duration: 3 }, range: 8, desc: "Hardens the whole team against what is coming — 8% less damage taken, and a little mending with it." },
 
     // ── Siphon — take what they have, and keep it ────────────────────────────
     { name: 'Mana Sap', learnLevel: 90, type: 'damage', channel: 'support', target: 'enemy', cooldown: 2, accuracy: 92, power: 16, mana: 8, variance: 0.15, effects: { manaBurn: 14 }, range: 6.6, desc: 'Drinks 14 MP straight out of them. Once the worst move in the game; now a real theft.' },
@@ -213,7 +213,7 @@ const POOLS: Record<Stat, Row[]> = {
     // one monster that could learn it did draft it. 300 clears the median and
     // leaves it a real mid-game unlock. Renewal (260) is the peer that works.
     { name: 'Mending Surge', learnLevel: 300, type: 'buff', channel: 'support', target: 'ally', cooldown: 6, accuracy: 100, power: 105, mana: 34, range: 8.0, desc: 'A flood of restoration into one body — the burst answer to burst.' },
-    { name: 'Providence', learnLevel: 850, type: 'buff', channel: 'support', target: 'team', cooldown: 7, accuracy: 100, power: 12, mana: 40, effects: { cleanse: true, hpRegenBuff: 8, duration: 3 }, range: 6.8, desc: 'Sees what is coming: clears the team and steadies it. Restoration — empowerment is CHA.' },
+    { name: 'Providence', learnLevel: 850, type: 'buff', channel: 'support', target: 'team', cooldown: 7, accuracy: 100, power: 16, mana: 40, effects: { cleanse: true, hpRegenBuff: 8, duration: 3 }, range: 6.8, desc: 'Sees what is coming: clears the team and steadies it. Restoration — empowerment is CHA.' },
   ],
   // ══ INT ══ magic · elements · ground AoE + stun · frost root/slow · teleports ═
   // HEXER stacks statuses and then detonates them. ELEMENTALIST makes ground you
