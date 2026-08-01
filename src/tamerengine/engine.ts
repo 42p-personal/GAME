@@ -736,6 +736,14 @@ export function simulateFieldBattle(setup: FieldSetup): FieldResult {
   // Accuracy POINTS, not a fraction (the standing units rule), and it favours
   // melee for free: melee is what actually stacks two bodies onto one target,
   // which is the STR/Warrior identity the class-damage table showed was weakest.
+  // ⚠️ MEASURED INERT (2026-08-01): the condition fires on 2.2% of attacks — 86
+  // of 3865 across the sweep — and switching the bonus to 0 moved nothing at
+  // either tier (mid 26.1s -> 26.7s, elite 19.5s -> 18.6s, both inside the 1.8s
+  // noise band, kills unchanged). It is NOT the cascade amplifier it was assumed
+  // to be; that assumption was reasoned, not measured, and the measurement
+  // refuted it. Same shape as the isolation term. Either widen the radii until it
+  // reaches, or delete it — do not leave it as a mechanic that reads real and is
+  // not.
   const FLANK_ACC_BONUS = 10
   const FLANK_ENGAGE_RADIUS = 2.6   // "on" the defender
   const FLANK_SUPPORT_RADIUS = 3.2  // "at its shoulder"

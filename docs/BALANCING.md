@@ -654,14 +654,20 @@ power dominate, so a new player's first fights are the slowest in the game.
   pre-first-blood and the **lowest cascade rate** (0.27/s)
 
 Long fights come from a slow cascade, not a slow opening. Drivers: numbers
-advantage compounds directly, focus fire is already high (0.65–0.71), and
-**flanking (+10 acc when outnumbered and unsupported) actively amplifies it** —
-the one mechanic explicitly rewarding the snowball, pointed at the side already
-losing.
+advantage compounds directly and focus fire is already high (0.65–0.71).
+
+⚠️ **AND FLANKING IS NOT THE AMPLIFIER — I ASSUMED THAT AND WAS WRONG.** An
+earlier revision of this section named `+10 acc when outnumbered and unsupported`
+as the mechanic rewarding the snowball. Measured: it fires on **2.2% of attacks**
+(86 of 3865), and setting the bonus to 0 moved nothing at either tier — mid 26.1s
+→ 26.7s, elite 19.5s → 18.6s, both inside the 1.8s band, kills unchanged. It is
+inert, the same shape as the isolation term. The claim was reasoned rather than
+measured, in a document whose own method notes say not to do that.
 
 **Next lever, and it widens rather than compresses** because it only touches
 fights that reach a numbers gap: a defensive bonus when outnumbered (the genre's
-"last stand"), and/or gating flanking on positioning rather than headcount.
+"last stand"). Flanking is a separate question — widen its radii until it
+reaches, or delete it; do not leave a mechanic that reads real and is not.
 Leave `maxHp` and mitigation alone — both are in good shape and neither addresses
 this.
 
