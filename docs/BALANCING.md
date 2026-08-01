@@ -678,12 +678,18 @@ live at 17.5% for a cost inside the noise band (mid 25.4s, elite 17.7s).
 refutes the CODE, not the idea — check whether the mechanism can fire before
 concluding the design is wrong.
 
-**Next lever, and it widens rather than compresses** because it only touches
-fights that reach a numbers gap: a defensive bonus when outnumbered (the genre's
-"last stand"). Flanking is a separate question — widen its radii until it
-reaches, or delete it; do not leave a mechanic that reads real and is not.
-Leave `maxHp` and mitigation alone — both are in good shape and neither addresses
-this.
+⚠️ **A defensive bonus when outnumbered ("last stand") was proposed and REJECTED
+on design grounds** — prolonging a fight that is already decided is not the same
+as making it competitive. Do not re-propose it.
+
+The next move is an EFFECT REACHABILITY AUDIT instead. Six mechanisms this
+session turned out not to reach, and `guard`, `ward`, `thorns`, `protect` and
+`taunt` have never been fire-rate checked. Find what is already inert before
+adding anything new — see `tools/effects.ts`.
+
+Leave `maxHp` and `statScale` alone: the first compresses the spread, and the
+second is the PROGRESSION axis (trimmed 10% and reverted the same day — with the
+opening guard, MIT_SOFT and COOLDOWN_MULT in place it was carrying nothing).
 
 ### Standing method notes earned this session
 
